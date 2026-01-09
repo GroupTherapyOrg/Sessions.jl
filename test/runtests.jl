@@ -1,4 +1,5 @@
 using Test
+using UUIDs
 
 # Test Cell and Executor without needing full Sessions module
 include("../src/Notebook/Cell.jl")
