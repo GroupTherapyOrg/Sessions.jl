@@ -25,16 +25,14 @@ include("Notebook/DependencyTracker.jl")
 include("components/Layout.jl")
 include("components/Sidebar.jl")
 include("components/Terminal.jl")
+include("components/CellComponent.jl")
 
 # =============================================================================
-# Interactive Islands (Wasm - for future full hybrid architecture)
+# Interactive Islands (Wasm)
 # =============================================================================
-# NotebookIsland.jl defines a Wasm island for notebook UI state
-# Currently the hybrid architecture uses JS bridge + WebSocket for compute
-# When Therapy.jl island compilation is fully integrated, this will
-# handle cell status signals in Wasm while WebSocket handles compute
+# Islands handle reactive UI state in WebAssembly
 
-# include("components/NotebookIsland.jl")  # Uncomment when Wasm integration ready
+include("components/NotebookIsland.jl")
 
 # =============================================================================
 # Server (WebSocket + HTTP with Therapy.jl rendering)
@@ -50,6 +48,8 @@ export Cell, CellStatus, IDLE, QUEUED, RUNNING, COMPLETED, ERRORED
 export Executor, execute, execute_cell!, restart!, shutdown!
 export NotebookReactivity, DependencyGraph, analyze_cell, update_cells!, get_downstream_cells, get_execution_order
 export Layout, TopBar, Sidebar, Terminal
+export CellComponent, CellOutput, CellsContainer
+export NotebookIsland, FileTreeIsland, TerminalIsland
 export dev
 
 """

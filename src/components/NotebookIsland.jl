@@ -1,130 +1,112 @@
-# NotebookIsland.jl - Interactive notebook component (Wasm island)
+# NotebookIsland.jl - Wasm island for notebook UI state
 #
-# This file defines a Therapy.jl island for notebook UI state management.
-# The island handles:
-# - Cell visibility (show/hide)
-# - Cell status indicators
+# This island handles reactive UI state using Therapy.jl signals.
+# The state is managed in WebAssembly for performance.
+#
+# What this handles:
+# - Cell count display
 # - Add cell button state
+# - Run all / restart button states
 #
-# Note: Cell CODE and OUTPUT are handled separately by the JS bridge
-# because they involve dynamic strings which WasmTarget doesn't support well.
-# This is the recommended hybrid approach:
-# - Wasm island: UI state (numeric signals)
-# - JS bridge: Dynamic content (code text, outputs)
-# - WebSocket: Server compute (execution, filesystem)
-#
-# Status codes:
-#   0 = hidden
-#   1 = idle (visible, ready)
-#   2 = running
-#   3 = completed
-#   4 = error
+# What remains in JS:
+# - WebSocket connection (network I/O)
+# - CodeMirror editors (external JS library)
+# - DOM updates for cell content (received from server)
 
 using Therapy
 
-# Maximum number of cell slots (fixed due to WasmTarget limitations)
-const MAX_CELLS = 10
-
 """
-    CellStatusBar component - displays status indicator for a cell.
+    NotebookIsland
 
-This is a presentational component that shows the cell status.
-The actual status value comes from a signal.
-
-Props:
-- :status - Signal getter for cell status (0-4)
-- :exec_count - Execution count number
+Wasm island for notebook-level UI controls.
+Handles cell count, button states with reactive signals.
 """
-CellStatusBar = component(:CellStatusBar) do props
-    status = get_prop(props, :status)
-    exec_count = get_prop(props, :exec_count)
+NotebookIsland = island(:NotebookIsland) do
+    # Reactive signals for notebook state
+    cell_count, set_cell_count = create_signal(1)
+    is_running, set_is_running = create_signal(false)
 
-    # Status indicator with data-format for JS to style
-    Div(:class => "flex items-center h-10 px-3 bg-gray-700",
-        # Status icon container - JS will update based on data-status
-        Div(:class => "cell-status-icon w-6 h-6 flex items-center justify-center mr-2",
-            Symbol("data-format") => "status-icon",
-            Span(status)
-        ),
-
-        # Execution count
-        Span(:class => "text-xs text-gray-500",
-            "[", Span(exec_count), "]"
+    Div(:id => "notebook-island", :class => "flex items-center gap-4",
+        # Cell count indicator
+        Div(:class => "flex items-center gap-2",
+            Span(:class => "text-sm text-gray-500", "Cells:"),
+            Span(:class => "text-sm text-gray-300 font-mono", cell_count)
         ),
 
         # Spacer
         Div(:class => "flex-1"),
 
-        # Run and Delete buttons - events handled by JS bridge
-        Button(:class => "btn-run px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-600 rounded mr-1",
-               "Run"),
-        Button(:class => "btn-delete px-2 py-1 text-xs text-gray-400 hover:text-red-400 hover:bg-gray-600 rounded",
-               "×")
+        # Run All button
+        Button(:id => "btn-run-all",
+            :class => "px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-sm disabled:opacity-50",
+            "Run All"),
+
+        # Restart button
+        Button(:id => "btn-restart",
+            :class => "px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm",
+            "Restart"),
+
+        # Add Cell button
+        Button(:id => "btn-add-cell",
+            :class => "px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm",
+            :on_click => () -> set_cell_count(cell_count() + 1),
+            "+ Cell")
     )
 end
 
 """
-    NotebookControlsIsland - Wasm island for notebook-level controls.
+    FileTreeIsland
 
-Handles:
-- Cell count state
-- Add Cell button with max limit
+Wasm island for file explorer state.
 """
-NotebookControlsIsland = island(:NotebookControlsIsland) do
-    # Number of active cells
-    cell_count, set_cell_count = create_signal(1)
+FileTreeIsland = island(:FileTreeIsland) do
+    current_path, set_current_path = create_signal(0)  # Index into path list
+    is_loading, set_is_loading = create_signal(false)
 
-    Div(:id => "notebook-controls", :class => "mt-4 flex justify-center items-center gap-4",
-        # Cell count display
-        Span(:class => "text-sm text-gray-500",
-            "Cells: ", Span(cell_count)
+    Div(:id => "file-tree-island",
+        # Loading indicator (shown when is_loading is true)
+        Div(:class => "text-xs text-gray-500 p-2",
+            Symbol("data-show") => is_loading,
+            "Loading..."),
+
+        # File list container - populated by server via WebSocket
+        Div(:id => "file-list", :class => "text-sm")
+    )
+end
+
+"""
+    TerminalIsland
+
+Wasm island for terminal UI state.
+"""
+TerminalIsland = island(:TerminalIsland) do
+    is_visible, set_is_visible = create_signal(true)
+    history_index, set_history_index = create_signal(0)
+
+    Div(:id => "terminal-island",
+        Symbol("data-visible") => is_visible,
+
+        # Terminal header
+        Div(:class => "h-8 bg-gray-900 border-b border-gray-700 flex items-center px-3 text-sm",
+            Span(:class => "text-gray-400", "Terminal"),
+            Div(:class => "flex-1"),
+            Button(:id => "btn-toggle-terminal",
+                :class => "text-gray-500 hover:text-white",
+                :on_click => () -> set_is_visible(!is_visible()),
+                "×")
         ),
 
-        # Add Cell button
-        # Note: The actual add logic is handled by JS bridge via WebSocket
-        # This island just tracks the count for UI display
-        Button(:id => "btn-add-cell-island",
-               :class => "px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm disabled:opacity-50",
-               # Disable when at max
-               # Note: This would need computed signal support
-               "+ Add Cell"
+        # Terminal output - populated by server
+        Div(:id => "terminal-output",
+            :class => "flex-1 overflow-auto p-2 font-mono text-sm text-green-400 bg-gray-900"),
+
+        # Terminal input
+        Div(:class => "flex items-center px-2 py-1 bg-gray-900 border-t border-gray-700",
+            Span(:class => "text-blue-400 mr-2 font-mono", "julia>"),
+            Input(:type => "text",
+                :id => "terminal-input",
+                :class => "flex-1 bg-transparent outline-none font-mono text-green-400",
+                :placeholder => "Enter command...")
         )
     )
 end
-
-# =============================================================================
-# Integration Notes
-# =============================================================================
-#
-# To integrate this island with Sessions.jl:
-#
-# 1. In WebSocketServer.jl, compile the island:
-#    ```julia
-#    using Therapy: compile_component
-#    compiled = compile_component(NotebookControlsIsland)
-#    ```
-#
-# 2. Include the Wasm bytes and hydration JS in generate_page():
-#    - Add Wasm as base64: `<script>const wasm = atob("...");</script>`
-#    - Add hydration JS: compiled.hydration.js
-#
-# 3. In the page HTML, include the island element:
-#    ```julia
-#    page = Layout(
-#        Div(:class => "...",
-#            NotebookControlsIsland()  # Renders as <therapy-island>
-#        )
-#    )
-#    ```
-#
-# 4. The hydration JS will:
-#    - Load the Wasm module
-#    - Connect event handlers
-#    - Initialize signals from DOM state
-#
-# Current Status:
-# - The JS bridge handles all notebook UI for now
-# - This island is ready for future integration
-# - The hybrid approach (Wasm state + JS content) is intentional
-#
-# =============================================================================

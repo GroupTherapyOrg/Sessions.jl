@@ -2,10 +2,11 @@
 # WebSocket Server for Sessions.jl
 # =============================================================================
 #
-# Following Pluto's approach:
-# - Message format: { type: "...", body: {...} }
-# - Handlers dictionary maps types to functions
-# - Simple, direct communication
+# Architecture:
+# - Server renders ALL UI using Therapy.jl VNodes
+# - WebSocket sends HTML for cell updates (not JSON data)
+# - Minimal JS: WebSocket connection + CodeMirror editors
+# - Wasm islands for reactive UI state (cell count, button states)
 
 using Therapy
 
@@ -59,23 +60,30 @@ function start_server(host::String, port::Int)
 end
 
 function generate_page()
+    # Build page using Therapy.jl components
     page = Layout(
         Div(:class => "flex-1 flex overflow-hidden",
+            # Sidebar with file explorer
             Sidebar(),
+
+            # Main content area
             Div(:class => "flex-1 flex flex-col overflow-hidden",
+                # Cells container - populated via WebSocket
                 Div(:id => "cells", :class => "flex-1 overflow-auto p-4"),
+
+                # Terminal panel
                 Terminal()
             )
         )
     )
 
     html = render_page(page; title="Sessions.jl", head_extra=head_extra())
-    html = replace(html, "</body>" => websocket_bridge_script() * "</body>")
+    html = replace(html, "</body>" => client_script() * "</body>")
     return html
 end
 
 # =============================================================================
-# WebSocket Handler (Pluto-style)
+# WebSocket Handler
 # =============================================================================
 
 function handle_websocket(ws)
@@ -83,10 +91,9 @@ function handle_websocket(ws)
     println("WebSocket client connected")
 
     try
-        # Pluto-style: iterate over WebSocket messages
         for msg in ws
             msg_str = msg isa String ? msg : String(msg)
-            println("Received message: $(first(msg_str, 100))")
+            println("Received: $(first(msg_str, 100))")
             handle_message(ws, msg_str)
         end
     catch e
@@ -100,12 +107,13 @@ function handle_websocket(ws)
 end
 
 # =============================================================================
-# Message Handlers (Pluto-style responses dict)
+# Message Handlers
 # =============================================================================
 
 const HANDLERS = Dict{String, Function}(
     "get_state" => (ws, body) -> begin
-        send_cells_state(ws)
+        # Send cells HTML (server-rendered)
+        send_cells_html(ws)
         send_files(ws, ".")
     end,
 
@@ -117,10 +125,10 @@ const HANDLERS = Dict{String, Function}(
             cell = CELLS[cell_id]
             cell.code = code
             cell.status = RUNNING
-            broadcast_cell(cell)
+            broadcast_cell_html(cell)
 
             execute_cell!(EXECUTOR[], cell)
-            broadcast_cell(cell)
+            broadcast_cell_html(cell)
         end
     end,
 
@@ -128,7 +136,7 @@ const HANDLERS = Dict{String, Function}(
         cell = Cell("")
         CELLS[cell.id] = cell
         push!(CELL_ORDER, cell.id)
-        broadcast_cells_state()
+        broadcast_cells_html()
     end,
 
     "delete_cell" => (ws, body) -> begin
@@ -136,7 +144,7 @@ const HANDLERS = Dict{String, Function}(
         if haskey(CELLS, cell_id) && length(CELLS) > 1
             delete!(CELLS, cell_id)
             filter!(id -> id != cell_id, CELL_ORDER)
-            broadcast_cells_state()
+            broadcast_cells_html()
         end
     end,
 
@@ -146,9 +154,9 @@ const HANDLERS = Dict{String, Function}(
                 cell = CELLS[id]
                 if !isempty(strip(cell.code))
                     cell.status = RUNNING
-                    broadcast_cell(cell)
+                    broadcast_cell_html(cell)
                     execute_cell!(EXECUTOR[], cell)
-                    broadcast_cell(cell)
+                    broadcast_cell_html(cell)
                 end
             end
         end
@@ -163,7 +171,7 @@ const HANDLERS = Dict{String, Function}(
             cell.stderr = ""
             cell.error_msg = ""
         end
-        broadcast_cells_state()
+        broadcast_cells_html()
     end,
 
     "list_files" => (ws, body) -> begin
@@ -191,8 +199,6 @@ const HANDLERS = Dict{String, Function}(
 )
 
 function handle_message(ws, msg_str::String)
-    println("Received: $(first(msg_str, 100))")
-
     msg = JSON3.read(msg_str, Dict)
     msg_type = get(msg, "type", "")
     body = get(msg, "body", Dict())
@@ -229,36 +235,42 @@ function broadcast_msg(type::String, body::Dict)
 end
 
 # =============================================================================
-# Cell Helpers
+# Server-Side Cell Rendering (Therapy.jl)
 # =============================================================================
 
-function cell_to_dict(cell::Cell)
-    Dict(
-        "id" => string(cell.id),
-        "code" => cell.code,
-        "status" => Int(cell.status),
-        "status_name" => string(cell.status),
-        "output" => cell.output !== nothing ? repr(cell.output) : nothing,
-        "stdout" => cell.stdout,
-        "stderr" => cell.stderr,
-        "error_msg" => cell.error_msg,
-        "execution_count" => cell.execution_count
-    )
+"""
+Render all cells as HTML and send to client.
+"""
+function send_cells_html(ws)
+    cells = [CELLS[id] for id in CELL_ORDER if haskey(CELLS, id)]
+    html = render_to_string(CellsContainer(cells))
+    send_msg(ws, "cells_html", Dict("html" => html, "cell_count" => length(cells)))
 end
 
-function send_cells_state(ws)
-    cells = [cell_to_dict(CELLS[id]) for id in CELL_ORDER if haskey(CELLS, id)]
-    send_msg(ws, "cells_state", Dict("cells" => cells))
+"""
+Broadcast all cells HTML to all clients.
+"""
+function broadcast_cells_html()
+    cells = [CELLS[id] for id in CELL_ORDER if haskey(CELLS, id)]
+    html = render_to_string(CellsContainer(cells))
+    broadcast_msg("cells_html", Dict("html" => html, "cell_count" => length(cells)))
 end
 
-function broadcast_cells_state()
-    cells = [cell_to_dict(CELLS[id]) for id in CELL_ORDER if haskey(CELLS, id)]
-    broadcast_msg("cells_state", Dict("cells" => cells))
+"""
+Render single cell as HTML and broadcast update.
+"""
+function broadcast_cell_html(cell::Cell)
+    html = render_to_string(CellComponent(cell))
+    broadcast_msg("cell_html", Dict(
+        "cell_id" => string(cell.id),
+        "html" => html,
+        "status" => lowercase(string(cell.status))
+    ))
 end
 
-function broadcast_cell(cell::Cell)
-    broadcast_msg("cell_update", Dict("cell" => cell_to_dict(cell)))
-end
+# =============================================================================
+# File Helpers (Server-rendered)
+# =============================================================================
 
 function send_files(ws, path::String)
     try
@@ -269,8 +281,42 @@ function send_files(ws, path::String)
             push!(entries, Dict("name" => name, "path" => full, "is_directory" => isdir(full)))
         end
         sort!(entries, by = e -> (!e["is_directory"], lowercase(e["name"])))
-        send_msg(ws, "files", Dict("path" => path, "entries" => entries))
+
+        # Render file tree as HTML
+        html = render_to_string(FileTreeComponent(path, entries))
+        send_msg(ws, "files_html", Dict("path" => path, "html" => html))
     catch e
         send_msg(ws, "error", Dict("message" => string(e)))
     end
+end
+
+"""
+Render file tree as Therapy.jl VNodes.
+"""
+function FileTreeComponent(path::String, entries::Vector)
+    Div(:id => "file-tree-content",
+        # Parent directory link
+        if path != "."
+            parent = dirname(path)
+            parent = isempty(parent) ? "." : parent
+            Div(:class => "file-item cursor-pointer px-2 py-1 hover:bg-gray-700",
+                Symbol("data-path") => parent,
+                Symbol("data-dir") => "1",
+                "..")
+        else
+            nothing
+        end,
+
+        # File/directory entries
+        [FileEntryComponent(e) for e in entries]...
+    )
+end
+
+function FileEntryComponent(entry::Dict)
+    is_dir = entry["is_directory"]
+    icon = is_dir ? "📁" : "📄"
+    Div(:class => "file-item cursor-pointer px-2 py-1 hover:bg-gray-700 $(is_dir ? "directory" : "file")",
+        Symbol("data-path") => entry["path"],
+        Symbol("data-dir") => is_dir ? "1" : "0",
+        "$icon $(entry["name"])")
 end
