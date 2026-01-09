@@ -34,7 +34,7 @@ function execute(exec::Executor, code::String)
     stderr_buffer = IOBuffer()
 
     result = try
-        expr = Meta.parse("begin\n$code\nend")
+        expr = Base.Meta.parse("begin\n$code\nend")
 
         # Redirect stdout/stderr during execution
         old_stdout = stdout

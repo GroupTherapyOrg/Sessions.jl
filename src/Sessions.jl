@@ -6,6 +6,9 @@ using HTTP.WebSockets
 using Sockets
 using JSON3
 using UUIDs
+using ExpressionExplorer
+using Malt
+import PlutoDependencyExplorer as PDE
 
 # =============================================================================
 # Core Data Structures
@@ -13,6 +16,7 @@ using UUIDs
 
 include("Notebook/Cell.jl")
 include("Notebook/Executor.jl")
+include("Notebook/DependencyTracker.jl")
 
 # =============================================================================
 # UI Components (Therapy.jl)
@@ -21,6 +25,16 @@ include("Notebook/Executor.jl")
 include("components/Layout.jl")
 include("components/Sidebar.jl")
 include("components/Terminal.jl")
+
+# =============================================================================
+# Interactive Islands (Wasm - for future full hybrid architecture)
+# =============================================================================
+# NotebookIsland.jl defines a Wasm island for notebook UI state
+# Currently the hybrid architecture uses JS bridge + WebSocket for compute
+# When Therapy.jl island compilation is fully integrated, this will
+# handle cell status signals in Wasm while WebSocket handles compute
+
+# include("components/NotebookIsland.jl")  # Uncomment when Wasm integration ready
 
 # =============================================================================
 # Server (WebSocket + HTTP with Therapy.jl rendering)
@@ -34,6 +48,7 @@ include("Server/WebSocketServer.jl")
 
 export Cell, CellStatus, IDLE, QUEUED, RUNNING, COMPLETED, ERRORED
 export Executor, execute, execute_cell!, restart!, shutdown!
+export NotebookReactivity, DependencyGraph, analyze_cell, update_cells!, get_downstream_cells, get_execution_order
 export Layout, TopBar, Sidebar, Terminal
 export dev
 

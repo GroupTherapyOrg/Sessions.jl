@@ -36,12 +36,16 @@ The goal is NOT to be a Pluto clone, but to be compatible enough that users can 
 - **Notebook Cells**: Code cells with execution and output display
 - **Top Bar**: Controls for Run All, Restart, Add Cell
 
-### 3. Server-Side Rendering with WebSocket Updates
-Unlike pure Therapy.jl islands (which compile to Wasm), Sessions uses:
-- Server renders all HTML using Therapy.jl components
-- WebSocket sends **pre-rendered HTML fragments** to the client
-- Minimal client JavaScript handles only transport (no rendering logic)
-- This is necessary because notebook execution must happen server-side
+### 3. Hybrid SSR + WebSocket Architecture
+Sessions uses a **hybrid approach** combining the best of both worlds:
+- **SSR (Server-Side)**: Static UI structure rendered with Therapy.jl components
+- **WebSocket (Server→Client)**: JSON data for compute results, NOT HTML
+- **Client-side JS**: Renders dynamic content (cells, file tree) from JSON
+- **Future**: Wasm islands will replace JS for UI state management
+
+This architecture separates concerns cleanly:
+- Server handles COMPUTE (execution, filesystem, terminal)
+- Client handles UI (rendering, interaction, state display)
 
 ### 4. Selective Pluto Package Leverage (Planned)
 We don't fork Pluto. We use its **standalone packages** where they provide value:
@@ -61,16 +65,17 @@ We don't fork Pluto. We use its **standalone packages** where they provide value
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Browser                                   │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │           Sessions UI (Therapy.jl Components)             │  │
+│  │           Sessions UI (Hybrid SSR + JS)                   │  │
 │  │                                                            │  │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐   │  │
 │  │  │   Sidebar   │  │   Cells     │  │    Terminal     │   │  │
-│  │  │  (files)    │  │ (notebook)  │  │   (REPL)        │   │  │
+│  │  │  (SSR+JS)   │  │ (JS render) │  │   (SSR+WS)      │   │  │
 │  │  └─────────────┘  └─────────────┘  └─────────────────┘   │  │
 │  │                                                            │  │
-│  │  Minimal JS: WebSocket transport only (~60 lines)         │  │
+│  │  JS Bridge: Receives JSON, renders cells, handles events  │  │
+│  │  Future: Wasm islands for UI state (NotebookIsland.jl)    │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                              │ WebSocket                         │
+│                              │ WebSocket (JSON)                  │
 └──────────────────────────────│──────────────────────────────────┘
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -79,22 +84,23 @@ We don't fork Pluto. We use its **standalone packages** where they provide value
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  HTTP Server                                               │  │
 │  │  - Serves pages rendered with Therapy.jl render_page()    │  │
-│  │  - Uses Layout, Sidebar, Terminal components              │  │
+│  │  - SSR: Layout, Sidebar, Terminal (with hydration keys)   │  │
+│  │  - Injects JS bridge for client-side cell rendering       │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  WebSocket Handler                                         │  │
-│  │  - Cell execution → returns pre-rendered HTML              │  │
-│  │  - File operations → returns pre-rendered HTML             │  │
-│  │  - Terminal I/O → returns output text                      │  │
-│  │  - All UI rendering happens HERE, not in browser           │  │
+│  │  WebSocket Handler (COMPUTE ONLY)                          │  │
+│  │  - Cell execution → returns JSON {cell_update: {...}}      │  │
+│  │  - File operations → returns JSON {files: [...]}           │  │
+│  │  - Terminal I/O → returns text                             │  │
+│  │  - NO HTML rendering, just data                            │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Core Components                                           │  │
 │  │  - Cell.jl: Cell data structure with status, output        │  │
 │  │  - Executor.jl: Code execution in isolated module          │  │
-│  │  - render_cell_vnode(): Converts Cell → Therapy.jl VNode   │  │
+│  │  - cell_to_dict(): Converts Cell → JSON for WebSocket      │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                                │
@@ -103,8 +109,16 @@ We don't fork Pluto. We use its **standalone packages** where they provide value
 │                        Therapy.jl                                │
 │  - VNode primitives (Div, Button, Input, Span, etc.)            │
 │  - render_page() for full HTML documents                         │
-│  - render_to_string() for HTML fragments                         │
+│  - render_to_string() for component rendering                    │
 │  - SSR with hydration keys (data-hk)                             │
+│  - island() for Wasm-compiled interactive components             │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       WasmTarget.jl                              │
+│  - Julia → WebAssembly compiler                                  │
+│  - Foundation for Therapy.jl islands                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -179,16 +193,18 @@ end
 
 ## WebSocket Protocol
 
-All communication uses JSON messages:
+All communication uses JSON messages. **Server returns DATA, not HTML.**
 
 ### Client → Server
 ```javascript
-// Execute cell
+// Cell operations
 {action: 'execute', cell_id: '...', code: '...'}
-
-// Add/delete cell
 {action: 'add_cell'}
 {action: 'delete_cell', cell_id: '...'}
+{action: 'update_code', cell_id: '...', code: '...'}
+{action: 'run_all'}
+{action: 'restart'}
+{action: 'get_cells'}
 
 // File operations
 {action: 'files', path: '.'}
@@ -200,14 +216,18 @@ All communication uses JSON messages:
 
 ### Server → Client
 ```javascript
-// Pre-rendered cells HTML
-{type: 'cells', html: '<div id="cells-content">...</div>'}
+// Cell data (JSON, client renders)
+{type: 'cells_state', cells: [{id, code, status, output, ...}, ...], count: N}
+{type: 'cell_update', cell: {id, code, status, output, stdout, stderr, error_msg, execution_count}}
 
-// Pre-rendered file tree HTML
-{type: 'files', html: '<div id="file-tree-content">...</div>'}
+// File list (JSON, client renders)
+{type: 'files', path: '...', entries: [{name, path, is_directory}, ...]}
 
 // Terminal output
 {type: 'terminal', output: '2'}
+
+// File content
+{type: 'file', path: '...', content: '...'}
 ```
 
 ---
@@ -220,58 +240,69 @@ All communication uses JSON messages:
 - [x] WebSocket server with cell execution
 - [x] Server-side rendering with Therapy.jl
 
-### Phase 2: Core Notebook ← Current
+### Phase 2: Hybrid Architecture ✓ (Current)
+- [x] **Hybrid SSR + WebSocket architecture**
+- [x] Server returns JSON data (not HTML)
+- [x] Client-side JS bridge for cell rendering
 - [x] Cell management (add, delete, run)
 - [x] Code execution with output capture
 - [x] Status indicators (idle, running, completed, errored)
+- [x] NotebookIsland.jl skeleton for future Wasm integration
+
+### Phase 3: Wasm Islands ← Next
+- [ ] Integrate NotebookIsland as Wasm-compiled component
+- [ ] Replace JS bridge with Wasm signal updates
+- [ ] Full Therapy.jl island architecture
+
+### Phase 4: Pluto Integration
 - [ ] Dependency tracking with ExpressionExplorer.jl
 - [ ] Reactive execution (when cell changes, re-run dependents)
+- [ ] Leverage other Pluto patterns/packages
 
-### Phase 3: File System
+### Phase 5: Rich Editor Features
+- [ ] **CodeMirror integration** (like Pluto) for syntax highlighting, line numbers
+- [ ] Autocomplete
+- [ ] Keyboard shortcuts (Shift+Enter to run)
+
+### Phase 6: File System Enhancement
 - [x] File listing via WebSocket
 - [x] Directory navigation
 - [ ] File editing and saving
 - [ ] Project detection (Project.toml)
 
-### Phase 4: Terminal
+### Phase 7: Terminal Enhancement
 - [x] Basic terminal input/output
 - [ ] Full PTY support with ANSI codes
 - [ ] Multiple terminal sessions
 
-### Phase 5: Rich Features
-- [ ] Syntax highlighting (server-side or Prism.js)
-- [ ] Autocomplete
+### Phase 8: Rich Output
 - [ ] Plot rendering
 - [ ] Table rendering
 - [ ] HTML output
-
-### Phase 6: Polish
-- [ ] Keyboard shortcuts (Shift+Enter to run)
-- [ ] Themes (light/dark)
-- [ ] Settings persistence
 - [ ] Better error display
 
-### Phase 7: Static Export
+### Phase 9: Polish
+- [ ] Themes (light/dark)
+- [ ] Settings persistence
+
+### Phase 10: Static Export
 - [ ] Build notebooks to static HTML
 - [ ] GitHub Pages deployment
 - [ ] Baked-in outputs
 
 ---
 
-## Why Not Client-Side Wasm?
+## Why Hybrid Architecture?
 
-Sessions differs from typical Therapy.jl islands because:
+Sessions uses a **hybrid architecture** (SSR + WebSocket + client-side rendering) because:
 
 1. **Notebook execution must be server-side** - Julia code needs to run with full capabilities
-2. **State lives on server** - Cells, outputs, execution results
-3. **WebSocket is natural** - Real-time updates for long-running computations
+2. **UI should be responsive** - Client-side rendering provides immediate feedback
+3. **Clean separation** - Server handles compute, client handles UI
+4. **Future-proof** - Easy to upgrade JS rendering to Wasm islands
 
-For pure Therapy.jl apps (like the docs site), islands compile to Wasm for client-side reactivity. But Sessions needs server-side execution, so we use:
-- Server-side Therapy.jl rendering (still using all the same components!)
-- WebSocket for communication
-- Pre-rendered HTML fragments for updates
-
-This is the same pattern used by HTMX, LiveView, and similar frameworks.
+This is similar to how Pluto works: server executes code, client renders UI.
+The difference is that Sessions will eventually use Therapy.jl's Wasm islands for the UI layer.
 
 ---
 
