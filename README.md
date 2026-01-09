@@ -4,20 +4,21 @@ A VSCode + Pluto hybrid IDE and notebook environment built entirely on [Therapy.
 
 ## Vision
 
-Sessions.jl is a **Therapy.jl component** that provides:
+Sessions.jl is a **Therapy.jl application** that provides:
 
 - **VSCode-like IDE**: File explorer, integrated terminal, multiple panes
-- **Pluto-like Notebooks**: Reactive cells with dependency tracking
-- **Full-Stack Integration**: Embed notebooks in any Therapy.jl application
-- **Static Export**: Build notebooks to GitHub Pages with pre-computed outputs
-- **Pure Julia**: All UI compiles to WebAssembly via WasmTarget.jl
+- **Pluto-like Notebooks**: Reactive cells with code execution
+- **Pure Therapy.jl UI**: All components rendered server-side using Therapy.jl
+- **WebSocket Communication**: Real-time state sync between browser and server
+- **Pluto Compatibility**: Copy-paste cells from Pluto notebooks (planned)
 
 ## Key Principle
 
-Sessions is a Therapy.jl component first, notebook second. This means:
-- Uses Therapy.jl signals, effects, and components
-- Can be embedded in any Therapy.jl application
-- Follows the same reactive patterns as the rest of your app
+Sessions follows the Therapy.jl application pattern:
+- All UI is built with Therapy.jl components (`Div`, `Button`, `Input`, etc.)
+- Server renders HTML using `render_page()` and `render_to_string()`
+- WebSocket handles real-time communication (cell execution, file operations)
+- Minimal client JavaScript - just transport, no rendering logic
 
 ## Installation
 
@@ -31,67 +32,85 @@ Pkg.add(url="https://github.com/TherapeuticJulia/Sessions.jl")
 ```julia
 using Sessions
 
-# Start the full IDE
+# Start the development server
 Sessions.dev()
 
 # Open http://localhost:8080 in your browser
 ```
 
-## Embedding in Your App
-
-```julia
-using Therapy
-using Sessions
-
-MyApp = island(:MyApp) do
-    Div(
-        Header("My Data Science App"),
-
-        # Embed a notebook as just another component
-        NotebookSession(:notebook_path => "analysis.jl"),
-
-        Footer("Powered by Sessions.jl")
-    )
-end
+Or use the app entry point:
+```bash
+julia --project=. src/app.jl dev
 ```
 
-## Static Export
+## Current Features
 
-Build notebooks to static HTML for GitHub Pages:
+- **Notebook Cells**: Add, edit, run, and delete cells
+- **Code Execution**: Julia code runs in isolated module with stdout capture
+- **File Explorer**: Browse project files, click to load into cells
+- **Terminal**: Interactive Julia REPL in the browser
+- **Real-time Sync**: All state changes broadcast via WebSocket
 
-```julia
-using Sessions
+## Project Structure
 
-# Single notebook
-Sessions.build("notebook.jl", "dist/")
-
-# All notebooks in a directory
-Sessions.build_static_site("notebooks/", "dist/")
+```
+Sessions.jl/
+├── src/
+│   ├── app.jl              # Entry point (like Therapy.jl apps)
+│   ├── Sessions.jl         # Main module
+│   ├── components/         # Therapy.jl UI components
+│   │   ├── Layout.jl       # Main page layout + TopBar
+│   │   ├── Sidebar.jl      # File explorer
+│   │   └── Terminal.jl     # REPL terminal
+│   ├── routes/             # Page routes
+│   │   └── index.jl        # Main notebook page
+│   ├── Notebook/           # Core notebook logic
+│   │   ├── Cell.jl         # Cell data structure
+│   │   └── Executor.jl     # Code execution
+│   └── Server/             # HTTP + WebSocket server
+│       └── WebSocketServer.jl
+├── test/
+│   └── runtests.jl
+├── VISION.md               # Architecture and goals
+├── CLAUDE.md               # Developer guide
+└── Project.toml
 ```
 
 ## Architecture
 
 ```
-Sessions.jl
-├── Components/          # Therapy.jl UI components
-│   ├── SessionsApp.jl   # Main IDE component
-│   ├── FileExplorer.jl  # File tree
-│   ├── Terminal.jl      # Browser terminal
-│   └── Notebook/        # Notebook components
-├── Server/              # WebSocket server
-│   ├── Filesystem.jl    # File operations
-│   ├── Terminal.jl      # PTY handling
-│   └── Execution.jl     # Cell execution
-├── Notebook/            # Core notebook logic
-│   ├── Cell.jl          # Cell data structure
-│   ├── DependencyGraph.jl  # Reactive deps
-│   └── Executor.jl      # Malt.jl wrapper
-└── Export/              # Static site generation
+┌─────────────────────────────────────────────────────────────────┐
+│                        Browser                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    Sessions UI                             │  │
+│  │  (HTML rendered by Therapy.jl, updated via WebSocket)     │  │
+│  │                                                            │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐   │  │
+│  │  │  Sidebar    │  │   Cells     │  │    Terminal     │   │  │
+│  │  │  (files)    │  │  (notebook) │  │   (REPL)        │   │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────────┘   │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │ WebSocket                         │
+└──────────────────────────────│──────────────────────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Sessions Server (Julia)                       │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  HTTP Server (serves Therapy.jl rendered pages)           │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  WebSocket Handler                                         │  │
+│  │  - Cell execution (execute code, return results)          │  │
+│  │  - File operations (list, read, write)                    │  │
+│  │  - Terminal I/O                                            │  │
+│  │  - State broadcast (sends pre-rendered HTML)              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Pluto Package Leverage
+## Pluto Package Leverage (Planned)
 
-Sessions uses standalone Pluto packages where they provide value:
+Sessions will use standalone Pluto packages where they provide value:
 
 - **ExpressionExplorer.jl**: Static analysis for dependency tracking
 - **Malt.jl**: Isolated worker process execution
@@ -101,6 +120,18 @@ We don't fork Pluto - we build on its excellent standalone packages.
 ## Development Status
 
 Sessions.jl is under active development as part of the TherapeuticJulia project.
+
+**Working:**
+- Basic notebook UI with cell management
+- Code execution with output display
+- File explorer with directory navigation
+- Terminal with command execution
+- WebSocket real-time sync
+
+**In Progress:**
+- Dependency tracking between cells
+- Rich output rendering (plots, tables)
+- Syntax highlighting
 
 See [VISION.md](./VISION.md) for detailed architecture and roadmap.
 
