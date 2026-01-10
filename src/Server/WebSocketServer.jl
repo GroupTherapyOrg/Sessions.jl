@@ -3,10 +3,10 @@
 # =============================================================================
 #
 # Architecture:
-# - Server renders ALL UI using Therapy.jl VNodes
-# - WebSocket sends HTML for cell updates (not JSON data)
-# - Minimal JS: WebSocket connection + CodeMirror editors
-# - Wasm islands for reactive UI state (cell count, button states)
+# - Uses Therapy.jl's island() for reactive UI components
+# - Islands are auto-discovered and compiled to Wasm
+# - WebSocket handles compute (code execution, files, terminal)
+# - Server renders UI using Therapy.jl VNodes
 
 using Therapy
 
@@ -21,6 +21,67 @@ const CELL_ORDER = Vector{UUID}()
 const EXECUTOR = Ref{Executor}(Executor())
 const WS_CLIENTS = Set{Any}()
 
+# Compiled islands cache
+const COMPILED_ISLANDS_CACHE = Ref{Any}(nothing)
+
+# =============================================================================
+# Island Discovery & Compilation (Using Therapy.jl's Pattern)
+# =============================================================================
+
+"""
+Discover and compile islands using Therapy.jl's pattern.
+Islands are registered via register_islands!() at runtime.
+"""
+function get_compiled_islands()
+    if COMPILED_ISLANDS_CACHE[] !== nothing
+        return COMPILED_ISLANDS_CACHE[]
+    end
+
+    # Register islands at runtime (avoids precompilation issues)
+    register_islands!()
+
+    println("Discovering and compiling islands...")
+
+    # Get all registered islands from Therapy.jl's registry
+    registered = get_islands()
+
+    if isempty(registered)
+        println("  No islands found")
+        COMPILED_ISLANDS_CACHE[] = Dict{Symbol, Any}()
+        return COMPILED_ISLANDS_CACHE[]
+    end
+
+    compiled = Dict{Symbol, Any}()
+
+    for island_def in registered
+        name = island_def.name
+        println("  Compiling: $name")
+
+        try
+            # Use therapy-island element as container (Therapy.jl's convention)
+            selector = "therapy-island[data-component=\"$(lowercase(string(name)))\"]"
+
+            # Compile the island
+            result = compile_component(island_def.render_fn; container_selector=selector)
+
+            compiled[name] = (
+                html = result.html,
+                js = result.hydration.js,
+                wasm_bytes = result.wasm.bytes,
+                wasm_filename = "$(lowercase(string(name))).wasm"
+            )
+
+            println("    Wasm: $(length(result.wasm.bytes)) bytes")
+        catch e
+            @warn "Failed to compile island: $name" exception=e
+        end
+    end
+
+    COMPILED_ISLANDS_CACHE[] = compiled
+    println("  Compiled $(length(compiled)) islands")
+    return compiled
+end
+
 # =============================================================================
 # Server
 # =============================================================================
@@ -33,6 +94,9 @@ function start_server(host::String, port::Int)
         push!(CELL_ORDER, cell.id)
     end
 
+    # Pre-compile islands (optional - can be lazy)
+    compiled_islands = get_compiled_islands()
+
     server = HTTP.listen!(host, port) do http
         path = HTTP.URI(http.message.target).path
 
@@ -44,11 +108,29 @@ function start_server(host::String, port::Int)
             catch e
                 @error "WebSocket upgrade error" exception=e
             end
+
+        # Serve Wasm files for islands
+        elseif endswith(path, ".wasm")
+            filename = basename(path)
+            for (name, island) in compiled_islands
+                if island.wasm_filename == filename
+                    HTTP.setstatus(http, 200)
+                    HTTP.setheader(http, "Content-Type" => "application/wasm")
+                    HTTP.startwrite(http)
+                    write(http, island.wasm_bytes)
+                    return
+                end
+            end
+            HTTP.setstatus(http, 404)
+            HTTP.startwrite(http)
+            write(http, "Wasm not found")
+
         elseif path == "/"
             HTTP.setstatus(http, 200)
             HTTP.setheader(http, "Content-Type" => "text/html; charset=utf-8")
             HTTP.startwrite(http)
-            write(http, generate_page())
+            write(http, generate_page(compiled_islands))
+
         else
             HTTP.setstatus(http, 404)
             HTTP.startwrite(http)
@@ -59,7 +141,15 @@ function start_server(host::String, port::Int)
     wait(server)
 end
 
-function generate_page()
+function generate_page(compiled_islands::Dict)
+    # Get island HTML for toolbar
+    island_html = ""
+    for (name, island) in compiled_islands
+        if name == :NotebookControlsIsland
+            island_html = "<therapy-island data-component=\"notebookcontrolsisland\">$(island.html)</therapy-island>"
+        end
+    end
+
     # Build page using Therapy.jl components
     page = Layout(
         Div(:class => "flex-1 flex overflow-hidden",
@@ -74,12 +164,32 @@ function generate_page()
                 # Terminal panel
                 Terminal()
             )
-        )
+        );
+        island_html = island_html
     )
 
     html = render_page(page; title="Sessions.jl", head_extra=head_extra())
-    html = replace(html, "</body>" => client_script() * "</body>")
+    html = replace(html, "</body>" => client_script() * island_hydration_script(compiled_islands) * "</body>")
     return html
+end
+
+"""
+Generate hydration script for all compiled islands.
+"""
+function island_hydration_script(compiled_islands::Dict)
+    if isempty(compiled_islands)
+        return ""
+    end
+
+    scripts = String[]
+    for (name, island) in compiled_islands
+        push!(scripts, """
+        // Island: $name
+        $(island.js)
+        """)
+    end
+
+    return "<script>\n" * join(scripts, "\n") * "\n</script>"
 end
 
 # =============================================================================
@@ -112,7 +222,6 @@ end
 
 const HANDLERS = Dict{String, Function}(
     "get_state" => (ws, body) -> begin
-        # Send cells HTML (server-rendered)
         send_cells_html(ws)
         send_files(ws, ".")
     end,
@@ -238,27 +347,18 @@ end
 # Server-Side Cell Rendering (Therapy.jl)
 # =============================================================================
 
-"""
-Render all cells as HTML and send to client.
-"""
 function send_cells_html(ws)
     cells = [CELLS[id] for id in CELL_ORDER if haskey(CELLS, id)]
     html = render_to_string(CellsContainer(cells))
     send_msg(ws, "cells_html", Dict("html" => html, "cell_count" => length(cells)))
 end
 
-"""
-Broadcast all cells HTML to all clients.
-"""
 function broadcast_cells_html()
     cells = [CELLS[id] for id in CELL_ORDER if haskey(CELLS, id)]
     html = render_to_string(CellsContainer(cells))
     broadcast_msg("cells_html", Dict("html" => html, "cell_count" => length(cells)))
 end
 
-"""
-Render single cell as HTML and broadcast update.
-"""
 function broadcast_cell_html(cell::Cell)
     html = render_to_string(CellComponent(cell))
     broadcast_msg("cell_html", Dict(
@@ -282,7 +382,6 @@ function send_files(ws, path::String)
         end
         sort!(entries, by = e -> (!e["is_directory"], lowercase(e["name"])))
 
-        # Render file tree as HTML
         html = render_to_string(FileTreeComponent(path, entries))
         send_msg(ws, "files_html", Dict("path" => path, "html" => html))
     catch e
@@ -290,12 +389,8 @@ function send_files(ws, path::String)
     end
 end
 
-"""
-Render file tree as Therapy.jl VNodes.
-"""
 function FileTreeComponent(path::String, entries::Vector)
     Div(:id => "file-tree-content",
-        # Parent directory link
         if path != "."
             parent = dirname(path)
             parent = isempty(parent) ? "." : parent
@@ -306,8 +401,6 @@ function FileTreeComponent(path::String, entries::Vector)
         else
             nothing
         end,
-
-        # File/directory entries
         [FileEntryComponent(e) for e in entries]...
     )
 end

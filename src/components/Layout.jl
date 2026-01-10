@@ -7,15 +7,15 @@
 using Therapy
 
 """
-    Layout(children...)
+    Layout(children...; island_html="")
 
 Main layout component for Sessions.jl pages.
 Provides the IDE chrome (top bar, structure) and renders children in the main area.
 """
-function Layout(children...)
+function Layout(children...; island_html::String="")
     Div(:id => "app", :class => "h-screen flex flex-col bg-gray-900 text-gray-200",
-        # Top Bar
-        TopBar(),
+        # Top Bar with optional island
+        TopBar(; island_html=island_html),
 
         # Main Content (passed as children)
         children...
@@ -23,13 +23,19 @@ function Layout(children...)
 end
 
 """
-    TopBar()
+    TopBar(; island_html="")
 
 Top navigation bar with session controls.
+Optionally includes compiled island HTML for reactive cell count.
 """
-function TopBar()
+function TopBar(; island_html::String="")
     Div(:class => "h-10 bg-gray-800 border-b border-gray-700 flex items-center px-4",
         Span(:class => "font-bold text-lg", "Sessions.jl"),
+
+        # Island container for notebook controls (cell count, etc.)
+        Div(:id => "notebook-controls-container",
+            :class => "ml-4",
+            RawHtml(island_html)),
 
         # Spacer
         Div(:class => "flex-1"),

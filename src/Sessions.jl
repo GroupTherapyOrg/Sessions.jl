@@ -49,7 +49,7 @@ export Executor, execute, execute_cell!, restart!, shutdown!
 export NotebookReactivity, DependencyGraph, analyze_cell, update_cells!, get_downstream_cells, get_execution_order
 export Layout, TopBar, Sidebar, Terminal
 export CellComponent, CellOutput, CellsContainer
-export NotebookIsland, FileTreeIsland, TerminalIsland
+export register_islands!
 export dev
 
 """
