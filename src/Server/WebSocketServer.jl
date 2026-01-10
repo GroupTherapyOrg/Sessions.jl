@@ -64,11 +64,15 @@ function get_compiled_islands()
             # Compile the island
             result = compile_component(island_def.render_fn; container_selector=selector)
 
+            wasm_filename = "$(lowercase(string(name))).wasm"
+            # Replace default app.wasm path with island-specific path
+            js = replace(result.hydration.js, "./app.wasm" => "/$wasm_filename")
+
             compiled[name] = (
                 html = result.html,
-                js = result.hydration.js,
+                js = js,
                 wasm_bytes = result.wasm.bytes,
-                wasm_filename = "$(lowercase(string(name))).wasm"
+                wasm_filename = wasm_filename
             )
 
             println("    Wasm: $(length(result.wasm.bytes)) bytes")
@@ -169,26 +173,32 @@ function generate_page(compiled_islands::Dict)
     )
 
     html = render_page(page; title="Sessions.jl", head_extra=head_extra())
-    html = replace(html, "</body>" => client_script() * island_hydration_script(compiled_islands) * "</body>")
+
+    # Only include hydration for islands actually in the page
+    islands_in_page = [:NotebookControlsIsland]
+    hydration = island_hydration_script(compiled_islands, islands_in_page)
+
+    html = replace(html, "</body>" => client_script() * hydration * "</body>")
     return html
 end
 
 """
-Generate hydration script for all compiled islands.
+Generate hydration script for specified islands.
 """
-function island_hydration_script(compiled_islands::Dict)
-    if isempty(compiled_islands)
-        return ""
-    end
-
+function island_hydration_script(compiled_islands::Dict, island_names::Vector{Symbol})
     scripts = String[]
-    for (name, island) in compiled_islands
-        push!(scripts, """
-        // Island: $name
-        $(island.js)
-        """)
+
+    for name in island_names
+        if haskey(compiled_islands, name)
+            island = compiled_islands[name]
+            push!(scripts, """
+            // Island: $name
+            $(island.js)
+            """)
+        end
     end
 
+    isempty(scripts) && return ""
     return "<script>\n" * join(scripts, "\n") * "\n</script>"
 end
 
