@@ -78,6 +78,19 @@ function client_script()
     const editors = new Map();  // cell_id -> EditorView
     let currentPath = '.';
 
+    // Update cell count in the NotebookControlsIsland
+    function updateCellCount(count) {
+        // Find the cell count element within the island (has data-hk attribute)
+        const island = document.querySelector('therapy-island[data-component="notebookcontrolsisland"]');
+        if (island) {
+            // The cell count is in the span with hydration key 3
+            const countEl = island.querySelector('[data-hk="3"]');
+            if (countEl) {
+                countEl.textContent = count;
+            }
+        }
+    }
+
     // ==========================================================================
     // WebSocket (network I/O - unavoidable in JS)
     // ==========================================================================
@@ -126,6 +139,9 @@ function client_script()
                 // Initialize CodeMirror for each cell
                 initializeEditors();
                 bindCellEvents();
+
+                // Update cell count display
+                updateCellCount(body.cell_count);
             }
         },
 
@@ -287,7 +303,7 @@ function client_script()
         document.getElementById('btn-restart')?.addEventListener('click', () => send('restart', {}));
         document.getElementById('btn-refresh-files')?.addEventListener('click', () => send('list_files', { path: currentPath }));
 
-        // Terminal input
+        // Terminal input (WebSocket communication still needed)
         const termInput = document.getElementById('terminal-input');
         if (termInput) {
             termInput.onkeydown = (e) => {

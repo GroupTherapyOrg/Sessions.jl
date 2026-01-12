@@ -146,15 +146,18 @@ function start_server(host::String, port::Int)
 end
 
 function generate_page(compiled_islands::Dict)
-    # Get island HTML for toolbar
-    island_html = ""
+    # Get island HTML for toolbar and terminal
+    toolbar_island_html = ""
+    terminal_island_html = ""
     for (name, island) in compiled_islands
         if name == :NotebookControlsIsland
-            island_html = "<therapy-island data-component=\"notebookcontrolsisland\">$(island.html)</therapy-island>"
+            toolbar_island_html = "<therapy-island data-component=\"notebookcontrolsisland\">$(island.html)</therapy-island>"
+        elseif name == :TerminalIsland
+            terminal_island_html = "<therapy-island data-component=\"terminalisland\">$(island.html)</therapy-island>"
         end
     end
 
-    # Build page using Therapy.jl components
+    # Build page using Therapy.jl components + Wasm islands
     page = Layout(
         Div(:class => "flex-1 flex overflow-hidden",
             # Sidebar with file explorer
@@ -165,17 +168,17 @@ function generate_page(compiled_islands::Dict)
                 # Cells container - populated via WebSocket
                 Div(:id => "cells", :class => "flex-1 overflow-auto p-4"),
 
-                # Terminal panel
-                Terminal()
+                # Terminal as Wasm island (handles its own visibility toggle)
+                RawHtml(terminal_island_html)
             )
         );
-        island_html = island_html
+        island_html = toolbar_island_html
     )
 
     html = render_page(page; title="Sessions.jl", head_extra=head_extra())
 
-    # Only include hydration for islands actually in the page
-    islands_in_page = [:NotebookControlsIsland]
+    # Include hydration for islands in the page
+    islands_in_page = [:NotebookControlsIsland, :TerminalIsland]
     hydration = island_hydration_script(compiled_islands, islands_in_page)
 
     html = replace(html, "</body>" => client_script() * hydration * "</body>")
