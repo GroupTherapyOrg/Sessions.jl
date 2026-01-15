@@ -17,6 +17,16 @@ Uses ONLY Tailwind for styling (no custom CSS).
 """
 function sessions_styles()
     """
+    <!-- BLOCKING: Set dark mode BEFORE content renders to prevent flicker -->
+    <script>
+    (function() {
+        var saved = localStorage.getItem('sessions-dark-mode');
+        if (saved === 'true' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+    })();
+    </script>
+
     <!-- Google Fonts: Serif for headings (calligraphy), Mono for code -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -69,14 +79,17 @@ function sessions_styles()
         font-family: 'JetBrains Mono', monospace;
         font-size: 14px;
         line-height: 1.6;
+        background: #fafaf9; /* stone-50 */
+        min-height: 60px;
     }
     .cm-editor.cm-focused { outline: none; }
     .cm-scroller { padding: 16px 20px; }
-    .cm-content { caret-color: #375bbd; }
+    .cm-content { caret-color: #375bbd; background: transparent; }
     .cm-cursor { border-left: 2px solid #375bbd; }
     .cm-selectionBackground { background: rgba(55, 91, 189, 0.15) !important; }
-    .cm-activeLine { background: rgba(55, 91, 189, 0.04); }
+    .cm-activeLine { background: rgba(55, 91, 189, 0.06); }
     .cm-gutters { background: #f5f5f4; border-right: 1px solid #e7e5e4; color: #a8a29e; }
+    .dark .cm-editor { background: #171717; /* neutral-900 */ }
     .dark .cm-gutters { background: #262626; border-right-color: #404040; color: #737373; }
     .dark .cm-activeLine { background: rgba(94, 122, 211, 0.08); }
     .dark .cm-selectionBackground { background: rgba(94, 122, 211, 0.25) !important; }
@@ -97,6 +110,32 @@ function sessions_styles()
     .dark .cm-function, .dark .cm-callee { color: #5e7ad3; }
     .dark .cm-string { color: #00ab85; }
     .dark .cm-typeName { color: #00e7b4; }
+
+    /* Cell state indicators */
+    .cell.cell-running { border-color: #f99b15; }
+    .cell.cell-running .run-btn { background: #f99b15; }
+    .cell.cell-queued { border-color: #815ba4; }
+    .cell.cell-queued .run-btn { background: #815ba4; }
+    .cell.cell-error { border-color: #ef4444; }
+    .cell.cell-error .run-btn { background: #ef4444; }
+    .cell.cell-idle .run-btn { background: #375bbd; }
+    .dark .cell.cell-idle .run-btn { background: #5e7ad3; }
+
+    /* Running animation */
+    .cell.cell-running .run-btn::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
     </style>
     """
 end
@@ -104,61 +143,101 @@ end
 """
 Sessions.jl JavaScript Bridge
 
-Uses Therapy.jl's reactive WebSocket system properly:
-1. Subscribes to server signals (cell_states, cell_outputs)
-2. Listens to therapy:signal:* events for reactive updates
-3. Sends actions via Therapy.jl channels
-4. CodeMirror is the only external JS dependency
+Architecture: Per-Cell Server Signals
+=====================================
+Each cell has its own signals: cell_state_{id}, cell_output_{id}, cell_runtime_{id}
+
+This is simpler than Dict-based signals because:
+1. Each cell subscribes only to its own signals
+2. No need to iterate through Dict on every update
+3. Therapy.jl auto-updates runtime via data-server-signal attribute
+
+The JavaScript handles:
+1. CodeMirror initialization (external JS library - cannot be avoided)
+2. State CSS class updates (data-server-signal only updates textContent)
+3. Output HTML updates (innerHTML, not textContent)
+4. Dirty state tracking (yellow indicator when code changed)
+5. Dark mode persistence (localStorage)
+6. Action delegation (execute, delete, add-cell)
 """
 function sessions_script()
     """
     <script>
-    // Sessions.jl - Using Therapy.jl's Reactive WebSocket System
+    // Sessions.jl - Per-Cell Signal Architecture
     (function() {
         'use strict';
 
         const editors = new Map();
+        const initialCode = new Map();  // Track original code for dirty detection
         let notebookId = null;
 
         // =====================================================================
-        // CodeMirror (Required - External JS Library)
+        // CodeMirror Initialization (Required - External JS Library)
         // =====================================================================
 
         async function initCodeMirror(container, code, cellId) {
-            // Use Pluto's pre-bundled CodeMirror (avoids multiple instance issues)
-            const CM = await import('codemirror-pluto');
+            try {
+                const CM = await import('codemirror-pluto');
+                console.log('[Sessions] CodeMirror loaded, available exports:', Object.keys(CM));
 
-            const view = new CM.EditorView({
-                state: CM.EditorState.create({
-                    doc: code,
-                    extensions: [
-                        // Core editor features
-                        CM.lineNumbers(),
-                        CM.highlightSpecialChars(),
-                        CM.history(),
-                        CM.drawSelection(),
-                        CM.indentOnInput(),
-                        CM.bracketMatching(),
-                        CM.closeBrackets(),
-                        CM.highlightSelectionMatches(),
-                        CM.EditorView.lineWrapping,
+                // Build extensions array, checking each one exists
+                const extensions = [];
 
-                        // Julia syntax highlighting
-                        CM.julia_andrey(),
+                // Core extensions (should always exist)
+                if (CM.lineNumbers) extensions.push(CM.lineNumbers());
+                if (CM.highlightSpecialChars) extensions.push(CM.highlightSpecialChars());
+                if (CM.history) extensions.push(CM.history());
+                if (CM.drawSelection) extensions.push(CM.drawSelection());
+                if (CM.indentOnInput) extensions.push(CM.indentOnInput());
+                if (CM.bracketMatching) extensions.push(CM.bracketMatching());
+                if (CM.closeBrackets) extensions.push(CM.closeBrackets());
+                if (CM.highlightSelectionMatches) extensions.push(CM.highlightSelectionMatches());
+                if (CM.EditorView?.lineWrapping) extensions.push(CM.EditorView.lineWrapping);
 
-                        // Keymaps
-                        CM.keymap.of([
-                            ...CM.defaultKeymap,
-                            ...CM.historyKeymap,
-                            ...CM.closeBracketsKeymap,
-                            { key: 'Shift-Enter', run: () => { executeCell(cellId); return true; } },
-                            { key: 'Mod-Enter', run: () => { executeCell(cellId); return true; } }
-                        ])
-                    ]
-                }),
-                parent: container
-            });
-            editors.set(cellId, view);
+                // Julia syntax highlighting (Pluto's lezer-based highlighter)
+                if (CM.julia_andrey) {
+                    extensions.push(CM.julia_andrey());
+                    console.log('[Sessions] Julia syntax highlighting enabled');
+                }
+
+                // Keymaps
+                const keymaps = [];
+                if (CM.defaultKeymap) keymaps.push(...CM.defaultKeymap);
+                if (CM.historyKeymap) keymaps.push(...CM.historyKeymap);
+                if (CM.closeBracketsKeymap) keymaps.push(...CM.closeBracketsKeymap);
+                // Custom keybindings for cell execution
+                keymaps.push({ key: 'Shift-Enter', run: () => { executeCell(cellId); return true; } });
+                keymaps.push({ key: 'Mod-Enter', run: () => { executeCell(cellId); return true; } });
+                if (CM.keymap) extensions.push(CM.keymap.of(keymaps));
+
+                // Track changes for dirty indicator
+                if (CM.EditorView?.updateListener) {
+                    extensions.push(CM.EditorView.updateListener.of(update => {
+                        if (update.docChanged) updateDirtyState(cellId);
+                    }));
+                }
+
+                const view = new CM.EditorView({
+                    state: CM.EditorState.create({
+                        doc: code,
+                        extensions: extensions
+                    }),
+                    parent: container
+                });
+                editors.set(cellId, view);
+                initialCode.set(cellId, code);
+                console.log('[Sessions] CodeMirror initialized for cell:', cellId);
+            } catch (err) {
+                console.error('[Sessions] CodeMirror init failed:', err);
+                // Fallback: show code in a textarea
+                const textarea = document.createElement('textarea');
+                textarea.value = code;
+                textarea.className = 'w-full h-32 p-4 font-mono text-sm bg-stone-50 dark:bg-neutral-900 border-0 resize-none focus:outline-none';
+                textarea.addEventListener('input', () => updateDirtyState(cellId));
+                container.appendChild(textarea);
+                editors.set(cellId, { state: { doc: { toString: () => textarea.value } } });
+                initialCode.set(cellId, code);
+            }
         }
 
         function getCode(cellId) {
@@ -167,7 +246,34 @@ function sessions_script()
         }
 
         // =====================================================================
-        // Therapy.jl Channel Actions
+        // Dirty State Tracking
+        // =====================================================================
+
+        function updateDirtyState(cellId) {
+            const current = getCode(cellId);
+            const original = initialCode.get(cellId) || '';
+            const isDirty = current !== original;
+
+            const cell = document.querySelector('[data-cell-id="' + cellId + '"]');
+            if (!cell) return;
+
+            const indicator = cell.querySelector('.dirty-indicator');
+            if (indicator) {
+                indicator.classList.toggle('hidden', !isDirty);
+                indicator.classList.toggle('bg-yellow-500', isDirty);
+                indicator.dataset.dirty = isDirty ? 'true' : 'false';
+            }
+        }
+
+        function clearDirtyState(cellId) {
+            // After execution, update initial code to current
+            const current = getCode(cellId);
+            initialCode.set(cellId, current);
+            updateDirtyState(cellId);
+        }
+
+        // =====================================================================
+        // Channel Actions (Therapy.jl)
         // =====================================================================
 
         function sendAction(channel, data) {
@@ -177,6 +283,7 @@ function sessions_script()
         }
 
         function executeCell(cellId) {
+            clearDirtyState(cellId);  // Mark as clean before execution
             sendAction('execute', {
                 notebook_id: notebookId,
                 cell_id: cellId,
@@ -185,62 +292,66 @@ function sessions_script()
         }
 
         // =====================================================================
-        // Therapy.jl Server Signal Handlers
-        // Using therapy:signal:* events for reactive updates
+        // Per-Cell Signal Handlers
         // =====================================================================
 
-        function setupSignalHandlers() {
-            // Subscribe to cell_states and cell_outputs signals
-            if (typeof TherapyWS !== 'undefined') {
-                TherapyWS.subscribe('cell_states');
-                TherapyWS.subscribe('cell_outputs');
+        function subscribeToCell(cellId) {
+            if (typeof TherapyWS === 'undefined') return;
+            TherapyWS.subscribe('cell_state_' + cellId);
+            TherapyWS.subscribe('cell_output_' + cellId);
+        }
+
+        function setupCellSignalHandler(cellId) {
+            const stateSignal = 'cell_state_' + cellId;
+            const outputSignal = 'cell_output_' + cellId;
+
+            // Handle state changes (CSS classes)
+            window.addEventListener('therapy:signal:' + stateSignal, function(e) {
+                const state = e.detail.value;
+                const cell = document.querySelector('[data-cell-id="' + cellId + '"]');
+                if (!cell) return;
+
+                cell.classList.remove('cell-running', 'cell-queued', 'cell-error', 'cell-idle');
+                const cls = state === 'CELL_RUNNING' ? 'cell-running' :
+                            state === 'CELL_QUEUED' ? 'cell-queued' :
+                            state === 'CELL_ERROR' ? 'cell-error' : 'cell-idle';
+                cell.classList.add(cls);
+            });
+
+            // Handle output changes (innerHTML)
+            window.addEventListener('therapy:signal:' + outputSignal, function(e) {
+                const html = e.detail.value || '';
+                const cell = document.querySelector('[data-cell-id="' + cellId + '"]');
+                if (!cell) return;
+
+                const outputEl = cell.querySelector('.cell-output');
+                if (outputEl) {
+                    outputEl.innerHTML = html;
+                    outputEl.style.display = html ? '' : 'none';
+                }
+            });
+        }
+
+        function setupAllCellSignals() {
+            // Wait for TherapyWS to be ready
+            function doSetup() {
+                if (typeof TherapyWS === 'undefined' || !TherapyWS.isConnected()) {
+                    setTimeout(doSetup, 200);
+                    return;
+                }
+
+                document.querySelectorAll('.cell').forEach(cell => {
+                    const cellId = cell.dataset.cellId;
+                    if (cellId) {
+                        subscribeToCell(cellId);
+                        setupCellSignalHandler(cellId);
+                    }
+                });
+
+                TherapyWS.subscribe('cells_list');
             }
 
-            // Handle cell_states signal updates (reactive CSS class updates)
-            window.addEventListener('therapy:signal:cell_states', function(e) {
-                const states = e.detail.value;
-                if (!states) return;
-
-                for (const [cellId, state] of Object.entries(states)) {
-                    const cell = document.querySelector('[data-cell-id="' + cellId + '"]');
-                    if (cell) {
-                        cell.classList.remove('cell-running', 'cell-queued', 'cell-error', 'cell-idle');
-                        const cls = state === 'CELL_RUNNING' ? 'cell-running' :
-                                    state === 'CELL_QUEUED' ? 'cell-queued' :
-                                    state === 'CELL_ERROR' ? 'cell-error' : 'cell-idle';
-                        cell.classList.add(cls);
-                    }
-                }
-            });
-
-            // Handle cell_outputs signal updates (reactive HTML updates)
-            window.addEventListener('therapy:signal:cell_outputs', function(e) {
-                const outputs = e.detail.value;
-                if (!outputs) return;
-
-                for (const [cellId, outputData] of Object.entries(outputs)) {
-                    const cell = document.querySelector('[data-cell-id="' + cellId + '"]');
-                    if (!cell) continue;
-
-                    let outputEl = cell.querySelector('.cell-output');
-
-                    if (outputData && outputData.html) {
-                        if (!outputEl) {
-                            outputEl = document.createElement('div');
-                            outputEl.className = 'cell-output border-t border-neutral-200 dark:border-neutral-700 p-4 bg-neutral-50 dark:bg-neutral-800/50 font-mono text-sm';
-                            const container = cell.querySelector('.cell-code-container');
-                            if (container) container.after(outputEl);
-                        }
-                        outputEl.innerHTML = outputData.html;
-
-                        // Update runtime badge if present
-                        if (outputData.runtime_ms) {
-                            let badge = cell.querySelector('.runtime-badge');
-                            if (badge) badge.textContent = outputData.runtime_ms.toFixed(1) + 'ms';
-                        }
-                    }
-                }
-            });
+            doSetup();
         }
 
         // =====================================================================
@@ -271,34 +382,76 @@ function sessions_script()
         }
 
         // =====================================================================
-        // Channel Handlers (for cell_added, cell_deleted)
+        // Channel Handlers (cell_added, cell_deleted)
         // =====================================================================
 
         function setupChannelHandlers() {
             if (typeof TherapyWS === 'undefined') return;
 
+            // TODO: Implement proper DOM insertion for new cells
+            // For now, reload on cell_added (cells_list signal will enable no-refresh later)
             TherapyWS.onChannelMessage('cell_added', () => location.reload());
+
             TherapyWS.onChannelMessage('cell_deleted', function(data) {
                 const cell = document.querySelector('[data-cell-id="' + data.cell_id + '"]');
                 if (cell) {
                     editors.delete(data.cell_id);
+                    initialCode.delete(data.cell_id);
                     cell.remove();
                 }
             });
         }
 
         // =====================================================================
+        // Dark Mode (initialization + toggle handler for island)
+        // =====================================================================
+
+        function initDarkMode() {
+            const saved = localStorage.getItem('sessions-dark-mode');
+            if (saved === 'true') {
+                document.documentElement.classList.add('dark');
+            } else if (saved === 'false') {
+                document.documentElement.classList.remove('dark');
+            } else {
+                // Check system preference
+                if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.classList.add('dark');
+                }
+            }
+        }
+
+        // Global toggle function that the DarkModeToggle island can call
+        // (Therapy.jl Wasm islands can call window.* functions)
+        window.toggleDarkMode = function() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('sessions-dark-mode', isDark ? 'true' : 'false');
+        };
+
+        // Also expose set_dark_mode for island :dark_mode prop binding
+        window.set_dark_mode = function(value) {
+            if (value === 1 || value === true) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+            localStorage.setItem('sessions-dark-mode', value ? 'true' : 'false');
+        };
+
+        // =====================================================================
         // Initialization
         // =====================================================================
 
         function init() {
-            console.log('[Sessions] Initializing with Therapy.jl reactive WebSocket...');
+
+            // Initialize dark mode from localStorage
+            initDarkMode();
 
             // Action delegation
             document.addEventListener('click', handleAction);
 
-            // Set up Therapy.jl signal handlers (reactive updates)
-            setupSignalHandlers();
+            // Set up per-cell signal handlers
+            setupAllCellSignals();
 
             // Set up channel handlers
             setupChannelHandlers();
@@ -309,7 +462,7 @@ function sessions_script()
                 const container = cell.querySelector('.cell-code-container');
                 const codeEl = cell.querySelector('.cell-code');
                 if (container && codeEl && !editors.has(cellId)) {
-                    const code = codeEl.textContent || '';
+                    const code = container.dataset.initialCode || codeEl.textContent || '';
                     codeEl.remove();
                     await initCodeMirror(container, code, cellId);
                 }
@@ -320,6 +473,8 @@ function sessions_script()
         window.setNotebookId = function(id) { notebookId = id; };
         window.runAll = function() { sendAction('run_all', { notebook_id: notebookId }); };
         window.saveNotebook = function() { sendAction('save', { notebook_id: notebookId }); };
+        window.addCell = function(afterId) { sendAction('add_cell', { notebook_id: notebookId, after_cell_id: afterId }); };
+        // Note: toggleDarkMode is handled by the DarkModeToggle island (Wasm)
 
         // Start
         if (document.readyState === 'loading') {
@@ -368,14 +523,8 @@ function Layout(content)
                             :onclick => "saveNotebook()",
                             "Save"
                         ),
-                        # Theme Toggle
-                        Button(:class => "p-2 rounded text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors",
-                            :onclick => "document.documentElement.classList.toggle('dark')",
-                            :title => "Toggle dark mode",
-                            Svg(:class => "w-5 h-5", :fill => "none", :viewBox => "0 0 24 24", :stroke => "currentColor", :stroke_width => "2",
-                                Path(:d => "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z")
-                            )
-                        )
+                        # Theme Toggle (Therapy.jl island - compiled to Wasm, no JavaScript)
+                        DarkModeToggle()
                     )
                 )
             )

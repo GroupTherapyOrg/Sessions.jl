@@ -75,6 +75,9 @@ end
 """
 Handle adding new cells.
 Message: {notebook_id, after_cell_id?, code?}
+
+After adding, registers per-cell signals and updates cells_list signal
+so clients can add the new cell to DOM without page refresh.
 """
 function setup_add_cell_channel!()
     on_channel_message("add_cell") do conn, data
@@ -86,12 +89,20 @@ function setup_add_cell_channel!()
             return
         end
 
-        after = haskey(data, "after_cell_id") ? UUID(data["after_cell_id"]) : nothing
+        # Handle null/nothing after_cell_id (for "Add Cell" at end of notebook)
+        after_cell_str = get(data, "after_cell_id", nothing)
+        after = (after_cell_str !== nothing && after_cell_str != "null" && !isempty(string(after_cell_str))) ? UUID(after_cell_str) : nothing
         code = get(data, "code", "")
 
         cell = add_cell!(notebook; code=code, after=after)
 
-        # Broadcast new cell
+        # Register per-cell signals for the new cell
+        register_cell_signals!(cell)
+
+        # Update cells_list signal (triggers client to add new cell to DOM)
+        update_cells_list_signal!(notebook)
+
+        # Also broadcast via channel for backwards compatibility
         broadcast_channel!("cell_added", Dict(
             "notebook_id" => string(notebook_id),
             "cell" => cell_to_dict(cell),
@@ -103,6 +114,8 @@ end
 """
 Handle deleting cells.
 Message: {notebook_id, cell_id}
+
+After deleting, unregisters per-cell signals and updates cells_list signal.
 """
 function setup_delete_cell_channel!()
     on_channel_message("delete_cell") do conn, data
@@ -115,6 +128,13 @@ function setup_delete_cell_channel!()
         end
 
         if delete_cell!(notebook, cell_id)
+            # Unregister per-cell signals
+            unregister_cell_signals!(cell_id)
+
+            # Update cells_list signal
+            update_cells_list_signal!(notebook)
+
+            # Also broadcast via channel for backwards compatibility
             broadcast_channel!("cell_deleted", Dict(
                 "notebook_id" => string(notebook_id),
                 "cell_id" => string(cell_id)
@@ -303,6 +323,8 @@ end
 """
 Handle load requests.
 Message: {path}
+
+After loading, registers per-cell signals for all cells.
 """
 function setup_load_channel!()
     on_channel_message("load") do conn, data
@@ -314,6 +336,9 @@ function setup_load_channel!()
 
             # Associate connection with notebook
             CONN_NOTEBOOK[conn.id] = notebook.id
+
+            # Register per-cell signals for all cells
+            register_all_cell_signals!(notebook)
 
             broadcast_channel!("loaded", Dict(
                 "notebook" => notebook_to_dict(notebook)

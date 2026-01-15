@@ -50,6 +50,7 @@ include("Server/Channels.jl")
 # =============================================================================
 
 include("UI/CellView.jl")
+include("UI/DarkModeToggle.jl")  # Island for theme toggle (compiled to Wasm)
 include("UI/Layout.jl")
 
 # =============================================================================

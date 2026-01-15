@@ -1,86 +1,159 @@
 # Signals.jl - Server signals for real-time state synchronization
 #
 # Uses Therapy.jl's reactive WebSocket system for automatic state propagation.
-# Server signals automatically broadcast to subscribed clients.
-# DOM elements with data-server-signal attributes auto-update.
+#
+# Architecture: Per-Cell Server Signals
+# =====================================
+# Instead of Dict-based signals (cell_states = {cell_id => state}), we use
+# individual signals per cell. This enables:
+#
+# 1. Fine-grained subscriptions (clients only get what they need)
+# 2. Simpler client-side handling (one signal = one cell)
+# 3. Better use of data-server-signal attributes where applicable
+#
+# Signal naming convention:
+# - cell_state_{cell_id}   -> "CELL_IDLE"|"CELL_RUNNING"|"CELL_QUEUED"|"CELL_ERROR"
+# - cell_output_{cell_id}  -> HTML string of cell output
+# - cell_runtime_{cell_id} -> Runtime in ms (number as string)
 
 using Therapy
 
 # =============================================================================
-# Server Signals (Automatically broadcast via WebSocket)
+# Signal Registry (Track per-cell signals)
 # =============================================================================
 
-# Cell states: {cell_id => "IDLE"|"RUNNING"|"QUEUED"|"ERROR"}
-# Auto-broadcasts to all connected clients when updated
-const CELL_STATES_SIGNAL = Ref{Any}(nothing)
+# Track which cell signals have been created
+const CELL_SIGNAL_REGISTRY = Set{String}()
 
-# Cell outputs: {cell_id => {html: "...", runtime_ms: 123}}
-# Auto-broadcasts to all connected clients when updated
-const CELL_OUTPUTS_SIGNAL = Ref{Any}(nothing)
-
-# Notebook info: {id, path, cell_count, modified}
+# Global notebook info signal
 const NOTEBOOK_INFO_SIGNAL = Ref{Any}(nothing)
 
 # Connected users for collaboration
 const USERS_SIGNAL = Ref{Any}(nothing)
 
+# Cells list signal for dynamic cell management (add/delete without refresh)
+const CELLS_LIST_SIGNAL = Ref{Any}(nothing)
+
 """
-Initialize Therapy.jl server signals.
-These automatically broadcast to subscribed clients via WebSocket.
+Initialize global Therapy.jl server signals.
+Per-cell signals are created dynamically when cells are added.
 """
 function setup_signals!()
-    # Cell states - clients subscribe via data-server-signal="cell_states"
-    CELL_STATES_SIGNAL[] = create_server_signal("cell_states", Dict{String, String}())
-
-    # Cell outputs - clients subscribe via data-server-signal="cell_outputs"
-    CELL_OUTPUTS_SIGNAL[] = create_server_signal("cell_outputs", Dict{String, Any}())
-
-    # Notebook info
+    # Notebook info (global)
     NOTEBOOK_INFO_SIGNAL[] = create_server_signal("notebook_info", Dict{String, Any}())
 
-    # Connected users
+    # Connected users (global)
     USERS_SIGNAL[] = create_server_signal("users", Dict{String, Any}[])
+
+    # Cells list - tracks which cells exist and their order
+    # Client subscribes to this to know when to add/remove cell DOM elements
+    CELLS_LIST_SIGNAL[] = create_server_signal("cells_list", Dict{String, Any}[])
 end
 
 # =============================================================================
-# Signal Update Functions (Auto-broadcast to clients)
+# Per-Cell Signal Management
 # =============================================================================
 
 """
-Update a single cell's state. Automatically broadcasts to all clients.
+Register server signals for a new cell.
+Creates: cell_state_{id}, cell_output_{id}, cell_runtime_{id}
 """
-function set_cell_state!(cell_id::UUID, state::CellState)
-    sig = CELL_STATES_SIGNAL[]
-    sig === nothing && return
+function register_cell_signals!(cell::Cell)
+    cell_id = string(cell.id)
 
-    update_server_signal!(sig, states -> begin
-        states[string(cell_id)] = string(state)
-        return states
-    end)
-end
+    # Create per-cell signals (only if not already created)
+    state_key = "cell_state_$(cell_id)"
+    output_key = "cell_output_$(cell_id)"
+    runtime_key = "cell_runtime_$(cell_id)"
 
-"""
-Update a cell's output. Automatically broadcasts to all clients.
-"""
-function set_cell_output!(cell_id::UUID, output::Union{Nothing, CellOutput}, runtime_ms::Union{Nothing, Float64})
-    sig = CELL_OUTPUTS_SIGNAL[]
-    sig === nothing && return
-
-    output_data = if output === nothing
-        Dict{String, Any}("html" => "", "logs" => "", "runtime_ms" => runtime_ms)
-    else
-        Dict{String, Any}(
-            "html" => output.html,
-            "logs" => output.logs,
-            "error_logs" => output.error_logs,
-            "runtime_ms" => runtime_ms
-        )
+    if !(state_key in CELL_SIGNAL_REGISTRY)
+        create_server_signal(state_key, string(cell.state))
+        push!(CELL_SIGNAL_REGISTRY, state_key)
     end
 
-    update_server_signal!(sig, outputs -> begin
-        outputs[string(cell_id)] = output_data
-        return outputs
-    end)
+    if !(output_key in CELL_SIGNAL_REGISTRY)
+        output_html = cell.output !== nothing ? cell.output.html : ""
+        create_server_signal(output_key, output_html)
+        push!(CELL_SIGNAL_REGISTRY, output_key)
+    end
+
+    if !(runtime_key in CELL_SIGNAL_REGISTRY)
+        runtime_str = cell.runtime_ms !== nothing ? string(round(cell.runtime_ms, digits=1)) : ""
+        create_server_signal(runtime_key, runtime_str)
+        push!(CELL_SIGNAL_REGISTRY, runtime_key)
+    end
+end
+
+"""
+Unregister signals for a deleted cell.
+"""
+function unregister_cell_signals!(cell_id::UUID)
+    id_str = string(cell_id)
+
+    # Remove from registry (signals themselves can be reused if cell recreated)
+    delete!(CELL_SIGNAL_REGISTRY, "cell_state_$(id_str)")
+    delete!(CELL_SIGNAL_REGISTRY, "cell_output_$(id_str)")
+    delete!(CELL_SIGNAL_REGISTRY, "cell_runtime_$(id_str)")
+end
+
+"""
+Register signals for all cells in a notebook.
+Called when notebook is loaded or server starts.
+"""
+function register_all_cell_signals!(notebook::Notebook)
+    for cell in values(notebook.cells)
+        register_cell_signals!(cell)
+    end
+
+    # Update cells list signal
+    update_cells_list_signal!(notebook)
+end
+
+# =============================================================================
+# Signal Update Functions (Per-Cell)
+# =============================================================================
+
+"""
+Update a cell's state signal. Automatically broadcasts to all clients.
+"""
+function set_cell_state!(cell_id::UUID, state::CellState)
+    id_str = string(cell_id)
+    signal_name = "cell_state_$(id_str)"
+
+    # Ensure signal exists
+    if !(signal_name in CELL_SIGNAL_REGISTRY)
+        create_server_signal(signal_name, string(state))
+        push!(CELL_SIGNAL_REGISTRY, signal_name)
+    end
+
+    # Get signal by name and update it
+    sig = get_server_signal_by_name(signal_name)
+    if sig !== nothing
+        set_server_signal!(sig, string(state))
+    end
+end
+
+"""
+Update a cell's output signal. Automatically broadcasts to all clients.
+"""
+function set_cell_output!(cell_id::UUID, output::Union{Nothing, CellOutput}, runtime_ms::Union{Nothing, Float64})
+    id_str = string(cell_id)
+    output_signal_name = "cell_output_$(id_str)"
+    runtime_signal_name = "cell_runtime_$(id_str)"
+
+    # Update output HTML
+    output_html = output !== nothing ? output.html : ""
+    output_sig = get_server_signal_by_name(output_signal_name)
+    if output_sig !== nothing
+        set_server_signal!(output_sig, output_html)
+    end
+
+    # Update runtime
+    runtime_str = runtime_ms !== nothing ? string(round(runtime_ms, digits=1)) : ""
+    runtime_sig = get_server_signal_by_name(runtime_signal_name)
+    if runtime_sig !== nothing
+        set_server_signal!(runtime_sig, runtime_str)
+    end
 end
 
 """
@@ -99,18 +172,30 @@ function set_notebook_info!(notebook::Notebook)
 end
 
 """
-Broadcast all cell states for a notebook.
+Update the cells list signal (used for add/delete without refresh).
 """
-function broadcast_all_cell_states!(notebook::Notebook)
-    sig = CELL_STATES_SIGNAL[]
+function update_cells_list_signal!(notebook::Notebook)
+    sig = CELLS_LIST_SIGNAL[]
     sig === nothing && return
 
-    update_server_signal!(sig, states -> begin
-        for (id, cell) in notebook.cells
-            states[string(id)] = string(cell.state)
-        end
-        return states
-    end)
+    cells_data = [
+        Dict{String, Any}(
+            "id" => string(cell.id),
+            "code" => cell.code
+        )
+        for cell in cells_in_order(notebook)
+    ]
+
+    set_server_signal!(sig, cells_data)
+end
+
+"""
+Broadcast all cell states for a notebook (updates all per-cell signals).
+"""
+function broadcast_all_cell_states!(notebook::Notebook)
+    for (id, cell) in notebook.cells
+        set_cell_state!(id, cell.state)
+    end
 end
 
 # =============================================================================

@@ -20,6 +20,7 @@ julia --project=. -e 'using Sessions; Sessions.serve()'
 ├─────────────────────────────────────────────────────────────┤
 │  Therapy.jl UI                                               │
 │  ├─ SSR Components (Layout, CellView)                       │
+│  ├─ Wasm Islands (DarkModeToggle, future: CellEditor)       │
 │  ├─ Pluto CodeMirror (julia_andrey syntax)                  │
 │  ├─ TherapyWS (WebSocket client)                            │
 │  └─ therapy:signal:* event listeners                        │
@@ -31,7 +32,7 @@ julia --project=. -e 'using Sessions; Sessions.serve()'
 │  Therapy.jl Server                                           │
 │  ├─ HTTP + WebSocket handling                               │
 │  ├─ Channels: execute, add_cell, delete_cell, etc.          │
-│  └─ Server Signals: cell_states, cell_outputs               │
+│  └─ Per-Cell Signals: cell_state_{id}, cell_output_{id}     │
 ├─────────────────────────────────────────────────────────────┤
 │  Notebook Engine                                             │
 │  ├─ ExpressionExplorer.jl (code analysis)                   │
@@ -69,16 +70,16 @@ Sessions.jl/
 │   ├── Server/
 │   │   ├── App.jl            # HTTP server, WebSocket routing
 │   │   ├── Channels.jl       # execute, add_cell, delete_cell handlers
-│   │   └── Signals.jl        # cell_states, cell_outputs signals
+│   │   └── Signals.jl        # Per-cell signals (cell_state_{id}, etc.)
 │   ├── UI/
 │   │   ├── Layout.jl         # Main layout, CodeMirror setup
 │   │   ├── CellView.jl       # Cell rendering component
-│   │   └── CellIsland.jl     # (future) Wasm island for cells
+│   │   ├── DarkModeToggle.jl # Wasm island for theme toggle
+│   │   └── CellEditor.jl     # (future) Wasm island for cells
 │   └── FileFormat/
 │       ├── Parse.jl          # Load Pluto .jl files
 │       └── Write.jl          # Save Pluto .jl files
-├── ARCHITECTURE.md
-├── CLAUDE.md                 # This file
+├── CLAUDE.md                 # This file (canonical docs)
 └── Project.toml
 ```
 
@@ -151,31 +152,53 @@ Therapy.jl provides three distinct patterns (matching Leptos.rs):
 
 Server-controlled, read-only on client. Updates broadcast as JSON patches (RFC 6902) for efficiency.
 
+**Sessions.jl uses Per-Cell Server Signals:**
+
+Instead of a single Dict signal for all cells, Sessions.jl creates individual signals per cell for fine-grained updates:
+
 ```julia
-# Server: Create signal
-cell_states = create_server_signal("cell_states", Dict{String,String}())
+# Signal naming convention
+cell_state_{uuid}   # "CELL_IDLE" | "CELL_QUEUED" | "CELL_RUNNING" | "CELL_ERROR"
+cell_output_{uuid}  # HTML output string
+cell_runtime_{uuid} # Execution time in ms
+cells_list          # JSON array of all cell IDs (for dynamic cell management)
 
-# Server: Update signal → auto-broadcasts patch to all subscribers
-set_server_signal!(cell_states, Dict(
-    cell_id => "CELL_RUNNING"
-))
+# Server: Register signals when cell is created
+function register_cell_signals!(cell::Cell)
+    cell_id = string(cell.id)
+    create_server_signal("cell_state_$(cell_id)", "CELL_IDLE")
+    create_server_signal("cell_output_$(cell_id)", "")
+    create_server_signal("cell_runtime_$(cell_id)", "")
+end
 
-# Client JS: Subscribe to receive updates
-TherapyWS.subscribe("cell_states");
+# Server: Update signal → auto-broadcasts to all subscribers
+function set_cell_state!(cell_id::UUID, state::CellState)
+    sig = get_server_signal_by_name("cell_state_$(cell_id)")
+    sig !== nothing && set_server_signal!(sig, string(state))
+end
+
+# Client JS: Subscribe to per-cell signals
+TherapyWS.subscribe("cell_state_abc123...");
+TherapyWS.subscribe("cell_output_abc123...");
 
 # Client JS: Listen for updates via DOM event
-window.addEventListener('therapy:signal:cell_states', function(e) {
-    const states = e.detail.value;  // Full current value
-    // Update UI...
+window.addEventListener('therapy:signal:cell_state_abc123...', (e) => {
+    const state = e.detail.value;  // "CELL_RUNNING"
+    // Update cell CSS class
 });
 
-# HTML: Automatic DOM binding (optional)
-<span data-server-signal="visitors">0</span>
+# HTML: CellView uses data attributes for signal binding
+<div class="cell"
+     data-cell-id="abc123..."
+     data-cell-state-signal="cell_state_abc123..."
+     data-cell-output-signal="cell_output_abc123...">
 ```
 
-**Sessions.jl uses Server Signals for:**
-- `cell_states` - Broadcasting cell execution state (RUNNING/IDLE/ERROR)
-- `cell_outputs` - Broadcasting cell outputs when execution completes
+**Benefits of per-cell signals:**
+- Fine-grained updates (only affected cell re-renders)
+- Simpler client-side logic (no Dict parsing)
+- Better performance with many cells
+- Cleaner `data-server-signal` binding
 
 ---
 
@@ -330,8 +353,11 @@ Automatic DOM binding (optional):
 function serve(; port::Int=8080, host::String="127.0.0.1")
     # Set up Therapy.jl WebSocket channels and signals
     setup_channels!()   # Creates execute, add_cell, delete_cell channels
-    setup_signals!()    # Creates cell_states, cell_outputs signals
+    setup_signals!()    # Creates cells_list signal
     setup_lifecycle!()  # Registers connect/disconnect callbacks
+
+    # Register per-cell signals for all existing cells
+    register_all_cell_signals!(notebook)
 
     # Start HTTP server (Therapy.jl handles WebSocket internally)
     server = HTTP.listen!(handle_stream, host, port)
@@ -352,38 +378,100 @@ function handle_stream(stream::HTTP.Stream)
 end
 ```
 
+### Per-Cell Signal Management
+
+```julia
+# When adding a cell (in Channels.jl)
+on_channel_message("add_cell") do conn, data
+    # ... create cell ...
+    register_cell_signals!(new_cell)    # Register signals for new cell
+    update_cells_list_signal!(notebook) # Update cells_list JSON array
+end
+
+# When deleting a cell
+on_channel_message("delete_cell") do conn, data
+    # ... delete cell ...
+    unregister_cell_signals!(cell)      # Clean up cell signals
+    update_cells_list_signal!(notebook)
+end
+```
+
 ### Client Setup (in Layout.jl)
 
 ```javascript
-// In sessions_script(), included via sessions_head_extra()
-function setupSignalHandlers() {
-    // Subscribe to server signals
-    TherapyWS.subscribe('cell_states');
-    TherapyWS.subscribe('cell_outputs');
-}
+// Subscribe to per-cell signals on page load
+document.querySelectorAll('[data-cell-state-signal]').forEach(cell => {
+    const stateSignal = cell.dataset.cellStateSignal;
+    const outputSignal = cell.dataset.cellOutputSignal;
+    TherapyWS.subscribe(stateSignal);
+    TherapyWS.subscribe(outputSignal);
+});
 
-function setupChannelHandlers() {
-    // Listen for broadcasts
-    TherapyWS.onChannelMessage('cell_added', () => location.reload());
-    TherapyWS.onChannelMessage('cell_deleted', (data) => {
-        // Remove cell from DOM...
+// Listen for per-cell state updates
+document.querySelectorAll('[data-cell-id]').forEach(cell => {
+    const stateSignal = cell.dataset.cellStateSignal;
+    window.addEventListener(`therapy:signal:${stateSignal}`, (e) => {
+        const state = e.detail.value;
+        // Update cell CSS classes based on state
+        cell.classList.toggle('cell-running', state === 'CELL_RUNNING');
+        cell.classList.toggle('cell-error', state === 'CELL_ERROR');
     });
-}
+});
 ```
 
 ---
 
-### Future: Wasm Islands
+### Wasm Islands
+
+Therapy.jl compiles Julia closures to WebAssembly for interactive UI without JavaScript.
+
+**DarkModeToggle (implemented):**
 
 ```julia
-# Interactive cell component compiled to Wasm
-CellIsland = island(:CellIsland) do props
+# src/UI/DarkModeToggle.jl - Pure Julia compiled to Wasm
+DarkModeToggle = island(:DarkModeToggle) do
+    # Reactive state: 0 = light, 1 = dark (Int32 for Wasm compatibility)
+    dark, set_dark = create_signal(Int32(0))
+
+    # :dark_mode prop tells compiler to call set_dark_mode(value) when signal changes
+    Div(:dark_mode => dark,
+        Button(
+            :class => "p-2 rounded ...",
+            :on_click => () -> begin
+                if dark() == Int32(0)
+                    set_dark(Int32(1))
+                else
+                    set_dark(Int32(0))
+                end
+            end,
+            :title => "Toggle dark mode",
+            Svg(:class => "w-5 h-5", ...)  # Moon/sun icon
+        )
+    )
+end
+```
+
+**Key patterns:**
+- `island(:Name) do ... end` - Creates interactive Wasm component
+- `create_signal(Int32(x))` - Use Int32 for Wasm number compatibility
+- `:dark_mode => signal` - Special prop binding to document theme
+- `:on_click => () -> ...` - Julia closure compiled to Wasm
+
+**Future: CellEditor island**
+
+```julia
+# Interactive cell editor with dirty state tracking
+CellEditor = island(:CellEditor) do props
     cell_id = get_prop(props, :cell_id)
     code, set_code = create_signal("")
+    is_dirty, set_dirty = create_signal(Int32(0))
 
-    Div(:class => "cell",
-        CodeEditor(:value => code, :on_change => set_code),
-        Button(:on_click => () -> execute(cell_id), "Run")
+    Div(:class => "cell-editor",
+        # Dirty indicator controlled by Wasm
+        Span(:class => is_dirty() == Int32(1) ? "bg-yellow-500" : ""),
+        # CodeMirror container (initialized via hydration script)
+        Div(Symbol("data-codemirror") => "true"),
+        Button(:on_click => () -> execute(cell_id), "▶ Run")
     )
 end
 ```
@@ -491,20 +579,29 @@ TherapyWS.sendMessage('save', {notebook_id, path})
 TherapyWS.sendMessage('load', {path})
 ```
 
-### Server → Client (via Signals)
+### Server → Client (via Per-Cell Signals)
 
 ```javascript
-// Subscribe on connect
-TherapyWS.subscribe('cell_states');
-TherapyWS.subscribe('cell_outputs');
-
-// Listen for updates
-window.addEventListener('therapy:signal:cell_states', (e) => {
-    // e.detail.value = {cell_id: "CELL_RUNNING", ...}
+// Subscribe to per-cell signals on page load
+cells.forEach(cell => {
+    TherapyWS.subscribe(`cell_state_${cell.id}`);
+    TherapyWS.subscribe(`cell_output_${cell.id}`);
+    TherapyWS.subscribe(`cell_runtime_${cell.id}`);
 });
 
-window.addEventListener('therapy:signal:cell_outputs', (e) => {
-    // e.detail.value = {cell_id: {html: "...", runtime_ms: 42}, ...}
+// Listen for individual cell state updates
+window.addEventListener('therapy:signal:cell_state_abc123...', (e) => {
+    // e.detail.value = "CELL_RUNNING" | "CELL_IDLE" | "CELL_ERROR"
+});
+
+window.addEventListener('therapy:signal:cell_output_abc123...', (e) => {
+    // e.detail.value = "<pre>4</pre>" (HTML string)
+});
+
+// Listen for cells list changes (add/delete)
+TherapyWS.subscribe('cells_list');
+window.addEventListener('therapy:signal:cells_list', (e) => {
+    // e.detail.value = ["uuid1", "uuid2", ...] (ordered array)
 });
 ```
 

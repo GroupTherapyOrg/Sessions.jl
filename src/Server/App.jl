@@ -79,6 +79,8 @@ function render_notebook_content()
         add_cell!(nb; code="x = 42")
         add_cell!(nb; code="x * 2")
         NOTEBOOKS[nb.id] = nb
+        # Register per-cell signals for all cells
+        register_all_cell_signals!(nb)
         nb
     end
 
@@ -244,6 +246,9 @@ function serve(; port::Int=8080, host::String="127.0.0.1", auto_port::Bool=true)
         add_cell!(notebook; code="# Welcome to Sessions.jl\n# A reactive Julia notebook powered by Therapy.jl")
         add_cell!(notebook; code="1 + 1")
         NOTEBOOKS[notebook.id] = notebook
+
+        # Register per-cell signals for all cells
+        register_all_cell_signals!(notebook)
     end
 
     # Find available port
