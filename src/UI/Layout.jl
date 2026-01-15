@@ -494,15 +494,59 @@ function sessions_script()
         }
 
         // =====================================================================
-        // Channel Handlers (cell_added, cell_deleted)
+        // Channel Handlers (cell_added, cell_deleted) - SPA Style
         // =====================================================================
 
         function setupChannelHandlers() {
             if (typeof TherapyWS === 'undefined') return;
 
-            // TODO: Implement proper DOM insertion for new cells
-            // For now, reload on cell_added (cells_list signal will enable no-refresh later)
-            TherapyWS.onChannelMessage('cell_added', () => location.reload());
+            // Handle new cell - insert HTML directly into DOM (no page reload!)
+            TherapyWS.onChannelMessage('cell_added', async function(data) {
+                const cellHtml = data.cell_html;
+                const afterCellId = data.after_cell_id;
+                const cellId = data.cell_id;
+
+                // Create a temporary container to parse the HTML
+                const temp = document.createElement('div');
+                temp.innerHTML = cellHtml;
+                const newCell = temp.firstElementChild;
+
+                // Find insertion point
+                const container = document.querySelector('.cells-container');
+                if (!container) return;
+
+                if (afterCellId) {
+                    // Insert after the specified cell
+                    const afterCell = document.querySelector('[data-cell-id="' + afterCellId + '"]');
+                    if (afterCell) {
+                        afterCell.after(newCell);
+                    } else {
+                        container.appendChild(newCell);
+                    }
+                } else {
+                    // Insert at end
+                    container.appendChild(newCell);
+                }
+
+                // Initialize CodeMirror for the new cell
+                const codeContainer = newCell.querySelector('.cell-code-container');
+                const codeEl = newCell.querySelector('.cell-code');
+                if (codeContainer && codeEl) {
+                    const code = codeContainer.dataset.initialCode || codeEl.textContent || '';
+                    codeEl.remove();
+                    await initCodeMirror(codeContainer, code, cellId);
+                }
+
+                // Subscribe to the new cell's signals
+                subscribeToCell(cellId);
+                setupCellSignalHandler(cellId);
+
+                // Remove empty state if it exists
+                const emptyState = container.querySelector('.text-center.py-20');
+                if (emptyState) emptyState.remove();
+
+                console.log('[Sessions] Cell added via SPA:', cellId);
+            });
 
             TherapyWS.onChannelMessage('cell_deleted', function(data) {
                 const cell = document.querySelector('[data-cell-id="' + data.cell_id + '"]');
@@ -510,6 +554,7 @@ function sessions_script()
                     editors.delete(data.cell_id);
                     initialCode.delete(data.cell_id);
                     cell.remove();
+                    console.log('[Sessions] Cell deleted:', data.cell_id);
                 }
             });
         }
@@ -669,10 +714,16 @@ end
 
 """
 Get complete head_extra content for render_page.
+Includes: styles, WebSocket client, client router (SPA), and Sessions.js
 """
 function sessions_head_extra()
-    # websocket_client_script() returns RawHtml, extract the content string
+    # WebSocket client script
     ws_script = websocket_client_script()
     ws_str = ws_script isa Therapy.RawHtml ? ws_script.content : string(ws_script)
-    sessions_styles() * ws_str * sessions_script()
+
+    # Client-side router for SPA navigation (no page reloads)
+    router_script = client_router_script(content_selector="#page-content")
+    router_str = router_script isa Therapy.RawHtml ? router_script.content : render_to_string(router_script)
+
+    sessions_styles() * ws_str * router_str * sessions_script()
 end

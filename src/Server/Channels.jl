@@ -76,8 +76,8 @@ end
 Handle adding new cells.
 Message: {notebook_id, after_cell_id?, code?}
 
-After adding, registers per-cell signals and updates cells_list signal
-so clients can add the new cell to DOM without page refresh.
+After adding, registers per-cell signals and broadcasts the rendered cell HTML
+so clients can insert it into the DOM without page refresh.
 """
 function setup_add_cell_channel!()
     on_channel_message("add_cell") do conn, data
@@ -99,13 +99,17 @@ function setup_add_cell_channel!()
         # Register per-cell signals for the new cell
         register_cell_signals!(cell)
 
-        # Update cells_list signal (triggers client to add new cell to DOM)
+        # Update cells_list signal
         update_cells_list_signal!(notebook)
 
-        # Also broadcast via channel for backwards compatibility
+        # Render the cell to HTML for client-side insertion (SPA style)
+        cell_html = render_to_string(CellView(cell))
+
+        # Broadcast with rendered HTML - no page reload needed
         broadcast_channel!("cell_added", Dict(
             "notebook_id" => string(notebook_id),
-            "cell" => cell_to_dict(cell),
+            "cell_id" => string(cell.id),
+            "cell_html" => cell_html,
             "after_cell_id" => after === nothing ? nothing : string(after)
         ))
     end

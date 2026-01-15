@@ -128,12 +128,23 @@ Render a list of cells.
 """
 function CellsView(cells::Vector{Cell})
     Div(:class => "cells-container space-y-10 pb-20",
-        # Empty state - refined, inviting
+        # Empty state - refined, inviting with action button
         isempty(cells) ?
             Div(:class => "text-center py-20",
                 Div(:class => "inline-block px-12 py-10 rounded-xl bg-stone-100/50 dark:bg-neutral-800/30 border border-stone-200/30 dark:border-neutral-700/30",
-                    P(:class => "text-xl font-serif text-stone-500 dark:text-stone-400 mb-3", "Begin your notebook"),
-                    P(:class => "text-sm text-stone-400 dark:text-stone-500 tracking-wide", "Add a cell to start writing Julia")
+                    P(:class => "text-xl font-serif text-stone-500 dark:text-stone-400 mb-4", "Begin your notebook"),
+                    Button(:class => "flex items-center gap-2 mx-auto px-4 py-2 text-sm font-medium text-stone-600 dark:text-stone-300 bg-white dark:bg-neutral-800 rounded-full shadow-sm hover:shadow-md border border-stone-200 dark:border-neutral-700 transition-all duration-200",
+                        Symbol("data-action") => "add-cell",
+                        Symbol("data-after-cell-id") => "",
+                        Svg(:class => "w-4 h-4",
+                            :fill => "none",
+                            :viewBox => "0 0 24 24",
+                            :stroke => "currentColor",
+                            Symbol("stroke-width") => "2",
+                            Path(:d => "M12 4v16m8-8H4")
+                        ),
+                        Span("Add your first cell")
+                    )
                 )
             ) : nothing,
         # Cell list

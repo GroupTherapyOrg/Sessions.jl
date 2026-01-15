@@ -39,19 +39,19 @@ include("FileFormat/Parse.jl")
 include("FileFormat/Write.jl")
 
 # =============================================================================
-# Server (Therapy.jl WebSocket integration)
-# =============================================================================
-
-include("Server/Signals.jl")
-include("Server/Channels.jl")
-
-# =============================================================================
-# UI Components
+# UI Components (loaded before Server for CellView access in Channels)
 # =============================================================================
 
 include("UI/CellView.jl")
 include("UI/DarkModeToggle.jl")  # Island for theme toggle (compiled to Wasm)
 include("UI/Layout.jl")
+
+# =============================================================================
+# Server (Therapy.jl WebSocket integration)
+# =============================================================================
+
+include("Server/Signals.jl")
+include("Server/Channels.jl")
 
 # =============================================================================
 # App Entry Point
