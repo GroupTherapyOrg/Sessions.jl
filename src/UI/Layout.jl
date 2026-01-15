@@ -64,11 +64,12 @@ function sessions_styles()
     }
     </script>
 
-    <!-- CodeMirror 6 via Pluto's pre-bundled setup -->
+    <!-- CodeMirror 6 via Pluto's pre-bundled setup + language module for syntaxHighlighting -->
     <script type="importmap">
     {
         "imports": {
-            "codemirror-pluto": "https://cdn.jsdelivr.net/gh/JuliaPluto/codemirror-pluto-setup@0.19.3/dist/index.es.min.js"
+            "codemirror-pluto": "https://cdn.jsdelivr.net/gh/JuliaPluto/codemirror-pluto-setup@0.19.3/dist/index.es.min.js",
+            "@codemirror/language": "https://cdn.jsdelivr.net/npm/@codemirror/language@6.10.1/dist/index.js"
         }
     }
     </script>
@@ -178,7 +179,14 @@ function sessions_script()
         async function initCodeMirror(container, code, cellId) {
             try {
                 const CM = await import('codemirror-pluto');
-                console.log('[Sessions] CodeMirror loaded, available exports:', Object.keys(CM));
+                // Import syntaxHighlighting separately (not bundled in codemirror-pluto)
+                let syntaxHighlighting = null;
+                try {
+                    const lang = await import('@codemirror/language');
+                    syntaxHighlighting = lang.syntaxHighlighting;
+                } catch (e) {
+                    console.warn('[Sessions] Could not load @codemirror/language:', e);
+                }
 
                 // Build extensions array, checking each one exists
                 const extensions = [];
@@ -197,7 +205,20 @@ function sessions_script()
                 // Julia syntax highlighting (Pluto's lezer-based highlighter)
                 if (CM.julia_andrey) {
                     extensions.push(CM.julia_andrey());
-                    console.log('[Sessions] Julia syntax highlighting enabled');
+                }
+
+                // Syntax highlighting styles (REQUIRED for colors to show!)
+                if (syntaxHighlighting && CM.defaultHighlightStyle) {
+                    extensions.push(syntaxHighlighting(CM.defaultHighlightStyle));
+                    console.log('[Sessions] Syntax highlighting enabled');
+                } else if (CM.defaultHighlightStyle) {
+                    // Fallback: try using it directly (might work if it's pre-wrapped)
+                    extensions.push(CM.defaultHighlightStyle);
+                }
+
+                // Also add fold gutter for code folding
+                if (CM.foldGutter) {
+                    extensions.push(CM.foldGutter());
                 }
 
                 // Keymaps
