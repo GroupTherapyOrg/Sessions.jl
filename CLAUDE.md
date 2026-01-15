@@ -518,44 +518,607 @@ end
 
 ---
 
+## 🚨 CRITICAL DESIGN PRINCIPLE: Therapy.jl Native UI
+
+**NEVER write raw JavaScript strings in Julia code.**
+
+Sessions.jl must use Therapy.jl's native components for ALL UI:
+
+| ❌ WRONG | ✅ CORRECT |
+|----------|-----------|
+| `Script("document.getElementById...")` | Therapy.jl server signals |
+| `:onclick => "jsFunction()"` | `:on_click => () -> julia_fn()` (Wasm island) |
+| Raw `<script>` tags in strings | `websocket_client_script()`, `client_router_script()` |
+| Manual innerHTML updates | `RawHtml(content)` + server signal broadcast |
+| Custom WebSocket code | Therapy.jl channels and signals |
+
+**The only exception:** CodeMirror initialization (external JS library) - but even this should be minimized.
+
+---
+
 ## Development Roadmap
 
 ### Phase 1: Core Polish ✅
-- [x] Cell execution via WebSocket
+- [x] Cell execution via WebSocket channels
 - [x] Server signals for state broadcasting
-- [x] CodeMirror with Julia syntax
+- [x] CodeMirror with Julia syntax (codemirror-pluto-setup)
 - [x] Basic cell operations (add, delete, run)
+- [x] SPA-style cell insertion (no page reload)
+- [x] Elegant parchment-inspired UI design
 
-### Phase 2: Rich Output (Current)
-- [ ] Fix stdout/stderr capture (use IOCapture.jl?)
-- [ ] HTML output rendering
-- [ ] SVG/Image display
-- [ ] Error formatting with stacktraces
-- [ ] Runtime display per cell
+### Phase 2: Rich Output & Reactivity 🔄 CURRENT
 
-### Phase 3: Interactivity
+See detailed implementation plan below.
+
+### Phase 3: Interactive Widgets
 - [ ] @bind macro support
-- [ ] PlutoUI slider/button widgets
-- [ ] Custom widget API
-- [ ] Live reactivity (auto re-run)
+- [ ] PlutoUI-compatible widgets (Slider, Button, etc.)
+- [ ] Custom widget API via Therapy.jl islands
 
-### Phase 4: Package Management
-- [ ] Syntax-analyzed imports
-- [ ] Auto Pkg.add on first use
-- [ ] Embedded Project.toml
-- [ ] Version pinning
-
-### Phase 5: IDE Features
-- [ ] File browser sidebar
+### Phase 4: IDE Features
+- [ ] Keyboard shortcuts (Ctrl+S, Ctrl+Enter, etc.)
+- [ ] Cell drag-and-drop reordering
 - [ ] Multiple notebooks (tabs)
-- [ ] Cell folding/collapsing
-- [ ] Autocomplete (LSP integration)
+- [ ] File browser sidebar
 - [ ] Export to HTML/PDF
 
-### Phase 6: Collaboration
-- [ ] Multi-user editing
-- [ ] Cursor presence
-- [ ] Real-time sync via Therapy.jl bidirectional signals
+### Phase 5: Advanced
+- [ ] Package management (auto Pkg.add)
+- [ ] Autocomplete (LSP integration)
+- [ ] Multi-user collaboration via bidirectional signals
+
+---
+
+## 🎯 PHASE 2 IMPLEMENTATION PLAN
+
+### Overview
+
+Phase 2 implements three major features:
+
+1. **Rich Output** - Display HTML, SVG, images, DataFrames, plots
+2. **Full Reactivity** - Auto re-run downstream cells when dependencies change
+3. **Smart Multi-line Cells** - Auto-wrap in `begin...end` transparently
+4. **Paste Pluto Notebooks** - Parse pasted Pluto content into cells
+
+All implementations use **Therapy.jl native components** - no raw JavaScript.
+
+---
+
+### 2.1 Rich Output Display
+
+#### How Pluto Does It
+
+Pluto uses a MIME-type priority system:
+1. `text/html` - HTML rendering (highest priority)
+2. `image/svg+xml` - SVG graphics
+3. `image/png` - PNG images (base64)
+4. `text/plain` - Fallback text
+
+#### Sessions.jl Implementation (Therapy.jl Native)
+
+**File: `src/Engine/Output.jl`**
+
+```julia
+# MIME type priority (highest first)
+const MIME_PRIORITY = [
+    MIME"text/html",
+    MIME"image/svg+xml",
+    MIME"image/png",
+    MIME"image/jpeg",
+    MIME"text/plain"
+]
+
+"""
+Get the richest available representation of a value.
+Returns (mime_type, content) tuple.
+"""
+function get_rich_output(value)
+    for mime in MIME_PRIORITY
+        if showable(mime, value)
+            io = IOBuffer()
+            show(io, mime, value)
+            return (string(mime), String(take!(io)))
+        end
+    end
+    # Fallback to repr
+    return ("text/plain", repr(value))
+end
+
+"""
+Render output as Therapy.jl component (NOT raw HTML string).
+"""
+function render_output(mime_type::String, content::String)
+    if mime_type == "text/html"
+        # Use Therapy.jl RawHtml for trusted HTML
+        RawHtml(content)
+    elseif mime_type == "image/svg+xml"
+        # SVG can be rendered directly via RawHtml
+        RawHtml(content)
+    elseif startswith(mime_type, "image/")
+        # Images as base64 data URI using Therapy.jl Img element
+        Img(:src => "data:$mime_type;base64,$content",
+            :class => "max-w-full h-auto")
+    else
+        # Plain text in Pre/Code elements
+        Pre(:class => "font-mono text-sm whitespace-pre-wrap",
+            Code(content))
+    end
+end
+```
+
+**File: `src/UI/CellOutput.jl`** (NEW - Therapy.jl component)
+
+```julia
+"""
+Cell output component - renders rich output via Therapy.jl elements.
+NEVER uses raw HTML strings - always Therapy.jl components.
+"""
+function CellOutput(cell::Cell)
+    if cell.output === nothing
+        return nothing
+    end
+
+    mime_type = cell.output.mime_type
+    content = cell.output.content
+
+    Div(:class => "cell-output-content",
+        render_output(mime_type, content)
+    )
+end
+```
+
+**Signal Updates (Server → Client)**
+
+```julia
+# In Channels.jl - after execution
+function broadcast_cell_output(cell::Cell)
+    # Get rich output
+    mime_type, content = get_rich_output(cell.result)
+
+    # Render to HTML via Therapy.jl (NOT string concatenation)
+    output_component = render_output(mime_type, content)
+    output_html = render_to_string(output_component)
+
+    # Broadcast via server signal
+    set_cell_output!(cell.id, output_html)
+end
+```
+
+#### Key Insight: RawHtml for Rich Content
+
+Therapy.jl's `RawHtml` is the correct way to inject HTML:
+- It explicitly marks content as trusted HTML
+- It integrates with SSR rendering
+- It's type-safe (not a string in a string)
+
+```julia
+# ✅ CORRECT - Therapy.jl native
+RawHtml("<table><tr><td>Data</td></tr></table>")
+
+# ❌ WRONG - raw string manipulation
+"<div>" * html_content * "</div>"
+```
+
+---
+
+### 2.2 Full Reactivity (Auto Re-run)
+
+#### How Pluto Does It
+
+1. **ExpressionExplorer.jl** - Analyzes each cell's code to find:
+   - `references` - Variables the cell reads
+   - `definitions` - Variables the cell defines
+
+2. **PlutoDependencyExplorer.jl** - Builds dependency graph:
+   - Cell A defines `x` → Cell B references `x` → B depends on A
+   - When A changes, B must re-run
+
+#### Sessions.jl Implementation
+
+**File: `src/Engine/Reactivity.jl`** (enhance existing)
+
+```julia
+using ExpressionExplorer
+import PlutoDependencyExplorer as PDE
+
+"""
+Analyze cell code and extract references/definitions.
+Handles multi-expression cells by wrapping in begin...end.
+"""
+function analyze_cell!(cell::Cell)
+    # Parse code (may be wrapped - see section 2.3)
+    expr = parse_cell_code(cell.code)
+
+    # Use ExpressionExplorer to find refs/defs
+    node = ExpressionExplorer.compute_reactive_node(expr)
+
+    cell.references = node.references
+    cell.definitions = node.definitions
+    cell.funcdefs = node.funcdefs_without_signatures
+end
+
+"""
+Get cells that need to re-run when `changed_cell` executes.
+Uses PlutoDependencyExplorer for correct topological ordering.
+"""
+function get_downstream_cells(notebook::Notebook, changed_cell::Cell)
+    # Build topology using PDE
+    cells = collect(values(notebook.cells))
+
+    topology = PDE.NotebookTopology{Cell}()
+    topology = PDE.updated_topology(
+        topology, cells, cells;
+        get_code_str = c -> c.code,
+        get_code_expr = c -> parse_cell_code(c.code)
+    )
+
+    # Get execution order starting from changed cell
+    order = PDE.topological_order(topology)
+
+    # Filter to cells downstream of changed_cell
+    changed_defs = changed_cell.definitions
+    downstream = Cell[]
+
+    for cell in order.runnable
+        if cell.id != changed_cell.id
+            # Cell depends on changed_cell if it references any of its definitions
+            if !isempty(intersect(cell.references, changed_defs))
+                push!(downstream, cell)
+            end
+        end
+    end
+
+    return downstream
+end
+
+"""
+Execute cell and all downstream dependencies reactively.
+"""
+function execute_reactive!(notebook::Notebook, cell_id::UUID)
+    cell = get_cell(notebook, cell_id)
+    cell === nothing && return
+
+    # Re-analyze in case code changed
+    analyze_cell!(cell)
+
+    # Get execution order: this cell + all downstream
+    to_execute = [cell]
+    append!(to_execute, get_downstream_cells(notebook, cell))
+
+    # Execute in order, broadcasting state updates
+    for c in to_execute
+        set_cell_state!(c.id, CELL_RUNNING)
+
+        result = execute_cell!(notebook, c)
+
+        # Broadcast output via Therapy.jl signal
+        broadcast_cell_output(c)
+
+        set_cell_state!(c.id, result.success ? CELL_IDLE : CELL_ERROR)
+    end
+end
+```
+
+**Channel Handler Update**
+
+```julia
+# In Channels.jl
+on_channel_message("execute") do conn, data
+    cell_id = UUID(data["cell_id"])
+    code = get(data, "code", nothing)
+
+    # Update code if provided
+    if code !== nothing
+        cell.code = code
+    end
+
+    # Execute reactively (cell + downstream)
+    execute_reactive!(notebook, cell_id)
+
+    # All state/output updates happen via server signals automatically
+end
+```
+
+---
+
+### 2.3 Smart Multi-line Cells (Auto begin...end)
+
+#### How Pluto Does It
+
+Pluto requires users to explicitly wrap multi-line code in `begin...end`.
+**Sessions.jl will be smarter** - auto-wrap transparently.
+
+#### Sessions.jl Implementation
+
+**File: `src/Engine/Cell.jl`** (enhance)
+
+```julia
+"""
+Parse cell code, auto-wrapping multi-expression code in begin...end.
+This is transparent to the user - they write multiple lines, we handle it.
+"""
+function parse_cell_code(code::String)
+    # Try parsing as single expression
+    expr = Meta.parse(code)
+
+    if expr isa Expr && expr.head == :incomplete
+        # Try wrapping in begin...end
+        wrapped = "begin\n$code\nend"
+        expr = Meta.parse(wrapped)
+        if !(expr isa Expr && expr.head == :incomplete)
+            return expr
+        end
+    end
+
+    # Check if it's multiple top-level expressions
+    # Meta.parse with `raise=false` returns :toplevel for multiple exprs
+    full_parse = Meta.parseall(code)
+
+    if full_parse isa Expr && full_parse.head == :toplevel && length(full_parse.args) > 1
+        # Multiple expressions - wrap in begin...end
+        return Expr(:block, full_parse.args...)
+    end
+
+    return expr
+end
+
+"""
+Get the display value of a cell (last expression in multi-line).
+"""
+function get_display_value(result)
+    # If result is from a begin...end block, it's the last expression
+    # This matches Pluto's behavior
+    return result
+end
+```
+
+**Key Insight: Transparent Wrapping**
+
+```julia
+# User writes (no begin/end needed):
+x = 1
+y = 2
+z = x + y
+
+# Sessions.jl internally parses as:
+begin
+    x = 1
+    y = 2
+    z = x + y  # ← This value is displayed
+end
+
+# Variables x, y, z are all defined at module scope (not local)
+```
+
+---
+
+### 2.4 Paste Pluto Notebook Content
+
+#### Pluto File Format
+
+```julia
+### A Pluto.jl notebook ###
+# v0.19.0
+
+# ╔═╡ 844da824-dcb6-11ea-1b3d-95c52106a0d2
+x = 1
+
+# ╔═╡ 844da856-dcb6-11ea-2061-a59a23dd029f
+y = x + 2
+
+# ╔═╡ Cell order:
+# ╠═844da824-dcb6-11ea-1b3d-95c52106a0d2
+# ╠═844da856-dcb6-11ea-2061-a59a23dd029f
+```
+
+#### Sessions.jl Implementation
+
+**File: `src/FileFormat/Parse.jl`** (enhance)
+
+```julia
+const PLUTO_HEADER = r"^### A Pluto\.jl notebook ###"
+const CELL_HEADER = r"^# ╔═╡ ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"m
+const CELL_ORDER = r"^# ╔═╡ Cell order:$"m
+
+"""
+Parse pasted Pluto notebook content into cells.
+Returns Vector of (uuid, code) tuples in display order.
+"""
+function parse_pluto_content(content::String)
+    cells = Dict{String, String}()
+    order = String[]
+
+    # Check if it's a Pluto notebook
+    if !occursin(PLUTO_HEADER, content)
+        # Not a Pluto notebook - treat as single cell
+        return [(string(uuid4()), content)]
+    end
+
+    # Extract cells
+    lines = split(content, '\n')
+    current_uuid = nothing
+    current_code = String[]
+
+    for line in lines
+        m = match(CELL_HEADER, line)
+        if m !== nothing
+            # Save previous cell
+            if current_uuid !== nothing
+                cells[current_uuid] = join(current_code, '\n')
+            end
+            current_uuid = m.captures[1]
+            current_code = String[]
+        elseif occursin(CELL_ORDER, line)
+            # Save last cell and start reading order
+            if current_uuid !== nothing
+                cells[current_uuid] = join(current_code, '\n')
+            end
+            current_uuid = nothing
+        elseif startswith(line, "# ╠═") || startswith(line, "# ╟─")
+            # Cell order entry
+            uuid = replace(line, r"^# [╠╟][═─]" => "")
+            push!(order, strip(uuid))
+        elseif current_uuid !== nothing
+            push!(current_code, line)
+        end
+    end
+
+    # Return cells in display order
+    return [(uuid, strip(get(cells, uuid, ""))) for uuid in order if haskey(cells, uuid)]
+end
+```
+
+**Channel Handler for Paste**
+
+```julia
+# In Channels.jl - new channel
+create_channel("paste_content")
+
+on_channel_message("paste_content") do conn, data
+    content = data["content"]
+    notebook_id = UUID(data["notebook_id"])
+
+    notebook = get(NOTEBOOKS, notebook_id, nothing)
+    notebook === nothing && return
+
+    # Parse pasted content (handles Pluto format or raw code)
+    parsed_cells = parse_pluto_content(content)
+
+    # Create cells and broadcast
+    for (uuid_str, code) in parsed_cells
+        cell = add_cell!(notebook; code=code)
+        register_cell_signals!(cell)
+
+        # Broadcast rendered HTML for SPA insertion
+        cell_html = render_to_string(CellView(cell))
+        broadcast_channel!("cell_added", Dict(
+            "cell_id" => string(cell.id),
+            "cell_html" => cell_html,
+            "after_cell_id" => nothing
+        ))
+    end
+
+    update_cells_list_signal!(notebook)
+end
+```
+
+**UI Component for Paste Detection** (Therapy.jl native)
+
+```julia
+# In Layout.jl - add paste handler via Therapy.jl
+# This uses :onpaste HTML attribute (SSR) until we have full Wasm paste handling
+Div(:class => "cells-container",
+    :onpaste => "handleNotebookPaste(event)",  # Minimal JS bridge
+    # ... cells
+)
+```
+
+Note: The paste handler is one of the few places where a small JS bridge is needed
+because clipboard API requires direct browser interaction. But the actual parsing
+and cell creation happens server-side via Therapy.jl channels.
+
+---
+
+### 2.5 stdout/stderr Capture
+
+**File: `src/Engine/Worker.jl`** (enhance)
+
+```julia
+using IOCapture  # Add to Project.toml
+
+"""
+Execute code with stdout/stderr capture.
+"""
+function execute_with_capture(worker, code::String)
+    # IOCapture handles all the complexity
+    captured = IOCapture.capture() do
+        remote_eval(worker, code)
+    end
+
+    return (
+        value = captured.value,
+        output = captured.output,  # Combined stdout/stderr
+        success = !captured.error
+    )
+end
+```
+
+**Render stdout/stderr via Therapy.jl**
+
+```julia
+function render_captured_output(stdout_content::String, result_html::String)
+    Div(:class => "cell-output",
+        # stdout/stderr in muted style
+        !isempty(stdout_content) ?
+            Pre(:class => "text-xs text-stone-500 dark:text-stone-400 mb-2 font-mono",
+                stdout_content
+            ) : nothing,
+        # Main result
+        RawHtml(result_html)
+    )
+end
+```
+
+---
+
+### 2.6 File Structure After Phase 2
+
+```
+src/
+├── Engine/
+│   ├── Cell.jl           # + parse_cell_code() auto-wrapping
+│   ├── Notebook.jl       # unchanged
+│   ├── Output.jl         # + MIME handling, render_output()
+│   ├── Reactivity.jl     # + full PDE integration, execute_reactive!
+│   └── Worker.jl         # + IOCapture for stdout/stderr
+├── Server/
+│   ├── App.jl            # unchanged
+│   ├── Channels.jl       # + paste_content channel
+│   └── Signals.jl        # unchanged
+├── UI/
+│   ├── Layout.jl         # + paste handler attribute
+│   ├── CellView.jl       # unchanged (already uses Therapy.jl)
+│   ├── CellOutput.jl     # NEW - Therapy.jl output component
+│   └── DarkModeToggle.jl # unchanged
+└── FileFormat/
+    ├── Parse.jl          # + parse_pluto_content()
+    └── Write.jl          # unchanged
+```
+
+---
+
+### 2.7 Testing Checklist
+
+```julia
+# Test rich output
+notebook = Notebook()
+add_cell!(notebook; code="using DataFrames; DataFrame(a=1:3, b=4:6)")
+# Should render as HTML table
+
+# Test reactivity
+add_cell!(notebook; code="x = 10")
+add_cell!(notebook; code="y = x * 2")  # y = 20
+# Change first cell to x = 5
+# y should auto-update to 10
+
+# Test multi-line
+add_cell!(notebook; code="""
+a = 1
+b = 2
+a + b
+""")
+# Should work without explicit begin/end, display 3
+
+# Test paste
+content = """
+### A Pluto.jl notebook ###
+# ╔═╡ abc123...
+x = 1
+# ╔═╡ def456...
+y = x + 1
+"""
+# Pasting should create 2 cells
+```
 
 ---
 
