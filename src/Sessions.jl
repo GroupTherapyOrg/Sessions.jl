@@ -1,104 +1,82 @@
 module Sessions
 
+# =============================================================================
+# Dependencies
+# =============================================================================
+
 using Therapy
 using HTTP
 using HTTP.WebSockets
 using Sockets
 using JSON3
 using UUIDs
+using OrderedCollections
 using ExpressionExplorer
-using Malt
+import Malt
 import PlutoDependencyExplorer as PDE
 
 # =============================================================================
-# Core Data Structures
+# Core Engine
 # =============================================================================
 
-include("Notebook/Cell.jl")
-include("Notebook/Executor.jl")
-include("Notebook/DependencyTracker.jl")
+include("Engine/Cell.jl")
+include("Engine/Notebook.jl")
+include("Engine/Output.jl")      # Must come before Worker.jl (defines escape_html)
+include("Engine/Reactivity.jl")
+include("Engine/Worker.jl")
 
 # =============================================================================
-# UI Components (Therapy.jl)
+# File Format (Pluto-compatible)
 # =============================================================================
 
-include("components/Layout.jl")
-include("components/Sidebar.jl")
-include("components/Terminal.jl")
-include("components/CellComponent.jl")
+include("FileFormat/Parse.jl")
+include("FileFormat/Write.jl")
 
 # =============================================================================
-# Interactive Islands (Wasm)
-# =============================================================================
-# Islands handle reactive UI state in WebAssembly
-
-include("components/NotebookIsland.jl")
-
-# =============================================================================
-# Server (WebSocket + HTTP with Therapy.jl rendering)
+# Server (Therapy.jl WebSocket)
 # =============================================================================
 
-include("Server/WebSocketServer.jl")
+include("Server/Signals.jl")
+include("Server/Channels.jl")
+include("Server/App.jl")
+
+# =============================================================================
+# UI Components
+# =============================================================================
+
+include("UI/CellView.jl")
+include("UI/Layout.jl")
 
 # =============================================================================
 # Public API
 # =============================================================================
 
-export Cell, CellStatus, IDLE, QUEUED, RUNNING, COMPLETED, ERRORED
-export Executor, execute, execute_cell!, restart!, shutdown!
-export NotebookReactivity, DependencyGraph, analyze_cell, update_cells!, get_downstream_cells, get_execution_order
-export Layout, TopBar, Sidebar, Terminal
-export CellComponent, CellOutput, CellsContainer
-export register_islands!
-export dev
+export Cell, CellState, CellOutput
+export CELL_IDLE, CELL_QUEUED, CELL_RUNNING, CELL_ERROR
+export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
+export analyze_cell!, get_execution_order, get_all_execution_order
+export execute_cell!, execute_reactive!, run_all!
+export load_notebook, save_notebook, is_pluto_notebook
+export serve
+
+# =============================================================================
+# Entry Points
+# =============================================================================
 
 """
     dev(; port=8080, host="127.0.0.1")
 
-Start the Sessions.jl development server.
-
-This follows the Therapy.jl development pattern:
-- All UI is rendered using Therapy.jl components (Layout, Sidebar, Terminal)
-- Components are in src/components/
-- Routes are in src/routes/
-- Server handles Julia code execution via WebSocket
+Start the Sessions development server.
 
 # Example
 ```julia
 using Sessions
-Sessions.dev(port=8080)
+Sessions.dev()
+# Open http://localhost:8080
 ```
 """
 function dev(; port::Int=8080, host::String="127.0.0.1")
-    println("\n━━━ Sessions.jl Dev Server ━━━")
-    println("Powered by Therapy.jl")
-    println()
-
-    # Find available port
-    actual_port = port
-    for attempt in 0:9
-        test_port = port + attempt
-        try
-            server = Sockets.listen(Sockets.IPv4(host), test_port)
-            close(server)
-            actual_port = test_port
-            break
-        catch
-            if attempt == 9
-                error("Could not find available port (tried $port-$(port+9))")
-            end
-        end
-    end
-
-    if actual_port != port
-        println("Note: Port $port in use, using port $actual_port")
-    end
-
-    println("Server running at http://$host:$actual_port")
-    println("Press Ctrl+C to stop")
-    println()
-
-    start_server(host, actual_port)
+    serve(; port=port, host=host)
 end
 
 end # module

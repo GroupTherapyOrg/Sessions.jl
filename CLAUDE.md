@@ -1,409 +1,254 @@
 # Sessions.jl Developer Guide
 
-## Quick Reference
+A Pluto-style reactive notebook IDE built with pure Julia using Therapy.jl for the UI and JuliaPluto packages for execution.
 
-Sessions.jl is a **Therapy.jl application** providing a VSCode + Pluto hybrid IDE/notebook experience. It is NOT a Pluto fork.
+## Quick Start
 
-**Sister Repos** (in dependency order):
-1. `../WasmTarget.jl` - Julia → WebAssembly compiler (most fundamental)
-2. `../Therapy.jl` - Reactive web framework (depends on WasmTarget)
-3. `Sessions.jl` - This app (depends on Therapy.jl)
+```bash
+cd /Users/daleblack/Documents/dev/TherapeuticJulia/Sessions.jl
+julia --project=. -e 'using Sessions; Sessions.dev()'
+# Open http://localhost:8080
+```
 
-**Architecture**: Hybrid SSR + WebSocket
-- **SSR (Server-Side Rendering)**: Static UI components rendered with Therapy.jl
-- **WebSocket**: Compute operations (code execution, terminal, filesystem)
-- **Client-side JS**: UI state management and cell rendering
-- **Future**: Wasm islands for UI state (NotebookIsland.jl ready)
+## Architecture
 
-**Key Principle**: Server handles COMPUTE, client handles UI. All data exchanged as JSON, not HTML.
+Sessions.jl combines:
+- **Therapy.jl** - All UI rendering (SSR + WASM islands)
+- **JuliaPluto packages** - Notebook execution engine
+- **WebSocket** - Real-time communication
 
----
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Browser (Client)                      │
+├─────────────────────────────────────────────────────────┤
+│  Therapy.jl UI (SSR + WASM)                             │
+│  - Layout, CellView components                          │
+│  - WebSocket client (TherapyWS)                         │
+│  - Cell editing and display                             │
+└─────────────────────────────────────────────────────────┘
+                         │ WebSocket
+┌────────────────────────┼────────────────────────────────┐
+│                    Server (Julia)                        │
+├────────────────────────┴────────────────────────────────┤
+│  Therapy.jl Server                                       │
+│  - HTTP + WebSocket handling                            │
+│  - Channels: execute, add_cell, save, load              │
+│  - Server signals: cell_states, notebook_info           │
+├─────────────────────────────────────────────────────────┤
+│  Notebook Engine (JuliaPluto packages)                   │
+│  - ExpressionExplorer.jl: Code analysis                 │
+│  - PlutoDependencyExplorer.jl: Reactive ordering        │
+│  - Malt.jl: Sandboxed worker processes                  │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Project Structure
 
 ```
 Sessions.jl/
 ├── src/
-│   ├── app.jl              # Entry point (like Therapy.jl apps)
-│   ├── Sessions.jl         # Main module
-│   ├── components/         # Therapy.jl UI components
-│   │   ├── Layout.jl       # Main page layout + TopBar
-│   │   ├── Sidebar.jl      # File explorer
-│   │   ├── Terminal.jl     # REPL terminal
-│   │   └── NotebookIsland.jl  # Future Wasm island for UI state
-│   ├── routes/             # Page routes (file-based routing ready)
-│   │   └── index.jl        # Main notebook page
-│   ├── Notebook/           # Core notebook logic
-│   │   ├── Cell.jl         # Cell data structure
-│   │   ├── Executor.jl     # Code execution
-│   │   └── DependencyTracker.jl  # Reactive dependency tracking (uses Pluto packages)
-│   └── Server/             # HTTP + WebSocket server
-│       ├── WebSocketServer.jl  # HTTP/WebSocket handling
-│       └── ClientBridge.jl     # WebSocket JS bridge (CodeMirror, cell rendering)
-├── test/
-│   └── runtests.jl
-├── VISION.md               # Architecture and goals
-├── CLAUDE.md               # This file
+│   ├── Sessions.jl           # Main module
+│   ├── Engine/
+│   │   ├── Cell.jl           # Cell struct, states
+│   │   ├── Notebook.jl       # Notebook container
+│   │   ├── Reactivity.jl     # Dependency tracking (ExpressionExplorer + PDE)
+│   │   ├── Worker.jl         # Malt.jl execution
+│   │   └── Output.jl         # MIME handling, rendering
+│   ├── Server/
+│   │   ├── App.jl            # Therapy.jl app setup
+│   │   ├── Channels.jl       # WebSocket channel handlers
+│   │   └── Signals.jl        # Server signal definitions
+│   ├── UI/
+│   │   ├── Layout.jl         # Main layout component
+│   │   └── CellView.jl       # Cell rendering
+│   ├── FileFormat/
+│   │   ├── Parse.jl          # Load Pluto .jl files
+│   │   └── Write.jl          # Save Pluto .jl files
+│   └── routes/
+│       └── index.jl          # Main notebook page
+├── ARCHITECTURE.md           # Detailed architecture doc
+├── CLAUDE.md                 # This file
 └── Project.toml
 ```
 
----
+## Dependencies
 
-## Development Workflow
+### JuliaPluto Packages (Execution Engine)
+- **ExpressionExplorer.jl** - Analyze code to find variable references/definitions
+- **PlutoDependencyExplorer.jl** - Build dependency graph, compute execution order
+- **Malt.jl** - Sandboxed worker processes for isolated execution
+- **HypertextLiteral.jl** - Safe HTML generation
 
-### Running in Development
-```bash
-cd /Users/daleblack/Documents/dev/TherapeuticJulia/Sessions.jl
+### Therapy.jl (UI Framework)
+- SSR components rendered to HTML
+- WebSocket channels for real-time communication
+- Server signals for state synchronization
+- Client-side routing for SPA navigation
 
-# Option 1: Direct
-julia --project=. -e 'using Sessions; Sessions.dev()'
+## Core Concepts
 
-# Option 2: App entry point
-julia --project=. src/app.jl dev
+### Cell
 
-# Open http://localhost:8080 in your browser
+```julia
+mutable struct Cell
+    id::UUID
+    code::String
+    output::Union{Nothing, CellOutput}
+    references::Set{Symbol}      # Variables this cell reads
+    definitions::Set{Symbol}     # Variables this cell defines
+    state::CellState             # IDLE, QUEUED, RUNNING, ERROR
+    runtime_ms::Union{Nothing, Float64}
+end
 ```
 
-### Testing
+### Notebook
+
+```julia
+mutable struct Notebook
+    id::UUID
+    path::Union{Nothing, String}
+    cells::OrderedDict{UUID, Cell}
+    cell_order::Vector{UUID}
+    worker::Union{Nothing, Malt.Worker}
+end
+```
+
+### Reactive Execution
+
+When a cell is executed:
+1. `analyze_cell!()` - ExpressionExplorer finds references/definitions
+2. `get_execution_order()` - Compute cells that need to re-run
+3. `execute_cell!()` - Malt.jl runs code in worker process
+4. Broadcast results via WebSocket channels
+
+## WebSocket Protocol
+
+### Client → Server (Channels)
+
+```javascript
+// Execute cell
+TherapyWS.sendMessage('execute', {notebook_id, cell_id, code})
+
+// Cell operations
+TherapyWS.sendMessage('add_cell', {notebook_id, after_cell_id})
+TherapyWS.sendMessage('delete_cell', {notebook_id, cell_id})
+TherapyWS.sendMessage('move_cell', {notebook_id, cell_id, new_index})
+
+// Notebook operations
+TherapyWS.sendMessage('run_all', {notebook_id})
+TherapyWS.sendMessage('interrupt', {notebook_id})
+TherapyWS.sendMessage('restart', {notebook_id})
+TherapyWS.sendMessage('save', {notebook_id, path})
+TherapyWS.sendMessage('load', {path})
+```
+
+### Server → Client (Channels)
+
+```javascript
+// Cell updates
+{type: 'cell_state', notebook_id, cell_id, state, runtime_ms}
+{type: 'cell_output', notebook_id, cell_id, output: {mime, html, logs}}
+{type: 'cell_added', notebook_id, cell, after_cell_id}
+{type: 'cell_deleted', notebook_id, cell_id}
+
+// Notebook events
+{type: 'saved', notebook_id, path}
+{type: 'loaded', notebook}
+{type: 'interrupted', notebook_id}
+{type: 'restarted', notebook_id}
+```
+
+## File Format
+
+Sessions uses Pluto's `.jl` format for notebook files:
+
+```julia
+### A Pluto.jl notebook ###
+# v0.19.0
+
+# ╔═╡ a1b2c3d4-...
+x = 1
+
+# ╔═╡ e5f6g7h8-...
+y = x + 1
+
+# ╔═╡ Cell order:
+# ╠═a1b2c3d4-...
+# ╠═e5f6g7h8-...
+```
+
+This ensures:
+- Notebooks can be run as regular Julia scripts
+- Full compatibility with Pluto.jl
+- Package environment embedded for reproducibility
+
+## Development
+
+### Running Tests
+
 ```bash
 julia --project=. test/runtests.jl
 ```
 
-### Working Across Repos
+### Adding Features
 
-When Sessions needs something from Therapy.jl:
+1. **New WebSocket channel**: Add handler in `Server/Channels.jl`
+2. **New UI component**: Add in `UI/` and include in `Sessions.jl`
+3. **New route**: Add in `routes/` directory
 
-1. **Identify the need** in Sessions.jl
-2. **Switch to Therapy.jl** and implement
-3. **Test the enhancement** in isolation
-4. **Return to Sessions** and use the new feature
+### Debugging
 
 ```julia
-# In Sessions Project.toml, local path is already configured:
-[sources]
-Therapy = {path = "../Therapy.jl"}
+# Check cell analysis
+cell = Cell(code="x = 1 + y")
+analyze_cell!(cell)
+println(cell.references)  # Set([:y])
+println(cell.definitions) # Set([:x])
+
+# Check execution order
+notebook = Notebook()
+add_cell!(notebook; code="x = 1")
+add_cell!(notebook; code="y = x + 1")
+order = get_all_execution_order(notebook)
 ```
 
----
+## Roadmap
 
-## Key Dependencies
+### Phase 1: Core Engine ✅
+- [x] Cell and Notebook structs
+- [x] ExpressionExplorer integration
+- [x] PlutoDependencyExplorer integration
+- [x] Malt.jl worker execution
+- [x] Pluto file format parsing/writing
 
-### From TherapeuticJulia
-- **Therapy.jl**: VNode components, render_page(), render_to_string()
+### Phase 2: WebSocket Communication ✅
+- [x] Therapy.jl channel handlers
+- [x] Cell execution protocol
+- [x] Notebook operations (save, load, restart)
 
-### Standard Library
-- **HTTP.jl**: HTTP server + WebSocket
-- **JSON3.jl**: Message serialization
-- **UUIDs**: Cell identification
+### Phase 3: Basic UI ✅
+- [x] Layout component
+- [x] CellView component
+- [x] Basic styling
 
-### From Pluto Ecosystem (Integrated)
-- **ExpressionExplorer.jl**: Static analysis for variable references
-- **PlutoDependencyExplorer.jl**: Topological ordering of cell dependencies
-- **Malt.jl**: Worker process management (for future isolated execution)
+### Phase 4: Code Editor ✅
+- [x] CodeMirror 6 integration (ESM imports)
+- [x] Julia-like syntax highlighting (Pluto theme)
+- [x] Keyboard shortcuts (Shift+Enter, Cmd+Enter)
+- [x] Therapy.jl + Pluto.jl combined theme
+- [x] Server rendering via render_page() with head_extra
+- [x] WebSocket integration for cell state updates
+- [ ] Julia-specific language mode (using JS as fallback)
+- [ ] Auto-completion (future)
 
----
-
-## Architecture
-
-### Hybrid SSR + WebSocket Architecture
-
-Sessions uses a **hybrid architecture**:
-- SSR for initial page structure (Therapy.jl components)
-- WebSocket for compute (JSON data exchange)
-- Client-side JS for UI state and cell rendering
-
-```
-Browser                              Server
-   │                                    │
-   │  GET /                             │
-   │ ─────────────────────────────────► │
-   │                                    │  render_page(Layout(...))
-   │  HTML (Therapy.jl SSR + JS bridge) │  (SSR components + hydration keys)
-   │ ◄───────────────────────────────── │
-   │                                    │
-   │  WebSocket /ws                     │
-   │ ◄──────────────────────────────────►
-   │                                    │
-   │  {action: 'execute', ...}          │
-   │ ─────────────────────────────────► │
-   │                                    │  execute code
-   │  {type: 'cell_update', cell: {...}}│  (JSON data, NOT HTML)
-   │ ◄───────────────────────────────── │
-   │                                    │
-   │  JS bridge renders cell to DOM     │
-   │  (or future: Wasm signal update)   │
-```
-
-### Separation of Concerns
-
-1. **Server = COMPUTE**
-   - Code execution in isolated module
-   - Cell state management (code, outputs, errors)
-   - File system operations
-   - Terminal I/O
-   - Returns JSON data, never HTML
-
-2. **Client = UI**
-   - Cell rendering (currently JS, future Wasm)
-   - Status indicators
-   - Event handling
-   - File tree display
-
-### Why This Architecture?
-
-1. **Notebook execution must be server-side** - Julia code runs on the server
-2. **Clean separation** - Server doesn't care about UI, client doesn't care about execution
-3. **Future-proof** - Easy to swap JS rendering for Wasm islands
-4. **Follows Pluto patterns** - Similar WebSocket approach, easier to leverage Pluto packages
-
-### Code Flow
-
-1. **HTTP Request** → `generate_page()` → `render_page(Layout(...))`
-2. **WebSocket Connect** → `broadcast_cells_state()` (JSON cell data)
-3. **Execute Cell** → `execute_cell!()` → `broadcast_cell_update()` (JSON)
-4. **Client** receives JSON, JS bridge renders cells to DOM
-
----
-
-## Key Files
-
-### src/Sessions.jl
-Main module - loads components and server:
-```julia
-module Sessions
-using Therapy, HTTP, JSON3, UUIDs
-
-include("Notebook/Cell.jl")
-include("Notebook/Executor.jl")
-include("components/Layout.jl")
-include("components/Sidebar.jl")
-include("components/Terminal.jl")
-include("Server/WebSocketServer.jl")
-
-function dev(; port=8080, host="127.0.0.1")
-    start_server(host, port)
-end
-end
-```
-
-### src/Server/WebSocketServer.jl
-Main server logic:
-- `start_server()` - HTTP listener with WebSocket upgrade
-- `handle_websocket()` - WebSocket connection handler
-- `handle_ws_message()` - Message router (execute, add_cell, files, terminal, etc.)
-- `generate_page()` - Renders main page with Therapy.jl components
-- `broadcast_cells_state()` - Send all cells to connected clients
-- `broadcast_cell_update()` - Send single cell update (efficient)
-
-### src/Server/ClientBridge.jl
-JavaScript bridge for WebSocket ↔ UI:
-- `head_extra()` - CodeMirror imports, CSS styles
-- `websocket_bridge_script()` - Cell rendering, event handling, WebSocket connection
-
-### src/Notebook/DependencyTracker.jl
-Reactive cell execution using Pluto packages:
-- `NotebookReactivity` - Tracks cell topology
-- `update_cells!()` - Rebuild dependency graph
-- `get_downstream_cells()` - Find cells to re-execute
-- `get_execution_order()` - Topological sort for run_all
-
-### src/Notebook/Cell.jl
-Cell data structure:
-```julia
-@enum CellStatus IDLE QUEUED RUNNING COMPLETED ERRORED
-
-mutable struct Cell
-    id::UUID
-    code::String
-    status::CellStatus
-    output::Any
-    stdout::String
-    stderr::String
-    error_msg::String
-    execution_count::Int
-end
-```
-
-### src/Notebook/Executor.jl
-Code execution:
-```julia
-struct Executor
-    mod::Module  # Isolated execution module
-end
-
-function execute(exec::Executor, code::String) -> ExecutionResult
-    # Evaluate in isolated module, capture stdout/stderr
-end
-
-function execute_cell!(exec::Executor, cell::Cell)
-    # Update cell status, execute, store output
-end
-```
-
----
-
-## WebSocket Protocol
-
-All messages are JSON. Server returns **data**, not HTML.
-
-### Client → Server Actions
-```javascript
-{action: 'execute', cell_id: '...', code: '...'}  // Run cell
-{action: 'add_cell'}                               // Add new cell
-{action: 'delete_cell', cell_id: '...'}           // Delete cell
-{action: 'update_code', cell_id: '...', code: '...'} // Update without running
-{action: 'run_all'}                                // Run all cells
-{action: 'restart'}                                // Restart executor
-{action: 'get_cells'}                              // Request full cell state
-{action: 'files', path: '.'}                       // List directory
-{action: 'open_file', path: '...'}                // Read file
-{action: 'terminal', input: '...'}                // Terminal input
-```
-
-### Server → Client Messages
-```javascript
-// Cell state (JSON data, client renders)
-{type: 'cells_state', cells: [...], count: N}
-{type: 'cell_update', cell: {id, code, status, output, ...}}
-
-// File list (JSON data, client renders)
-{type: 'files', path: '...', entries: [{name, path, is_directory}, ...]}
-
-// Other
-{type: 'terminal', output: '...'} // Terminal output text
-{type: 'file', path: '...', content: '...'} // File content
-{type: 'error', message: '...'}  // Error message
-```
-
-### Cell Data Structure (JSON)
-```javascript
-{
-    id: 'uuid-string',
-    code: 'julia code...',
-    status: 1,  // 0=hidden, 1=idle, 2=running, 3=completed, 4=error
-    status_name: 'IDLE',
-    output: 'result repr',
-    stdout: 'printed output',
-    stderr: 'error output',
-    error_msg: 'exception message',
-    execution_count: 0
-}
-```
-
----
-
-## Adding Features
-
-### Adding a New Component
-1. Create file in `src/components/`
-2. Define function returning VNodes: `function MyComponent() Div(...) end`
-3. Include in `src/Sessions.jl`
-4. Use in `generate_page()` or other components
-
-### Adding a WebSocket Action
-1. Add handler in `handle_ws_message()`:
-```julia
-elseif action == "my_action"
-    # Handle action
-    result = do_something(data["param"])
-    # Send response
-    send(ws, JSON3.write(Dict("type" => "my_response", ...)))
-```
-2. Add client-side binding in `ws_client_script()`
-
-### Adding a Route (Future)
-When file-based routing is enabled:
-1. Create `src/routes/my-page.jl`
-2. Define page function returning VNodes
-3. Export the function
-
----
-
-## Testing Strategy
-
-### Unit Tests
-```julia
-@testset "Cell" begin
-    cell = Cell()
-    @test cell.status == IDLE
-end
-
-@testset "Executor" begin
-    exec = Executor()
-    result = execute(exec, "1 + 1")
-    @test result.value == 2
-end
-```
-
-### Manual Testing
-1. Start dev server: `Sessions.dev()`
-2. Open browser to localhost:8080
-3. Test: add cells, run code, navigate files, use terminal
-
----
-
-## Current Status
-
-### Implemented
-- [x] Project structure following Therapy.jl patterns
-- [x] Layout, Sidebar, Terminal components (SSR with hydration keys)
-- [x] Cell data structure with status tracking
-- [x] Code execution in isolated module
-- [x] **Hybrid architecture**: SSR + WebSocket (JSON) + client-side rendering
-- [x] WebSocket returns JSON data (not HTML)
-- [x] File explorer (list, navigate directories)
-- [x] Terminal (basic input/output)
-- [x] CodeMirror 6 syntax highlighting (Julia-like colors)
-- [x] Dependency tracking (PlutoDependencyExplorer integration)
-- [x] Reactive execution (re-run downstream cells automatically)
-- [x] Clean module separation (WebSocketServer + ClientBridge)
-
-### In Progress
-- [ ] Full Wasm island integration (replace JS bridge with Wasm signals)
-- [ ] Isolated worker processes (Malt.jl integration)
-
-### Planned
-- [ ] File editing/saving
-- [ ] Plot rendering (using Therapy.jl Wasm)
+### Phase 5: Full IDE (Next)
+- [ ] File browser sidebar
+- [ ] Multiple notebooks (tabs)
+- [ ] Package management UI
 - [ ] Keyboard shortcuts
-- [ ] Static export to GitHub Pages
-- [ ] Multi-session support
+- [ ] Collaboration support
 
----
+## Sister Projects
 
-## Debugging Tips
-
-### Server won't start
-- Check if port is in use: `lsof -i:8080`
-- Kill existing process: `lsof -ti:8080 | xargs kill -9`
-
-### WebSocket not connecting
-- Check browser console for errors
-- Verify server is running and listening
-- Check for CORS issues (shouldn't be any with same-origin)
-
-### Code execution fails
-- Check cell.error_msg for Julia errors
-- Verify Executor module is initialized
-- Check stdout/stderr capture
-
-### UI not updating
-- Check WebSocket connection in browser dev tools
-- Verify `broadcast_cells_html()` is called after state changes
-- Check `render_cells_html()` output
-
----
-
-## Performance Notes
-
-1. **Server handles compute** - Julia code execution server-side
-2. **JSON over WebSocket** - Efficient data transfer, client renders
-3. **CodeMirror 6** - Modern editor with ES modules from CDN
-4. **Efficient updates** - `broadcast_cell_update()` for single-cell changes
-5. **Reactive execution** - Only re-run downstream cells via dependency tracking
-
----
-
-## Contact
-
-This is part of the TherapeuticJulia project. All three repos (Sessions.jl, Therapy.jl, WasmTarget.jl) are developed in concert.
+- **Therapy.jl** - Reactive web framework (../Therapy.jl)
+- **WasmTarget.jl** - Julia → WebAssembly compiler (../WasmTarget.jl)
