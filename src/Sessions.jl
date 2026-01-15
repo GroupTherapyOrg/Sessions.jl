@@ -4,13 +4,19 @@ module Sessions
 # Dependencies
 # =============================================================================
 
+# Core framework - provides reactivity, components, SSR, WebSocket handling
 using Therapy
+
+# HTTP server - Sessions needs to handle custom routes
+# (Therapy.jl uses HTTP internally but doesn't expose all server utilities)
 using HTTP
-using HTTP.WebSockets
-using Sockets
+
+# Data handling
 using JSON3
 using UUIDs
 using OrderedCollections
+
+# Code analysis for reactive notebooks
 using ExpressionExplorer
 import Malt
 import PlutoDependencyExplorer as PDE
@@ -33,12 +39,11 @@ include("FileFormat/Parse.jl")
 include("FileFormat/Write.jl")
 
 # =============================================================================
-# Server (Therapy.jl WebSocket)
+# Server (Therapy.jl WebSocket integration)
 # =============================================================================
 
 include("Server/Signals.jl")
 include("Server/Channels.jl")
-include("Server/App.jl")
 
 # =============================================================================
 # UI Components
@@ -46,6 +51,12 @@ include("Server/App.jl")
 
 include("UI/CellView.jl")
 include("UI/Layout.jl")
+
+# =============================================================================
+# App Entry Point
+# =============================================================================
+
+include("Server/App.jl")
 
 # =============================================================================
 # Public API
@@ -57,26 +68,8 @@ export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
 export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!
 export load_notebook, save_notebook, is_pluto_notebook
+
+# Server API
 export serve
-
-# =============================================================================
-# Entry Points
-# =============================================================================
-
-"""
-    dev(; port=8080, host="127.0.0.1")
-
-Start the Sessions development server.
-
-# Example
-```julia
-using Sessions
-Sessions.dev()
-# Open http://localhost:8080
-```
-"""
-function dev(; port::Int=8080, host::String="127.0.0.1")
-    serve(; port=port, host=host)
-end
 
 end # module

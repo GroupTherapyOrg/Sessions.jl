@@ -1,105 +1,60 @@
 # Layout.jl - Main application layout
 #
 # The root layout component for Sessions, wrapping all pages.
-# Theme: Therapy.jl parchment base with Pluto.jl reactive accents
+# Theme: Therapy.jl clean styling with Pluto.jl reactive accents
+#
+# Design Philosophy:
+# - Pure Tailwind CSS (no custom CSS variables)
+# - font-serif for headings (scholarly/calligraphy aesthetic like Therapy.jl)
+# - Pluto.jl blue accent instead of Therapy.jl emerald
+# - Clean, minimal, professional
 
 using Therapy
 
 """
-CSS styles for Sessions (CodeMirror + Pluto theme).
+Head content for Sessions - fonts, Tailwind config, CodeMirror.
+Uses ONLY Tailwind for styling (no custom CSS).
 """
 function sessions_styles()
     """
-    <style>
-    /* Font Loading */
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+    <!-- Google Fonts: Serif for headings (calligraphy), Mono for code -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
-    /* Pluto-inspired Color Variables */
-    :root {
-        --pluto-blue: #375bbd;
-        --pluto-blue-light: #5e7ad3;
-        --pluto-purple: #815ba4;
-        --pluto-green: #48b685;
-        --pluto-orange: #f99b15;
-        --pluto-cyan: #00a9d1;
-        --cell-running: #3b82f6;
-        --cell-queued: #f59e0b;
-        --cell-error: #ef4444;
-        --cell-idle: transparent;
-        --bg-primary: #fafaf9;
-        --bg-secondary: #f5f5f4;
-        --bg-tertiary: #e7e5e4;
-        --text-primary: #1c1917;
-        --text-secondary: #57534e;
-        --text-muted: #a8a29e;
-        --border-color: #d6d3d1;
-        --accent-primary: #059669;
-    }
-
-    .dark {
-        --bg-primary: #171717;
-        --bg-secondary: #262626;
-        --bg-tertiary: #404040;
-        --text-primary: #fafaf9;
-        --text-secondary: #d6d3d1;
-        --text-muted: #737373;
-        --border-color: #404040;
-        --pluto-blue: #3271e7;
-        --pluto-cyan: #00e7b4;
-    }
-
-    /* CodeMirror Theme */
-    .cm-editor {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 14px;
-        background: var(--bg-primary);
-    }
-    .cm-editor.cm-focused { outline: none; }
-    .cm-scroller { padding: 12px 16px; }
-    .cm-content { caret-color: var(--pluto-blue); }
-    .cm-cursor { border-left: 2px solid var(--pluto-blue); }
-    .cm-selectionBackground { background: rgba(55, 91, 189, 0.2) !important; }
-    .cm-activeLine { background: rgba(55, 91, 189, 0.05); }
-    .cm-gutters { background: var(--bg-secondary); border-right: 1px solid var(--border-color); }
-
-    /* Syntax Highlighting */
-    .cm-keyword { color: var(--pluto-purple); font-weight: 500; }
-    .cm-function, .cm-callee { color: var(--pluto-blue); }
-    .cm-string { color: var(--pluto-green); }
-    .cm-number { color: var(--pluto-orange); }
-    .cm-comment { color: var(--text-muted); font-style: italic; }
-    .cm-operator { color: var(--pluto-purple); }
-    .cm-typeName { color: var(--pluto-cyan); }
-
-    /* Cell States */
-    .cell { transition: border-color 0.2s, box-shadow 0.2s; position: relative; }
-    .cell-running { border-left: 3px solid var(--cell-running) !important; }
-    .cell-queued { border-left: 3px solid var(--cell-queued) !important; }
-    .cell-error { border-left: 3px solid var(--cell-error) !important; }
-    .cell-idle { border-left: 3px solid transparent; }
-
-    /* Run Button */
-    .run-btn { background: var(--pluto-green); transition: background 0.2s; }
-    .run-btn:hover { background: #3da076; }
-
-    /* Cell Output */
-    .cell-output { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-    .cell-output pre { white-space: pre-wrap; margin: 0; }
-    .cell-output .error-message { color: #dc2626; font-weight: 500; }
-    .dark .cell-output .error-message { color: #f87171; }
-
-    /* Add Cell Button */
-    .add-cell-btn { opacity: 0; transition: opacity 0.2s; }
-    .cell:hover .add-cell-btn { opacity: 1; }
-
-    .notebook-container { max-width: 900px; margin: 0 auto; }
-    .runtime-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-    </style>
-
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS with Pluto.jl color config -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    // Pluto.jl color palette
+                    pluto: {
+                        blue: '#375bbd',
+                        'blue-light': '#5e7ad3',
+                        purple: '#815ba4',
+                        green: '#48b685',
+                        orange: '#f99b15',
+                        cyan: '#00a9d1',
+                        pink: '#cc80ac',
+                    }
+                },
+                fontFamily: {
+                    // Crimson Pro for calligraphy/scholarly headings
+                    serif: ['Crimson Pro', 'Georgia', 'serif'],
+                    // Inter for clean UI text
+                    sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    // JetBrains Mono for code
+                    mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                }
+            }
+        }
+    }
+    </script>
 
-    <!-- CodeMirror 6 via Pluto's pre-bundled setup (avoids multiple instance issues) -->
+    <!-- CodeMirror 6 via Pluto's pre-bundled setup -->
     <script type="importmap">
     {
         "imports": {
@@ -107,6 +62,42 @@ function sessions_styles()
         }
     }
     </script>
+
+    <!-- Minimal CodeMirror styling (Tailwind handles everything else) -->
+    <style>
+    .cm-editor {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .cm-editor.cm-focused { outline: none; }
+    .cm-scroller { padding: 16px 20px; }
+    .cm-content { caret-color: #375bbd; }
+    .cm-cursor { border-left: 2px solid #375bbd; }
+    .cm-selectionBackground { background: rgba(55, 91, 189, 0.15) !important; }
+    .cm-activeLine { background: rgba(55, 91, 189, 0.04); }
+    .cm-gutters { background: #f5f5f4; border-right: 1px solid #e7e5e4; color: #a8a29e; }
+    .dark .cm-gutters { background: #262626; border-right-color: #404040; color: #737373; }
+    .dark .cm-activeLine { background: rgba(94, 122, 211, 0.08); }
+    .dark .cm-selectionBackground { background: rgba(94, 122, 211, 0.25) !important; }
+    .dark .cm-content { caret-color: #5e7ad3; }
+    .dark .cm-cursor { border-left-color: #5e7ad3; }
+
+    /* Pluto syntax highlighting */
+    .cm-keyword { color: #815ba4; font-weight: 500; }
+    .cm-function, .cm-callee { color: #375bbd; }
+    .cm-string { color: #48b685; }
+    .cm-number { color: #f99b15; }
+    .cm-comment { color: #a8a29e; font-style: italic; }
+    .cm-operator { color: #815ba4; }
+    .cm-typeName { color: #00a9d1; }
+    .cm-variableName { color: #1c1917; }
+    .cm-propertyName { color: #cc80ac; }
+    .dark .cm-variableName { color: #fafaf9; }
+    .dark .cm-function, .dark .cm-callee { color: #5e7ad3; }
+    .dark .cm-string { color: #00ab85; }
+    .dark .cm-typeName { color: #00e7b4; }
+    </style>
     """
 end
 
@@ -236,7 +227,7 @@ function sessions_script()
                     if (outputData && outputData.html) {
                         if (!outputEl) {
                             outputEl = document.createElement('div');
-                            outputEl.className = 'cell-output border-t border-neutral-200 dark:border-neutral-700 p-4 bg-neutral-50 dark:bg-neutral-800/50';
+                            outputEl.className = 'cell-output border-t border-neutral-200 dark:border-neutral-700 p-4 bg-neutral-50 dark:bg-neutral-800/50 font-mono text-sm';
                             const container = cell.querySelector('.cell-code-container');
                             if (container) container.after(outputEl);
                         }
@@ -344,33 +335,72 @@ end
 """
 Main layout component for Sessions.
 Returns the body content (not full HTML - use render_page for that).
+
+Design: Therapy.jl clean patterns with Pluto.jl branding.
+- font-serif for headings (scholarly/calligraphy aesthetic)
+- Pluto blue (#375bbd) as primary accent
+- Clean transitions and dark mode support
 """
 function Layout(content)
-    Div(:class => "min-h-screen bg-neutral-50 dark:bg-neutral-900",
-        # Header
-        Header(:class => "bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 px-4 py-2 flex items-center justify-between sticky top-0 z-10",
-            Div(:class => "flex items-center gap-4",
-                H1(:class => "text-xl font-semibold",
-                    Span(:class => "text-emerald-600 dark:text-emerald-400", "Sessions"),
-                    Span(:class => "text-neutral-400 font-light", ".jl")
-                ),
-                Span(:class => "text-sm text-neutral-500 hidden sm:inline", "Julia Notebook")
-            ),
-            Div(:class => "flex items-center gap-2",
-                Button(:class => "run-btn px-3 py-1.5 text-sm text-white rounded font-medium",
-                    :onclick => "runAll()",
-                    "▶ Run All"
-                ),
-                Button(:class => "px-3 py-1.5 text-sm bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded hover:bg-neutral-300 transition-colors",
-                    :onclick => "saveNotebook()",
-                    "Save"
+    Div(:class => "min-h-screen bg-neutral-100 dark:bg-neutral-950 transition-colors duration-200",
+        # Navigation Bar (Therapy.jl style)
+        Nav(:class => "bg-neutral-50 dark:bg-neutral-900 border-b border-neutral-300 dark:border-neutral-800 transition-colors duration-200",
+            Div(:class => "max-w-5xl mx-auto px-4 sm:px-6 lg:px-8",
+                Div(:class => "flex justify-between h-16",
+                    # Logo & Title (serif font for calligraphy feel)
+                    Div(:class => "flex items-center",
+                        A(:href => "/", :class => "flex items-center",
+                            Span(:class => "text-2xl font-serif font-bold text-pluto-blue dark:text-pluto-blue-light", "Sessions"),
+                            Span(:class => "text-2xl font-serif font-light text-neutral-500 dark:text-neutral-500", ".jl")
+                        )
+                    ),
+
+                    # Actions
+                    Div(:class => "flex items-center gap-3",
+                        # Run All Button (Pluto green)
+                        Button(:class => "bg-pluto-green hover:bg-emerald-600 text-white px-4 py-2 rounded font-medium text-sm transition-colors shadow-sm flex items-center gap-2",
+                            :onclick => "runAll()",
+                            Span("▶"),
+                            Span("Run All")
+                        ),
+                        # Save Button
+                        Button(:class => "bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 px-4 py-2 rounded font-medium text-sm hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors",
+                            :onclick => "saveNotebook()",
+                            "Save"
+                        ),
+                        # Theme Toggle
+                        Button(:class => "p-2 rounded text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors",
+                            :onclick => "document.documentElement.classList.toggle('dark')",
+                            :title => "Toggle dark mode",
+                            Svg(:class => "w-5 h-5", :fill => "none", :viewBox => "0 0 24 24", :stroke => "currentColor", :stroke_width => "2",
+                                Path(:d => "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z")
+                            )
+                        )
+                    )
                 )
             )
         ),
 
-        # Main content
-        MainEl(:id => "page-content", :class => "p-4",
+        # Main Content Area
+        MainEl(:id => "page-content", :class => "max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
             content
+        ),
+
+        # Footer (Therapy.jl style)
+        Footer(:class => "bg-neutral-50 dark:bg-neutral-900 border-t border-neutral-300 dark:border-neutral-800 mt-auto transition-colors duration-200",
+            Div(:class => "max-w-5xl mx-auto py-6 px-4 sm:px-6 lg:px-8",
+                Div(:class => "text-center",
+                    P(:class => "text-neutral-500 dark:text-neutral-400 text-sm",
+                        "Built with ",
+                        A(:href => "https://github.com/TherapeuticJulia/Therapy.jl",
+                          :class => "text-pluto-blue dark:text-pluto-blue-light hover:text-pluto-purple dark:hover:text-pluto-purple transition-colors",
+                          :target => "_blank",
+                          "Therapy.jl"
+                        ),
+                        " — A reactive web framework for Julia"
+                    )
+                )
+            )
         )
     )
 end
