@@ -632,16 +632,6 @@ function Layout(content)
 
                     # Actions - understated elegance
                     Div(:class => "flex items-center gap-3",
-                        # Run All - refined green
-                        Button(:class => "flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 rounded-full shadow-sm hover:shadow transition-all duration-200",
-                            :onclick => "runAll()",
-                            Svg(:class => "w-3 h-3",
-                                :fill => "currentColor",
-                                :viewBox => "0 0 20 20",
-                                Path(:d => "M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z")
-                            ),
-                            Span("Run All")
-                        ),
                         # Save - ghost button
                         Button(:class => "px-3 py-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-stone-800/50 rounded-full transition-all duration-200",
                             :onclick => "saveNotebook()",
