@@ -614,10 +614,18 @@ function Layout(content)
         Nav(:class => "sticky top-0 z-50 bg-stone-50/90 dark:bg-neutral-900/90 backdrop-blur-lg border-b border-stone-200/60 dark:border-neutral-800/60 transition-colors duration-300",
             Div(:class => "max-w-4xl mx-auto px-8",
                 Div(:class => "flex justify-between h-12",
-                    # Logo & Title - calligraphic elegance
+                    # Logo & Title - illuminated manuscript style
                     Div(:class => "flex items-center",
-                        A(:href => "/", :class => "flex items-baseline gap-0.5 group",
-                            Span(:class => "text-lg font-serif font-semibold text-stone-700 dark:text-stone-200 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors duration-200", "Sessions"),
+                        A(:href => "/", :class => "flex items-baseline group",
+                            # Each letter colored like an illuminated manuscript
+                            Span(:class => "text-lg font-serif font-semibold text-rose-700 dark:text-rose-400", "S"),
+                            Span(:class => "text-lg font-serif font-semibold text-amber-700 dark:text-amber-400", "e"),
+                            Span(:class => "text-lg font-serif font-semibold text-emerald-700 dark:text-emerald-400", "s"),
+                            Span(:class => "text-lg font-serif font-semibold text-sky-700 dark:text-sky-400", "s"),
+                            Span(:class => "text-lg font-serif font-semibold text-violet-700 dark:text-violet-400", "i"),
+                            Span(:class => "text-lg font-serif font-semibold text-rose-700 dark:text-rose-400", "o"),
+                            Span(:class => "text-lg font-serif font-semibold text-amber-700 dark:text-amber-400", "n"),
+                            Span(:class => "text-lg font-serif font-semibold text-emerald-700 dark:text-emerald-400", "s"),
                             Span(:class => "text-lg font-serif font-light text-stone-400 dark:text-stone-500", ".jl")
                         )
                     ),

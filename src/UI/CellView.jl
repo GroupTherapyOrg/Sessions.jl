@@ -52,8 +52,8 @@ function CellView(cell::Cell)
         Div(:class => "cell-code-container relative bg-amber-50/40 dark:bg-neutral-800/60 rounded-t-lg",
             Symbol("data-initial-code") => cell.code,
 
-            # Floating run button (top-right, appears on hover)
-            Div(:class => "absolute top-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+            # Floating run button (top-right, appears on hover, z-20 to be above CodeMirror)
+            Div(:class => "absolute top-3 right-3 z-20 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
                 # Runtime badge
                 Span(:class => "text-xs font-mono text-neutral-400",
                     Symbol("data-server-signal") => runtime_signal,
@@ -86,8 +86,8 @@ function CellView(cell::Cell)
                 )
             ),
 
-            # Dirty indicator (yellow dot, top-left)
-            Span(:class => "dirty-indicator absolute top-3 left-3 w-2 h-2 rounded-full bg-amber-400 hidden",
+            # Dirty indicator (yellow dot, top-left, z-20 to be above CodeMirror)
+            Span(:class => "dirty-indicator absolute top-3 left-3 z-20 w-2 h-2 rounded-full bg-amber-400 hidden",
                 Symbol("data-dirty") => "false"
             ),
 

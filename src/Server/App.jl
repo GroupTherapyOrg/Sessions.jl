@@ -87,27 +87,19 @@ function render_notebook_content()
     cells = cells_in_order(notebook)
 
     # Build page content
-    Div(:class => "space-y-6",
-        # Notebook header
-        Div(:class => "mb-6",
-            H2(:class => "text-3xl font-serif font-semibold text-neutral-900 dark:text-neutral-100",
+    Div(:class => "space-y-8",
+        # Notebook header - elegant, scholarly
+        Div(:class => "mb-8 pb-6 border-b border-stone-200/30 dark:border-neutral-800/30",
+            H2(:class => "text-2xl font-serif font-medium text-stone-700 dark:text-stone-200 tracking-wide",
                 notebook.path === nothing ? "Untitled Notebook" : basename(notebook.path)
             ),
-            P(:class => "text-sm text-neutral-500 dark:text-neutral-400 mt-1",
+            P(:class => "text-xs text-stone-400 dark:text-stone-500 mt-2 tracking-wider uppercase",
                 "$(length(cells)) cells"
             )
         ),
 
         # Cells
         CellsView(cells),
-
-        # Add cell at end
-        Div(:class => "text-center py-4",
-            Button(:class => "px-4 py-2 text-sm bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors",
-                :onclick => "addCell(null)",
-                "+ Add Cell"
-            )
-        ),
 
         # Set notebook ID for client
         Script("setNotebookId('$(notebook.id)');")
