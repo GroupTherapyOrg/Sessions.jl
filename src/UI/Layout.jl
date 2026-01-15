@@ -74,69 +74,160 @@ function sessions_styles()
     }
     </script>
 
-    <!-- Minimal CodeMirror styling (Tailwind handles everything else) -->
+    <!-- Elegant parchment-inspired styling -->
     <style>
+    /* ═══════════════════════════════════════════════════════════════════
+       CodeMirror - Scholarly, elegant like writing with a quill
+       ═══════════════════════════════════════════════════════════════════ */
     .cm-editor {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 14px;
-        line-height: 1.6;
-        background: #fafaf9; /* stone-50 */
-        min-height: 60px;
+        font-size: 13px;
+        line-height: 1.75;
+        background: transparent;
+        min-height: 48px;
     }
     .cm-editor.cm-focused { outline: none; }
-    .cm-scroller { padding: 16px 20px; }
-    .cm-content { caret-color: #375bbd; background: transparent; }
-    .cm-cursor { border-left: 2px solid #375bbd; }
-    .cm-selectionBackground { background: rgba(55, 91, 189, 0.15) !important; }
-    .cm-activeLine { background: rgba(55, 91, 189, 0.06); }
-    .cm-gutters { background: #f5f5f4; border-right: 1px solid #e7e5e4; color: #a8a29e; }
-    .dark .cm-editor { background: #171717; /* neutral-900 */ }
-    .dark .cm-gutters { background: #262626; border-right-color: #404040; color: #737373; }
-    .dark .cm-activeLine { background: rgba(94, 122, 211, 0.08); }
-    .dark .cm-selectionBackground { background: rgba(94, 122, 211, 0.25) !important; }
-    .dark .cm-content { caret-color: #5e7ad3; }
-    .dark .cm-cursor { border-left-color: #5e7ad3; }
+    .cm-scroller { padding: 20px 24px; }
+    .cm-content {
+        caret-color: #8b5a2b;
+        background: transparent;
+    }
+    .cm-cursor {
+        border-left: 1.5px solid #8b5a2b;
+    }
+    .cm-selectionBackground {
+        background: rgba(139, 90, 43, 0.15) !important;
+    }
+    .cm-activeLine {
+        background: rgba(139, 90, 43, 0.05);
+    }
+    .cm-gutters {
+        background: transparent;
+        border-right: none;
+        color: #c4a77d;
+        padding-right: 12px;
+        font-size: 11px;
+    }
+    .cm-lineNumbers .cm-gutterElement {
+        min-width: 2.5em;
+        text-align: right;
+        padding-right: 8px;
+    }
 
-    /* Pluto syntax highlighting */
-    .cm-keyword { color: #815ba4; font-weight: 500; }
-    .cm-function, .cm-callee { color: #375bbd; }
-    .cm-string { color: #48b685; }
-    .cm-number { color: #f99b15; }
-    .cm-comment { color: #a8a29e; font-style: italic; }
-    .cm-operator { color: #815ba4; }
-    .cm-typeName { color: #00a9d1; }
-    .cm-variableName { color: #1c1917; }
-    .cm-propertyName { color: #cc80ac; }
-    .dark .cm-variableName { color: #fafaf9; }
-    .dark .cm-function, .dark .cm-callee { color: #5e7ad3; }
-    .dark .cm-string { color: #00ab85; }
-    .dark .cm-typeName { color: #00e7b4; }
+    /* Dark mode - rich leather-bound book aesthetic */
+    .dark .cm-content { caret-color: #c9a86c; }
+    .dark .cm-cursor { border-left-color: #c9a86c; }
+    .dark .cm-activeLine { background: rgba(201, 168, 108, 0.06); }
+    .dark .cm-selectionBackground { background: rgba(201, 168, 108, 0.18) !important; }
+    .dark .cm-gutters { color: #5c5344; }
 
-    /* Cell state indicators */
-    .cell.cell-running { border-color: #f99b15; }
-    .cell.cell-running .run-btn { background: #f99b15; }
-    .cell.cell-queued { border-color: #815ba4; }
-    .cell.cell-queued .run-btn { background: #815ba4; }
-    .cell.cell-error { border-color: #ef4444; }
-    .cell.cell-error .run-btn { background: #ef4444; }
-    .cell.cell-idle .run-btn { background: #375bbd; }
-    .dark .cell.cell-idle .run-btn { background: #5e7ad3; }
+    /* ═══════════════════════════════════════════════════════════════════
+       Syntax highlighting - rich, refined colors
+       ═══════════════════════════════════════════════════════════════════ */
+    /* Light mode - ink on parchment */
+    .cm-keyword { color: #7c4d8a; font-weight: 500; }
+    .cm-function, .cm-callee { color: #2d5a8a; }
+    .cm-string { color: #3d7a5a; }
+    .cm-number { color: #b8860b; }
+    .cm-comment { color: #9a8b7a; font-style: italic; }
+    .cm-operator { color: #7c4d8a; }
+    .cm-typeName { color: #0077aa; }
+    .cm-variableName { color: #3d3226; }
+    .cm-propertyName { color: #9a5b6a; }
+    .cm-bool { color: #b8860b; }
+    .cm-atom { color: #0077aa; }
 
-    /* Running animation */
+    /* Dark mode - glowing ink on dark leather */
+    .dark .cm-keyword { color: #c9a0dc; font-weight: 500; }
+    .dark .cm-function, .dark .cm-callee { color: #8ab4f8; }
+    .dark .cm-string { color: #81c995; }
+    .dark .cm-number { color: #f0c674; }
+    .dark .cm-comment { color: #7a7265; font-style: italic; }
+    .dark .cm-operator { color: #c9a0dc; }
+    .dark .cm-typeName { color: #7dd3e8; }
+    .dark .cm-variableName { color: #e8e0d5; }
+    .dark .cm-propertyName { color: #e8a0b0; }
+    .dark .cm-bool { color: #f0c674; }
+    .dark .cm-atom { color: #7dd3e8; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       Cell state indicators - subtle, refined
+       ═══════════════════════════════════════════════════════════════════ */
+    .cell-state-bar { background: transparent; }
+    .cell.cell-idle .cell-state-bar { background: transparent; }
+    .cell.cell-running .cell-state-bar {
+        background: linear-gradient(to bottom, #d4a853, #c9a040);
+    }
+    .cell.cell-queued .cell-state-bar {
+        background: linear-gradient(to bottom, #9a7baa, #8a6b9a);
+    }
+    .cell.cell-error .cell-state-bar {
+        background: linear-gradient(to bottom, #c97070, #b86060);
+    }
+
+    /* Run button - elegant pill with gradient */
+    .run-btn {
+        position: relative;
+        overflow: hidden;
+    }
+    .cell.cell-idle .run-btn {
+        background: linear-gradient(135deg, #3d6aa5, #2d5a95);
+    }
+    .cell.cell-running .run-btn {
+        background: linear-gradient(135deg, #d4a853, #c9a040);
+    }
+    .cell.cell-queued .run-btn {
+        background: linear-gradient(135deg, #9a7baa, #8a6b9a);
+    }
+    .cell.cell-error .run-btn {
+        background: linear-gradient(135deg, #c97070, #b86060);
+    }
+    .dark .cell.cell-idle .run-btn {
+        background: linear-gradient(135deg, #5a7dba, #4a6daa);
+    }
+
+    /* Running animation - gentle gold shimmer */
     .cell.cell-running .run-btn::after {
         content: '';
         position: absolute;
-        width: 100%;
-        height: 100%;
-        top: 0;
-        left: 0;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-        animation: shimmer 1.5s infinite;
+        inset: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+        animation: shimmer 2s ease-in-out infinite;
     }
     @keyframes shimmer {
         0% { transform: translateX(-100%); }
         100% { transform: translateX(100%); }
     }
+
+    /* Dirty indicator - amber glow */
+    .dirty-indicator {
+        box-shadow: 0 0 4px rgba(217, 119, 6, 0.5);
+    }
+    .dirty-indicator:not(.hidden) {
+        animation: amber-pulse 2.5s ease-in-out infinite;
+    }
+    @keyframes amber-pulse {
+        0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(217, 119, 6, 0.5); }
+        50% { opacity: 0.6; box-shadow: 0 0 8px rgba(217, 119, 6, 0.3); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       Global refinements
+       ═══════════════════════════════════════════════════════════════════ */
+    /* Smoother scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.15);
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+    .dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+    .dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+    /* Selection color */
+    ::selection { background: rgba(139, 90, 43, 0.2); }
+    .dark ::selection { background: rgba(201, 168, 108, 0.25); }
     </style>
     """
 end
@@ -348,7 +439,7 @@ function sessions_script()
                 const outputEl = cell.querySelector('.cell-output');
                 if (outputEl) {
                     outputEl.innerHTML = html;
-                    outputEl.style.display = html ? '' : 'none';
+                    outputEl.classList.toggle('hidden', !html);
                 }
             });
         }
@@ -512,62 +603,65 @@ end
 Main layout component for Sessions.
 Returns the body content (not full HTML - use render_page for that).
 
-Design: Therapy.jl clean patterns with Pluto.jl branding.
-- font-serif for headings (scholarly/calligraphy aesthetic)
-- Pluto blue (#375bbd) as primary accent
-- Clean transitions and dark mode support
+Design: Elegant, minimal, scholarly aesthetic.
+- Serif font for branding (calligraphy feel)
+- Pluto blue as accent color
+- Generous whitespace and subtle shadows
 """
 function Layout(content)
-    Div(:class => "min-h-screen bg-neutral-100 dark:bg-neutral-950 transition-colors duration-200",
-        # Navigation Bar (Therapy.jl style)
-        Nav(:class => "bg-neutral-50 dark:bg-neutral-900 border-b border-neutral-300 dark:border-neutral-800 transition-colors duration-200",
-            Div(:class => "max-w-5xl mx-auto px-4 sm:px-6 lg:px-8",
-                Div(:class => "flex justify-between h-16",
-                    # Logo & Title (serif font for calligraphy feel)
+    Div(:class => "min-h-screen flex flex-col bg-stone-100 dark:bg-neutral-950 transition-colors duration-300",
+        # Navigation Bar - refined, scholarly
+        Nav(:class => "sticky top-0 z-50 bg-stone-50/90 dark:bg-neutral-900/90 backdrop-blur-lg border-b border-stone-200/60 dark:border-neutral-800/60 transition-colors duration-300",
+            Div(:class => "max-w-4xl mx-auto px-8",
+                Div(:class => "flex justify-between h-12",
+                    # Logo & Title - calligraphic elegance
                     Div(:class => "flex items-center",
-                        A(:href => "/", :class => "flex items-center",
-                            Span(:class => "text-2xl font-serif font-bold text-pluto-blue dark:text-pluto-blue-light", "Sessions"),
-                            Span(:class => "text-2xl font-serif font-light text-neutral-500 dark:text-neutral-500", ".jl")
+                        A(:href => "/", :class => "flex items-baseline gap-0.5 group",
+                            Span(:class => "text-lg font-serif font-semibold text-stone-700 dark:text-stone-200 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors duration-200", "Sessions"),
+                            Span(:class => "text-lg font-serif font-light text-stone-400 dark:text-stone-500", ".jl")
                         )
                     ),
 
-                    # Actions
+                    # Actions - understated elegance
                     Div(:class => "flex items-center gap-3",
-                        # Run All Button (Pluto green)
-                        Button(:class => "bg-pluto-green hover:bg-emerald-600 text-white px-4 py-2 rounded font-medium text-sm transition-colors shadow-sm flex items-center gap-2",
+                        # Run All - refined green
+                        Button(:class => "flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 rounded-full shadow-sm hover:shadow transition-all duration-200",
                             :onclick => "runAll()",
-                            Span("▶"),
+                            Svg(:class => "w-3 h-3",
+                                :fill => "currentColor",
+                                :viewBox => "0 0 20 20",
+                                Path(:d => "M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z")
+                            ),
                             Span("Run All")
                         ),
-                        # Save Button
-                        Button(:class => "bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 px-4 py-2 rounded font-medium text-sm hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors",
+                        # Save - ghost button
+                        Button(:class => "px-3 py-1 text-xs font-medium text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-200/50 dark:hover:bg-stone-800/50 rounded-full transition-all duration-200",
                             :onclick => "saveNotebook()",
                             "Save"
                         ),
-                        # Theme Toggle (Therapy.jl island - compiled to Wasm, no JavaScript)
+                        # Divider
+                        Span(:class => "w-px h-4 bg-stone-300 dark:bg-stone-700"),
+                        # Theme Toggle
                         DarkModeToggle()
                     )
                 )
             )
         ),
 
-        # Main Content Area
-        MainEl(:id => "page-content", :class => "max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+        # Main Content Area - generous, breathable
+        MainEl(:id => "page-content", :class => "flex-1 max-w-4xl w-full mx-auto px-8 py-12",
             content
         ),
 
-        # Footer (Therapy.jl style)
-        Footer(:class => "bg-neutral-50 dark:bg-neutral-900 border-t border-neutral-300 dark:border-neutral-800 mt-auto transition-colors duration-200",
-            Div(:class => "max-w-5xl mx-auto py-6 px-4 sm:px-6 lg:px-8",
-                Div(:class => "text-center",
-                    P(:class => "text-neutral-500 dark:text-neutral-400 text-sm",
-                        "Built with ",
-                        A(:href => "https://github.com/TherapeuticJulia/Therapy.jl",
-                          :class => "text-pluto-blue dark:text-pluto-blue-light hover:text-pluto-purple dark:hover:text-pluto-purple transition-colors",
-                          :target => "_blank",
-                          "Therapy.jl"
-                        ),
-                        " — A reactive web framework for Julia"
+        # Footer - whisper quiet
+        Footer(:class => "border-t border-stone-200/40 dark:border-neutral-800/40 transition-colors duration-300",
+            Div(:class => "max-w-4xl mx-auto py-5 px-8",
+                P(:class => "text-center text-stone-400 dark:text-stone-600 text-xs tracking-wide",
+                    "Built with ",
+                    A(:href => "https://github.com/TherapeuticJulia/Therapy.jl",
+                      :class => "text-stone-500 dark:text-stone-500 hover:text-amber-600 dark:hover:text-amber-500 transition-colors",
+                      :target => "_blank",
+                      "Therapy.jl"
                     )
                 )
             )
