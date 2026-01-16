@@ -70,6 +70,10 @@ export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!
 export load_notebook, save_notebook, is_pluto_notebook
 
+# Phase 2: Smart multi-line cells and Pluto paste
+export parse_cell_code, get_executable_code
+export parse_pluto_content, is_pluto_content
+
 # Server API
 export serve
 

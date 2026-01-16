@@ -1,17 +1,28 @@
 # Worker.jl - Sandboxed code execution using Malt.jl
 #
 # Each notebook gets its own worker process for isolated execution.
+# Supports rich MIME output (HTML, SVG, images, etc.) for Therapy.jl rendering.
 
 import Malt
 using UUIDs
+
+# MIME type priority for rich output (highest priority first)
+const MIME_PRIORITY = [
+    "text/html",
+    "image/svg+xml",
+    "image/png",
+    "image/jpeg",
+    "text/markdown",
+    "text/plain"
+]
 
 """
 Result of executing code in a worker.
 """
 struct ExecutionResult
     success::Bool
-    value::Any
-    output_type::Type
+    value::Any              # The rendered content (HTML string, base64 image, etc.)
+    mime_type::String       # MIME type of the output
     stdout::String
     stderr::String
     error::Union{Nothing, String}
@@ -23,22 +34,61 @@ end
     execute_code(worker::Malt.Worker, code::String) -> ExecutionResult
 
 Execute Julia code in the worker process and capture all output.
+Uses include_string to handle multi-line code natively (no begin...end needed).
+Returns rich MIME output (HTML, SVG, images) when available.
 """
 function execute_code(worker::Malt.Worker, code::String)
     start_time = time()
 
+    # Pass the raw code - include_string handles multiple expressions natively
     result = Malt.remote_eval_fetch(worker, quote
         local _result_value = nothing
-        local _result_type = Nothing
+        local _result_content = ""
+        local _result_mime = "text/plain"
         local _error_msg = nothing
         local _stacktrace = nothing
         local _success = true
 
+        # MIME priority for rich output (instances, not types)
+        local _MIME_PRIORITY = [
+            MIME("text/html"),
+            MIME("image/svg+xml"),
+            MIME("image/png"),
+            MIME("image/jpeg"),
+            MIME("text/markdown"),
+            MIME("text/plain")
+        ]
+
         try
-            # Parse and evaluate (skip stdout/stderr capture for now)
-            local expr = Meta.parse($code)
-            _result_value = Core.eval(Main, expr)
-            _result_type = typeof(_result_value)
+            # Use include_string - handles multiple expressions natively
+            # Returns the value of the last expression (like Pluto)
+            _result_value = include_string(Main, $code)
+
+            # Get rich output - find best MIME type
+            if _result_value !== nothing
+                for mime in _MIME_PRIORITY
+                    if showable(mime, _result_value)
+                        _result_mime = string(mime)
+                        local io = IOBuffer()
+                        show(io, mime, _result_value)
+                        local data = take!(io)
+
+                        # For images, base64 encode
+                        if startswith(_result_mime, "image/") && _result_mime != "image/svg+xml"
+                            _result_content = Base.base64encode(data)
+                        else
+                            _result_content = String(data)
+                        end
+                        break
+                    end
+                end
+
+                # Fallback to repr if nothing else worked
+                if isempty(_result_content)
+                    _result_content = repr(_result_value)
+                    _result_mime = "text/plain"
+                end
+            end
         catch e
             _success = false
             _error_msg = sprint(showerror, e)
@@ -48,10 +98,10 @@ function execute_code(worker::Malt.Worker, code::String)
         # Return all captured data
         (
             success = _success,
-            value = _success ? repr(_result_value) : nothing,
-            value_type = string(_result_type),
-            stdout = "",  # TODO: Implement proper stdout capture
-            stderr = "",  # TODO: Implement proper stderr capture
+            content = _result_content,
+            mime_type = _result_mime,
+            stdout = "",  # TODO: Implement proper stdout capture via IOCapture.jl
+            stderr = "",
             error = _error_msg,
             stacktrace = _stacktrace
         )
@@ -61,8 +111,8 @@ function execute_code(worker::Malt.Worker, code::String)
 
     return ExecutionResult(
         result.success,
-        result.value,
-        Any,  # We lose the actual type, but have the string representation
+        result.content,
+        result.mime_type,
         result.stdout,
         result.stderr,
         result.error,
@@ -75,6 +125,7 @@ end
     execute_cell!(notebook::Notebook, cell::Cell) -> ExecutionResult
 
 Execute a cell in the notebook's worker and update the cell state.
+Handles rich MIME output (HTML, SVG, images) for Therapy.jl rendering.
 """
 function execute_cell!(notebook::Notebook, cell::Cell)
     # Ensure worker exists
@@ -91,18 +142,24 @@ function execute_cell!(notebook::Notebook, cell::Cell)
 
     if result.success
         cell.state = CELL_IDLE
+
+        # Render output based on MIME type
+        html_output = render_rich_output(result.value, result.mime_type)
+
         cell.output = CellOutput(
             result.value,
-            "text/plain",  # TODO: Detect MIME type
-            escape_html(string(result.value)),
+            result.mime_type,
+            html_output,
             split(result.stdout, '\n', keepempty=false),
             split(result.stderr, '\n', keepempty=false)
         )
     else
         cell.state = CELL_ERROR
-        error_html = """<div class="error">
-            <div class="error-message">$(escape_html(result.error))</div>
-            <pre class="stacktrace">$(escape_html(result.stacktrace === nothing ? "" : result.stacktrace))</pre>
+        # Error output with elegant styling for parchment theme
+        error_html = """<div class="cell-error rounded-lg p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50">
+            <div class="font-semibold text-red-700 dark:text-red-400 mb-2">Error</div>
+            <div class="font-mono text-sm text-red-600 dark:text-red-300 mb-3">$(escape_html(result.error === nothing ? "" : result.error))</div>
+            <pre class="text-xs text-red-500/70 dark:text-red-400/60 overflow-x-auto whitespace-pre-wrap">$(escape_html(result.stacktrace === nothing ? "" : result.stacktrace))</pre>
         </div>"""
         cell.output = CellOutput(
             nothing,
@@ -114,6 +171,38 @@ function execute_cell!(notebook::Notebook, cell::Cell)
     end
 
     return result
+end
+
+"""
+    render_rich_output(content::String, mime_type::String) -> String
+
+Render rich output content as HTML based on MIME type.
+Uses Tailwind classes for styling, integrates with Therapy.jl's RawHtml.
+"""
+function render_rich_output(content::String, mime_type::String)
+    if isempty(content)
+        return ""
+    end
+
+    if mime_type == "text/html"
+        # HTML content is returned as-is (will be wrapped in RawHtml by CellView)
+        return content
+    elseif mime_type == "image/svg+xml"
+        # SVG is returned as-is (will be wrapped in RawHtml)
+        return content
+    elseif mime_type == "image/png"
+        # PNG as base64 data URI
+        return """<img src="data:image/png;base64,$content" class="max-w-full h-auto rounded shadow-sm" />"""
+    elseif mime_type == "image/jpeg"
+        # JPEG as base64 data URI
+        return """<img src="data:image/jpeg;base64,$content" class="max-w-full h-auto rounded shadow-sm" />"""
+    elseif mime_type == "text/markdown"
+        # For now, render markdown as preformatted (TODO: add markdown renderer)
+        return """<div class="prose dark:prose-invert prose-stone max-w-none">$(escape_html(content))</div>"""
+    else
+        # Default: plain text with elegant monospace styling
+        return """<pre class="font-mono text-sm text-stone-700 dark:text-stone-300 whitespace-pre-wrap">$(escape_html(content))</pre>"""
+    end
 end
 
 """

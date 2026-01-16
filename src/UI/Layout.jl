@@ -557,6 +557,70 @@ function sessions_script()
                     console.log('[Sessions] Cell deleted:', data.cell_id);
                 }
             });
+
+            // Handle paste completion (feedback to user)
+            TherapyWS.onChannelMessage('paste_complete', function(data) {
+                const count = data.cells_created;
+                const isPluto = data.is_pluto_format;
+                if (count > 0) {
+                    console.log('[Sessions] Pasted ' + count + ' cell(s)' + (isPluto ? ' from Pluto notebook' : ''));
+                }
+            });
+        }
+
+        // =====================================================================
+        // Paste Handler (Pluto notebook import)
+        // =====================================================================
+
+        function setupPasteHandler() {
+            // Listen for paste events on the cells container
+            document.addEventListener('paste', function(e) {
+                // Only handle paste when not focused on a CodeMirror editor
+                const activeEl = document.activeElement;
+                const isInEditor = activeEl && (
+                    activeEl.closest('.cm-editor') ||
+                    activeEl.tagName === 'TEXTAREA' ||
+                    activeEl.tagName === 'INPUT'
+                );
+
+                // If in an editor, let the normal paste happen
+                if (isInEditor) return;
+
+                // Check if paste target is in the notebook area
+                const target = e.target;
+                const isInNotebook = target.closest('.cells-container') ||
+                                     target.closest('#page-content') ||
+                                     target.closest('main');
+
+                if (!isInNotebook) return;
+
+                // Get clipboard text
+                const text = e.clipboardData?.getData('text/plain');
+                if (!text || text.trim().length === 0) return;
+
+                // Check if it looks like Pluto content or multi-line code
+                const isPluto = text.includes('### A Pluto.jl notebook ###');
+                const isMultiLine = text.includes('\\n') || text.split('\\n').length > 3;
+
+                // Only intercept if it's Pluto content or significant code
+                if (!isPluto && !isMultiLine) return;
+
+                e.preventDefault();
+
+                // Find the last cell to insert after
+                const cells = document.querySelectorAll('.cell');
+                const lastCell = cells.length > 0 ? cells[cells.length - 1] : null;
+                const afterCellId = lastCell ? lastCell.dataset.cellId : null;
+
+                // Send to server
+                sendAction('paste_content', {
+                    notebook_id: notebookId,
+                    content: text,
+                    after_cell_id: afterCellId
+                });
+
+                console.log('[Sessions] Paste detected, sending to server...');
+            });
         }
 
         // =====================================================================
@@ -612,6 +676,9 @@ function sessions_script()
 
             // Set up channel handlers
             setupChannelHandlers();
+
+            // Set up paste handler for Pluto notebook import
+            setupPasteHandler();
 
             // Initialize CodeMirror editors
             document.querySelectorAll('.cell').forEach(async function(cell) {

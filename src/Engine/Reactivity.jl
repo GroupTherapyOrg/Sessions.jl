@@ -13,6 +13,9 @@
 
 Analyze a cell's code to find variable references and definitions.
 Updates the cell's `references`, `definitions`, and `funcdefs` fields.
+
+Uses `parse_cell_code` to handle multi-line cells transparently -
+users don't need to wrap code in begin...end.
 """
 function analyze_cell!(cell::Cell)
     if isempty(strip(cell.code))
@@ -23,15 +26,21 @@ function analyze_cell!(cell::Cell)
     end
 
     try
-        expr = Base.Meta.parse(cell.code)
+        # Use parse_cell_code for auto begin...end wrapping
+        expr = parse_cell_code(cell.code)
+        println("[Sessions] Analyzing code: $(repr(cell.code))")
+        println("[Sessions] Parsed expr: $(expr)")
+
         node = ExpressionExplorer.compute_reactive_node(expr)
+        println("[Sessions] ReactiveNode: refs=$(node.references), defs=$(node.definitions)")
 
         cell.references = node.references
         cell.definitions = node.definitions
         cell.funcdefs = node.funcdefs_without_signatures
     catch e
-        # If parsing fails, leave reactivity metadata empty
-        # The execution error will be caught later
+        # Log the error instead of silently swallowing it
+        println("[Sessions] analyze_cell! ERROR: $(sprint(showerror, e))")
+        println("[Sessions] Stacktrace: $(sprint(Base.show_backtrace, catch_backtrace()))")
         cell.references = Set{Symbol}()
         cell.definitions = Set{Symbol}()
         cell.funcdefs = Set{Symbol}()
@@ -44,6 +53,7 @@ end
     analyze_code(code::String)
 
 Analyze code without a cell, returning (references, definitions, funcdefs).
+Uses `parse_cell_code` for auto begin...end wrapping of multi-line code.
 """
 function analyze_code(code::String)
     if isempty(strip(code))
@@ -51,7 +61,8 @@ function analyze_code(code::String)
     end
 
     try
-        expr = Base.Meta.parse(code)
+        # Use parse_cell_code for auto begin...end wrapping
+        expr = parse_cell_code(code)
         node = ExpressionExplorer.compute_reactive_node(expr)
         return (node.references, node.definitions, node.funcdefs_without_signatures)
     catch
@@ -79,6 +90,7 @@ PDECell(cell::Cell) = PDECell(cell.id, cell.code)
     compute_topology(notebook)
 
 Build a NotebookTopology from the notebook's cells using PlutoDependencyExplorer.
+Uses `parse_cell_code` for auto begin...end wrapping of multi-line cells.
 """
 function compute_topology(notebook::Notebook)
     # First, analyze all cells
@@ -97,7 +109,7 @@ function compute_topology(notebook::Notebook)
         pde_cells,
         pde_cells;
         get_code_str = c -> c.code,
-        get_code_expr = c -> Base.Meta.parse(c.code),
+        get_code_expr = c -> parse_cell_code(c.code),  # Use parse_cell_code for auto begin...end
         get_cell_disabled = c -> false
     )
 

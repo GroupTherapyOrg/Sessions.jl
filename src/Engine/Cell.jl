@@ -97,6 +97,120 @@ is_error(cell::Cell) = cell.state == CELL_ERROR
 has_output(cell::Cell) = cell.output !== nothing
 has_error(cell::Cell) = cell.state == CELL_ERROR
 
+# =============================================================================
+# Smart Multi-line Cell Parsing (Auto begin...end)
+# =============================================================================
+
+"""
+    parse_cell_code(code::String) -> Expr
+
+Parse cell code, automatically wrapping multi-expression code in begin...end.
+This is transparent to the user - they write multiple lines, we handle it.
+
+# Behavior
+- Single expression: Returns as-is
+- Multiple top-level expressions: Wraps in begin...end block
+- Incomplete expression: Tries wrapping to complete it
+- Empty/whitespace: Returns nothing literal
+
+# Examples
+```julia
+# Single expression - returned as-is
+parse_cell_code("x = 1")  # => :(x = 1)
+
+# Multiple expressions - auto-wrapped
+parse_cell_code("x = 1\\ny = 2\\nx + y")  # => begin x = 1; y = 2; x + y end
+
+# User never needs to write begin...end explicitly
+```
+"""
+function parse_cell_code(code::String)
+    stripped = strip(code)
+
+    # Empty code
+    if isempty(stripped)
+        return :nothing
+    end
+
+    # Try parsing as single expression first
+    expr = Base.Meta.parse(code, raise=false)
+
+    # If it parsed cleanly as a single non-error expression, use it
+    if !(expr isa Expr && expr.head == :incomplete)
+        return expr
+    end
+
+    # Try parsing all expressions
+    try
+        full_parse = Base.Meta.parseall(code)
+
+        if full_parse isa Expr && full_parse.head == :toplevel
+            # Filter out LineNumberNode entries
+            exprs = filter(e -> !(e isa LineNumberNode), full_parse.args)
+
+            if length(exprs) == 0
+                return :nothing
+            elseif length(exprs) == 1
+                return first(exprs)
+            else
+                # Multiple expressions - wrap in begin...end block
+                # This makes all variables defined at module scope (not local)
+                return Expr(:block, exprs...)
+            end
+        end
+
+        return full_parse
+    catch e
+        # If parseall fails, try wrapping in begin...end
+        wrapped = "begin\n$code\nend"
+        try
+            return Base.Meta.parse(wrapped)
+        catch
+            # Return the original error expression
+            return expr
+        end
+    end
+end
+
+"""
+    get_executable_code(code::String) -> String
+
+Get the code string that should be executed, wrapping in begin...end if needed.
+This is what gets sent to the worker for execution.
+"""
+function get_executable_code(code::String)
+    stripped = strip(code)
+
+    if isempty(stripped)
+        return "nothing"
+    end
+
+    # Try parsing to see if it's multiple expressions
+    try
+        full_parse = Base.Meta.parseall(code)
+
+        if full_parse isa Expr && full_parse.head == :toplevel
+            exprs = filter(e -> !(e isa LineNumberNode), full_parse.args)
+
+            if length(exprs) > 1
+                # Multiple expressions - wrap in begin...end
+                return "begin\n$code\nend"
+            end
+        end
+    catch
+        # If parsing fails, try wrapped version
+        wrapped = "begin\n$code\nend"
+        try
+            Base.Meta.parse(wrapped)
+            return wrapped
+        catch
+            # Return original, let execution show the error
+        end
+    end
+
+    return code
+end
+
 """
 Convert cell to JSON-serializable dictionary.
 """

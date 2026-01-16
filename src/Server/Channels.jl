@@ -48,19 +48,32 @@ function setup_execute_channel!()
             analyze_cell!(cell)
         end
 
+        # Debug: Print cell analysis info
+        println("[Sessions] Executing cell: $(cell_id)")
+        println("[Sessions] Cell defines: $(cell.definitions)")
+        println("[Sessions] Cell references: $(cell.references)")
+
         # Broadcast that cell is running
         broadcast_cell_state(notebook_id, cell)
 
         # Execute reactively (cell + downstream dependencies)
         try
+            # Get execution order BEFORE executing to see what will run
+            cells_to_run = get_execution_order(notebook, [cell_id])
+            println("[Sessions] Cells to run ($(length(cells_to_run))): $(map(c -> string(c.id)[1:8], cells_to_run))")
+            for c in cells_to_run
+                println("[Sessions]   - $(string(c.id)[1:8]): defs=$(c.definitions), refs=$(c.references)")
+            end
+
             results = execute_reactive!(notebook, cell_id)
 
             # Broadcast updates for each executed cell
-            for cell in get_execution_order(notebook, [cell_id])
-                broadcast_cell_state(notebook_id, cell)
-                broadcast_cell_output(notebook_id, cell)
+            for c in cells_to_run
+                broadcast_cell_state(notebook_id, c)
+                broadcast_cell_output(notebook_id, c)
             end
         catch e
+            println("[Sessions] ERROR: $(sprint(showerror, e))")
             send_channel!("error", conn.id, Dict(
                 "message" => "Execution failed: $(sprint(showerror, e))"
             ))
@@ -282,6 +295,80 @@ function setup_restart_channel!()
 end
 
 # =============================================================================
+# Channel: Paste Content (Pluto notebook import)
+# =============================================================================
+
+"""
+Handle pasted content (Pluto notebook or raw code).
+Message: {notebook_id, content, after_cell_id?}
+
+Parses Pluto notebook format and creates cells automatically.
+Non-Pluto content is treated as a single cell.
+"""
+function setup_paste_content_channel!()
+    on_channel_message("paste_content") do conn, data
+        notebook_id = UUID(data["notebook_id"])
+        content = get(data, "content", "")
+
+        notebook = get(NOTEBOOKS, notebook_id, nothing)
+        if notebook === nothing
+            send_channel!("error", conn.id, Dict("message" => "Notebook not found"))
+            return
+        end
+
+        # Parse the pasted content (handles both Pluto format and raw code)
+        parsed_cells = parse_pluto_content(content)
+
+        if isempty(parsed_cells)
+            return
+        end
+
+        # Handle after_cell_id for insertion point
+        after_cell_str = get(data, "after_cell_id", nothing)
+        after = (after_cell_str !== nothing && after_cell_str != "null" && !isempty(string(after_cell_str))) ? UUID(after_cell_str) : nothing
+
+        # Create cells in order
+        created_cells = Cell[]
+        prev_cell_id = after
+
+        for (uuid_str, code) in parsed_cells
+            cell = add_cell!(notebook; code=code, after=prev_cell_id)
+
+            # Register per-cell signals for the new cell
+            register_cell_signals!(cell)
+
+            push!(created_cells, cell)
+            prev_cell_id = cell.id
+        end
+
+        # Update cells_list signal
+        update_cells_list_signal!(notebook)
+
+        # Broadcast each created cell for SPA insertion
+        for (i, cell) in enumerate(created_cells)
+            cell_html = render_to_string(CellView(cell))
+
+            # Determine the after_cell_id for positioning
+            insert_after = i == 1 ? after : created_cells[i-1].id
+
+            broadcast_channel!("cell_added", Dict(
+                "notebook_id" => string(notebook_id),
+                "cell_id" => string(cell.id),
+                "cell_html" => cell_html,
+                "after_cell_id" => insert_after === nothing ? nothing : string(insert_after)
+            ))
+        end
+
+        # Also broadcast a summary message
+        broadcast_channel!("paste_complete", Dict(
+            "notebook_id" => string(notebook_id),
+            "cells_created" => length(created_cells),
+            "is_pluto_format" => is_pluto_content(content)
+        ))
+    end
+end
+
+# =============================================================================
 # Channel: File Operations
 # =============================================================================
 
@@ -400,6 +487,7 @@ function create_channels!()
     create_channel("delete_cell")
     create_channel("move_cell")
     create_channel("update_code")
+    create_channel("paste_content")
 
     # Notebook operations
     create_channel("interrupt")
@@ -414,6 +502,7 @@ function create_channels!()
     create_channel("cell_added")
     create_channel("cell_deleted")
     create_channel("cell_moved")
+    create_channel("paste_complete")
     create_channel("interrupted")
     create_channel("restarted")
     create_channel("saved")
@@ -434,6 +523,7 @@ function setup_channels!()
     setup_delete_cell_channel!()
     setup_move_cell_channel!()
     setup_update_code_channel!()
+    setup_paste_content_channel!()
     setup_interrupt_channel!()
     setup_run_all_channel!()
     setup_restart_channel!()
