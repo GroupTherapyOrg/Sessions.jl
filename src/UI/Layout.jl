@@ -73,13 +73,11 @@ function sessions_styles()
     }
     </script>
 
-    <!-- CodeMirror 6 via Pluto's pre-bundled setup -->
-    <!-- Using esm.sh for @codemirror/language to resolve transitive deps (@lezer/common, etc.) -->
+    <!-- CodeMirror 6 via Pluto's pre-bundled setup (includes all deps) -->
     <script type="importmap">
     {
         "imports": {
-            "codemirror-pluto": "https://cdn.jsdelivr.net/gh/JuliaPluto/codemirror-pluto-setup@0.19.3/dist/index.es.min.js",
-            "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.1"
+            "codemirror-pluto": "https://cdn.jsdelivr.net/gh/JuliaPluto/codemirror-pluto-setup@0.19.3/dist/index.es.min.js"
         }
     }
     </script>
@@ -280,19 +278,20 @@ function sessions_script()
         async function initCodeMirror(container, code, cellId) {
             try {
                 const CM = await import('codemirror-pluto');
-                // Import syntaxHighlighting separately (not bundled in codemirror-pluto)
-                let syntaxHighlighting = null;
-                try {
-                    const lang = await import('@codemirror/language');
-                    syntaxHighlighting = lang.syntaxHighlighting;
-                } catch (e) {
-                    // Silently fall back - codemirror-pluto may include its own highlighting
-                }
 
-                // Build extensions array, checking each one exists
+                // Use Pluto's pre-configured setup - it bundles everything correctly
+                // pluto_syntax_colors() returns a complete extension with Julia highlighting
                 const extensions = [];
 
-                // Core extensions (should always exist)
+                // Julia syntax with Pluto's colors (this is the main one we need)
+                if (CM.pluto_syntax_colors) {
+                    extensions.push(CM.pluto_syntax_colors());
+                } else if (CM.julia_andrey) {
+                    // Fallback to just the parser without custom colors
+                    extensions.push(CM.julia_andrey());
+                }
+
+                // Core editing features
                 if (CM.lineNumbers) extensions.push(CM.lineNumbers());
                 if (CM.highlightSpecialChars) extensions.push(CM.highlightSpecialChars());
                 if (CM.history) extensions.push(CM.history());
@@ -302,32 +301,13 @@ function sessions_script()
                 if (CM.closeBrackets) extensions.push(CM.closeBrackets());
                 if (CM.highlightSelectionMatches) extensions.push(CM.highlightSelectionMatches());
                 if (CM.EditorView?.lineWrapping) extensions.push(CM.EditorView.lineWrapping);
-
-                // Julia syntax highlighting (Pluto's lezer-based highlighter)
-                if (CM.julia_andrey) {
-                    extensions.push(CM.julia_andrey());
-                }
-
-                // Syntax highlighting styles (REQUIRED for colors to show!)
-                if (syntaxHighlighting && CM.defaultHighlightStyle) {
-                    extensions.push(syntaxHighlighting(CM.defaultHighlightStyle));
-                    console.log('[Sessions] Syntax highlighting enabled');
-                } else if (CM.defaultHighlightStyle) {
-                    // Fallback: try using it directly (might work if it's pre-wrapped)
-                    extensions.push(CM.defaultHighlightStyle);
-                }
-
-                // Also add fold gutter for code folding
-                if (CM.foldGutter) {
-                    extensions.push(CM.foldGutter());
-                }
+                if (CM.foldGutter) extensions.push(CM.foldGutter());
 
                 // Keymaps
                 const keymaps = [];
                 if (CM.defaultKeymap) keymaps.push(...CM.defaultKeymap);
                 if (CM.historyKeymap) keymaps.push(...CM.historyKeymap);
                 if (CM.closeBracketsKeymap) keymaps.push(...CM.closeBracketsKeymap);
-                // Custom keybindings for cell execution
                 keymaps.push({ key: 'Shift-Enter', run: () => { executeCell(cellId); return true; } });
                 keymaps.push({ key: 'Mod-Enter', run: () => { executeCell(cellId); return true; } });
                 if (CM.keymap) extensions.push(CM.keymap.of(keymaps));
