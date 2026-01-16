@@ -720,7 +720,7 @@ function Layout(content)
                     # Note: Force full page reload to reinitialize CodeMirror properly
                     Div(:class => "flex items-center",
                         A(:href => "/", :class => "flex items-baseline group",
-                          Symbol("data-router-ignore") => "true",
+                          :onclick => "event.preventDefault(); window.location.href='/';",
                             # Each letter colored like an illuminated manuscript
                             Span(:class => "text-lg font-serif font-semibold text-rose-700 dark:text-rose-400", "S"),
                             Span(:class => "text-lg font-serif font-semibold text-amber-700 dark:text-amber-400", "e"),
