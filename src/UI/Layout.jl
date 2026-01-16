@@ -33,8 +33,17 @@ function sessions_styles()
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
     <!-- Tailwind CSS with Pluto.jl color config -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Note: Using CDN for development. For production, use Tailwind CLI build. -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
+    // Suppress Tailwind CDN console warning (we know this is dev mode)
+    if (typeof console !== 'undefined') {
+        const origWarn = console.warn;
+        console.warn = function(...args) {
+            if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
+            origWarn.apply(console, args);
+        };
+    }
     tailwind.config = {
         darkMode: 'class',
         theme: {
@@ -64,12 +73,13 @@ function sessions_styles()
     }
     </script>
 
-    <!-- CodeMirror 6 via Pluto's pre-bundled setup + language module for syntaxHighlighting -->
+    <!-- CodeMirror 6 via Pluto's pre-bundled setup -->
+    <!-- Using esm.sh for @codemirror/language to resolve transitive deps (@lezer/common, etc.) -->
     <script type="importmap">
     {
         "imports": {
             "codemirror-pluto": "https://cdn.jsdelivr.net/gh/JuliaPluto/codemirror-pluto-setup@0.19.3/dist/index.es.min.js",
-            "@codemirror/language": "https://cdn.jsdelivr.net/npm/@codemirror/language@6.10.1/dist/index.js"
+            "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.1"
         }
     }
     </script>
@@ -276,7 +286,7 @@ function sessions_script()
                     const lang = await import('@codemirror/language');
                     syntaxHighlighting = lang.syntaxHighlighting;
                 } catch (e) {
-                    console.warn('[Sessions] Could not load @codemirror/language:', e);
+                    // Silently fall back - codemirror-pluto may include its own highlighting
                 }
 
                 // Build extensions array, checking each one exists
