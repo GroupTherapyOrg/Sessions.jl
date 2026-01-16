@@ -653,25 +653,10 @@ function sessions_script()
         // Initialization
         // =====================================================================
 
-        function init() {
-
-            // Initialize dark mode from localStorage
-            initDarkMode();
-
-            // Action delegation
-            document.addEventListener('click', handleAction);
-
-            // Set up per-cell signal handlers
-            setupAllCellSignals();
-
-            // Set up channel handlers
-            setupChannelHandlers();
-
-            // Set up paste handler for Pluto notebook import
-            setupPasteHandler();
-
-            // Initialize CodeMirror editors
-            document.querySelectorAll('.cell').forEach(async function(cell) {
+        async function initEditors() {
+            // Initialize CodeMirror editors for all cells
+            const cells = document.querySelectorAll('.cell');
+            for (const cell of cells) {
                 const cellId = cell.dataset.cellId;
                 const container = cell.querySelector('.cell-code-container');
                 const codeEl = cell.querySelector('.cell-code');
@@ -680,7 +665,57 @@ function sessions_script()
                     codeEl.remove();
                     await initCodeMirror(container, code, cellId);
                 }
-            });
+            }
+        }
+
+        function init() {
+            // Initialize dark mode from localStorage
+            initDarkMode();
+
+            // Action delegation (only add once)
+            if (!window._sessionsClickHandler) {
+                window._sessionsClickHandler = true;
+                document.addEventListener('click', handleAction);
+            }
+
+            // Set up per-cell signal handlers
+            setupAllCellSignals();
+
+            // Set up channel handlers (only add once)
+            if (!window._sessionsChannelHandlers) {
+                window._sessionsChannelHandlers = true;
+                setupChannelHandlers();
+            }
+
+            // Set up paste handler (only add once)
+            if (!window._sessionsPasteHandler) {
+                window._sessionsPasteHandler = true;
+                setupPasteHandler();
+            }
+
+            // Initialize CodeMirror editors
+            initEditors();
+
+            // Set up navigation observer for SPA (only add once)
+            if (!window._sessionsNavObserver) {
+                window._sessionsNavObserver = true;
+                setupNavigationObserver();
+            }
+        }
+
+        // Reinitialize after SPA navigation
+        function reinit() {
+            // Clear old editor references for cells that no longer exist
+            for (const [cellId, editor] of editors) {
+                if (!document.querySelector('[data-cell-id="' + cellId + '"]')) {
+                    editors.delete(cellId);
+                    initialCode.delete(cellId);
+                }
+            }
+            // Initialize new cells
+            initEditors();
+            // Re-setup signal handlers for new cells
+            setupAllCellSignals();
         }
 
         // Global API
@@ -688,7 +723,32 @@ function sessions_script()
         window.runAll = function() { sendAction('run_all', { notebook_id: notebookId }); };
         window.saveNotebook = function() { sendAction('save', { notebook_id: notebookId }); };
         window.addCell = function(afterId) { sendAction('add_cell', { notebook_id: notebookId, after_cell_id: afterId }); };
-        // Note: toggleDarkMode is handled by the DarkModeToggle island (Wasm)
+        window.Sessions = { init: init, reinit: reinit };
+
+        // Listen for SPA router navigation events (try multiple event names)
+        window.addEventListener('therapy:router:loaded', reinit);
+        window.addEventListener('therapy:navigate', reinit);
+        window.addEventListener('therapy:page:loaded', reinit);
+
+        // Fallback: MutationObserver to detect when #page-content changes
+        function setupNavigationObserver() {
+            const pageContent = document.getElementById('page-content');
+            if (!pageContent) return;
+
+            const observer = new MutationObserver(function(mutations) {
+                // Check if cells were added/removed
+                const hasNewCells = mutations.some(m =>
+                    Array.from(m.addedNodes).some(n =>
+                        n.nodeType === 1 && (n.classList?.contains('cell') || n.querySelector?.('.cell'))
+                    )
+                );
+                if (hasNewCells) {
+                    setTimeout(reinit, 50);
+                }
+            });
+
+            observer.observe(pageContent, { childList: true, subtree: true });
+        }
 
         // Start
         if (document.readyState === 'loading') {
@@ -771,16 +831,16 @@ end
 
 """
 Get complete head_extra content for render_page.
-Includes: styles, WebSocket client, and Sessions.js
-
-Note: We intentionally do NOT use Therapy.jl's client_router_script here.
-Sessions.jl is a notebook app where users stay on one page - SPA navigation
-would break CodeMirror initialization on route changes.
+Includes: styles, WebSocket client, client router (SPA), and Sessions.js
 """
 function sessions_head_extra()
     # WebSocket client script
     ws_script = websocket_client_script()
     ws_str = ws_script isa Therapy.RawHtml ? ws_script.content : string(ws_script)
 
-    sessions_styles() * ws_str * sessions_script()
+    # Client-side router for SPA navigation
+    router_script = client_router_script(content_selector="#page-content")
+    router_str = router_script isa Therapy.RawHtml ? router_script.content : render_to_string(router_script)
+
+    sessions_styles() * ws_str * router_str * sessions_script()
 end
