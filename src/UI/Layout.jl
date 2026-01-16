@@ -717,8 +717,10 @@ function Layout(content)
             Div(:class => "max-w-4xl mx-auto px-8",
                 Div(:class => "flex justify-between h-12",
                     # Logo & Title - illuminated manuscript style
+                    # Note: Force full page reload to reinitialize CodeMirror properly
                     Div(:class => "flex items-center",
                         A(:href => "/", :class => "flex items-baseline group",
+                          Symbol("data-router-ignore") => "true",
                             # Each letter colored like an illuminated manuscript
                             Span(:class => "text-lg font-serif font-semibold text-rose-700 dark:text-rose-400", "S"),
                             Span(:class => "text-lg font-serif font-semibold text-amber-700 dark:text-amber-400", "e"),
