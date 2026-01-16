@@ -717,10 +717,8 @@ function Layout(content)
             Div(:class => "max-w-4xl mx-auto px-8",
                 Div(:class => "flex justify-between h-12",
                     # Logo & Title - illuminated manuscript style
-                    # Note: Force full page reload to reinitialize CodeMirror properly
                     Div(:class => "flex items-center",
                         A(:href => "/", :class => "flex items-baseline group",
-                          :onclick => "event.preventDefault(); window.location.href='/';",
                             # Each letter colored like an illuminated manuscript
                             Span(:class => "text-lg font-serif font-semibold text-rose-700 dark:text-rose-400", "S"),
                             Span(:class => "text-lg font-serif font-semibold text-amber-700 dark:text-amber-400", "e"),
@@ -773,16 +771,16 @@ end
 
 """
 Get complete head_extra content for render_page.
-Includes: styles, WebSocket client, client router (SPA), and Sessions.js
+Includes: styles, WebSocket client, and Sessions.js
+
+Note: We intentionally do NOT use Therapy.jl's client_router_script here.
+Sessions.jl is a notebook app where users stay on one page - SPA navigation
+would break CodeMirror initialization on route changes.
 """
 function sessions_head_extra()
     # WebSocket client script
     ws_script = websocket_client_script()
     ws_str = ws_script isa Therapy.RawHtml ? ws_script.content : string(ws_script)
 
-    # Client-side router for SPA navigation (no page reloads)
-    router_script = client_router_script(content_selector="#page-content")
-    router_str = router_script isa Therapy.RawHtml ? router_script.content : render_to_string(router_script)
-
-    sessions_styles() * ws_str * router_str * sessions_script()
+    sessions_styles() * ws_str * sessions_script()
 end
