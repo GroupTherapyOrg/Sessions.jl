@@ -28,8 +28,8 @@ import PlutoDependencyExplorer as PDE
 include("Engine/Cell.jl")
 include("Engine/Notebook.jl")
 include("Engine/Output.jl")      # Must come before Worker.jl (defines escape_html)
-include("Engine/Reactivity.jl")
-include("Engine/Worker.jl")
+include("Engine/Reactivity.jl")  # ExpressionExplorer & PDE integration
+include("Engine/Worker.jl")      # Malt worker execution
 
 # =============================================================================
 # File Format (Pluto-compatible)
@@ -39,22 +39,88 @@ include("FileFormat/Parse.jl")
 include("FileFormat/Write.jl")
 
 # =============================================================================
-# UI Components (loaded before Server for CellView access in Channels)
+# Components - Organized into Islands (interactive Wasm) and Server (SSR)
+# =============================================================================
+#
+# Islands: Interactive components compiled to WebAssembly
+# - CellEditor.jl: Interactive cell editing (run button, state indicators)
+# - DarkModeToggle.jl: Theme toggle with signal-based state
+#
+# Server: Server-side rendered components
+# - Layout.jl: Main application layout with nav, footer
+# - CellView.jl: Cell rendering with reactive signal bindings
+#
+# See SESSIONS-003 in ralph_loop/prd.json for architecture details.
 # =============================================================================
 
+# Islands - Interactive Wasm components
+include("components/islands/DarkModeToggle.jl")
+include("components/islands/CellEditor.jl")
+
+# Server - SSR components (must come after islands for DarkModeToggle)
+include("components/server/CellView.jl")
+include("components/server/Layout.jl")
+
+# Legacy UI paths - re-export for backward compatibility
+# These will be removed in a future version
 include("UI/CellView.jl")
-include("UI/DarkModeToggle.jl")  # Island for theme toggle (compiled to Wasm)
+include("UI/DarkModeToggle.jl")
 include("UI/Layout.jl")
 
 # =============================================================================
-# Server (Therapy.jl WebSocket integration)
+# Server - Comprehensive Server Module
+# =============================================================================
+#
+# server/server.jl is a comprehensive file containing:
+# - Pluto org packages (ExpressionExplorer, PlutoDependencyExplorer, Malt)
+# - Therapy WebSocket signal handlers
+# - Cell execution logic
+# - Notebook state management
+#
+# See SESSIONS-001 in ralph_loop/prd.json for details.
 # =============================================================================
 
-include("Server/Signals.jl")
-include("Server/Channels.jl")
+include("server/server.jl")
 
 # =============================================================================
-# App Entry Point
+# Widgets - PlutoUI-compatible widgets for @bind macro
+# =============================================================================
+#
+# These must come after server/server.jl because they extend the bond interface
+# functions (initial_value, transform_value, etc.) defined there.
+#
+# Available widgets:
+# - Slider: Range slider for numeric values
+# - TextField: Text input for string values
+# - CheckBox: Checkbox for boolean values
+# - Select: Dropdown for selecting from options
+# - NumberField: Numeric input with optional range
+#
+# See SESSIONS-012 in ralph_loop/prd.json for details.
+# =============================================================================
+
+include("components/islands/widgets/Slider.jl")
+include("components/islands/widgets/TextField.jl")
+include("components/islands/widgets/CheckBox.jl")
+include("components/islands/widgets/Select.jl")
+include("components/islands/widgets/NumberField.jl")
+
+# =============================================================================
+# App Entry Point - Embeddable Therapy.jl Component
+# =============================================================================
+#
+# app.jl provides the NotebookApp component that makes Sessions.jl notebooks
+# embeddable in any Therapy.jl application. See SESSIONS-004 in prd.json.
+#
+# Usage:
+#   using Therapy, Sessions
+#   Sessions.NotebookApp(notebook_path = "/path/to/notebook.jl")
+# =============================================================================
+
+include("app.jl")
+
+# =============================================================================
+# Server/App.jl - HTTP Server (standalone mode)
 # =============================================================================
 
 include("Server/App.jl")
@@ -76,5 +142,16 @@ export parse_pluto_content, is_pluto_content
 
 # Server API
 export serve
+
+# App Entry Point (embeddable component)
+export NotebookApp, NotebookOptions, notebook_head_extra, init_notebook_server!
+
+# Bond API (@bind macro support)
+export @bind, SessionsBond
+export initial_value, transform_value, possible_values, validate_value
+export create_bond
+
+# PlutoUI-compatible widgets
+export Slider, TextField, CheckBox, Select, NumberField
 
 end # module
