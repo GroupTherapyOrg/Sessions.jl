@@ -12,6 +12,10 @@ const PROJECT_TOML_MARKER = "# ╔═╡ Project.toml"
 const MANIFEST_TOML_MARKER = "# ╔═╡ Manifest.toml"
 const PLUTO_HEADER = "### A Pluto.jl notebook ###"
 
+# Cell order delimiters (Pluto uses these to indicate folded/visible state)
+const CELL_ORDER_DELIMITER = "# ╠═"           # Visible/expanded cell
+const CELL_ORDER_DELIMITER_FOLDED = "# ╟─"    # Folded/hidden cell
+
 """
     load_notebook(path::String) -> Notebook
 
@@ -37,6 +41,7 @@ function load_notebook(path::String)
     project_lines = String[]
     manifest_lines = String[]
     cell_order_ids = UUID[]
+    folded_cells = Set{UUID}()  # Track which cells are folded
 
     for line in lines[2:end]  # Skip header
         # Check for cell order section
@@ -66,10 +71,15 @@ function load_notebook(path::String)
         end
 
         if in_cell_order
-            # Parse cell order entry: # ╠═uuid or # ╟─uuid
+            # Parse cell order entry: # ╠═uuid (visible) or # ╟─uuid (folded)
             m = match(r"^# [╠╟][═─]([a-f0-9-]+)$", line)
             if m !== nothing
-                push!(cell_order_ids, UUID(m.captures[1]))
+                cell_uuid = UUID(m.captures[1])
+                push!(cell_order_ids, cell_uuid)
+                # Check if this is a folded cell (╟─)
+                if startswith(line, CELL_ORDER_DELIMITER_FOLDED)
+                    push!(folded_cells, cell_uuid)
+                end
             end
             continue
         end
@@ -114,6 +124,14 @@ function load_notebook(path::String)
     # Store package environment
     notebook.project_toml = join(project_lines, '\n')
     notebook.manifest_toml = join(manifest_lines, '\n')
+
+    # Set folded state on cells
+    for cell_id in folded_cells
+        cell = get(notebook.cells, cell_id, nothing)
+        if cell !== nothing
+            cell.folded = true
+        end
+    end
 
     # Analyze all cells
     for cell in values(notebook.cells)

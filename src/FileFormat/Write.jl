@@ -34,8 +34,12 @@ function save_notebook(notebook::Notebook, path::String)
     for cell_id in notebook.cell_order
         cell = get(notebook.cells, cell_id, nothing)
         if cell !== nothing
-            # ╠═ for code cells, ╟─ for markdown (we treat all as code for now)
-            println(io, "# ╠═$(cell_id)")
+            # ╠═ for visible cells, ╟─ for folded cells
+            if cell.folded
+                println(io, "# ╟─$(cell_id)")
+            else
+                println(io, "# ╠═$(cell_id)")
+            end
         end
     end
     println(io)

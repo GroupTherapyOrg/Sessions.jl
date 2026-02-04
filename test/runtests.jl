@@ -884,6 +884,311 @@ using Therapy
         end
     end
 
+    # =========================================================================
+    # SESSIONS-1903: Pluto Notebook File Format
+    # =========================================================================
+    @testset "File format (SESSIONS-1903)" begin
+        fixtures_dir = joinpath(@__DIR__, "fixtures")
+
+        @testset "load_notebook - basic" begin
+            path = joinpath(fixtures_dir, "basic_notebook.jl")
+            nb = load_notebook(path)
+
+            @test nb.path == path
+            @test length(nb.cells) == 3
+            @test length(nb.cell_order) == 3
+
+            # Verify cells loaded correctly
+            cell1 = nb.cells[nb.cell_order[1]]
+            @test cell1.code == "x = 1"
+
+            cell2 = nb.cells[nb.cell_order[2]]
+            @test cell2.code == "y = x + 1"
+
+            cell3 = nb.cells[nb.cell_order[3]]
+            @test cell3.code == "z = x * y"
+        end
+
+        @testset "load_notebook - UUIDs correctly extracted" begin
+            path = joinpath(fixtures_dir, "basic_notebook.jl")
+            nb = load_notebook(path)
+
+            # Check that UUIDs match expected format
+            for cell_id in nb.cell_order
+                @test cell_id isa UUID
+            end
+
+            # Verify specific UUIDs from fixture
+            @test nb.cell_order[1] == UUID("00000001-0000-0000-0000-000000000001")
+            @test nb.cell_order[2] == UUID("00000002-0000-0000-0000-000000000002")
+            @test nb.cell_order[3] == UUID("00000003-0000-0000-0000-000000000003")
+        end
+
+        @testset "load_notebook - folded metadata" begin
+            path = joinpath(fixtures_dir, "folded_notebook.jl")
+            nb = load_notebook(path)
+
+            @test length(nb.cells) == 3
+
+            # First cell is visible (not folded)
+            cell1_id = UUID("11111111-1111-1111-1111-111111111111")
+            @test !nb.cells[cell1_id].folded
+
+            # Second cell is folded
+            cell2_id = UUID("22222222-2222-2222-2222-222222222222")
+            @test nb.cells[cell2_id].folded
+
+            # Third cell is visible
+            cell3_id = UUID("33333333-3333-3333-3333-333333333333")
+            @test !nb.cells[cell3_id].folded
+        end
+
+        @testset "load_notebook - Project.toml and Manifest.toml" begin
+            path = joinpath(fixtures_dir, "with_pkgs_notebook.jl")
+            nb = load_notebook(path)
+
+            @test !isempty(nb.project_toml)
+            @test occursin("Statistics", nb.project_toml)
+
+            @test !isempty(nb.manifest_toml)
+            @test occursin("Statistics", nb.manifest_toml)
+        end
+
+        @testset "is_pluto_notebook" begin
+            @test is_pluto_notebook(joinpath(fixtures_dir, "basic_notebook.jl"))
+            @test !is_pluto_notebook(joinpath(fixtures_dir, "nonexistent.jl"))
+            @test !is_pluto_notebook(@__FILE__)  # This test file is not a Pluto notebook
+        end
+
+        @testset "save_notebook - basic" begin
+            # Create a notebook in memory
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="a = 1")
+            cell2 = add_cell!(nb; code="b = a + 1")
+
+            # Analyze cells for topology
+            for c in values(nb.cells)
+                analyze_cell!(c)
+            end
+
+            # Save to temp file
+            temp_path = tempname() * ".jl"
+            try
+                save_notebook(nb, temp_path)
+
+                # Verify file was written
+                @test isfile(temp_path)
+                content = read(temp_path, String)
+
+                @test startswith(content, "### A Pluto.jl notebook ###")
+                @test occursin("a = 1", content)
+                @test occursin("b = a + 1", content)
+                @test occursin("Cell order:", content)
+            finally
+                rm(temp_path; force=true)
+            end
+        end
+
+        @testset "save_notebook - preserves folded state" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="# visible")
+            cell2 = add_cell!(nb; code="# folded")
+            cell2.folded = true
+            cell3 = add_cell!(nb; code="# also visible")
+
+            for c in values(nb.cells)
+                analyze_cell!(c)
+            end
+
+            temp_path = tempname() * ".jl"
+            try
+                save_notebook(nb, temp_path)
+                content = read(temp_path, String)
+
+                # Count occurrences of each delimiter
+                visible_count = length(collect(eachmatch(r"# ╠═", content)))
+                folded_count = length(collect(eachmatch(r"# ╟─", content)))
+
+                @test visible_count == 2  # Two visible cells
+                @test folded_count == 1   # One folded cell
+            finally
+                rm(temp_path; force=true)
+            end
+        end
+
+        @testset "round-trip: load → modify → save → load" begin
+            # Load existing notebook
+            orig_path = joinpath(fixtures_dir, "folded_notebook.jl")
+            nb = load_notebook(orig_path)
+
+            # Modify the notebook
+            cell2_id = UUID("22222222-2222-2222-2222-222222222222")
+            nb.cells[cell2_id].code = "modified_folded_var = 999"
+
+            # Also modify folded state
+            nb.cells[cell2_id].folded = false
+            nb.cells[nb.cell_order[1]].folded = true
+
+            # Save to new location
+            temp_path = tempname() * ".jl"
+            try
+                save_notebook(nb, temp_path)
+
+                # Reload the notebook
+                nb2 = load_notebook(temp_path)
+
+                # Verify modifications persisted
+                @test nb2.cells[cell2_id].code == "modified_folded_var = 999"
+                @test !nb2.cells[cell2_id].folded  # Was folded, now not
+                @test nb2.cells[nb2.cell_order[1]].folded  # Was not folded, now is
+
+                # Verify cell order preserved
+                @test length(nb2.cell_order) == 3
+            finally
+                rm(temp_path; force=true)
+            end
+        end
+
+        @testset "parse_pluto_content - basic" begin
+            content = """### A Pluto.jl notebook ###
+# v0.19.0
+
+# ╔═╡ 12345678-1234-1234-1234-123456789012
+x = 1
+
+# ╔═╡ 23456789-2345-2345-2345-234567890123
+y = 2
+
+# ╔═╡ Cell order:
+# ╠═12345678-1234-1234-1234-123456789012
+# ╠═23456789-2345-2345-2345-234567890123
+"""
+            cells = parse_pluto_content(content)
+
+            @test length(cells) == 2
+            @test cells[1][2] == "x = 1"
+            @test cells[2][2] == "y = 2"
+        end
+
+        @testset "parse_pluto_content - non-Pluto content" begin
+            content = "x = 1\ny = 2"
+            cells = parse_pluto_content(content)
+
+            @test length(cells) == 1
+            @test cells[1][2] == "x = 1\ny = 2"
+        end
+
+        @testset "is_pluto_content" begin
+            @test is_pluto_content("### A Pluto.jl notebook ###\nsome content")
+            @test !is_pluto_content("x = 1")
+            @test !is_pluto_content("")
+        end
+
+        # =====================================================================
+        # Testing with Real Pluto Community Notebooks
+        # =====================================================================
+        @testset "Community notebook: Basic.jl" begin
+            path = joinpath(fixtures_dir, "pluto_sample_basic.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+                @test length(nb.cells) >= 3
+                @test length(nb.cell_order) >= 3
+
+                # First cell is markdown (folded in cell order)
+                first_cell_id = nb.cell_order[1]
+                @test nb.cells[first_cell_id].folded
+
+                # Check that code cells are present
+                code_found = false
+                for cell in values(nb.cells)
+                    if occursin("1:100000", cell.code)
+                        code_found = true
+                        break
+                    end
+                end
+                @test code_found
+            else
+                @info "Skipping community notebook test - file not found: $path"
+            end
+        end
+
+        @testset "Community notebook: Tower of Hanoi.jl" begin
+            path = joinpath(fixtures_dir, "pluto_sample_hanoi.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+                @test length(nb.cells) >= 10
+
+                # Verify cell order is preserved
+                @test length(nb.cell_order) == length(nb.cells)
+
+                # Check that specific content exists
+                found_hanoi = false
+                found_function = false
+                for cell in values(nb.cells)
+                    if occursin("tower of Hanoi", lowercase(cell.code)) || occursin("tower of hanoi", lowercase(cell.code))
+                        found_hanoi = true
+                    end
+                    if occursin("function islegal", cell.code)
+                        found_function = true
+                    end
+                end
+                @test found_hanoi || found_function
+
+                # Verify save/load round-trip
+                temp_path = tempname() * ".jl"
+                try
+                    save_notebook(nb, temp_path)
+                    nb2 = load_notebook(temp_path)
+                    @test length(nb2.cells) == length(nb.cells)
+                    @test length(nb2.cell_order) == length(nb.cell_order)
+                finally
+                    rm(temp_path; force=true)
+                end
+            else
+                @info "Skipping community notebook test - file not found: $path"
+            end
+        end
+
+        @testset "Community notebook: Interactivity.jl" begin
+            path = joinpath(fixtures_dir, "pluto_sample_interactive.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+                @test length(nb.cells) >= 5
+
+                # Check for @bind macro usage
+                found_bind = false
+                for cell in values(nb.cells)
+                    if occursin("@bind", cell.code)
+                        found_bind = true
+                        break
+                    end
+                end
+                @test found_bind
+
+                # Verify round-trip preserves content
+                temp_path = tempname() * ".jl"
+                try
+                    save_notebook(nb, temp_path)
+                    nb2 = load_notebook(temp_path)
+
+                    # Check that @bind cells are still there
+                    bind_found = false
+                    for cell in values(nb2.cells)
+                        if occursin("@bind", cell.code)
+                            bind_found = true
+                            break
+                        end
+                    end
+                    @test bind_found
+                finally
+                    rm(temp_path; force=true)
+                end
+            else
+                @info "Skipping community notebook test - file not found: $path"
+            end
+        end
+    end
+
 end
 
 println("\nAll tests passed!")
