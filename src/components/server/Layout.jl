@@ -903,6 +903,77 @@ function sessions_script()
         };
 
         // =====================================================================
+        // Sidebar Panel Switching (SESSIONS-2201)
+        // =====================================================================
+
+        // Get saved sidebar state from localStorage
+        function getSidebarState() {
+            try {
+                var state = localStorage.getItem('sessions-sidebar-state');
+                return state ? JSON.parse(state) : { collapsed: false, panel: 'files' };
+            } catch (e) {
+                return { collapsed: false, panel: 'files' };
+            }
+        }
+
+        // Save sidebar state to localStorage
+        function saveSidebarState(state) {
+            try {
+                localStorage.setItem('sessions-sidebar-state', JSON.stringify(state));
+            } catch (e) {}
+        }
+
+        // Toggle sidebar collapsed state
+        window.toggleSidebar = function() {
+            var sidebar = document.querySelector('.sidebar');
+            if (!sidebar) return;
+
+            var state = getSidebarState();
+            state.collapsed = !state.collapsed;
+            saveSidebarState(state);
+
+            // Toggle collapsed class and width
+            if (state.collapsed) {
+                sidebar.classList.add('w-12');
+                sidebar.classList.remove('w-64');
+                sidebar.setAttribute('data-sidebar-collapsed', 'true');
+                // Hide panel content
+                var panels = sidebar.querySelectorAll('.running-panel, .settings-panel, .file-browser');
+                panels.forEach(function(p) { p.style.display = 'none'; });
+            } else {
+                sidebar.classList.remove('w-12');
+                sidebar.classList.add('w-64');
+                sidebar.setAttribute('data-sidebar-collapsed', 'false');
+                // Show active panel content
+                var activePanel = state.panel || 'files';
+                window.location.reload(); // Reload to show panel
+            }
+        };
+
+        // Switch sidebar panel
+        window.switchSidebarPanel = function(panelName) {
+            var state = getSidebarState();
+            state.panel = panelName;
+            saveSidebarState(state);
+
+            // Update tab styles
+            var tabs = document.querySelectorAll('.sidebar-tab');
+            tabs.forEach(function(tab) {
+                var isActive = tab.getAttribute('data-panel') === panelName;
+                if (isActive) {
+                    tab.classList.add('bg-stone-200', 'text-stone-800');
+                    tab.classList.remove('text-stone-500');
+                } else {
+                    tab.classList.remove('bg-stone-200', 'text-stone-800');
+                    tab.classList.add('text-stone-500');
+                }
+            });
+
+            // Reload to switch panel content
+            window.location.reload();
+        };
+
+        // =====================================================================
         // Notebook Tab Management (SESSIONS-2200)
         // =====================================================================
 

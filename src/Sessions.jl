@@ -92,6 +92,9 @@ include("components/server/TerminalPanel.jl")
 # Notebook tabs component (SESSIONS-2200)
 include("components/server/NotebookTabs.jl")
 
+# Sidebar component with panel switching (SESSIONS-2201)
+include("components/server/Sidebar.jl")
+
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
 # =============================================================================
@@ -183,5 +186,10 @@ export create_terminal_ui_session, get_terminal_ui_session, close_terminal_ui_se
 
 # Notebook tabs (SESSIONS-2200)
 export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script
+
+# Sidebar (SESSIONS-2201)
+export Sidebar, SidebarTabs, SidebarTabButton, RunningPanel, SettingsPanel, RunningItem
+export SidebarPanel, PANEL_FILES, PANEL_RUNNING, PANEL_SETTINGS
+export sidebar_script, CollapsedSidebar
 
 end # module
