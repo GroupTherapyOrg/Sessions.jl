@@ -170,6 +170,119 @@ const USERS_SIGNAL = Ref{Any}(nothing)
 const CELLS_LIST_SIGNAL = Ref{Any}(nothing)
 
 # =============================================================================
+# FILE BROWSER STATE
+# =============================================================================
+
+"""
+File browser state for each connection.
+Tracks current directory and workspace root.
+"""
+const FILEBROWSER_STATE = Dict{String, Dict{String, Any}}()
+
+"""
+Global file browser signal reference.
+"""
+const FILEBROWSER_LISTING_SIGNAL = Ref{Any}(nothing)
+
+"""
+File entry struct for browser listings.
+"""
+struct FileEntry
+    name::String
+    is_directory::Bool
+    size::Int64
+    modified::Float64  # Unix timestamp
+    path::String       # Full path for actions
+end
+
+"""
+Convert FileEntry to Dict for JSON serialization.
+"""
+function file_entry_to_dict(entry::FileEntry)
+    Dict{String,Any}(
+        "name" => entry.name,
+        "is_directory" => entry.is_directory,
+        "size" => entry.size,
+        "modified" => entry.modified,
+        "path" => entry.path
+    )
+end
+
+"""
+List directory contents, returning FileEntry objects.
+Excludes hidden files by default.
+"""
+function list_directory(path::String; show_hidden::Bool = false)
+    entries = FileEntry[]
+
+    if !isdir(path)
+        return entries
+    end
+
+    try
+        for name in readdir(path)
+            # Skip hidden files unless requested
+            if !show_hidden && startswith(name, ".")
+                continue
+            end
+
+            full_path = joinpath(path, name)
+            try
+                info = stat(full_path)
+                push!(entries, FileEntry(
+                    name,
+                    isdir(full_path),
+                    Int64(info.size),
+                    Float64(info.mtime),
+                    full_path
+                ))
+            catch
+                # Skip files we can't stat (permissions, etc.)
+            end
+        end
+    catch e
+        @warn "Failed to list directory" path exception=e
+    end
+
+    # Sort: directories first, then alphabetically
+    sort!(entries, by = e -> (!e.is_directory, lowercase(e.name)))
+
+    return entries
+end
+
+"""
+Format file size for display.
+"""
+function format_file_size(bytes::Int64)
+    if bytes < 1024
+        return "$(bytes) B"
+    elseif bytes < 1024 * 1024
+        return "$(round(bytes / 1024, digits=1)) KB"
+    elseif bytes < 1024 * 1024 * 1024
+        return "$(round(bytes / (1024 * 1024), digits=1)) MB"
+    else
+        return "$(round(bytes / (1024 * 1024 * 1024), digits=1)) GB"
+    end
+end
+
+"""
+Validate that a path is within the allowed workspace.
+Returns normalized path if valid, nothing if invalid.
+"""
+function validate_path(path::String, root::String)
+    # Normalize both paths
+    norm_path = normpath(abspath(path))
+    norm_root = normpath(abspath(root))
+
+    # Check that path is within root (prevent directory traversal)
+    if startswith(norm_path, norm_root)
+        return norm_path
+    else
+        return nothing
+    end
+end
+
+# =============================================================================
 # SECTION 2: PLUTO ORG PACKAGES - EXPRESSIONEXPLORER INTEGRATION
 # =============================================================================
 #
@@ -229,6 +342,7 @@ function setup_signals!()
     NOTEBOOK_INFO_SIGNAL[] = create_server_signal("notebook_info", Dict{String, Any}())
     USERS_SIGNAL[] = create_server_signal("users", Dict{String, Any}[])
     CELLS_LIST_SIGNAL[] = create_server_signal("cells_list", Dict{String, Any}[])
+    FILEBROWSER_LISTING_SIGNAL[] = create_server_signal("filebrowser_listing", Dict{String, Any}[])
 end
 
 """
@@ -853,6 +967,270 @@ function setup_set_bond_channel!()
     end
 end
 
+# =============================================================================
+# SECTION 6B: FILE BROWSER CHANNEL HANDLERS
+# =============================================================================
+
+"""
+Update file browser listing signal with current directory contents.
+"""
+function update_filebrowser_listing!(path::String)
+    entries = list_directory(path)
+    listing = [file_entry_to_dict(e) for e in entries]
+
+    sig = FILEBROWSER_LISTING_SIGNAL[]
+    if sig !== nothing
+        set_server_signal!(sig, listing)
+    end
+end
+
+"""
+Get file browser state for a connection, initializing if needed.
+"""
+function get_filebrowser_state(conn_id::String; root::String = pwd())
+    if !haskey(FILEBROWSER_STATE, conn_id)
+        FILEBROWSER_STATE[conn_id] = Dict{String, Any}(
+            "root" => root,
+            "current" => root
+        )
+    end
+    return FILEBROWSER_STATE[conn_id]
+end
+
+"""
+Handle navigate_directory channel messages.
+Message: {path} or {path, root}
+"""
+function setup_navigate_directory_channel!()
+    on_channel_message("navigate_directory") do conn, data
+        state = get_filebrowser_state(conn.id)
+        root = get(data, "root", state["root"])
+        path = get(data, "path", state["current"])
+
+        # Validate path is within root
+        validated = validate_path(path, root)
+        if validated === nothing
+            println("[Sessions] Path traversal attempt blocked: $path")
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        # Update state
+        state["root"] = root
+        state["current"] = validated
+
+        # Update listing
+        update_filebrowser_listing!(validated)
+
+        println("[Sessions] Navigate to: $validated")
+    end
+end
+
+"""
+Handle refresh_filebrowser channel messages.
+"""
+function setup_refresh_filebrowser_channel!()
+    on_channel_message("refresh_filebrowser") do conn, data
+        state = get_filebrowser_state(conn.id)
+        update_filebrowser_listing!(state["current"])
+        println("[Sessions] Refresh file browser")
+    end
+end
+
+"""
+Handle create_file channel messages.
+Message: {path, name}
+"""
+function setup_create_file_channel!()
+    on_channel_message("create_file") do conn, data
+        state = get_filebrowser_state(conn.id)
+        dir = get(data, "path", state["current"])
+        name = get(data, "name", "untitled.jl")
+
+        # Validate path
+        validated = validate_path(dir, state["root"])
+        if validated === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        # Create file
+        file_path = joinpath(validated, name)
+        if !isfile(file_path)
+            try
+                write(file_path, "# New file\n")
+                update_filebrowser_listing!(validated)
+                println("[Sessions] Created file: $file_path")
+            catch e
+                send_channel!("error", conn.id, Dict("message" => "Failed to create file: $e"))
+            end
+        else
+            send_channel!("error", conn.id, Dict("message" => "File already exists"))
+        end
+    end
+end
+
+"""
+Handle create_folder channel messages.
+Message: {path, name}
+"""
+function setup_create_folder_channel!()
+    on_channel_message("create_folder") do conn, data
+        state = get_filebrowser_state(conn.id)
+        dir = get(data, "path", state["current"])
+        name = get(data, "name", "New Folder")
+
+        # Validate path
+        validated = validate_path(dir, state["root"])
+        if validated === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        # Create folder
+        folder_path = joinpath(validated, name)
+        if !isdir(folder_path)
+            try
+                mkdir(folder_path)
+                update_filebrowser_listing!(validated)
+                println("[Sessions] Created folder: $folder_path")
+            catch e
+                send_channel!("error", conn.id, Dict("message" => "Failed to create folder: $e"))
+            end
+        else
+            send_channel!("error", conn.id, Dict("message" => "Folder already exists"))
+        end
+    end
+end
+
+"""
+Handle delete_item channel messages.
+Message: {path}
+"""
+function setup_delete_item_channel!()
+    on_channel_message("delete_item") do conn, data
+        state = get_filebrowser_state(conn.id)
+        path = get(data, "path", "")
+
+        # Validate path
+        validated = validate_path(path, state["root"])
+        if validated === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        # Don't allow deleting root
+        if validated == normpath(abspath(state["root"]))
+            send_channel!("error", conn.id, Dict("message" => "Cannot delete workspace root"))
+            return
+        end
+
+        try
+            if isdir(validated)
+                rm(validated; recursive=true)
+            else
+                rm(validated)
+            end
+            update_filebrowser_listing!(state["current"])
+            println("[Sessions] Deleted: $validated")
+        catch e
+            send_channel!("error", conn.id, Dict("message" => "Failed to delete: $e"))
+        end
+    end
+end
+
+"""
+Handle rename_item channel messages.
+Message: {old_path, new_name}
+"""
+function setup_rename_item_channel!()
+    on_channel_message("rename_item") do conn, data
+        state = get_filebrowser_state(conn.id)
+        old_path = get(data, "old_path", "")
+        new_name = get(data, "new_name", "")
+
+        # Validate old path
+        validated_old = validate_path(old_path, state["root"])
+        if validated_old === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        # Build new path
+        dir = dirname(validated_old)
+        new_path = joinpath(dir, new_name)
+
+        # Validate new path
+        validated_new = validate_path(new_path, state["root"])
+        if validated_new === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid destination path"))
+            return
+        end
+
+        try
+            mv(validated_old, validated_new)
+            update_filebrowser_listing!(state["current"])
+            println("[Sessions] Renamed: $validated_old -> $validated_new")
+        catch e
+            send_channel!("error", conn.id, Dict("message" => "Failed to rename: $e"))
+        end
+    end
+end
+
+"""
+Handle open_file channel messages.
+Message: {path}
+For .jl files, opens as notebook. For others, sends file content.
+"""
+function setup_open_file_channel!()
+    on_channel_message("open_file") do conn, data
+        state = get_filebrowser_state(conn.id)
+        path = get(data, "path", "")
+
+        # Validate path
+        validated = validate_path(path, state["root"])
+        if validated === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        if !isfile(validated)
+            send_channel!("error", conn.id, Dict("message" => "File not found"))
+            return
+        end
+
+        # For .jl files, check if it's a Pluto notebook and open as such
+        if endswith(lowercase(validated), ".jl")
+            try
+                # Try to load as notebook (will work for Pluto format)
+                notebook = load_notebook(validated)
+                NOTEBOOKS[notebook.id] = notebook
+                register_all_cell_signals!(notebook)
+                CONN_NOTEBOOK[conn.id] = notebook.id
+
+                # Send notebook info via channel
+                send_channel!("loaded", conn.id, Dict(
+                    "notebook_id" => string(notebook.id),
+                    "path" => validated,
+                    "cell_count" => length(notebook.cells)
+                ))
+                println("[Sessions] Opened notebook: $validated")
+            catch e
+                # Not a valid Pluto notebook, just inform client
+                send_channel!("error", conn.id, Dict(
+                    "message" => "Failed to open as notebook: $e"
+                ))
+            end
+        else
+            # For other files, could send content for viewing
+            # This is a placeholder - full implementation in SESSIONS-2101
+            send_channel!("error", conn.id, Dict(
+                "message" => "Only .jl files can be opened"
+            ))
+        end
+    end
+end
+
 """
 Create all message channels.
 Must be called before registering handlers.
@@ -871,6 +1249,15 @@ function create_channels!()
     create_channel("save")
     create_channel("load")
     create_channel("set_bond")  # Bond value updates from browser
+
+    # File browser channels
+    create_channel("navigate_directory")
+    create_channel("refresh_filebrowser")
+    create_channel("create_file")
+    create_channel("create_folder")
+    create_channel("delete_item")
+    create_channel("rename_item")
+    create_channel("open_file")
 
     # Response channels
     create_channel("cell_state")
@@ -892,6 +1279,7 @@ Register all WebSocket channel handlers.
 function setup_channels!()
     create_channels!()
 
+    # Notebook channels
     setup_execute_channel!()
     setup_add_cell_channel!()
     setup_delete_cell_channel!()
@@ -904,6 +1292,15 @@ function setup_channels!()
     setup_save_channel!()
     setup_load_channel!()
     setup_set_bond_channel!()  # @bind support
+
+    # File browser channels
+    setup_navigate_directory_channel!()
+    setup_refresh_filebrowser_channel!()
+    setup_create_file_channel!()
+    setup_create_folder_channel!()
+    setup_delete_item_channel!()
+    setup_rename_item_channel!()
+    setup_open_file_channel!()
 end
 
 # =============================================================================
@@ -941,6 +1338,7 @@ function setup_lifecycle!()
         end
 
         delete!(CONN_NOTEBOOK, conn.id)
+        delete!(FILEBROWSER_STATE, conn.id)  # Clean up file browser state
     end
 end
 

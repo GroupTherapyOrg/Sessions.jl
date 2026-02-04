@@ -83,6 +83,9 @@ include("UI/Layout.jl")
 
 include("server/server.jl")
 
+# FileBrowser component (must come after server.jl for FileEntry type)
+include("components/server/FileBrowser.jl")
+
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
 # =============================================================================
@@ -163,5 +166,9 @@ export create_bond
 
 # PlutoUI-compatible widgets
 export Slider, TextField, CheckBox, Select, NumberField
+
+# File browser (SESSIONS-2100)
+export FileBrowser, BrowserToolbar, Breadcrumbs, FileList, FileItem
+export FileEntry, list_directory, format_file_size
 
 end # module
