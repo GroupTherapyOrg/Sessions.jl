@@ -137,6 +137,11 @@ export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!
 export load_notebook, save_notebook, is_pluto_notebook
 
+# Dependency tracking (SESSIONS-1902)
+export SessionsCell, update_topology!, compute_topology
+export get_downstream_cells, get_upstream_cells, get_dependency_info
+export has_cycle, detect_and_mark_cycles!
+
 # Workspace API (module-based isolation)
 export Workspace, create_workspace, run_cell!, cleanup_variables!
 export reset_workspace!, get_variable, set_variable!, is_defined, list_defined

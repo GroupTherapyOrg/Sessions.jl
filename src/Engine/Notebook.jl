@@ -14,6 +14,7 @@ A notebook containing cells and execution context.
 - `path`: File path (nothing if unsaved)
 - `cells`: OrderedDict of cells by UUID
 - `cell_order`: Display order of cell IDs
+- `topology`: PlutoDependencyExplorer topology for dependency tracking
 - `worker`: Malt.jl worker process for execution
 - `modified`: Whether notebook has unsaved changes
 - `project_toml`: Package environment Project.toml content
@@ -25,6 +26,10 @@ mutable struct Notebook
 
     cells::OrderedDict{UUID, Cell}
     cell_order::Vector{UUID}
+
+    # Dependency topology (PlutoDependencyExplorer)
+    # This is updated by update_topology!() after cell changes
+    topology::Any  # PDE.NotebookTopology{SessionsCell} or nothing
 
     # Execution context
     worker::Union{Nothing, Malt.Worker}
@@ -48,10 +53,11 @@ function Notebook(; path::Union{Nothing, String}=nothing)
         path,
         OrderedDict{UUID, Cell}(),
         UUID[],
-        nothing,
-        false,
-        "",
-        ""
+        nothing,  # topology - computed on demand by update_topology!()
+        nothing,  # worker
+        false,    # modified
+        "",       # project_toml
+        ""        # manifest_toml
     )
 end
 

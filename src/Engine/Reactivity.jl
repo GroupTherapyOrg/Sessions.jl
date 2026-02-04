@@ -75,22 +75,39 @@ end
 # =============================================================================
 
 """
-Wrapper cell type for PlutoDependencyExplorer.
-PDE requires cells to subtype AbstractCell.
+    SessionsCell <: PlutoDependencyExplorer.AbstractCell
+
+Wrapper cell type for PlutoDependencyExplorer integration.
+PDE requires cells to subtype AbstractCell for topology computation.
+
+The PDE interface is callback-based (via `updated_topology` keyword args):
+- `get_code_str(cell)` → returns code string
+- `get_code_expr(cell)` → returns parsed expression
+- `get_cell_disabled(cell)` → returns Bool
+
+This is Sessions.jl's adapter that wraps our Cell type for dependency analysis.
 """
-struct PDECell <: PDE.AbstractCell
+struct SessionsCell <: PDE.AbstractCell
     id::UUID
     code::String
 end
 
-# Create PDECell from our Cell
-PDECell(cell::Cell) = PDECell(cell.id, cell.code)
+# Create SessionsCell from our Cell
+SessionsCell(cell::Cell) = SessionsCell(cell.id, cell.code)
+
+# Helper functions for PDE callbacks (these are NOT method overrides,
+# they are passed to updated_topology as keyword arguments)
+_get_code_str(c::SessionsCell) = c.code
+_get_code_expr(c::SessionsCell) = parse_cell_code(c.code)
+_get_cell_disabled(c::SessionsCell) = false
 
 """
     compute_topology(notebook)
 
 Build a NotebookTopology from the notebook's cells using PlutoDependencyExplorer.
 Uses `parse_cell_code` for auto begin...end wrapping of multi-line cells.
+
+Returns a `PDE.NotebookTopology{SessionsCell}` object.
 """
 function compute_topology(notebook::Notebook)
     # First, analyze all cells
@@ -99,15 +116,15 @@ function compute_topology(notebook::Notebook)
     end
 
     # Wrap cells for PDE
-    pde_cells = [PDECell(cell) for cell in values(notebook.cells)]
+    sessions_cells = [SessionsCell(cell) for cell in values(notebook.cells)]
 
     # Create empty topology and update with our cells
-    empty_topology = PDE.NotebookTopology{PDECell}()
+    empty_topology = PDE.NotebookTopology{SessionsCell}()
 
     topology = PDE.updated_topology(
         empty_topology,
-        pde_cells,
-        pde_cells;
+        sessions_cells,
+        sessions_cells;
         get_code_str = c -> c.code,
         get_code_expr = c -> parse_cell_code(c.code),  # Use parse_cell_code for auto begin...end
         get_cell_disabled = c -> false
@@ -117,22 +134,125 @@ function compute_topology(notebook::Notebook)
 end
 
 """
+    update_topology!(notebook::Notebook)
+    update_topology!(notebook::Notebook, changed_cell_ids::Vector{UUID})
+
+Update the notebook's dependency topology after cell changes.
+
+If `changed_cell_ids` is provided, only those cells are re-analyzed (more efficient).
+If not provided, all cells are re-analyzed.
+
+This function:
+1. Analyzes changed cells to extract references/definitions
+2. Updates the PDE topology with new dependency information
+3. Stores the result in `notebook.topology`
+
+# Returns
+The updated `NotebookTopology{SessionsCell}` object.
+
+# Example
+```julia
+# After editing a cell
+update_cell_code!(notebook, cell_id, "y = x * 2")
+update_topology!(notebook, [cell_id])
+
+# Or refresh all cells
+update_topology!(notebook)
+```
+"""
+function update_topology!(notebook::Notebook)
+    # Analyze all cells and rebuild topology
+    for cell in values(notebook.cells)
+        analyze_cell!(cell)
+    end
+
+    sessions_cells = [SessionsCell(cell) for cell in values(notebook.cells)]
+
+    if notebook.topology === nothing
+        notebook.topology = PDE.NotebookTopology{SessionsCell}()
+    end
+
+    notebook.topology = PDE.updated_topology(
+        notebook.topology,
+        sessions_cells,  # changed cells = all cells
+        sessions_cells;  # all cells
+        get_code_str = c -> c.code,
+        get_code_expr = c -> parse_cell_code(c.code),
+        get_cell_disabled = c -> false
+    )
+
+    return notebook.topology
+end
+
+function update_topology!(notebook::Notebook, changed_cell_ids::Vector{UUID})
+    # Only analyze changed cells
+    for cell_id in changed_cell_ids
+        cell = get_cell(notebook, cell_id)
+        if cell !== nothing
+            analyze_cell!(cell)
+        end
+    end
+
+    # Get all cells for PDE
+    all_cells = [SessionsCell(cell) for cell in values(notebook.cells)]
+
+    # Get only changed cells for incremental update
+    changed_cells = [SessionsCell(notebook.cells[id]) for id in changed_cell_ids
+                     if haskey(notebook.cells, id)]
+
+    if notebook.topology === nothing
+        notebook.topology = PDE.NotebookTopology{SessionsCell}()
+    end
+
+    notebook.topology = PDE.updated_topology(
+        notebook.topology,
+        changed_cells,
+        all_cells;
+        get_code_str = c -> c.code,
+        get_code_expr = c -> parse_cell_code(c.code),
+        get_cell_disabled = c -> false
+    )
+
+    return notebook.topology
+end
+
+"""
     get_execution_order(notebook, changed_cells::Vector{UUID})
 
 Given cells that changed, compute the full list of cells that need to run,
 in topological order.
 
-Returns a Vector of Cells in execution order.
+This function:
+1. Ensures the topology is up-to-date (calls update_topology! if needed)
+2. Finds all downstream cells that depend on the changed cells
+3. Returns cells sorted in dependency order (upstream before downstream)
+
+# Arguments
+- `notebook`: The notebook containing cells
+- `changed_cells`: UUIDs of cells that were modified
+
+# Returns
+A Vector of Cells in execution order (upstream cells first).
+
+# Example
+```julia
+# After changing cell1, get all cells that need to re-run
+order = get_execution_order(notebook, [cell1.id])
+for cell in order
+    execute_cell!(notebook, cell.id)
+end
+```
 """
 function get_execution_order(notebook::Notebook, changed_cells::Vector{UUID})
-    # Analyze all cells first
-    for cell in values(notebook.cells)
-        analyze_cell!(cell)
+    # Ensure topology is up-to-date
+    if notebook.topology === nothing
+        update_topology!(notebook)
+    else
+        # Update topology for changed cells
+        update_topology!(notebook, changed_cells)
     end
 
-    # Build dependency graph manually since PDE API may vary
-    # For each cell, find which other cells depend on its definitions
-
+    # Build dependency graph from analyzed cells
     # Map: symbol -> cell that defines it
     symbol_to_definer = Dict{Symbol, UUID}()
     for cell in values(notebook.cells)
@@ -176,12 +296,16 @@ function get_execution_order(notebook::Notebook, changed_cells::Vector{UUID})
     end
 
     # Topological sort based on dependencies
-    # Simple approach: sort by dependency depth
+    # Sort by dependency depth (cells with no dependencies come first)
     function dependency_depth(cell_id::UUID, visited=Set{UUID}())
         if cell_id in visited
-            return 0  # Cycle, return 0
+            return 0  # Cycle detected, return 0 to avoid infinite recursion
         end
         push!(visited, cell_id)
+
+        if !haskey(notebook.cells, cell_id)
+            return 0
+        end
 
         cell = notebook.cells[cell_id]
         max_depth = 0
@@ -304,4 +428,197 @@ function has_cycle(notebook::Notebook)
     end
 
     return (false, UUID[])
+end
+
+"""
+    detect_and_mark_cycles!(notebook)
+
+Check for circular dependencies and mark affected cells with CELL_ERROR state.
+
+Returns (has_cycle::Bool, cycle_cells::Vector{UUID})
+
+When a cycle is detected:
+- All cells in the cycle are set to CELL_ERROR state
+- Their output is set to a CellOutput with the cycle error message
+
+# Example
+```julia
+has_cycle, cycle_ids = detect_and_mark_cycles!(notebook)
+if has_cycle
+    @warn "Circular dependency detected" cells=cycle_ids
+end
+```
+"""
+function detect_and_mark_cycles!(notebook::Notebook)
+    found_cycle, cycle_ids = has_cycle(notebook)
+
+    if found_cycle
+        error_msg = "CircularDependencyError: This cell is part of a circular dependency cycle with cells: $(join([string(id)[1:8] for id in cycle_ids], ", "))..."
+
+        for cell_id in cycle_ids
+            cell = get_cell(notebook, cell_id)
+            if cell !== nothing
+                cell.state = CELL_ERROR
+                # CellOutput signature: (value, mime, html, logs, error_logs)
+                cell.output = CellOutput(
+                    nothing,
+                    "text/plain",
+                    "<pre class=\"error\">$error_msg</pre>",
+                    String[],
+                    [error_msg]
+                )
+            end
+        end
+    end
+
+    return (found_cycle, cycle_ids)
+end
+
+"""
+    get_upstream_cells(notebook, cell_id)
+
+Find all cells that the given cell depends on (directly or indirectly).
+
+# Returns
+Vector of upstream Cell objects in topological order (dependencies first).
+"""
+function get_upstream_cells(notebook::Notebook, cell_id::UUID)
+    cell = get_cell(notebook, cell_id)
+    if cell === nothing
+        return Cell[]
+    end
+
+    # Ensure cells are analyzed
+    if notebook.topology === nothing
+        update_topology!(notebook)
+    end
+
+    # Build symbol -> definer map
+    symbol_to_definer = Dict{Symbol, UUID}()
+    for c in values(notebook.cells)
+        for sym in union(c.definitions, c.funcdefs)
+            symbol_to_definer[sym] = c.id
+        end
+    end
+
+    # BFS to find all upstream cells
+    upstream = Set{UUID}()
+    queue = [cell_id]
+
+    while !isempty(queue)
+        current_id = popfirst!(queue)
+        current = get_cell(notebook, current_id)
+        if current === nothing
+            continue
+        end
+
+        for ref in current.references
+            if haskey(symbol_to_definer, ref)
+                definer_id = symbol_to_definer[ref]
+                if definer_id != current_id && !(definer_id in upstream)
+                    push!(upstream, definer_id)
+                    push!(queue, definer_id)
+                end
+            end
+        end
+    end
+
+    # Sort by dependency depth
+    cells = [notebook.cells[id] for id in upstream if haskey(notebook.cells, id)]
+
+    # Simple depth calculation
+    function depth(c)
+        d = 0
+        for ref in c.references
+            if haskey(symbol_to_definer, ref)
+                definer_id = symbol_to_definer[ref]
+                if definer_id in upstream
+                    d = max(d, depth(notebook.cells[definer_id]) + 1)
+                end
+            end
+        end
+        return d
+    end
+
+    sort!(cells, by=depth)
+    return cells
+end
+
+"""
+    get_dependency_info(notebook, cell_id)
+
+Get detailed dependency information for a cell.
+
+# Returns
+A NamedTuple with:
+- `upstream`: Vector of upstream cell IDs (cells this cell depends on)
+- `downstream`: Vector of downstream cell IDs (cells that depend on this cell)
+- `definitions`: Set of symbols this cell defines
+- `references`: Set of symbols this cell references
+- `unresolved`: Set of referenced symbols that no cell defines
+"""
+function get_dependency_info(notebook::Notebook, cell_id::UUID)
+    cell = get_cell(notebook, cell_id)
+    if cell === nothing
+        return (
+            upstream = UUID[],
+            downstream = UUID[],
+            definitions = Set{Symbol}(),
+            references = Set{Symbol}(),
+            unresolved = Set{Symbol}()
+        )
+    end
+
+    # Ensure analyzed
+    analyze_cell!(cell)
+
+    # Build symbol -> definer map
+    symbol_to_definer = Dict{Symbol, UUID}()
+    for c in values(notebook.cells)
+        analyze_cell!(c)
+        for sym in union(c.definitions, c.funcdefs)
+            symbol_to_definer[sym] = c.id
+        end
+    end
+
+    # Find upstream cells
+    upstream = UUID[]
+    for ref in cell.references
+        if haskey(symbol_to_definer, ref)
+            definer_id = symbol_to_definer[ref]
+            if definer_id != cell_id && !(definer_id in upstream)
+                push!(upstream, definer_id)
+            end
+        end
+    end
+
+    # Find downstream cells
+    downstream = UUID[]
+    cell_defines = union(cell.definitions, cell.funcdefs)
+    for c in values(notebook.cells)
+        if c.id != cell_id
+            for ref in c.references
+                if ref in cell_defines && !(c.id in downstream)
+                    push!(downstream, c.id)
+                    break
+                end
+            end
+        end
+    end
+
+    # Find unresolved references
+    unresolved = Set{Symbol}()
+    for ref in cell.references
+        if !haskey(symbol_to_definer, ref)
+            push!(unresolved, ref)
+        end
+    end
+
+    return (
+        upstream = upstream,
+        downstream = downstream,
+        definitions = cell.definitions,
+        references = cell.references,
+        unresolved = unresolved
+    )
 end

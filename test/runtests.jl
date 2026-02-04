@@ -95,6 +95,22 @@ using Therapy
             @test :y in cell.definitions
         end
 
+        @testset "Cell analysis - function definitions" begin
+            cell = Cell(; code="function foo(x) x + 1 end")
+            analyze_cell!(cell)
+            @test :foo in cell.funcdefs
+            # Note: ExpressionExplorer sees :+ as a reference (operator usage)
+            # That's expected behavior from the Pluto ecosystem
+        end
+
+        @testset "Cell analysis - multiple definitions" begin
+            cell = Cell(; code="a = 1\nb = 2\nc = a + b")
+            analyze_cell!(cell)
+            @test :a in cell.definitions
+            @test :b in cell.definitions
+            @test :c in cell.definitions
+        end
+
         @testset "Execution order" begin
             nb = Notebook()
             cell1 = add_cell!(nb; code="x = 1")
@@ -113,6 +129,265 @@ using Therapy
             idx2 = findfirst(c -> c.id == cell2.id, order)
             idx3 = findfirst(c -> c.id == cell3.id, order)
             @test idx1 < idx2 < idx3
+        end
+    end
+
+    # =========================================================================
+    # SESSIONS-1902: Dependency Tracking with Pluto Packages
+    # =========================================================================
+    @testset "Dependency tracking (SESSIONS-1902)" begin
+        @testset "SessionsCell interface" begin
+            # Test SessionsCell wraps Cell correctly
+            cell = Cell(; code="x = 42")
+            sc = SessionsCell(cell)
+            @test sc.id == cell.id
+            @test sc.code == cell.code
+
+            # Test SessionsCell subtypes AbstractCell
+            import PlutoDependencyExplorer as PDE
+            @test sc isa PDE.AbstractCell
+        end
+
+        @testset "update_topology! creates topology" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+
+            @test nb.topology === nothing
+            update_topology!(nb)
+            @test nb.topology !== nothing
+        end
+
+        @testset "update_topology! with changed cells" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+
+            update_topology!(nb)
+            initial_topology = nb.topology
+
+            # Update just cell1
+            cell1.code = "x = 2"
+            update_topology!(nb, [cell1.id])
+
+            # Topology should be updated
+            @test nb.topology !== nothing
+        end
+
+        @testset "get_execution_order - linear chain" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="a = 1")
+            cell2 = add_cell!(nb; code="b = a + 1")
+            cell3 = add_cell!(nb; code="c = b + 1")
+
+            order = get_execution_order(nb, [cell1.id])
+            @test length(order) == 3
+
+            idx1 = findfirst(c -> c.id == cell1.id, order)
+            idx2 = findfirst(c -> c.id == cell2.id, order)
+            idx3 = findfirst(c -> c.id == cell3.id, order)
+            @test idx1 < idx2 < idx3
+        end
+
+        @testset "get_execution_order - diamond dependency" begin
+            # Diamond pattern: A -> B, A -> C, B -> D, C -> D
+            nb = Notebook()
+            cellA = add_cell!(nb; code="a = 1")
+            cellB = add_cell!(nb; code="b = a * 2")
+            cellC = add_cell!(nb; code="c = a * 3")
+            cellD = add_cell!(nb; code="d = b + c")
+
+            order = get_execution_order(nb, [cellA.id])
+            @test length(order) == 4
+
+            # A must come first
+            idxA = findfirst(c -> c.id == cellA.id, order)
+            idxB = findfirst(c -> c.id == cellB.id, order)
+            idxC = findfirst(c -> c.id == cellC.id, order)
+            idxD = findfirst(c -> c.id == cellD.id, order)
+
+            @test idxA < idxB
+            @test idxA < idxC
+            @test idxB < idxD
+            @test idxC < idxD
+        end
+
+        @testset "get_execution_order - partial update" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+            cell3 = add_cell!(nb; code="z = 100")  # Independent cell
+
+            order = get_execution_order(nb, [cell1.id])
+            @test length(order) == 2  # Only cell1 and cell2
+
+            ids = [c.id for c in order]
+            @test cell1.id in ids
+            @test cell2.id in ids
+            @test !(cell3.id in ids)  # Independent cell not included
+        end
+
+        @testset "get_all_execution_order" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="a = 1")
+            cell2 = add_cell!(nb; code="b = a + 1")
+            cell3 = add_cell!(nb; code="c = 100")
+
+            order = get_all_execution_order(nb)
+            @test length(order) == 3
+        end
+
+        @testset "get_downstream_cells" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+            cell3 = add_cell!(nb; code="z = y + 1")
+
+            downstream = get_downstream_cells(nb, cell1.id)
+            @test length(downstream) == 2
+
+            ids = [c.id for c in downstream]
+            @test cell2.id in ids
+            @test cell3.id in ids
+            @test !(cell1.id in ids)  # Original cell excluded
+        end
+
+        @testset "get_upstream_cells" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+            cell3 = add_cell!(nb; code="z = y + 1")
+
+            upstream = get_upstream_cells(nb, cell3.id)
+            @test length(upstream) == 2
+
+            ids = [c.id for c in upstream]
+            @test cell1.id in ids
+            @test cell2.id in ids
+            @test !(cell3.id in ids)
+        end
+
+        @testset "get_dependency_info" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+            cell3 = add_cell!(nb; code="z = y + undefined_var")
+
+            info = get_dependency_info(nb, cell2.id)
+
+            @test cell1.id in info.upstream
+            @test cell3.id in info.downstream
+            @test :y in info.definitions
+            @test :x in info.references
+
+            # Test unresolved references
+            info3 = get_dependency_info(nb, cell3.id)
+            @test :undefined_var in info3.unresolved
+        end
+
+        @testset "has_cycle - no cycle" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+            cell3 = add_cell!(nb; code="z = y + 1")
+
+            found_cycle, cycle_ids = has_cycle(nb)
+            @test !found_cycle
+            @test isempty(cycle_ids)
+        end
+
+        @testset "has_cycle - direct cycle" begin
+            nb = Notebook()
+            # Create a direct cycle: x = y + 1, y = x + 1
+            cell1 = add_cell!(nb; code="x = y + 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+
+            found_cycle, cycle_ids = has_cycle(nb)
+            @test found_cycle
+            @test length(cycle_ids) >= 2
+            @test cell1.id in cycle_ids || cell2.id in cycle_ids
+        end
+
+        @testset "has_cycle - indirect cycle" begin
+            nb = Notebook()
+            # Create indirect cycle: a -> b -> c -> a
+            cell1 = add_cell!(nb; code="a = c + 1")
+            cell2 = add_cell!(nb; code="b = a + 1")
+            cell3 = add_cell!(nb; code="c = b + 1")
+
+            found_cycle, cycle_ids = has_cycle(nb)
+            @test found_cycle
+        end
+
+        @testset "detect_and_mark_cycles!" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = y + 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+
+            found_cycle, cycle_ids = detect_and_mark_cycles!(nb)
+            @test found_cycle
+
+            # Cells should be marked with error state
+            for id in cycle_ids
+                cell = get_cell(nb, id)
+                if cell !== nothing
+                    @test cell.state == CELL_ERROR
+                    @test cell.output !== nothing
+                    # Error message is in error_logs
+                    @test !isempty(cell.output.error_logs)
+                    @test any(occursin("Circular", msg) for msg in cell.output.error_logs)
+                end
+            end
+        end
+
+        @testset "compute_topology returns valid topology" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = x + 1")
+
+            topology = compute_topology(nb)
+            @test topology !== nothing
+        end
+
+        @testset "get_execution_order with empty changed_cells" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="x = 1")
+            cell2 = add_cell!(nb; code="y = 2")
+
+            order = get_execution_order(nb, UUID[])
+            @test isempty(order)
+        end
+
+        @testset "analyze_code utility function" begin
+            refs, defs, funcdefs = Sessions.analyze_code("y = x + 1")
+            @test :x in refs
+            @test :y in defs
+        end
+
+        @testset "function dependency" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="function foo(x) x * 2 end")
+            cell2 = add_cell!(nb; code="result = foo(5)")
+
+            for c in values(nb.cells)
+                analyze_cell!(c)
+            end
+
+            @test :foo in cell1.funcdefs
+            @test :foo in cell2.references
+            @test :result in cell2.definitions
+
+            order = get_execution_order(nb, [cell1.id])
+            @test length(order) == 2
+        end
+
+        @testset "self-referential cell (not a cycle)" begin
+            nb = Notebook()
+            # x = 1 is not a cycle, just a simple assignment
+            cell = add_cell!(nb; code="x = 1")
+
+            found_cycle, _ = has_cycle(nb)
+            @test !found_cycle
         end
     end
 
