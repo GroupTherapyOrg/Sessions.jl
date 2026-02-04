@@ -86,23 +86,39 @@ function render_notebook_content()
 
     cells = cells_in_order(notebook)
 
-    # Build page content
-    Div(:class => "space-y-8",
-        # Notebook header - elegant, scholarly
-        Div(:class => "mb-8 pb-6 border-b border-stone-200/30 dark:border-neutral-800/30",
-            H2(:class => "text-2xl font-serif font-medium text-stone-700 dark:text-stone-200 tracking-wide",
-                notebook.path === nothing ? "Untitled Notebook" : basename(notebook.path)
-            ),
-            P(:class => "text-xs text-stone-400 dark:text-stone-500 mt-2 tracking-wider uppercase",
-                "$(length(cells)) cells"
+    # Get workspace directory for file browser
+    workspace = pwd()
+    file_entries = list_directory(workspace)
+
+    # Build page content with sidebar and notebook
+    Div(:class => "flex gap-6",
+        # File Browser Sidebar (SESSIONS-2100, context menus via SESSIONS-2102)
+        Div(:class => "w-64 flex-shrink-0 h-[calc(100vh-12rem)] sticky top-24",
+            FileBrowser(
+                root_path = workspace,
+                current_path = workspace,
+                entries = file_entries
             )
         ),
 
-        # Cells
-        CellsView(cells),
+        # Main notebook content
+        Div(:class => "flex-1 space-y-8",
+            # Notebook header - elegant, scholarly
+            Div(:class => "mb-8 pb-6 border-b border-stone-200/30 dark:border-neutral-800/30",
+                H2(:class => "text-2xl font-serif font-medium text-stone-700 dark:text-stone-200 tracking-wide",
+                    notebook.path === nothing ? "Untitled Notebook" : basename(notebook.path)
+                ),
+                P(:class => "text-xs text-stone-400 dark:text-stone-500 mt-2 tracking-wider uppercase",
+                    "$(length(cells)) cells"
+                )
+            ),
 
-        # Set notebook ID for client
-        Script("setNotebookId('$(notebook.id)');")
+            # Cells
+            CellsView(cells),
+
+            # Set notebook ID for client
+            Script("setNotebookId('$(notebook.id)');")
+        )
     )
 end
 

@@ -48,6 +48,21 @@ const HOME_ICON_PATH = "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2
 # Chevron right icon
 const CHEVRON_RIGHT_PATH = "M9 5l7 7-7 7"
 
+# Ellipsis (three dots) icon for context menu trigger
+const ELLIPSIS_ICON_PATH = "M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+
+# Pencil icon for rename
+const PENCIL_ICON_PATH = "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+
+# Trash icon for delete
+const TRASH_ICON_PATH = "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+
+# Copy icon for copy path
+const COPY_ICON_PATH = "M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+
+# Open/Document icon
+const OPEN_ICON_PATH = "M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -176,12 +191,115 @@ function Breadcrumbs(current_path::String; root_path::String = "")
 end
 
 # =============================================================================
+# CONTEXT MENU COMPONENT (SESSIONS-2102)
+# =============================================================================
+
+"""
+Context menu item with icon.
+"""
+function ContextMenuItem(;
+    label::String,
+    icon_path::String,
+    on_click::String,
+    is_danger::Bool = false,
+    disabled::Bool = false
+)
+    base_classes = "flex items-center gap-3 w-full px-3 py-2 text-sm transition-colors"
+    color_classes = if disabled
+        "text-stone-300 dark:text-stone-600 cursor-not-allowed"
+    elseif is_danger
+        "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+    else
+        "text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-neutral-700"
+    end
+
+    Button(:class => "$base_classes $color_classes",
+        :onclick => disabled ? "" : on_click,
+        :disabled => disabled ? "disabled" : nothing,
+        Svg(:class => "w-4 h-4 flex-shrink-0",
+            :fill => "none",
+            :viewBox => "0 0 24 24",
+            :stroke => "currentColor",
+            Symbol("stroke-width") => "1.5",
+            Path(:d => icon_path)
+        ),
+        Span(label)
+    )
+end
+
+"""
+    FileContextMenu()
+
+Hidden context menu that appears on right-click.
+Positioned via JavaScript based on click coordinates.
+
+# Menu Items
+- Open (for .jl files) - Opens file as notebook
+- Rename - Prompts for new name
+- Delete - Confirms and deletes
+- New File - Creates new file in current directory
+- New Folder - Creates new folder in current directory
+- Copy Path - Copies full path to clipboard
+"""
+function FileContextMenu()
+    Div(:id => "file-context-menu",
+        :class => "hidden fixed z-[100] min-w-[180px] bg-white dark:bg-neutral-800 rounded-lg shadow-xl border border-stone-200/50 dark:border-neutral-700/50 py-1 overflow-hidden",
+        # Open (shown only for .jl files)
+        Div(:id => "ctx-menu-open",
+            ContextMenuItem(
+                label = "Open",
+                icon_path = OPEN_ICON_PATH,
+                on_click = "contextMenuOpen()"
+            )
+        ),
+        # Separator (shown after Open)
+        Div(:id => "ctx-menu-separator-open", :class => "border-t border-stone-200/50 dark:border-neutral-700/50 my-1"),
+        # Rename
+        ContextMenuItem(
+            label = "Rename",
+            icon_path = PENCIL_ICON_PATH,
+            on_click = "contextMenuRename()"
+        ),
+        # Delete
+        ContextMenuItem(
+            label = "Delete",
+            icon_path = TRASH_ICON_PATH,
+            on_click = "contextMenuDelete()",
+            is_danger = true
+        ),
+        # Separator
+        Div(:class => "border-t border-stone-200/50 dark:border-neutral-700/50 my-1"),
+        # New File
+        ContextMenuItem(
+            label = "New File",
+            icon_path = PLUS_ICON_PATH,
+            on_click = "createFile()"
+        ),
+        # New Folder
+        ContextMenuItem(
+            label = "New Folder",
+            icon_path = PLUS_ICON_PATH,
+            on_click = "createFolder()"
+        ),
+        # Separator
+        Div(:class => "border-t border-stone-200/50 dark:border-neutral-700/50 my-1"),
+        # Copy Path
+        ContextMenuItem(
+            label = "Copy Path",
+            icon_path = COPY_ICON_PATH,
+            on_click = "contextMenuCopyPath()"
+        )
+    )
+end
+
+# =============================================================================
 # FILE ITEM COMPONENT
 # =============================================================================
 
 """
 Individual file or folder row.
 Double-click folders to navigate, double-click .jl files to open as notebooks.
+Right-click shows context menu (SESSIONS-2102).
 """
 function FileItem(entry::FileEntry)
     icon_path = get_file_icon(entry)
@@ -198,10 +316,15 @@ function FileItem(entry::FileEntry)
         ""  # No action for other file types yet
     end
 
+    # Determine if this is a Julia file (for context menu Open option)
+    is_julia_file = endswith(lowercase(entry.name), ".jl")
+
     Div(:class => "group flex items-center gap-3 px-3 py-2 hover:bg-stone-100 dark:hover:bg-neutral-800 cursor-pointer transition-colors border-b border-stone-100/50 dark:border-neutral-800/50 last:border-b-0",
         :ondblclick => action,
+        :oncontextmenu => "showContextMenu(event, '$(entry.path)', $(entry.is_directory), $(is_julia_file))",
         Symbol("data-path") => entry.path,
         Symbol("data-is-directory") => string(entry.is_directory),
+        Symbol("data-is-julia") => string(is_julia_file),
 
         # Icon
         Div(:class => "flex-shrink-0 $icon_color",
@@ -225,9 +348,19 @@ function FileItem(entry::FileEntry)
             entry.is_directory ? "" : format_file_size(entry.size)
         ),
 
-        # Actions (appear on hover) - will be expanded in SESSIONS-2102
+        # Actions (appear on hover) - ellipsis button for context menu
         Div(:class => "hidden group-hover:flex items-center gap-1",
-            # Placeholder for context menu trigger
+            Button(:class => "p-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 hover:bg-stone-200/50 dark:hover:bg-neutral-600/50 rounded transition-colors",
+                :onclick => "showContextMenu(event, '$(entry.path)', $(entry.is_directory), $(is_julia_file))",
+                :title => "More options",
+                Svg(:class => "w-4 h-4",
+                    :fill => "none",
+                    :viewBox => "0 0 24 24",
+                    :stroke => "currentColor",
+                    Symbol("stroke-width") => "2",
+                    Path(:d => ELLIPSIS_ICON_PATH)
+                )
+            )
         )
     )
 end
@@ -302,24 +435,30 @@ function FileBrowser(;
     current_path::String = root_path,
     entries::Vector{FileEntry} = FileEntry[]
 )
-    Div(:class => "flex flex-col h-full bg-stone-50 dark:bg-neutral-900 border-r border-stone-200/50 dark:border-neutral-700/50",
-        Symbol("data-component") => "file-browser",
-        Symbol("data-root-path") => root_path,
-        Symbol("data-current-path") => current_path,
+    Fragment(
+        # Main file browser container
+        Div(:class => "flex flex-col h-full bg-stone-50 dark:bg-neutral-900 border-r border-stone-200/50 dark:border-neutral-700/50",
+            Symbol("data-component") => "file-browser",
+            Symbol("data-root-path") => root_path,
+            Symbol("data-current-path") => current_path,
 
-        # Header
-        Div(:class => "flex items-center px-3 py-2 border-b border-stone-200/50 dark:border-neutral-700/50",
-            Span(:class => "text-sm font-medium text-stone-600 dark:text-stone-400", "Files")
+            # Header
+            Div(:class => "flex items-center px-3 py-2 border-b border-stone-200/50 dark:border-neutral-700/50",
+                Span(:class => "text-sm font-medium text-stone-600 dark:text-stone-400", "Files")
+            ),
+
+            # Toolbar
+            BrowserToolbar(),
+
+            # Breadcrumbs
+            Breadcrumbs(current_path; root_path = root_path),
+
+            # File list
+            FileList(entries)
         ),
 
-        # Toolbar
-        BrowserToolbar(),
-
-        # Breadcrumbs
-        Breadcrumbs(current_path; root_path = root_path),
-
-        # File list
-        FileList(entries)
+        # Context menu (positioned via JavaScript)
+        FileContextMenu()
     )
 end
 

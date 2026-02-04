@@ -551,6 +551,127 @@ function sessions_script()
         };
 
         // =====================================================================
+        // Context Menu API (SESSIONS-2102)
+        // =====================================================================
+
+        // Track currently selected item for context menu
+        var contextMenuPath = null;
+        var contextMenuIsDirectory = false;
+        var contextMenuIsJulia = false;
+
+        // Show context menu at position
+        window.showContextMenu = function(event, path, isDirectory, isJulia) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            contextMenuPath = path;
+            contextMenuIsDirectory = isDirectory;
+            contextMenuIsJulia = isJulia;
+
+            var menu = document.getElementById('file-context-menu');
+            if (!menu) return;
+
+            // Show/hide "Open" option based on file type
+            var openItem = document.getElementById('ctx-menu-open');
+            var openSeparator = document.getElementById('ctx-menu-separator-open');
+            if (openItem && openSeparator) {
+                if (isJulia || isDirectory) {
+                    openItem.style.display = 'block';
+                    openSeparator.style.display = 'block';
+                } else {
+                    openItem.style.display = 'none';
+                    openSeparator.style.display = 'none';
+                }
+            }
+
+            // Position the menu
+            var x = event.clientX;
+            var y = event.clientY;
+
+            // Make visible to measure
+            menu.classList.remove('hidden');
+            menu.style.visibility = 'hidden';
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+
+            // Adjust if menu would go off screen
+            var rect = menu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                x = window.innerWidth - rect.width - 10;
+            }
+            if (rect.bottom > window.innerHeight) {
+                y = window.innerHeight - rect.height - 10;
+            }
+
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            menu.style.visibility = 'visible';
+        };
+
+        // Hide context menu
+        window.hideContextMenu = function() {
+            var menu = document.getElementById('file-context-menu');
+            if (menu) {
+                menu.classList.add('hidden');
+            }
+            contextMenuPath = null;
+        };
+
+        // Context menu action handlers
+        window.contextMenuOpen = function() {
+            hideContextMenu();
+            if (contextMenuPath) {
+                if (contextMenuIsDirectory) {
+                    navigateToDirectory(contextMenuPath);
+                } else if (contextMenuIsJulia) {
+                    openNotebook(contextMenuPath);
+                }
+            }
+        };
+
+        window.contextMenuRename = function() {
+            hideContextMenu();
+            if (contextMenuPath) {
+                renameItem(contextMenuPath);
+            }
+        };
+
+        window.contextMenuDelete = function() {
+            hideContextMenu();
+            if (contextMenuPath) {
+                deleteItem(contextMenuPath);
+            }
+        };
+
+        window.contextMenuCopyPath = function() {
+            hideContextMenu();
+            if (contextMenuPath) {
+                navigator.clipboard.writeText(contextMenuPath).then(function() {
+                    console.log('[Sessions] Path copied:', contextMenuPath);
+                }).catch(function(err) {
+                    console.error('[Sessions] Failed to copy path:', err);
+                    // Fallback: show in prompt
+                    prompt('Copy this path:', contextMenuPath);
+                });
+            }
+        };
+
+        // Close context menu on click outside
+        document.addEventListener('click', function(e) {
+            var menu = document.getElementById('file-context-menu');
+            if (menu && !menu.contains(e.target)) {
+                hideContextMenu();
+            }
+        });
+
+        // Close context menu on Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideContextMenu();
+            }
+        });
+
+        // =====================================================================
         // Paste Handler (Pluto notebook import)
         // =====================================================================
 

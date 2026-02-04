@@ -168,7 +168,7 @@ export create_bond
 export Slider, TextField, CheckBox, Select, NumberField
 
 # File browser (SESSIONS-2100)
-export FileBrowser, BrowserToolbar, Breadcrumbs, FileList, FileItem
+export FileBrowser, BrowserToolbar, Breadcrumbs, FileList, FileItem, FileContextMenu, ContextMenuItem
 export FileEntry, list_directory, format_file_size
 
 end # module
