@@ -473,6 +473,200 @@ function broadcast_cell_output(notebook_id::UUID, cell::Cell)
 end
 
 # =============================================================================
+# Channel: Multi-Notebook Tab Management (SESSIONS-2200)
+# =============================================================================
+
+"""
+Handle switching to a different notebook.
+Message: {notebook_id}
+"""
+function setup_switch_notebook_channel!()
+    on_channel_message("switch_notebook") do conn, data
+        notebook_id = UUID(data["notebook_id"])
+
+        # Verify notebook exists
+        if !haskey(NOTEBOOKS, notebook_id)
+            send_channel!("error", conn.id, Dict("message" => "Notebook not found"))
+            return
+        end
+
+        # Update connection's active notebook
+        CONN_NOTEBOOK[conn.id] = notebook_id
+
+        # Register signals for the new active notebook
+        notebook = NOTEBOOKS[notebook_id]
+        register_all_cell_signals!(notebook)
+
+        # Update the active notebook signal
+        set_active_notebook!(notebook_id)
+
+        # Broadcast that we've switched
+        broadcast_channel!("notebook_switched", Dict(
+            "notebook_id" => string(notebook_id),
+            "title" => notebook.path !== nothing ? basename(notebook.path) : "Untitled"
+        ))
+
+        println("[Sessions] Switched to notebook: $(notebook_id)")
+    end
+end
+
+"""
+Handle closing a notebook tab.
+Message: {notebook_id}
+"""
+function setup_close_notebook_channel!()
+    on_channel_message("close_notebook") do conn, data
+        notebook_id = UUID(data["notebook_id"])
+
+        # Verify notebook exists
+        if !haskey(NOTEBOOKS, notebook_id)
+            return
+        end
+
+        notebook = NOTEBOOKS[notebook_id]
+
+        # Shutdown the worker if running
+        shutdown_worker!(notebook)
+
+        # Unregister all cell signals for this notebook
+        for cell in values(notebook.cells)
+            unregister_cell_signals!(cell.id)
+        end
+
+        # Remove from NOTEBOOKS
+        delete!(NOTEBOOKS, notebook_id)
+
+        # Clean up any connections pointing to this notebook
+        for (conn_id, nb_id) in CONN_NOTEBOOK
+            if nb_id == notebook_id
+                delete!(CONN_NOTEBOOK, conn_id)
+            end
+        end
+
+        # Update notebook tabs signal
+        update_notebook_tabs_signal!()
+
+        # Broadcast that notebook was closed
+        broadcast_channel!("notebook_closed", Dict(
+            "notebook_id" => string(notebook_id)
+        ))
+
+        println("[Sessions] Closed notebook: $(notebook_id)")
+
+        # If there are remaining notebooks, switch to the first one
+        if !isempty(NOTEBOOKS)
+            first_nb_id = first(keys(NOTEBOOKS))
+            set_active_notebook!(first_nb_id)
+
+            # Notify clients to switch
+            broadcast_channel!("notebook_switched", Dict(
+                "notebook_id" => string(first_nb_id),
+                "title" => NOTEBOOKS[first_nb_id].path !== nothing ? basename(NOTEBOOKS[first_nb_id].path) : "Untitled"
+            ))
+        end
+    end
+end
+
+"""
+Handle creating a new notebook.
+Message: {} (no parameters needed)
+"""
+function setup_create_notebook_channel!()
+    on_channel_message("create_notebook") do conn, data
+        # Create a new empty notebook
+        notebook = create_notebook()
+        NOTEBOOKS[notebook.id] = notebook
+
+        # Associate connection with the new notebook
+        CONN_NOTEBOOK[conn.id] = notebook.id
+
+        # Register cell signals (even for empty notebook)
+        register_all_cell_signals!(notebook)
+
+        # Update notebook tabs signal
+        update_notebook_tabs_signal!()
+
+        # Set as active
+        set_active_notebook!(notebook.id)
+
+        # Broadcast that notebook was created
+        broadcast_channel!("notebook_created", Dict(
+            "notebook_id" => string(notebook.id),
+            "title" => "Untitled"
+        ))
+
+        # Also broadcast switch event
+        broadcast_channel!("notebook_switched", Dict(
+            "notebook_id" => string(notebook.id),
+            "title" => "Untitled"
+        ))
+
+        println("[Sessions] Created new notebook: $(notebook.id)")
+    end
+end
+
+"""
+Handle opening a notebook from file (from file browser).
+Message: {path}
+"""
+function setup_open_notebook_channel!()
+    on_channel_message("open_notebook") do conn, data
+        path = data["path"]
+
+        # Check if already open
+        for (nb_id, nb) in NOTEBOOKS
+            if nb.path == path
+                # Just switch to it
+                CONN_NOTEBOOK[conn.id] = nb_id
+                set_active_notebook!(nb_id)
+                broadcast_channel!("notebook_switched", Dict(
+                    "notebook_id" => string(nb_id),
+                    "title" => basename(path)
+                ))
+                return
+            end
+        end
+
+        # Load from file
+        try
+            notebook = load_notebook(path)
+            NOTEBOOKS[notebook.id] = notebook
+
+            # Associate connection with notebook
+            CONN_NOTEBOOK[conn.id] = notebook.id
+
+            # Register per-cell signals
+            register_all_cell_signals!(notebook)
+
+            # Update notebook tabs signal
+            update_notebook_tabs_signal!()
+
+            # Set as active
+            set_active_notebook!(notebook.id)
+
+            # Broadcast that notebook was opened
+            broadcast_channel!("notebook_opened", Dict(
+                "notebook_id" => string(notebook.id),
+                "path" => path,
+                "title" => basename(path)
+            ))
+
+            # Also broadcast switch event
+            broadcast_channel!("notebook_switched", Dict(
+                "notebook_id" => string(notebook.id),
+                "title" => basename(path)
+            ))
+
+            println("[Sessions] Opened notebook: $(path)")
+        catch e
+            send_channel!("error", conn.id, Dict(
+                "message" => "Failed to open notebook: $(sprint(showerror, e))"
+            ))
+        end
+    end
+end
+
+# =============================================================================
 # Setup All Channels
 # =============================================================================
 
@@ -496,6 +690,12 @@ function create_channels!()
     create_channel("save")
     create_channel("load")
 
+    # Multi-notebook tab management (SESSIONS-2200)
+    create_channel("switch_notebook")
+    create_channel("close_notebook")
+    create_channel("create_notebook")
+    create_channel("open_notebook")
+
     # Response channels (for broadcasting to clients)
     create_channel("cell_state")
     create_channel("cell_output")
@@ -507,6 +707,10 @@ function create_channels!()
     create_channel("restarted")
     create_channel("saved")
     create_channel("loaded")
+    create_channel("notebook_switched")
+    create_channel("notebook_closed")
+    create_channel("notebook_created")
+    create_channel("notebook_opened")
     create_channel("error")
 end
 
@@ -529,4 +733,10 @@ function setup_channels!()
     setup_restart_channel!()
     setup_save_channel!()
     setup_load_channel!()
+
+    # Multi-notebook tab management (SESSIONS-2200)
+    setup_switch_notebook_channel!()
+    setup_close_notebook_channel!()
+    setup_create_notebook_channel!()
+    setup_open_notebook_channel!()
 end

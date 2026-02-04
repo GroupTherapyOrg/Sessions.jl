@@ -903,6 +903,105 @@ function sessions_script()
         };
 
         // =====================================================================
+        // Notebook Tab Management (SESSIONS-2200)
+        // =====================================================================
+
+        // Track open notebooks locally for unsaved changes prompt
+        window.openNotebooks = window.openNotebooks || {};
+
+        // Switch to a different notebook tab
+        window.switchTab = function(notebookId) {
+            console.log('[Tabs] Switching to notebook:', notebookId);
+
+            // Send channel message to switch notebook
+            sendAction('switch_notebook', { notebook_id: notebookId });
+
+            // Update local active state immediately for responsiveness
+            updateActiveTab(notebookId);
+        };
+
+        // Close a notebook tab
+        window.closeTab = function(notebookId) {
+            console.log('[Tabs] Closing notebook:', notebookId);
+
+            // Check for unsaved changes
+            var tabEl = document.querySelector('[data-tab-id="' + notebookId + '"]');
+            var hasUnsaved = tabEl && tabEl.querySelector('.bg-amber-500, .bg-amber-400');
+
+            if (hasUnsaved) {
+                if (!confirm('This notebook has unsaved changes. Close anyway?')) {
+                    return;
+                }
+            }
+
+            // Send channel message to close notebook
+            sendAction('close_notebook', { notebook_id: notebookId });
+        };
+
+        // Create a new notebook
+        window.createNewNotebook = function() {
+            console.log('[Tabs] Creating new notebook');
+            sendAction('create_notebook', {});
+        };
+
+        // Update active tab styling
+        function updateActiveTab(notebookId) {
+            var tabs = document.querySelectorAll('.notebook-tab');
+            tabs.forEach(function(tab) {
+                var isActive = tab.getAttribute('data-tab-id') === notebookId;
+                tab.setAttribute('data-active', isActive ? 'true' : 'false');
+
+                if (isActive) {
+                    tab.classList.remove('bg-stone-200/50', 'text-stone-500');
+                    tab.classList.add('bg-stone-100', 'text-stone-800', 'shadow-sm');
+                } else {
+                    tab.classList.remove('bg-stone-100', 'text-stone-800', 'shadow-sm');
+                    tab.classList.add('bg-stone-200/50', 'text-stone-500');
+                }
+            });
+
+            // Update container data attribute
+            var container = document.querySelector('.notebook-tabs-container');
+            if (container) {
+                container.setAttribute('data-active-notebook', notebookId);
+            }
+
+            // Update notebook ID for cell operations
+            if (typeof setNotebookId === 'function') {
+                setNotebookId(notebookId);
+            }
+        }
+
+        // Setup notebook tab channel handlers
+        function setupTabChannelHandlers() {
+            if (typeof TherapyWS === 'undefined') return;
+
+            // Listen for notebook switched events from server
+            TherapyWS.onChannelMessage('notebook_switched', function(data) {
+                console.log('[Tabs] Notebook switched:', data);
+                updateActiveTab(data.notebook_id);
+
+                // Reload page to show the new notebook content
+                window.location.reload();
+            });
+
+            TherapyWS.onChannelMessage('notebook_closed', function(data) {
+                console.log('[Tabs] Notebook closed:', data);
+                // Tab will be removed by page reload
+            });
+
+            TherapyWS.onChannelMessage('notebook_created', function(data) {
+                console.log('[Tabs] Notebook created:', data);
+                // Page will reload to show new notebook
+            });
+
+            TherapyWS.onChannelMessage('notebook_opened', function(data) {
+                console.log('[Tabs] Notebook opened:', data);
+                // Page will reload to show new notebook
+            });
+        }
+
+        // =====================================================================
         // Paste Handler (Pluto notebook import)
         // =====================================================================
 
@@ -951,6 +1050,7 @@ function sessions_script()
             if (!window._sessionsChannelHandlers) {
                 window._sessionsChannelHandlers = true;
                 setupChannelHandlers();
+                setupTabChannelHandlers();
             }
 
             // Set up paste handler (only once)
@@ -1035,9 +1135,12 @@ Design: Elegant, minimal, scholarly aesthetic.
 - Pluto blue as accent color
 - Generous whitespace and subtle shadows
 """
-function Layout(content; dark_mode_toggle=nothing)
+function Layout(content; dark_mode_toggle=nothing, notebooks=nothing, active_notebook_id=nothing)
     # Use provided toggle or default
     toggle = dark_mode_toggle !== nothing ? dark_mode_toggle : DarkModeToggle()
+
+    # Show tabs if notebooks provided
+    show_tabs = notebooks !== nothing && !isempty(notebooks)
 
     Div(:class => "min-h-screen flex flex-col bg-stone-100 dark:bg-neutral-950 transition-colors duration-300",
         # Navigation Bar - refined, scholarly
@@ -1075,6 +1178,9 @@ function Layout(content; dark_mode_toggle=nothing)
                 )
             )
         ),
+
+        # Notebook Tabs Bar (SESSIONS-2200) - only shown when multiple notebooks
+        show_tabs ? NotebookTabs(notebooks; active_id=active_notebook_id) : nothing,
 
         # Main Content Area - generous, breathable
         MainEl(:id => "page-content", :class => "flex-1 max-w-4xl w-full mx-auto px-8 py-12",

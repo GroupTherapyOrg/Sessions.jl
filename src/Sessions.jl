@@ -89,6 +89,9 @@ include("components/server/FileBrowser.jl")
 # Terminal component (SESSIONS-2110)
 include("components/server/TerminalPanel.jl")
 
+# Notebook tabs component (SESSIONS-2200)
+include("components/server/NotebookTabs.jl")
+
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
 # =============================================================================
@@ -177,5 +180,8 @@ export FileEntry, list_directory, format_file_size
 # Terminal (SESSIONS-2110)
 export TerminalPanel, TerminalTabs, TerminalUISession
 export create_terminal_ui_session, get_terminal_ui_session, close_terminal_ui_session!
+
+# Notebook tabs (SESSIONS-2200)
+export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script
 
 end # module

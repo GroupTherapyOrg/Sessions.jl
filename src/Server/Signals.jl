@@ -34,6 +34,12 @@ const USERS_SIGNAL = Ref{Any}(nothing)
 # Cells list signal for dynamic cell management (add/delete without refresh)
 const CELLS_LIST_SIGNAL = Ref{Any}(nothing)
 
+# Notebook tabs signal - tracks all open notebooks for tab UI
+const NOTEBOOK_TABS_SIGNAL = Ref{Any}(nothing)
+
+# Active notebook signal - which notebook is currently displayed
+const ACTIVE_NOTEBOOK_SIGNAL = Ref{Any}(nothing)
+
 """
 Initialize global Therapy.jl server signals.
 Per-cell signals are created dynamically when cells are added.
@@ -48,6 +54,13 @@ function setup_signals!()
     # Cells list - tracks which cells exist and their order
     # Client subscribes to this to know when to add/remove cell DOM elements
     CELLS_LIST_SIGNAL[] = create_server_signal("cells_list", Dict{String, Any}[])
+
+    # Notebook tabs - list of open notebooks for tab bar
+    # Each entry: {id, title, modified, created_at}
+    NOTEBOOK_TABS_SIGNAL[] = create_server_signal("notebook_tabs", Dict{String, Any}[])
+
+    # Active notebook - which notebook is currently displayed
+    ACTIVE_NOTEBOOK_SIGNAL[] = create_server_signal("active_notebook", "")
 end
 
 # =============================================================================
@@ -196,6 +209,55 @@ function broadcast_all_cell_states!(notebook::Notebook)
     for (id, cell) in notebook.cells
         set_cell_state!(id, cell.state)
     end
+end
+
+# =============================================================================
+# Notebook Tabs Signals (Multi-notebook support)
+# =============================================================================
+
+"""
+Update the notebook tabs signal with all open notebooks.
+Called when notebooks are opened, closed, or modified.
+"""
+function update_notebook_tabs_signal!()
+    sig = NOTEBOOK_TABS_SIGNAL[]
+    sig === nothing && return
+
+    # Build list of all open notebooks
+    tabs_data = [
+        Dict{String, Any}(
+            "id" => string(nb.id),
+            "title" => nb.path !== nothing ? basename(nb.path) : "Untitled",
+            "modified" => nb.modified,
+            "path" => nb.path
+        )
+        for nb in values(NOTEBOOKS)
+    ]
+
+    set_server_signal!(sig, tabs_data)
+end
+
+"""
+Set the active notebook ID. Broadcasts to all clients.
+"""
+function set_active_notebook!(notebook_id::Union{UUID, String})
+    sig = ACTIVE_NOTEBOOK_SIGNAL[]
+    sig === nothing && return
+
+    id_str = notebook_id isa UUID ? string(notebook_id) : notebook_id
+    set_server_signal!(sig, id_str)
+end
+
+"""
+Get the active notebook ID for a connection, or the default.
+"""
+function get_active_notebook_id(conn_id::String)::Union{UUID, Nothing}
+    if haskey(CONN_NOTEBOOK, conn_id)
+        return CONN_NOTEBOOK[conn_id]
+    elseif !isempty(NOTEBOOKS)
+        return first(keys(NOTEBOOKS))
+    end
+    return nothing
 end
 
 # =============================================================================
