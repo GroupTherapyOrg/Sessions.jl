@@ -1,32 +1,35 @@
 name = "Sessions"
 uuid = "c3d4e5f6-a7b8-9012-cdef-123456789012"
-authors = ["TherapeuticJulia"]
 version = "0.1.0"
+authors = ["TherapeuticJulia"]
 
 [deps]
-# Therapy.jl ecosystem
-Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
-
-# Pluto execution engine
+AbstractPlutoDingetjes = "6e696c72-6542-2067-7265-42206c756150"
 ExpressionExplorer = "21656369-7473-754a-2065-74616d696c43"
-PlutoDependencyExplorer = "72656b73-756c-7461-726b-72656b6b696b"
-Malt = "36869731-bdee-424d-aa32-cab38c994e3b"
-
-# Standard library
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
-Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
-UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+Malt = "36869731-bdee-424d-aa32-cab38c994e3b"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+PlutoDependencyExplorer = "72656b73-756c-7461-726b-72656b6b696b"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
+Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [sources]
 Therapy = {path = "../Therapy.jl"}
 
 [compat]
+AbstractPlutoDingetjes = "1"
 ExpressionExplorer = "1"
-PlutoDependencyExplorer = "1"
-Malt = "1"
 HTTP = "1"
 JSON3 = "1"
+Malt = "1"
 OrderedCollections = "1"
+PlutoDependencyExplorer = "1"
 julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
