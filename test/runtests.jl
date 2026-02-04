@@ -1187,6 +1187,325 @@ y = 2
                 @info "Skipping community notebook test - file not found: $path"
             end
         end
+
+        @testset "Community notebook: Getting Started.jl" begin
+            path = joinpath(fixtures_dir, "pluto_getting_started.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+                @test length(nb.cells) >= 10
+
+                # Check for specific content from the tutorial
+                found_cat = false
+                found_bind = false
+                for cell in values(nb.cells)
+                    if occursin("cat", cell.code)
+                        found_cat = true
+                    end
+                    if occursin("@bind", cell.code)
+                        found_bind = true
+                    end
+                end
+                @test found_cat  # The cat variable in the tutorial
+                @test found_bind  # Has @bind power_level
+
+                # Verify cell order is maintained
+                @test length(nb.cell_order) == length(nb.cells)
+
+                # Test round-trip
+                temp_path = tempname() * ".jl"
+                try
+                    save_notebook(nb, temp_path)
+                    nb2 = load_notebook(temp_path)
+                    @test length(nb2.cells) == length(nb.cells)
+
+                    # Verify content preserved
+                    cat_found = false
+                    for cell in values(nb2.cells)
+                        if occursin("cat", cell.code)
+                            cat_found = true
+                            break
+                        end
+                    end
+                    @test cat_found
+                finally
+                    rm(temp_path; force=true)
+                end
+            else
+                @info "Skipping community notebook test - file not found: $path"
+            end
+        end
+
+        @testset "Community notebook: PlutoUI Sample" begin
+            path = joinpath(fixtures_dir, "pluto_plutoui_sample.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+                @test length(nb.cells) >= 10
+
+                # Check for PlutoUI imports
+                found_plutoui = false
+                found_slider = false
+                found_scrubbable = false
+                for cell in values(nb.cells)
+                    if occursin("using PlutoUI", cell.code)
+                        found_plutoui = true
+                    end
+                    if occursin("Slider", cell.code)
+                        found_slider = true
+                    end
+                    if occursin("Scrubbable", cell.code)
+                        found_scrubbable = true
+                    end
+                end
+                @test found_plutoui
+                @test found_slider
+                @test found_scrubbable
+
+                # Test round-trip preserves all content
+                temp_path = tempname() * ".jl"
+                try
+                    save_notebook(nb, temp_path)
+                    nb2 = load_notebook(temp_path)
+                    @test length(nb2.cells) == length(nb.cells)
+                    @test length(nb2.cell_order) == length(nb.cell_order)
+                finally
+                    rm(temp_path; force=true)
+                end
+            else
+                @info "Skipping community notebook test - file not found: $path"
+            end
+        end
+    end
+
+    # =========================================================================
+    # SESSIONS-2202: Pluto Notebook Compatibility Suite
+    # =========================================================================
+    @testset "Pluto Compatibility Suite (SESSIONS-2202)" begin
+        fixtures_dir = joinpath(@__DIR__, "fixtures")
+
+        @testset "5+ community notebooks load correctly" begin
+            # List of all Pluto notebooks we test against
+            notebooks = [
+                "pluto_sample_basic.jl",
+                "pluto_sample_hanoi.jl",
+                "pluto_sample_interactive.jl",
+                "pluto_getting_started.jl",
+                "pluto_plutoui_sample.jl"
+            ]
+
+            loaded_count = 0
+            for notebook_file in notebooks
+                path = joinpath(fixtures_dir, notebook_file)
+                if isfile(path)
+                    @testset "Load: $notebook_file" begin
+                        nb = load_notebook(path)
+                        @test nb !== nothing
+                        @test !isempty(nb.cells)
+                        @test length(nb.cell_order) == length(nb.cells)
+                        loaded_count += 1
+                    end
+                end
+            end
+            @test loaded_count >= 5  # Must successfully load at least 5 notebooks
+        end
+
+        @testset "Cell dependency analysis works" begin
+            # Test with Hanoi notebook - has functions and dependencies
+            path = joinpath(fixtures_dir, "pluto_sample_hanoi.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+
+                # Analyze all cells
+                for cell in values(nb.cells)
+                    analyze_cell!(cell)
+                end
+
+                # Look for cells that define functions
+                functions_found = Set{Symbol}()
+                for cell in values(nb.cells)
+                    union!(functions_found, cell.funcdefs)
+                end
+
+                # Hanoi notebook should have islegal, iscomplete, move, solve
+                @test !isempty(functions_found)
+
+                # Test topology computation
+                update_topology!(nb)
+                @test nb.topology !== nothing
+            end
+        end
+
+        @testset "Round-trip preserves all data" begin
+            notebooks = [
+                "pluto_sample_basic.jl",
+                "pluto_sample_hanoi.jl",
+                "pluto_sample_interactive.jl"
+            ]
+
+            for notebook_file in notebooks
+                path = joinpath(fixtures_dir, notebook_file)
+                if isfile(path)
+                    @testset "Round-trip: $notebook_file" begin
+                        nb_orig = load_notebook(path)
+
+                        temp_path = tempname() * ".jl"
+                        try
+                            save_notebook(nb_orig, temp_path)
+                            nb_reloaded = load_notebook(temp_path)
+
+                            # Same number of cells
+                            @test length(nb_reloaded.cells) == length(nb_orig.cells)
+
+                            # Same cell order
+                            @test nb_reloaded.cell_order == nb_orig.cell_order
+
+                            # Same code in each cell
+                            for (id, orig_cell) in nb_orig.cells
+                                reloaded_cell = nb_reloaded.cells[id]
+                                @test reloaded_cell.code == orig_cell.code
+                                @test reloaded_cell.folded == orig_cell.folded
+                            end
+                        finally
+                            rm(temp_path; force=true)
+                        end
+                    end
+                end
+            end
+        end
+
+        @testset "Saved notebooks are valid Pluto format" begin
+            nb = Notebook()
+            cell1 = add_cell!(nb; code="# Test markdown cell\nmd\"Hello\"")
+            cell1.folded = true  # Markdown cells are typically folded
+            cell2 = add_cell!(nb; code="x = 42")
+            cell3 = add_cell!(nb; code="y = x * 2")
+
+            for c in values(nb.cells)
+                analyze_cell!(c)
+            end
+
+            temp_path = tempname() * ".jl"
+            try
+                save_notebook(nb, temp_path)
+                content = read(temp_path, String)
+
+                # Check Pluto header
+                @test startswith(content, "### A Pluto.jl notebook ###")
+
+                # Check cell markers present
+                @test occursin("# ╔═╡", content)
+
+                # Check cell order section
+                @test occursin("# ╔═╡ Cell order:", content)
+
+                # Check folded marker for markdown cell
+                @test occursin("# ╟─", content)
+
+                # Check visible marker for code cells
+                @test occursin("# ╠═", content)
+
+                # Check code is present
+                @test occursin("x = 42", content)
+                @test occursin("y = x * 2", content)
+            finally
+                rm(temp_path; force=true)
+            end
+        end
+
+        @testset "Multi-line cells preserved" begin
+            path = joinpath(fixtures_dir, "pluto_sample_hanoi.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+
+                # Find cells with multiple lines
+                multi_line_cells = []
+                for cell in values(nb.cells)
+                    if count('\n', cell.code) > 1
+                        push!(multi_line_cells, cell)
+                    end
+                end
+
+                @test !isempty(multi_line_cells)
+
+                # Verify multi-line code is preserved on round-trip
+                temp_path = tempname() * ".jl"
+                try
+                    save_notebook(nb, temp_path)
+                    nb2 = load_notebook(temp_path)
+
+                    for orig_cell in multi_line_cells
+                        reloaded_cell = nb2.cells[orig_cell.id]
+                        @test reloaded_cell.code == orig_cell.code
+                    end
+                finally
+                    rm(temp_path; force=true)
+                end
+            end
+        end
+
+        @testset "Special characters in code preserved" begin
+            nb = Notebook()
+            # Add cells with special characters
+            cell1 = add_cell!(nb; code="s = \"Hello\\nWorld\"")
+            cell2 = add_cell!(nb; code="emoji = \"🐱🐶\"")
+            cell3 = add_cell!(nb; code="math = \"π ≈ 3.14159\"")
+            cell4 = add_cell!(nb; code="special = \"quotes: \\\"inside\\\"\"")
+
+            for c in values(nb.cells)
+                analyze_cell!(c)
+            end
+
+            temp_path = tempname() * ".jl"
+            try
+                save_notebook(nb, temp_path)
+                nb2 = load_notebook(temp_path)
+
+                @test nb2.cells[cell1.id].code == cell1.code
+                @test nb2.cells[cell2.id].code == cell2.code
+                @test nb2.cells[cell3.id].code == cell3.code
+                @test nb2.cells[cell4.id].code == cell4.code
+            finally
+                rm(temp_path; force=true)
+            end
+        end
+
+        @testset "@bind cells detected correctly" begin
+            path = joinpath(fixtures_dir, "pluto_sample_interactive.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+
+                # Count cells with @bind
+                bind_cells = 0
+                for cell in values(nb.cells)
+                    if occursin("@bind", cell.code)
+                        bind_cells += 1
+                    end
+                end
+
+                @test bind_cells >= 5  # Interactive notebook has multiple @bind cells
+            end
+        end
+
+        @testset "Notebook version info preserved" begin
+            path = joinpath(fixtures_dir, "pluto_sample_basic.jl")
+            if isfile(path)
+                # Read original file to get version
+                original_content = read(path, String)
+                version_match = match(r"# v(\d+\.\d+\.\d+)", original_content)
+
+                nb = load_notebook(path)
+
+                temp_path = tempname() * ".jl"
+                try
+                    save_notebook(nb, temp_path)
+                    saved_content = read(temp_path, String)
+
+                    # Should have a version marker
+                    @test occursin("# v", saved_content)
+                finally
+                    rm(temp_path; force=true)
+                end
+            end
+        end
     end
 
 end
