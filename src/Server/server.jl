@@ -1231,6 +1231,326 @@ function setup_open_file_channel!()
     end
 end
 
+# =============================================================================
+# SECTION 6C: TERMINAL CHANNEL HANDLERS (SESSIONS-2110)
+# =============================================================================
+#
+# Terminal emulation via PTY (pseudo-terminal).
+# Uses Julia's UnixIO package for PTY management on Unix systems.
+# On Windows, uses ConPTY via external process.
+
+"""
+Active terminal sessions.
+Maps session_id -> PTY process info
+"""
+const TERMINAL_SESSIONS = Dict{String, Dict{String, Any}}()
+
+"""
+Terminal session cleanup task references.
+"""
+const TERMINAL_CLEANUP_TASKS = Dict{String, Any}()
+
+"""
+Create a new terminal session with PTY.
+Returns session info dict.
+"""
+function create_terminal_session!(session_id::String; cols::Int=80, rows::Int=24)
+    # Check if session already exists
+    if haskey(TERMINAL_SESSIONS, session_id)
+        return TERMINAL_SESSIONS[session_id]
+    end
+
+    # Get shell from environment
+    shell = get(ENV, "SHELL", "/bin/bash")
+    if !isfile(shell)
+        shell = Sys.iswindows() ? "cmd.exe" : "/bin/sh"
+    end
+
+    try
+        # Create PTY process
+        # Note: On Unix, we use a subprocess with script to get a PTY
+        # On Windows, we'd use ConPTY but for now we use a simpler approach
+
+        if Sys.iswindows()
+            # Windows: Use cmd.exe with pipes (simplified, no true PTY)
+            process = open(`cmd.exe`, "r+")
+            session = Dict{String, Any}(
+                "id" => session_id,
+                "process" => process,
+                "shell" => "cmd.exe",
+                "cols" => cols,
+                "rows" => rows,
+                "created_at" => time(),
+                "active" => true
+            )
+        else
+            # Unix: Use script -q to allocate PTY
+            # The trick: `script -q /dev/null shell` gives us a PTY
+            env = copy(ENV)
+            env["TERM"] = "xterm-256color"
+            env["COLUMNS"] = string(cols)
+            env["LINES"] = string(rows)
+
+            # Create process with PTY
+            process = open(pipeline(ignorestatus(`script -q /dev/null $(shell)`); env=env), "r+")
+
+            session = Dict{String, Any}(
+                "id" => session_id,
+                "process" => process,
+                "shell" => shell,
+                "cols" => cols,
+                "rows" => rows,
+                "created_at" => time(),
+                "active" => true
+            )
+        end
+
+        TERMINAL_SESSIONS[session_id] = session
+
+        # Start output reader task
+        start_terminal_reader!(session_id)
+
+        println("[Sessions] Terminal created: $session_id (shell: $shell)")
+        return session
+
+    catch e
+        println("[Sessions] Failed to create terminal: $(sprint(showerror, e))")
+        return nothing
+    end
+end
+
+"""
+Start a task to read terminal output and broadcast to clients.
+"""
+function start_terminal_reader!(session_id::String)
+    session = get(TERMINAL_SESSIONS, session_id, nothing)
+    if session === nothing
+        return
+    end
+
+    process = session["process"]
+
+    # Create async task to read output
+    task = @async begin
+        try
+            while session["active"] && isopen(process)
+                # Read available data (non-blocking with timeout)
+                if bytesavailable(process) > 0
+                    data = read(process, bytesavailable(process))
+                    if !isempty(data)
+                        output = String(data)
+                        # Broadcast to all clients subscribed to this terminal
+                        broadcast_channel!("terminal_output_$session_id", Dict(
+                            "session_id" => session_id,
+                            "output" => output
+                        ))
+                    end
+                else
+                    # Small sleep to prevent busy loop
+                    sleep(0.05)
+                end
+            end
+        catch e
+            if !(e isa EOFError || e isa IOError)
+                println("[Sessions] Terminal reader error: $(sprint(showerror, e))")
+            end
+        finally
+            # Mark session as inactive
+            if haskey(TERMINAL_SESSIONS, session_id)
+                TERMINAL_SESSIONS[session_id]["active"] = false
+            end
+        end
+    end
+
+    TERMINAL_CLEANUP_TASKS[session_id] = task
+end
+
+"""
+Write data to a terminal session.
+"""
+function terminal_write!(session_id::String, data::String)
+    session = get(TERMINAL_SESSIONS, session_id, nothing)
+    if session === nothing || !session["active"]
+        return false
+    end
+
+    try
+        process = session["process"]
+        if isopen(process)
+            write(process, data)
+            flush(process)
+            return true
+        end
+    catch e
+        println("[Sessions] Terminal write error: $(sprint(showerror, e))")
+    end
+
+    return false
+end
+
+"""
+Resize a terminal session.
+"""
+function terminal_resize!(session_id::String, cols::Int, rows::Int)
+    session = get(TERMINAL_SESSIONS, session_id, nothing)
+    if session === nothing
+        return false
+    end
+
+    session["cols"] = cols
+    session["rows"] = rows
+
+    # On Unix, send SIGWINCH to notify of resize
+    # Note: This is a simplified version - full PTY resize requires ioctl
+    if !Sys.iswindows()
+        try
+            process = session["process"]
+            # Can't easily resize with script approach
+            # Would need proper PTY library for this
+        catch e
+            println("[Sessions] Terminal resize error: $(sprint(showerror, e))")
+        end
+    end
+
+    return true
+end
+
+"""
+Close a terminal session.
+"""
+function close_terminal_session!(session_id::String)
+    session = get(TERMINAL_SESSIONS, session_id, nothing)
+    if session === nothing
+        return
+    end
+
+    session["active"] = false
+
+    try
+        process = session["process"]
+        if isopen(process)
+            close(process)
+        end
+    catch e
+        # Ignore close errors
+    end
+
+    # Cancel reader task
+    if haskey(TERMINAL_CLEANUP_TASKS, session_id)
+        delete!(TERMINAL_CLEANUP_TASKS, session_id)
+    end
+
+    delete!(TERMINAL_SESSIONS, session_id)
+    println("[Sessions] Terminal closed: $session_id")
+end
+
+"""
+Handle create_terminal channel messages.
+Message: {session_id, cols?, rows?}
+"""
+function setup_create_terminal_channel!()
+    on_channel_message("create_terminal") do conn, data
+        session_id = get(data, "session_id", string(uuid4()))
+        cols = get(data, "cols", 80)
+        rows = get(data, "rows", 24)
+
+        session = create_terminal_session!(session_id; cols=cols, rows=rows)
+
+        if session !== nothing
+            # Create output channel for this terminal
+            create_channel("terminal_output_$session_id")
+
+            # Send confirmation
+            send_channel!("terminal_created", conn.id, Dict(
+                "session_id" => session_id,
+                "shell" => session["shell"]
+            ))
+
+            # Send initial message
+            broadcast_channel!("terminal_output_$session_id", Dict(
+                "session_id" => session_id,
+                "output" => "\x1b[32mTerminal ready.\x1b[0m\r\n"
+            ))
+        else
+            send_channel!("error", conn.id, Dict(
+                "message" => "Failed to create terminal"
+            ))
+        end
+    end
+end
+
+"""
+Handle terminal_input channel messages.
+Message: {session_id, data}
+"""
+function setup_terminal_input_channel!()
+    on_channel_message("terminal_input") do conn, data
+        session_id = get(data, "session_id", "")
+        input_data = get(data, "data", "")
+
+        if !isempty(session_id) && !isempty(input_data)
+            terminal_write!(session_id, input_data)
+        end
+    end
+end
+
+"""
+Handle terminal_resize channel messages.
+Message: {session_id, cols, rows}
+"""
+function setup_terminal_resize_channel!()
+    on_channel_message("terminal_resize") do conn, data
+        session_id = get(data, "session_id", "")
+        cols = get(data, "cols", 80)
+        rows = get(data, "rows", 24)
+
+        if !isempty(session_id)
+            terminal_resize!(session_id, cols, rows)
+        end
+    end
+end
+
+"""
+Handle close_terminal channel messages.
+Message: {session_id}
+"""
+function setup_close_terminal_channel!()
+    on_channel_message("close_terminal") do conn, data
+        session_id = get(data, "session_id", "")
+        if !isempty(session_id)
+            close_terminal_session!(session_id)
+        end
+    end
+end
+
+"""
+Handle new_terminal channel messages (create terminal and return ID).
+Message: {title?}
+"""
+function setup_new_terminal_channel!()
+    on_channel_message("new_terminal") do conn, data
+        title = get(data, "title", "Terminal")
+        session_id = string(uuid4())
+
+        session = create_terminal_session!(session_id)
+
+        if session !== nothing
+            create_channel("terminal_output_$session_id")
+
+            # Send terminal info to client for UI creation
+            send_channel!("terminal_created", conn.id, Dict(
+                "session_id" => session_id,
+                "title" => title,
+                "shell" => session["shell"]
+            ))
+        else
+            send_channel!("error", conn.id, Dict(
+                "message" => "Failed to create terminal"
+            ))
+        end
+    end
+end
+
 """
 Create all message channels.
 Must be called before registering handlers.
@@ -1258,6 +1578,14 @@ function create_channels!()
     create_channel("delete_item")
     create_channel("rename_item")
     create_channel("open_file")
+
+    # Terminal channels (SESSIONS-2110)
+    create_channel("create_terminal")
+    create_channel("terminal_input")
+    create_channel("terminal_resize")
+    create_channel("close_terminal")
+    create_channel("new_terminal")
+    create_channel("terminal_created")  # Response
 
     # Response channels
     create_channel("cell_state")
@@ -1301,6 +1629,13 @@ function setup_channels!()
     setup_delete_item_channel!()
     setup_rename_item_channel!()
     setup_open_file_channel!()
+
+    # Terminal channels (SESSIONS-2110)
+    setup_create_terminal_channel!()
+    setup_terminal_input_channel!()
+    setup_terminal_resize_channel!()
+    setup_close_terminal_channel!()
+    setup_new_terminal_channel!()
 end
 
 # =============================================================================

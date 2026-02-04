@@ -86,6 +86,9 @@ include("server/server.jl")
 # FileBrowser component (must come after server.jl for FileEntry type)
 include("components/server/FileBrowser.jl")
 
+# Terminal component (SESSIONS-2110)
+include("components/server/TerminalPanel.jl")
+
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
 # =============================================================================
@@ -170,5 +173,9 @@ export Slider, TextField, CheckBox, Select, NumberField
 # File browser (SESSIONS-2100)
 export FileBrowser, BrowserToolbar, Breadcrumbs, FileList, FileItem, FileContextMenu, ContextMenuItem
 export FileEntry, list_directory, format_file_size
+
+# Terminal (SESSIONS-2110)
+export TerminalPanel, TerminalTabs, TerminalUISession
+export create_terminal_ui_session, get_terminal_ui_session, close_terminal_ui_session!
 
 end # module

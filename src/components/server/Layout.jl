@@ -85,6 +85,12 @@ function sessions_styles()
     }
     </script>
 
+    <!-- xterm.js for terminal emulation -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+
     <!-- Elegant parchment-inspired styling -->
     <style>
     /* ═══════════════════════════════════════════════════════════════════
@@ -672,6 +678,231 @@ function sessions_script()
         });
 
         // =====================================================================
+        // Terminal API (SESSIONS-2110)
+        // =====================================================================
+
+        // Registry of active terminal instances
+        var terminalInstances = {};
+
+        // Initialize xterm.js for a terminal container
+        function initTerminal(sessionId) {
+            var container = document.getElementById('terminal-' + sessionId);
+            if (!container || !container.hasAttribute('data-xterm')) return null;
+
+            // Skip if already initialized
+            if (terminalInstances[sessionId]) {
+                return terminalInstances[sessionId];
+            }
+
+            // Check that xterm is loaded
+            if (typeof Terminal === 'undefined') {
+                console.warn('[Sessions] xterm.js not loaded yet');
+                return null;
+            }
+
+            // Create terminal with elegant theme
+            var term = new Terminal({
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                fontSize: 13,
+                lineHeight: 1.5,
+                cursorBlink: true,
+                cursorStyle: 'bar',
+                theme: {
+                    background: '#0a0a0a',
+                    foreground: '#e8e0d5',
+                    cursor: '#c9a86c',
+                    cursorAccent: '#0a0a0a',
+                    selectionBackground: 'rgba(201, 168, 108, 0.3)',
+                    black: '#1a1816',
+                    red: '#c97070',
+                    green: '#81c995',
+                    yellow: '#f0c674',
+                    blue: '#8ab4f8',
+                    magenta: '#c9a0dc',
+                    cyan: '#7dd3e8',
+                    white: '#e8e0d5',
+                    brightBlack: '#5c5344',
+                    brightRed: '#e8a0a0',
+                    brightGreen: '#a0e0b0',
+                    brightYellow: '#f8d898',
+                    brightBlue: '#a8c8f8',
+                    brightMagenta: '#d8b8e8',
+                    brightCyan: '#98e0f0',
+                    brightWhite: '#f8f0e8'
+                }
+            });
+
+            // Load addons
+            var fitAddon = null;
+            var webLinksAddon = null;
+
+            if (typeof FitAddon !== 'undefined') {
+                fitAddon = new FitAddon.FitAddon();
+                term.loadAddon(fitAddon);
+            }
+
+            if (typeof WebLinksAddon !== 'undefined') {
+                webLinksAddon = new WebLinksAddon.WebLinksAddon();
+                term.loadAddon(webLinksAddon);
+            }
+
+            // Remove loading indicator
+            var loading = document.getElementById('terminal-loading-' + sessionId);
+            if (loading) loading.remove();
+
+            // Open terminal in container
+            term.open(container);
+
+            // Fit to container
+            if (fitAddon) {
+                try {
+                    fitAddon.fit();
+                } catch (e) {
+                    console.warn('[Sessions] Fit addon error:', e);
+                }
+            }
+
+            // Handle window resize
+            var resizeHandler = function() {
+                if (fitAddon) {
+                    try {
+                        fitAddon.fit();
+                        // Send resize to server
+                        sendAction('terminal_resize', {
+                            session_id: sessionId,
+                            cols: term.cols,
+                            rows: term.rows
+                        });
+                    } catch (e) {}
+                }
+            };
+            window.addEventListener('resize', resizeHandler);
+
+            // Handle user input - send to server
+            term.onData(function(data) {
+                sendAction('terminal_input', {
+                    session_id: sessionId,
+                    data: data
+                });
+            });
+
+            // Store instance
+            terminalInstances[sessionId] = {
+                term: term,
+                fitAddon: fitAddon,
+                resizeHandler: resizeHandler
+            };
+
+            // Subscribe to terminal output channel
+            if (typeof TherapyWS !== 'undefined') {
+                TherapyWS.onChannelMessage('terminal_output_' + sessionId, function(data) {
+                    if (data.output) {
+                        term.write(data.output);
+                    }
+                });
+            }
+
+            // Request terminal creation on server
+            sendAction('create_terminal', {
+                session_id: sessionId,
+                cols: term.cols,
+                rows: term.rows
+            });
+
+            // Write welcome message
+            term.writeln('\\x1b[2mConnecting to server...\\x1b[0m');
+
+            console.log('[Sessions] Terminal initialized:', sessionId);
+            return terminalInstances[sessionId];
+        }
+
+        // Initialize all terminals on the page
+        function initAllTerminals() {
+            var containers = document.querySelectorAll('[data-xterm]');
+            containers.forEach(function(container) {
+                var sessionId = container.getAttribute('data-session-id');
+                if (sessionId && !terminalInstances[sessionId]) {
+                    initTerminal(sessionId);
+                }
+            });
+        }
+
+        // Clear terminal content
+        window.clearTerminal = function(sessionId) {
+            var instance = terminalInstances[sessionId];
+            if (instance && instance.term) {
+                instance.term.clear();
+            }
+        };
+
+        // Close terminal
+        window.closeTerminal = function(sessionId) {
+            var instance = terminalInstances[sessionId];
+            if (instance) {
+                // Notify server
+                sendAction('close_terminal', { session_id: sessionId });
+
+                // Remove event listener
+                if (instance.resizeHandler) {
+                    window.removeEventListener('resize', instance.resizeHandler);
+                }
+
+                // Dispose terminal
+                if (instance.term) {
+                    instance.term.dispose();
+                }
+
+                delete terminalInstances[sessionId];
+            }
+
+            // Remove panel from DOM
+            var panel = document.querySelector('[data-terminal-id="' + sessionId + '"]');
+            if (panel) {
+                panel.remove();
+            }
+
+            console.log('[Sessions] Terminal closed:', sessionId);
+        };
+
+        // Create new terminal
+        window.createTerminal = function(title) {
+            sendAction('new_terminal', { title: title || 'Terminal' });
+        };
+
+        // Switch active terminal (for tabbed interface)
+        window.switchTerminal = function(sessionId) {
+            // Hide all panels
+            var panels = document.querySelectorAll('.terminal-panel-wrapper');
+            panels.forEach(function(panel) {
+                panel.style.display = 'none';
+            });
+
+            // Show selected panel
+            var selected = document.querySelector('[data-panel-id="' + sessionId + '"]');
+            if (selected) {
+                selected.style.display = 'block';
+            }
+
+            // Update tab states
+            var tabs = document.querySelectorAll('.terminal-tab');
+            tabs.forEach(function(tab) {
+                var isActive = tab.getAttribute('data-tab-id') === sessionId;
+                tab.classList.toggle('bg-white', isActive);
+                tab.classList.toggle('dark:bg-neutral-800', isActive);
+                tab.classList.toggle('border-t-2', isActive);
+                tab.classList.toggle('border-pluto-blue', isActive);
+            });
+
+            // Fit terminal
+            var instance = terminalInstances[sessionId];
+            if (instance && instance.fitAddon) {
+                setTimeout(function() {
+                    try { instance.fitAddon.fit(); } catch (e) {}
+                }, 50);
+            }
+        };
+
+        // =====================================================================
         // Paste Handler (Pluto notebook import)
         // =====================================================================
 
@@ -730,6 +961,9 @@ function sessions_script()
 
             // Set up bonds on initial page load and after mutations
             setupAllBonds();
+
+            // Initialize any terminals on the page
+            initAllTerminals();
 
             // Watch for cell output changes via MutationObserver
             // This catches when data-signal-html updates the output
