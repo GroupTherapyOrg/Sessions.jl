@@ -1258,8 +1258,8 @@ function Layout(content; dark_mode_toggle=nothing, notebooks=nothing, active_not
             content
         ),
 
-        # Footer - whisper quiet
-        Footer(:class => "border-t border-stone-200/40 dark:border-neutral-800/40 transition-colors duration-300",
+        # Footer - whisper quiet (add bottom padding for status bar)
+        Footer(:class => "border-t border-stone-200/40 dark:border-neutral-800/40 transition-colors duration-300 pb-8",
             Div(:class => "max-w-4xl mx-auto py-5 px-8",
                 P(:class => "text-center text-stone-400 dark:text-stone-600 text-xs tracking-wide",
                     "Built with ",
@@ -1270,7 +1270,10 @@ function Layout(content; dark_mode_toggle=nothing, notebooks=nothing, active_not
                     )
                 )
             )
-        )
+        ),
+
+        # Status Bar - bottom fixed bar (SESSIONS-2203)
+        StatusBar()
     )
 end
 
@@ -1295,5 +1298,5 @@ function sessions_head_extra()
     ext_libs = external_library_script()
     ext_libs_str = ext_libs isa Therapy.RawHtml ? ext_libs.content : render_to_string(ext_libs)
 
-    sessions_styles() * ws_str * router_str * ext_libs_str * sessions_script()
+    sessions_styles() * ws_str * router_str * ext_libs_str * sessions_script() * statusbar_script()
 end

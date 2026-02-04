@@ -95,6 +95,9 @@ include("components/server/NotebookTabs.jl")
 # Sidebar component with panel switching (SESSIONS-2201)
 include("components/server/Sidebar.jl")
 
+# StatusBar component with kernel/git/connection status (SESSIONS-2203)
+include("components/server/StatusBar.jl")
+
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
 # =============================================================================
@@ -191,5 +194,8 @@ export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script
 export Sidebar, SidebarTabs, SidebarTabButton, RunningPanel, SettingsPanel, RunningItem
 export SidebarPanel, PANEL_FILES, PANEL_RUNNING, PANEL_SETTINGS
 export sidebar_script, CollapsedSidebar
+
+# StatusBar (SESSIONS-2203)
+export StatusBar, KernelStatus, GitStatus, ConnectionStatus, statusbar_script
 
 end # module
