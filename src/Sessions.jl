@@ -29,6 +29,7 @@ include("Engine/Cell.jl")
 include("Engine/Notebook.jl")
 include("Engine/Output.jl")      # Must come before Worker.jl (defines escape_html)
 include("Engine/Reactivity.jl")  # ExpressionExplorer & PDE integration
+include("Engine/Workspace.jl")   # Module-based isolation for cell evaluation
 include("Engine/Worker.jl")      # Malt worker execution
 
 # =============================================================================
@@ -135,6 +136,10 @@ export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
 export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!
 export load_notebook, save_notebook, is_pluto_notebook
+
+# Workspace API (module-based isolation)
+export Workspace, create_workspace, run_cell!, cleanup_variables!
+export reset_workspace!, get_variable, set_variable!, is_defined, list_defined
 
 # Phase 2: Smart multi-line cells and Pluto paste
 export parse_cell_code, get_executable_code
