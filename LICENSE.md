@@ -46,9 +46,8 @@ These are starting points, not rigid rules:
 
 | Organization Size | Suggested Annual License |
 |-------------------|--------------------------|
-| $1M – $5M revenue | $1,000 – $3,000 |
-| $5M – $25M revenue | $5,000 – $15,000 |
-| $25M+ revenue | Let's talk |
+| $100K – $1M revenue | $5,000 – $15,000 |
+| $1M – $25M+ revenue | Let's talk |
 
 **Early adopters, startups, and multi-year commitments get discounts.**
 
