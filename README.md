@@ -1,5 +1,14 @@
 # Sessions.jl
 
+
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo/sessions_dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="logo/sessions_light.svg">
+    <img alt="Therapy.jl" src="logo/logo_light.svg" height="60">
+  </picture>
+</div>
+
 A VSCode + Pluto hybrid IDE and notebook environment built entirely on [Therapy.jl](https://github.com/TherapeuticJulia/Therapy.jl).
 
 ## Vision
