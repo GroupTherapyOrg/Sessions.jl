@@ -423,9 +423,13 @@ function set_cell_output!(cell_id::UUID, output::Union{Nothing, CellOutput}, run
     runtime_signal_name = "cell_runtime_$(id_str)"
 
     output_html = output !== nothing ? output.html : ""
+    println("[Sessions] set_cell_output! $(id_str[1:8]): html=$(length(output_html)) chars")
+
     output_sig = get_server_signal_by_name(output_signal_name)
     if output_sig !== nothing
         set_server_signal!(output_sig, output_html)
+    else
+        @warn "[Sessions] Signal not found: $output_signal_name — output dropped"
     end
 
     runtime_str = runtime_ms !== nothing ? string(round(runtime_ms, digits=1)) : ""
@@ -543,14 +547,15 @@ function setup_execute_channel!()
         println("[Sessions] Cell defines: $(cell.definitions)")
         println("[Sessions] Cell references: $(cell.references)")
 
+        # Mark as running and broadcast immediately
+        cell.state = CELL_RUNNING
         broadcast_cell_state(notebook_id, cell)
 
-        try
+        # Run execution async so WS handler returns immediately,
+        # allowing signal updates to reach the client
+        @async try
             cells_to_run = get_execution_order(notebook, [cell_id])
             println("[Sessions] Cells to run ($(length(cells_to_run))): $(map(c -> string(c.id)[1:8], cells_to_run))")
-            for c in cells_to_run
-                println("[Sessions]   - $(string(c.id)[1:8]): defs=$(c.definitions), refs=$(c.references)")
-            end
 
             results = execute_reactive!(notebook, cell_id)
 
@@ -558,9 +563,12 @@ function setup_execute_channel!()
                 broadcast_cell_state(notebook_id, c)
                 broadcast_cell_output(notebook_id, c)
             end
+            println("[Sessions] Execution complete for cell $(string(cell_id)[1:8])")
         catch e
             println("[Sessions] ERROR: $(sprint(showerror, e))")
-            send_channel!("error", conn.id, Dict(
+            cell.state = CELL_ERROR
+            broadcast_cell_state(notebook_id, cell)
+            broadcast_channel!("error", Dict(
                 "message" => "Execution failed: $(sprint(showerror, e))"
             ))
         end
@@ -589,7 +597,7 @@ function setup_add_cell_channel!()
         register_cell_signals!(cell)
         update_cells_list_signal!(notebook)
 
-        cell_html = render_to_string(CellView(cell))
+        cell_html = render_to_string(IDECellCard(cell))
 
         broadcast_channel!("cell_added", Dict(
             "notebook_id" => string(notebook_id),
@@ -748,11 +756,26 @@ function setup_run_all_channel!()
             return
         end
 
-        run_all!(notebook)
-
+        # Mark all cells as queued immediately
         for cell in values(notebook.cells)
+            cell.state = CELL_QUEUED
             broadcast_cell_state(notebook_id, cell)
-            broadcast_cell_output(notebook_id, cell)
+        end
+
+        # Run async so WS handler returns immediately
+        @async try
+            run_all!(notebook)
+
+            for cell in values(notebook.cells)
+                broadcast_cell_state(notebook_id, cell)
+                broadcast_cell_output(notebook_id, cell)
+            end
+            println("[Sessions] Run all complete")
+        catch e
+            println("[Sessions] Run all ERROR: $(sprint(showerror, e))")
+            broadcast_channel!("error", Dict(
+                "message" => "Run all failed: $(sprint(showerror, e))"
+            ))
         end
     end
 end
@@ -826,7 +849,7 @@ function setup_paste_content_channel!()
         update_cells_list_signal!(notebook)
 
         for (i, cell) in enumerate(created_cells)
-            cell_html = render_to_string(CellView(cell))
+            cell_html = render_to_string(IDECellCard(cell))
             insert_after = i == 1 ? after : created_cells[i-1].id
 
             broadcast_channel!("cell_added", Dict(
@@ -2024,6 +2047,16 @@ function create_channels!()
 
     # Workspace inspector channel (SESSIONS-3606)
     create_channel("workspace_vars")
+
+    # Multi-notebook channels (SESSIONS-3701)
+    create_channel("switch_notebook")
+    create_channel("close_notebook")
+    create_channel("notebook_switched")  # Response
+    create_channel("notebook_closed")    # Response
+
+    # Export channels (SESSIONS-3702)
+    create_channel("export_notebook")
+    create_channel("export_result")      # Response
 
     # Terminal channels (SESSIONS-2110)
     create_channel("create_terminal")
