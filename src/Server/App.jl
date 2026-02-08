@@ -154,20 +154,39 @@ function render_tabs()
 end
 
 """
+Build the status bar with current notebook context.
+"""
+function render_statusbar()
+    # Get notebook path for display
+    nb_path = if !isempty(NOTEBOOKS)
+        nb = first(values(NOTEBOOKS))
+        nb.path !== nothing ? nb.path : ""
+    else
+        ""
+    end
+
+    IDEStatusBar(
+        kernel_state="idle",
+        notebook_path=nb_path
+    )
+end
+
+"""
 Render full notebook page with IDE Layout.
 """
 function render_notebook_page()
     content = render_notebook_content()
     sidebar = render_sidebar_content()
     tabs = render_tabs()
+    statusbar = render_statusbar()
 
     page = Layout(content;
         sidebar=sidebar,
         tabs=tabs,
-        statusbar=StatusBar()
+        statusbar=statusbar
     )
 
-    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_script())
+    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_ide_script())
 end
 
 """

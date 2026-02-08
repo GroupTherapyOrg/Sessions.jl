@@ -92,6 +92,7 @@ include("components/server/StatusBar.jl")
 include("IDE/Layout.jl")
 include("IDE/Sidebar.jl")
 include("IDE/NotebookTabs.jl")
+include("IDE/StatusBar.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
@@ -191,7 +192,9 @@ export Sidebar, SidebarTabs, SidebarTabButton, RunningPanel, SettingsPanel, Runn
 export SidebarPanel, PANEL_FILES, PANEL_RUNNING, PANEL_SETTINGS
 export sidebar_script, CollapsedSidebar
 
-# StatusBar (SESSIONS-2203)
+# StatusBar (SESSIONS-2203 → SESSIONS-3403)
 export StatusBar, KernelStatus, GitStatus, ConnectionStatus, statusbar_script
+export IDEStatusBar, IDEKernelStatus, IDENotebookPath, IDECellProgress
+export IDEConnectionStatus, IDEGitStatus, statusbar_ide_script
 
 end # module
