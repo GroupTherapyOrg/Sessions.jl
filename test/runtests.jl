@@ -657,10 +657,126 @@ using Therapy
             end
         end
 
+        @testset "Select" begin
+            @testset "Select creation" begin
+                s = Sessions.Select(["a", "b", "c"])
+                @test length(s.options) == 3
+                @test s.default === nothing
+            end
+
+            @testset "Select with pairs" begin
+                s = Sessions.Select(["en" => "English", "es" => "Spanish"])
+                @test length(s.options) == 2
+                @test s.options[1].second == "English"
+            end
+
+            @testset "Select with Dict" begin
+                s = Sessions.Select(Dict("a" => "A", "b" => "B"))
+                @test length(s.options) == 2
+            end
+
+            @testset "Select initial_value" begin
+                s1 = Sessions.Select(["a", "b", "c"])
+                @test Sessions.initial_value(s1) == "a"
+
+                s2 = Sessions.Select(["a", "b", "c"], default="b")
+                @test Sessions.initial_value(s2) == "b"
+            end
+
+            @testset "Select transform_value" begin
+                s = Sessions.Select(["a", "b", "c"])
+                @test Sessions.transform_value(s, "a") == "a"
+                @test Sessions.transform_value(s, "b") == "b"
+            end
+
+            @testset "Select possible_values" begin
+                s = Sessions.Select(["a", "b", "c"])
+                @test Sessions.possible_values(s) == ["a", "b", "c"]
+            end
+
+            @testset "Select validate_value" begin
+                s = Sessions.Select(["a", "b", "c"])
+                @test Sessions.validate_value(s, "a") == true
+                @test Sessions.validate_value(s, "d") == false
+            end
+
+            @testset "Select HTML rendering" begin
+                s = Sessions.Select(["dog", "cat", "bird"], default="cat")
+                html = sprint(show, MIME"text/html"(), s)
+                @test occursin("<select", html)
+                @test occursin("<option", html)
+                @test occursin("selected", html)
+                @test occursin("cat", html)
+            end
+        end
+
+        @testset "NumberField" begin
+            @testset "NumberField creation" begin
+                nf = NumberField()
+                @test nf.range === nothing
+                @test nf.default === nothing
+            end
+
+            @testset "NumberField with range" begin
+                nf = NumberField(1:100, default=50)
+                @test nf.range == 1:100
+                @test nf.default == 50
+            end
+
+            @testset "NumberField initial_value" begin
+                nf1 = NumberField()
+                @test Sessions.initial_value(nf1) == 0
+
+                nf2 = NumberField(1:10)
+                @test Sessions.initial_value(nf2) == 1
+
+                nf3 = NumberField(1:10, default=5)
+                @test Sessions.initial_value(nf3) == 5
+            end
+
+            @testset "NumberField transform_value" begin
+                nf = NumberField(1:10)
+                @test Sessions.transform_value(nf, "5") == 5
+                @test Sessions.transform_value(nf, 7) == 7
+
+                nf_float = NumberField(0.0:0.1:1.0)
+                @test Sessions.transform_value(nf_float, "0.5") == 0.5
+            end
+
+            @testset "NumberField validate_value" begin
+                nf = NumberField(1:10)
+                @test Sessions.validate_value(nf, 5) == true
+                @test Sessions.validate_value(nf, 15) == false
+                @test Sessions.validate_value(nf, "not a number") == false
+
+                nf_open = NumberField()
+                @test Sessions.validate_value(nf_open, 999) == true
+            end
+
+            @testset "NumberField possible_values" begin
+                nf = NumberField(1:5)
+                @test Sessions.possible_values(nf) == [1, 2, 3, 4, 5]
+
+                nf_none = NumberField()
+                @test Sessions.possible_values(nf_none) === nothing
+            end
+
+            @testset "NumberField HTML rendering" begin
+                nf = NumberField(1:100, default=42)
+                html = sprint(show, MIME"text/html"(), nf)
+                @test occursin("<input type=\"number\"", html)
+                @test occursin("min=\"1\"", html)
+                @test occursin("max=\"100\"", html)
+                @test occursin("value=\"42\"", html)
+            end
+        end
+
         @testset "Widget exports" begin
             @test isdefined(Sessions, :Slider)
             @test isdefined(Sessions, :TextField)
             @test isdefined(Sessions, :CheckBox)
+            @test isdefined(Sessions, :Select)
+            @test isdefined(Sessions, :NumberField)
         end
 
         @testset "Widgets work with @bind" begin
