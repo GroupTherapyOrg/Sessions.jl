@@ -22,27 +22,8 @@
 using Therapy
 using UUIDs
 
-# =============================================================================
-# NotebookApp Options
-# =============================================================================
-
-"""
-    NotebookOptions
-
-Configuration options for NotebookApp.
-
-# Fields
-- `show_header::Bool`: Whether to show the notebook header (default: true)
-- `show_add_first_cell::Bool`: Whether to show "Add your first cell" in empty notebooks (default: true)
-- `editable::Bool`: Whether cells can be edited (default: true)
-- `runnable::Bool`: Whether cells can be executed (default: true)
-"""
-Base.@kwdef struct NotebookOptions
-    show_header::Bool = true
-    show_add_first_cell::Bool = true
-    editable::Bool = true
-    runnable::Bool = true
-end
+# NotebookOptions is defined in Sessions.jl (before IDE includes) so that
+# IDECellsView/IDECellCard can reference it at include time.
 
 # =============================================================================
 # NotebookApp Component
@@ -124,15 +105,25 @@ function NotebookApp(;
     # Get cells in order
     cells = cells_in_order(notebook)
 
-    # Build the component
-    Div(:class => "sessions-notebook space-y-8",
+    # Build container attributes
+    attrs = Pair{Symbol,String}[
+        :class => "sessions-notebook",
         Symbol("data-notebook-id") => string(notebook.id),
+    ]
+    if options.max_height !== nothing
+        push!(attrs, :style => "max-height: $(options.max_height); overflow-y: auto;")
+    end
+    if options.theme != "default"
+        push!(attrs, Symbol("data-theme") => options.theme)
+    end
 
+    # Build the component
+    Div(attrs...,
         # Optional header
         options.show_header ? notebook_header(notebook, cells) : nothing,
 
-        # Cells view with options
-        notebook_cells_view(cells, options),
+        # Cells — use IDE cell components with options
+        IDECellsView(cells; options=options),
 
         # Script to set notebook ID for client JS
         Script("if (typeof setNotebookId === 'function') { setNotebookId('$(notebook.id)'); }")
@@ -209,47 +200,6 @@ function notebook_header(notebook::Notebook, cells::Vector{Cell})
     )
 end
 
-"""
-    notebook_cells_view(cells, options)
-
-Render the cells container, respecting display options.
-"""
-function notebook_cells_view(cells::Vector{Cell}, options::NotebookOptions)
-    Div(:class => "cells-container space-y-10 pb-20",
-        # Empty state
-        isempty(cells) && options.show_add_first_cell ?
-            empty_notebook_state(options) : nothing,
-
-        # Cells
-        [CellView(cell) for cell in cells]...
-    )
-end
-
-"""
-    empty_notebook_state(options)
-
-Render the empty state for a notebook with no cells.
-"""
-function empty_notebook_state(options::NotebookOptions)
-    Div(:class => "text-center py-20",
-        Div(:class => "inline-block px-12 py-10 rounded-xl bg-warm-50/50 dark:bg-warm-950/30 border border-warm-200/30 dark:border-[#252422]/30",
-            P(:class => "text-xl font-serif text-warm-500 dark:text-warm-400 mb-4", "Begin your notebook"),
-            options.editable ?
-                Button(:class => "flex items-center gap-2 mx-auto px-4 py-2 text-sm font-medium text-warm-600 dark:text-warm-300 bg-warm-50 dark:bg-warm-950 rounded-full shadow-sm hover:shadow-md border border-warm-200 dark:border-[#252422] transition-all duration-200",
-                    :on_click => "addCellAfter(null)",
-                    Svg(:class => "w-4 h-4",
-                        :fill => "none",
-                        :viewBox => "0 0 24 24",
-                        :stroke => "currentColor",
-                        Symbol("stroke-width") => "2",
-                        Path(:d => "M12 4v16m8-8H4")
-                    ),
-                    Span("Add your first cell")
-                ) : nothing
-        )
-    )
-end
-
 # =============================================================================
 # Head Extra Content
 # =============================================================================
@@ -260,11 +210,12 @@ end
 Get the head content required for NotebookApp.
 
 This includes:
-- Sessions styles (Tailwind config, CodeMirror styles)
+- Sessions styles (Tailwind CSS, CodeMirror theme, cell state styles)
+- Suite.jl theme script (FOUC prevention) and runtime script
 - Therapy.jl WebSocket client
-- Therapy.jl client router (for SPA)
-- External library scripts (CodeMirror)
-- Sessions.jl minimal JS bridge
+- External library scripts (CodeMirror, xterm.js)
+- Sessions.jl JS bridge (cell execute, add, delete)
+- Component-specific CSS (markdown, output, cell state)
 
 Use this in your page's head_extra when embedding NotebookApp:
 
@@ -277,9 +228,23 @@ function my_page()
     )
 end
 ```
+
+For the full IDE with sidebar, tabs, terminal, etc., use `Sessions.serve()` instead.
 """
 function notebook_head_extra()
-    sessions_head_extra()
+    # Core: layout + fonts + CodeMirror + WS client
+    base = sessions_head_extra()
+
+    # Component CSS/JS needed by NotebookApp cells
+    extras = cell_state_styles() *
+             markdown_styles() *
+             output_styles() *
+             codemirror_sessions_theme() *
+             cell_toolbar_script() *
+             markdown_cell_script() *
+             output_truncation_script()
+
+    base * extras
 end
 
 # =============================================================================

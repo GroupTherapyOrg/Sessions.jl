@@ -86,33 +86,37 @@ end
 # =============================================================================
 
 """
-    IDECodeCard(cell)
+    IDECodeCard(cell; show_toolbar=true)
 
 Code card with left accent bar, matching SVG design.
 Background: warm-50 / dark:#111110
 Left accent bar: 2px, color-coded by state
+
+When `show_toolbar=false`, the drag handle and cell toolbar are hidden
+(used by embedded NotebookApp in read-only or minimal mode).
 """
-function IDECodeCard(cell::Cell)
+function IDECodeCard(cell::Cell; show_toolbar::Bool=true)
     cell_id_str = string(cell.id)
     state_signal = "cell_state_$(cell_id_str)"
     runtime_signal = "cell_runtime_$(cell_id_str)"
     accent = _accent_color(cell)
 
     Div(:class => "cell-code-card relative flex",
-        # Drag handle (grip icon, visible on hover)
-        Div(:class => "cell-drag-handle flex-shrink-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing",
-            :draggable => "true",
-            Symbol("data-drag-cell") => cell_id_str,
-            :title => "Drag to reorder",
-            Svg(:class => "w-3 h-3 text-warm-300 dark:text-warm-600", :fill => "currentColor", :viewBox => "0 0 16 16",
-                Circle(:cx => "5", :cy => "3", :r => "1"),
-                Circle(:cx => "11", :cy => "3", :r => "1"),
-                Circle(:cx => "5", :cy => "8", :r => "1"),
-                Circle(:cx => "11", :cy => "8", :r => "1"),
-                Circle(:cx => "5", :cy => "13", :r => "1"),
-                Circle(:cx => "11", :cy => "13", :r => "1")
-            )
-        ),
+        # Drag handle (grip icon, visible on hover) — hidden when toolbar disabled
+        show_toolbar ?
+            Div(:class => "cell-drag-handle flex-shrink-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing",
+                :draggable => "true",
+                Symbol("data-drag-cell") => cell_id_str,
+                :title => "Drag to reorder",
+                Svg(:class => "w-3 h-3 text-warm-300 dark:text-warm-600", :fill => "currentColor", :viewBox => "0 0 16 16",
+                    Circle(:cx => "5", :cy => "3", :r => "1"),
+                    Circle(:cx => "11", :cy => "3", :r => "1"),
+                    Circle(:cx => "5", :cy => "8", :r => "1"),
+                    Circle(:cx => "11", :cy => "8", :r => "1"),
+                    Circle(:cx => "5", :cy => "13", :r => "1"),
+                    Circle(:cx => "11", :cy => "13", :r => "1")
+                )
+            ) : nothing,
 
         # Left accent bar (2px)
         Div(:class => "cell-accent-bar w-0.5 rounded-l flex-shrink-0 $accent"),
@@ -124,11 +128,12 @@ function IDECodeCard(cell::Cell)
             Suite.CardContent(
                 :class => "relative p-0",
 
-                # Cell toolbar (run, move, fold, delete)
-                IDECellToolbar(cell_id_str;
-                    runtime_ms=cell.runtime_ms,
-                    is_folded=cell.folded
-                ),
+                # Cell toolbar (run, move, fold, delete) — hidden when disabled
+                show_toolbar ?
+                    IDECellToolbar(cell_id_str;
+                        runtime_ms=cell.runtime_ms,
+                        is_folded=cell.folded
+                    ) : nothing,
 
                 # Code area (CodeMirror target)
                 Div(
@@ -176,25 +181,31 @@ end
 # =============================================================================
 
 """
-    IDECellCard(cell::Cell)
+    IDECellCard(cell::Cell; options=nothing)
 
 Complete cell card matching SVG design: output above, dotted separator, code below.
+
+When `options::NotebookOptions` is provided, controls:
+- `show_toolbar`: Show/hide cell toolbar (run, move, fold, delete)
+- `show_add_cell`: Show/hide add-cell button between cells
+- `show_output`: Show/hide cell output
+- `editable`: Enable/disable code editing
+- `runnable`: Enable/disable cell execution
 
 # Structure
 1. Output rendered in base layer (if present)
 2. Dotted separator (if output present)
 3. Code card with left accent bar + CodeMirror + hover toolbar
 4. Add cell button (between cells, on hover)
-
-# Left Accent Colors
-- Green (#389826): running, queued, or has output
-- Purple (#9558b2): markdown cell
-- Red (#cb3c33): error state
-- Neutral (warm-200): idle with no output
 """
-function IDECellCard(cell::Cell)
+function IDECellCard(cell::Cell; options::Union{NotebookOptions, Nothing}=nothing)
     cell_id_str = string(cell.id)
     state_signal = "cell_state_$(cell_id_str)"
+
+    # Options defaults (nil = full IDE mode)
+    show_toolbar = options === nothing || options.show_toolbar
+    show_add = options === nothing || options.show_add_cell
+    show_output = options === nothing || options.show_output
 
     state_class = if cell.state == CELL_RUNNING
         "cell-running"
@@ -226,24 +237,28 @@ function IDECellCard(cell::Cell)
         cell.state == CELL_STALE ? CellStaleIndicator() : nothing,
 
         # 1. Output (above code card, in base layer)
-        has_error ?
-            CellErrorDisplay(cell.output.html; logs=cell.output.error_logs) :
-            IDECellOutput(cell),
+        show_output ? (
+            has_error ?
+                CellErrorDisplay(cell.output.html; logs=cell.output.error_logs) :
+                IDECellOutput(cell)
+        ) : nothing,
 
         # 1b. Running skeleton (shown via CSS when cell-running class is active)
         CellRunningIndicator(),
 
         # 2. Dotted separator (CSS-hidden when folded)
-        CellSeparator(cell),
+        show_output ? CellSeparator(cell) : nothing,
 
         # 3. Code card with left accent (CSS-hidden when folded)
-        IDECodeCard(cell),
+        show_toolbar ?
+            IDECodeCard(cell) :
+            IDECodeCard(cell; show_toolbar=false),
 
         # 3b. Fold indicator (CSS-shown only when folded)
         CellFoldedIndicator(cell_id_str),
 
         # 4. Add cell button (between cells)
-        CellAddButton(cell_id_str)
+        show_add ? CellAddButton(cell_id_str) : nothing
     )
 end
 
@@ -276,13 +291,18 @@ end
 # =============================================================================
 
 """
-    IDECellsView(cells::Vector{Cell})
+    IDECellsView(cells::Vector{Cell}; options=nothing)
 
 Renders a list of cells using IDECellCard.
 Includes empty state with "Begin your notebook" prompt.
+
+When `options::NotebookOptions` is provided, it controls visibility of
+toolbar, add-cell buttons, output, and editability for embedded use.
 """
-function IDECellsView(cells::Vector{Cell})
+function IDECellsView(cells::Vector{Cell}; options::Union{NotebookOptions, Nothing}=nothing)
     last_cell_id = isempty(cells) ? nothing : string(cells[end].id)
+    show_add = options === nothing || options.show_add_cell
+    is_editable = options === nothing || options.editable
 
     Div(:class => "cells-container space-y-6 pb-20",
         # Empty state
@@ -290,17 +310,18 @@ function IDECellsView(cells::Vector{Cell})
             Div(:class => "text-center py-20",
                 Div(:class => "inline-block px-12 py-10 rounded-xl bg-warm-100/50 dark:bg-warm-800/30 border border-warm-200/30 dark:border-warm-700/30",
                     P(:class => "text-xl font-serif text-warm-500 dark:text-warm-400 mb-4", "Begin your notebook"),
-                    Button(:class => "flex items-center gap-2 mx-auto px-4 py-2 text-sm font-mono text-warm-600 dark:text-warm-300 bg-warm-50 dark:bg-warm-900 rounded-full border border-warm-200 dark:border-warm-700 hover:border-accent-500 transition-colors",
-                        :on_click => "addCellAfter(null)",
-                        Span(:class => "text-sm", "+"),
-                        Span("Add your first cell")
-                    )
+                    is_editable ?
+                        Button(:class => "flex items-center gap-2 mx-auto px-4 py-2 text-sm font-mono text-warm-600 dark:text-warm-300 bg-warm-50 dark:bg-warm-900 rounded-full border border-warm-200 dark:border-warm-700 hover:border-accent-500 transition-colors",
+                            :on_click => "addCellAfter(null)",
+                            Span(:class => "text-sm", "+"),
+                            Span("Add your first cell")
+                        ) : nothing
                 )
             ) : nothing,
         # Cell list — markdown cells get special rendering
-        [is_markdown(cell) ? IDEMarkdownCell(cell) : IDECellCard(cell) for cell in cells]...,
+        [is_markdown(cell) ? IDEMarkdownCell(cell) : IDECellCard(cell; options=options) for cell in cells]...,
         # Bottom add-cell button (always visible after last cell)
-        last_cell_id !== nothing ?
+        last_cell_id !== nothing && show_add ?
             Div(:class => "flex items-center justify-center pt-4",
                 Button(:class => "flex items-center gap-2 px-4 py-2 text-xs font-mono text-warm-400 dark:text-warm-500 hover:text-warm-600 dark:hover:text-warm-400 bg-warm-50 dark:bg-warm-900 rounded-full border border-dashed border-warm-200/50 dark:border-warm-700/50 hover:border-accent-500/50 transition-colors",
                     :on_click => "addCellAfter('$(last_cell_id)')",

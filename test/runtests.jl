@@ -685,16 +685,21 @@ using Therapy
         @testset "NotebookOptions defaults" begin
             opts = NotebookOptions()
             @test opts.show_header == true
-            @test opts.show_add_first_cell == true
+            @test opts.show_toolbar == true
+            @test opts.show_add_cell == true
             @test opts.editable == true
             @test opts.runnable == true
+            @test opts.show_output == true
+            @test opts.max_height === nothing
+            @test opts.theme == "default"
         end
 
         @testset "NotebookOptions custom" begin
-            opts = NotebookOptions(show_header = false, editable = false)
+            opts = NotebookOptions(show_header = false, editable = false, show_toolbar = false)
             @test opts.show_header == false
             @test opts.editable == false
-            @test opts.show_add_first_cell == true  # default
+            @test opts.show_toolbar == false
+            @test opts.show_add_cell == true  # default
         end
 
         @testset "NotebookApp exported" begin

@@ -81,6 +81,41 @@ include("components/server/Sidebar.jl")
 include("components/server/StatusBar.jl")
 
 # =============================================================================
+# NotebookOptions (must come before IDE components that reference it)
+# =============================================================================
+#
+# Defines NotebookOptions struct used by IDECellsView/IDECellCard for embedded
+# notebook display. Separated from app.jl so IDE components can access it
+# during include order.
+# =============================================================================
+
+"""
+    NotebookOptions
+
+Configuration options for NotebookApp display and behavior.
+
+# Fields
+- `show_header::Bool`: Show notebook title and cell count (default: true)
+- `show_toolbar::Bool`: Show cell toolbar — run, move, fold, delete (default: true)
+- `show_add_cell::Bool`: Show add-cell buttons between cells (default: true)
+- `editable::Bool`: Allow editing code via CodeMirror (default: true)
+- `runnable::Bool`: Allow executing cells (default: true)
+- `show_output::Bool`: Show cell output — false = code-only (default: true)
+- `max_height::Union{String, Nothing}`: CSS max-height for scrollable container (default: nothing)
+- `theme::String`: Theme name — default/ocean/minimal/nature (default: "default")
+"""
+Base.@kwdef struct NotebookOptions
+    show_header::Bool = true
+    show_toolbar::Bool = true
+    show_add_cell::Bool = true
+    editable::Bool = true
+    runnable::Bool = true
+    show_output::Bool = true
+    max_height::Union{String, Nothing} = nothing
+    theme::String = "default"
+end
+
+# =============================================================================
 # IDE Layout (Suite.jl rewrite — SESSIONS-3400)
 # =============================================================================
 #
