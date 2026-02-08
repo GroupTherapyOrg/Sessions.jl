@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "f78055e316d18ba45d56d764f78430a15e220f2a"
+project_hash = "34ccaf98dbb0f1cad28386738e9b002a17952a68"
 
 [[deps.AbstractPlutoDingetjes]]
 deps = ["Pkg"]
@@ -285,7 +285,7 @@ uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 version = "1.11.0"
 
 [[deps.Sessions]]
-deps = ["ExpressionExplorer", "HTTP", "JSON3", "Malt", "OrderedCollections", "PlutoDependencyExplorer", "Sockets", "Therapy", "UUIDs"]
+deps = ["AbstractPlutoDingetjes", "ExpressionExplorer", "HTTP", "JSON3", "Malt", "OrderedCollections", "PlutoDependencyExplorer", "Sockets", "Suite", "Therapy", "UUIDs"]
 path = "."
 uuid = "c3d4e5f6-a7b8-9012-cdef-123456789012"
 version = "0.1.0"
@@ -309,6 +309,12 @@ version = "1.11.0"
 uuid = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 version = "1.11.0"
 
+[[deps.Suite]]
+deps = ["Dates", "Therapy", "WasmTarget"]
+path = "../Suite.jl"
+uuid = "bb23b221-5e4e-46a9-beb2-ac0d644636d2"
+version = "0.1.0"
+
 [[deps.TOML]]
 deps = ["Dates"]
 uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
@@ -325,7 +331,7 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 version = "1.11.0"
 
 [[deps.Therapy]]
-deps = ["HTTP", "JSON3", "Sockets", "UUIDs", "WasmTarget"]
+deps = ["Downloads", "HTTP", "JSON3", "SHA", "Sockets", "Suite", "UUIDs", "WasmTarget"]
 path = "../Therapy.jl"
 uuid = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 version = "0.1.0"
