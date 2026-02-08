@@ -294,3 +294,386 @@
   .suite-hl-special { color: #f78c6c; font-style: italic; }
   .suite-hl-operator { color: #89ddff; }
 }
+
+/* ==========================================================================
+   Sessions.jl-specific styles
+   ========================================================================== */
+
+/* Cell accent bar + card custom properties */
+@layer base {
+  :root {
+    /* Cell accent bar colors (2px left bar, colored by state) */
+    --cell-accent-output: rgba(56, 152, 38, 0.35);    /* Green — has output */
+    --cell-accent-markdown: rgba(149, 88, 178, 0.25);  /* Purple — markdown */
+    --cell-accent-idle: var(--color-warm-200);           /* Neutral — no output */
+    --cell-accent-error: rgba(203, 60, 51, 0.35);       /* Red — error */
+    --cell-accent-stale: rgba(245, 158, 11, 0.35);      /* Amber — stale */
+    --cell-accent-running: rgba(56, 152, 38, 0.5);      /* Green bright — running */
+
+    /* Output text */
+    --output-color: rgba(56, 152, 38, 0.55);
+
+    /* Dotted separator */
+    --separator-color: var(--color-warm-200);
+
+    /* Add-cell zone */
+    --addcell-bg: var(--color-warm-100);
+    --addcell-border: var(--color-warm-200);
+    --addcell-text: var(--color-warm-400);
+
+    /* Dark border (between warm-800 and warm-900, from SVG) */
+    --border-dark: #252422;
+    --border-dark-light: #353432;
+  }
+
+  .dark {
+    --cell-accent-idle: #252422;
+    --separator-color: #252422;
+    --addcell-bg: #252422;
+    --addcell-border: #353432;
+    --addcell-text: var(--color-warm-500);
+  }
+}
+
+/* Cell card styles */
+@layer components {
+  /* Cell wrapper: accent bar + card side by side */
+  .sessions-cell {
+    @apply relative flex gap-1;
+  }
+
+  /* Left accent bar (2px wide) */
+  .sessions-cell-accent {
+    @apply w-0.5 shrink-0 rounded-full;
+    background-color: var(--cell-accent-idle);
+  }
+  .sessions-cell-accent[data-state="output"]   { background-color: var(--cell-accent-output); }
+  .sessions-cell-accent[data-state="markdown"] { background-color: var(--cell-accent-markdown); }
+  .sessions-cell-accent[data-state="error"]    { background-color: var(--cell-accent-error); }
+  .sessions-cell-accent[data-state="stale"]    { background-color: var(--cell-accent-stale); }
+  .sessions-cell-accent[data-state="running"]  { background-color: var(--cell-accent-running); }
+
+  /* Code card */
+  .sessions-cell-card {
+    @apply flex-1 bg-warm-50 dark:bg-warm-950 rounded-md font-mono text-xs;
+    @apply border border-transparent;
+  }
+  .sessions-cell-card:hover {
+    @apply border-warm-200 dark:border-[#252422];
+  }
+
+  /* Cell code area */
+  .sessions-cell-code {
+    @apply p-4 leading-5;
+    font-size: 12.5px;
+  }
+
+  /* Cell output area (output above code) */
+  .sessions-cell-output {
+    @apply px-4 pt-3 pb-2;
+    color: var(--output-color);
+    font-size: 13px;
+  }
+
+  /* Dotted separator between output and code */
+  .sessions-cell-separator {
+    @apply mx-0;
+    border: none;
+    border-top: 1px dashed var(--separator-color);
+  }
+
+  /* Hover run button (top-right of cell card) */
+  .sessions-cell-run {
+    @apply absolute top-1 right-1 opacity-0 transition-opacity;
+    @apply px-2 py-0.5 rounded-[5px] text-[9px] font-mono;
+    background: rgba(56, 152, 38, 0.1);
+    color: rgba(56, 152, 38, 0.6);
+  }
+  .sessions-cell:hover .sessions-cell-run {
+    @apply opacity-100;
+  }
+}
+
+/* Add-cell hover zone */
+@layer components {
+  .sessions-addcell {
+    @apply relative flex items-center justify-center h-4 my-1 opacity-0 transition-opacity;
+  }
+  .sessions-addcell:hover {
+    @apply opacity-100;
+  }
+
+  /* Dashed lines on either side */
+  .sessions-addcell::before,
+  .sessions-addcell::after {
+    content: '';
+    @apply flex-1 h-px;
+    background: repeating-linear-gradient(
+      to right,
+      var(--separator-color) 0,
+      var(--separator-color) 3px,
+      transparent 3px,
+      transparent 6px
+    );
+    opacity: 0.35;
+  }
+
+  /* Plus pill button */
+  .sessions-addcell-btn {
+    @apply shrink-0 px-4 py-0.5 mx-2 rounded-full text-xs;
+    background: var(--addcell-bg);
+    border: 1px solid var(--addcell-border);
+    color: var(--addcell-text);
+  }
+  .sessions-addcell-btn:hover {
+    @apply border-warm-300 dark:border-warm-600;
+  }
+}
+
+/* Sidebar styles */
+@layer components {
+  .sessions-sidebar {
+    @apply w-[220px] shrink-0 bg-warm-50 dark:bg-warm-950;
+    @apply border-r border-warm-200 dark:border-[#252422];
+    @apply flex flex-col overflow-hidden;
+  }
+
+  /* Section labels (WORKSPACE, PACKAGES) */
+  .sessions-sidebar-label {
+    @apply font-serif font-normal text-[11px] tracking-[2px] uppercase;
+    @apply text-warm-600 dark:text-warm-700 px-5 py-2;
+  }
+
+  /* File tree */
+  .sessions-file-tree {
+    @apply text-[11px] font-mono leading-5;
+    @apply text-warm-600 dark:text-warm-500;
+  }
+
+  /* File tree indentation levels */
+  .sessions-file-tree-item {
+    @apply px-5 py-px cursor-pointer rounded;
+  }
+  .sessions-file-tree-item[data-depth="1"] { @apply pl-9; }
+  .sessions-file-tree-item[data-depth="2"] { @apply pl-13; }
+
+  /* Active file highlight */
+  .sessions-file-tree-item[data-active="true"] {
+    @apply mx-2 px-3 rounded;
+    background: rgba(56, 152, 38, 0.08);
+    color: rgba(56, 152, 38, 0.8);
+  }
+  :is(.dark) .sessions-file-tree-item[data-active="true"] {
+    background: rgba(56, 152, 38, 0.1);
+  }
+
+  /* Muted config files */
+  .sessions-file-tree-item[data-muted="true"] {
+    @apply text-warm-400 dark:text-warm-700;
+  }
+
+  /* Package list */
+  .sessions-package-item {
+    @apply px-5 py-px text-[11px] font-mono;
+    @apply text-warm-600 dark:text-warm-500;
+  }
+  .sessions-package-version {
+    @apply text-warm-400 dark:text-warm-700 text-[10px] ml-1;
+  }
+
+  /* Sidebar collapse button */
+  .sessions-sidebar-collapse {
+    @apply absolute top-0 right-0 w-5 h-5 rounded;
+    @apply flex items-center justify-center;
+    @apply bg-warm-100 dark:bg-warm-900 text-warm-400 dark:text-warm-700;
+  }
+}
+
+/* Tab bar styles */
+@layer components {
+  .sessions-tab-bar {
+    @apply flex items-end h-7 bg-warm-100 dark:bg-warm-900;
+    @apply border-b border-warm-200 dark:border-[#252422];
+  }
+
+  .sessions-tab {
+    @apply px-3 h-[26px] flex items-center gap-1 rounded-t-[5px];
+    @apply text-[10px] font-mono cursor-pointer;
+    @apply text-warm-400 dark:text-warm-700;
+  }
+  .sessions-tab:hover {
+    @apply text-warm-600 dark:text-warm-500;
+  }
+
+  /* Active tab: matches card bg, bottom border removed */
+  .sessions-tab[data-active="true"] {
+    @apply bg-warm-50 dark:bg-warm-950;
+    @apply text-warm-800 dark:text-warm-300;
+    @apply border border-warm-200 dark:border-[#252422] border-b-0;
+    margin-bottom: -1px;
+  }
+
+  .sessions-tab-close {
+    @apply text-[8px] opacity-0 transition-opacity ml-1;
+    @apply text-warm-400 dark:text-warm-600;
+  }
+  .sessions-tab:hover .sessions-tab-close {
+    @apply opacity-100;
+  }
+
+  .sessions-tab-new {
+    @apply px-2 h-[26px] flex items-center;
+    @apply text-warm-400 dark:text-warm-700 text-xs cursor-pointer;
+  }
+
+  /* Run All button */
+  .sessions-run-all {
+    @apply ml-auto mr-3 px-3 py-1 rounded text-[9px] font-mono;
+    background: rgba(56, 152, 38, 0.1);
+    color: rgba(56, 152, 38, 0.7);
+  }
+  .sessions-run-all:hover {
+    background: rgba(56, 152, 38, 0.15);
+  }
+
+  /* Running indicator dot */
+  .sessions-running-dot {
+    @apply inline-block w-2 h-2 rounded-full mr-2;
+    background: rgba(56, 152, 38, 0.4);
+    animation: sessions-pulse 1.5s ease-in-out infinite;
+  }
+  :is(.dark) .sessions-running-dot {
+    background: rgba(56, 152, 38, 0.5);
+  }
+
+  @keyframes sessions-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+}
+
+/* Terminal panel styles */
+@layer components {
+  .sessions-terminal {
+    @apply bg-warm-50 dark:bg-warm-950;
+    @apply border-t border-warm-200 dark:border-[#252422];
+  }
+
+  .sessions-terminal-tab {
+    @apply inline-flex items-center px-3 py-0.5 rounded text-[9px] font-mono;
+    background: rgba(56, 152, 38, 0.08);
+    color: rgba(56, 152, 38, 0.7);
+  }
+  :is(.dark) .sessions-terminal-tab {
+    background: rgba(56, 152, 38, 0.1);
+  }
+
+  .sessions-terminal-collapse {
+    @apply mx-auto block w-6 h-1 rounded-full;
+    @apply bg-warm-400 dark:bg-warm-700;
+  }
+}
+
+/* CodeMirror 6 theme override — warm neutrals */
+@layer components {
+  .cm-editor {
+    font-family: 'JuliaMono', 'SF Mono', 'Fira Code', monospace !important;
+    font-size: 12.5px !important;
+    line-height: 20px !important;
+    background: transparent !important;
+  }
+  .cm-editor .cm-content {
+    @apply text-warm-800 dark:text-warm-300;
+    caret-color: var(--color-warm-600);
+  }
+  .cm-editor .cm-cursor {
+    border-left-color: var(--color-warm-600) !important;
+  }
+  .cm-editor .cm-gutters {
+    @apply bg-warm-50 dark:bg-warm-950 border-r-0;
+    color: var(--color-warm-400);
+  }
+  .cm-editor .cm-activeLineGutter,
+  .cm-editor .cm-activeLine {
+    background: rgba(56, 152, 38, 0.04) !important;
+  }
+  :is(.dark) .cm-editor .cm-activeLineGutter,
+  :is(.dark) .cm-editor .cm-activeLine {
+    background: rgba(56, 152, 38, 0.06) !important;
+  }
+  .cm-editor .cm-selectionBackground {
+    background: rgba(56, 152, 38, 0.12) !important;
+  }
+  .cm-editor .cm-matchingBracket {
+    background: rgba(56, 152, 38, 0.15) !important;
+    outline: 1px solid rgba(56, 152, 38, 0.3);
+  }
+  .cm-editor .cm-tooltip {
+    @apply bg-warm-50 dark:bg-warm-900 border border-warm-200 dark:border-[#252422];
+    @apply rounded shadow-md;
+  }
+  .cm-editor .cm-tooltip-autocomplete > ul > li {
+    @apply text-warm-800 dark:text-warm-300;
+  }
+  .cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+    background: rgba(56, 152, 38, 0.1) !important;
+    @apply text-warm-800 dark:text-warm-300;
+  }
+
+  /* Julia syntax colors for CodeMirror (SVG-matched) */
+  .cm-editor .tok-keyword { color: rgba(149, 88, 178, 0.85); }     /* Purple */
+  .cm-editor .tok-typeName { color: rgba(64, 99, 216, 0.8); }      /* Blue */
+  .cm-editor .tok-function { color: rgba(64, 99, 216, 0.8); }      /* Blue */
+  .cm-editor .tok-string { color: rgba(203, 60, 51, 0.7); }        /* Red */
+  .cm-editor .tok-comment { color: var(--color-warm-500); font-style: italic; }
+  .cm-editor .tok-operator { color: var(--color-warm-600); }
+  :is(.dark) .cm-editor .tok-operator { color: var(--color-warm-500); }
+  .cm-editor .tok-number { color: rgba(64, 99, 216, 0.7); }
+  .cm-editor .tok-bool { color: rgba(149, 88, 178, 0.85); }
+  .cm-editor .tok-macroName { color: rgba(149, 88, 178, 0.85); font-weight: 600; }
+}
+
+/* xterm.js theme override — warm neutrals */
+@layer components {
+  .xterm {
+    @apply bg-warm-50 dark:bg-warm-950;
+    padding: 8px;
+  }
+  .xterm-viewport {
+    @apply bg-warm-50 dark:bg-warm-950;
+  }
+
+  /* Julia REPL prompt color */
+  .sessions-repl-prompt {
+    color: rgba(56, 152, 38, 0.6);
+    font-family: 'JuliaMono', 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+  }
+}
+
+/* Markdown cell rendered output */
+@layer components {
+  .sessions-markdown {
+    @apply font-serif text-warm-800 dark:text-warm-300;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .sessions-markdown h1 {
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    @apply text-warm-800 dark:text-warm-300;
+  }
+  .sessions-markdown h2 {
+    font-size: 17px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+    @apply text-warm-800 dark:text-warm-300;
+  }
+  .sessions-markdown code {
+    @apply font-mono text-xs bg-warm-100 dark:bg-warm-900 px-1 py-0.5 rounded;
+  }
+  .sessions-markdown pre code {
+    @apply block p-3 rounded-md;
+  }
+}
