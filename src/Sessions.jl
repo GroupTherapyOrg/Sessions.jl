@@ -220,7 +220,7 @@ export parse_cell_code, get_executable_code
 export parse_pluto_content, is_pluto_content
 
 # Server API
-export serve
+export serve, dev
 
 # App Entry Point (embeddable component)
 export NotebookApp, NotebookOptions, notebook_head_extra, init_notebook_server!

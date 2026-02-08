@@ -57,6 +57,9 @@
 
 using HTTP
 
+# Module-level CSS storage (populated by serve()/dev(), served at /styles.css)
+const _CSS_BYTES = Ref(UInt8[])
+
 # HTTP is needed for the server. Therapy.jl provides:
 # - handle_websocket(stream) - WebSocket upgrade handling
 # - websocket_client_script() - Client JS for WebSocket
@@ -233,6 +236,20 @@ function handle_stream(stream::HTTP.Stream)
         end
     end
 
+    # Serve compiled Tailwind CSS
+    if path == "/styles.css" && !isempty(_CSS_BYTES[])
+        try
+            HTTP.setstatus(stream, 200)
+            HTTP.setheader(stream, "Content-Type" => "text/css; charset=utf-8")
+            HTTP.setheader(stream, "Cache-Control" => "no-cache")
+            HTTP.startwrite(stream)
+            write(stream, _CSS_BYTES[])
+        catch e
+            is_broken_pipe(e) || rethrow(e)
+        end
+        return
+    end
+
     # Ignore Chrome DevTools probe requests
     if startswith(path, "/.well-known/")
         try
@@ -335,6 +352,9 @@ Sessions.jl uses Therapy.jl for all real-time features:
 - WebSocket with auto-reconnect and JSON patches
 """
 function serve(; port::Int=8080, host::String="127.0.0.1", auto_port::Bool=true)
+    # Build Tailwind CSS
+    _build_tailwind!()
+
     # Set up Therapy.jl WebSocket channels and signals
     setup_channels!()
     setup_signals!()
@@ -383,6 +403,163 @@ function serve(; port::Int=8080, host::String="127.0.0.1", auto_port::Bool=true)
     server = HTTP.listen!(handle_stream, host, actual_port)
 
     # Keep server running
+    try
+        wait(server)
+    catch e
+        if isa(e, InterruptException)
+            println("\nShutting down...")
+        else
+            rethrow(e)
+        end
+    finally
+        close(server)
+    end
+end
+
+# =============================================================================
+# Tailwind CSS Build Helper
+# =============================================================================
+
+"""
+    _build_tailwind!()
+
+Build Tailwind CSS from Sessions.jl's input.css and store in `_CSS_BYTES`.
+Uses Therapy.jl's `build_tailwind_css()` which auto-provisions the CLI.
+"""
+function _build_tailwind!()
+    println("Building Tailwind CSS...")
+    # Find input.css relative to Sessions.jl package root
+    pkg_root = normpath(joinpath(@__DIR__, "..", ".."))
+    input_path = joinpath(pkg_root, "input.css")
+
+    if !isfile(input_path)
+        @warn "input.css not found at $input_path, skipping Tailwind build"
+        return
+    end
+
+    css_output = tempname() * ".css"
+    try
+        if build_tailwind_css(input_css=input_path, output_file=css_output, minify=false, cwd=pkg_root)
+            _CSS_BYTES[] = read(css_output)
+            println("  Built: $(round(length(_CSS_BYTES[]) / 1024, digits=1)) KB")
+        else
+            @warn "Tailwind CLI not available — styles will be missing"
+        end
+    finally
+        rm(css_output, force=true)
+    end
+end
+
+# =============================================================================
+# Development Server
+# =============================================================================
+
+"""
+    dev(; port=8080, host="127.0.0.1", auto_port=true)
+
+Start the Sessions.jl development server with file watching.
+
+Watches `.jl` source files and `input.css` for changes. When files change,
+Tailwind CSS is rebuilt automatically.
+
+# Example
+```julia
+using Sessions
+Sessions.dev()
+# Open http://localhost:8080
+# Edit .jl files → Tailwind CSS auto-rebuilds on next request
+```
+"""
+function dev(; port::Int=8080, host::String="127.0.0.1", auto_port::Bool=true)
+    # Build Tailwind CSS
+    _build_tailwind!()
+
+    # Set up Therapy.jl WebSocket channels and signals
+    setup_channels!()
+    setup_signals!()
+    setup_lifecycle!()
+
+    # Create a default notebook if none exists
+    if isempty(NOTEBOOKS)
+        notebook = Notebook()
+        add_cell!(notebook; code="# Welcome to Sessions.jl\n# A reactive Julia notebook powered by Therapy.jl")
+        add_cell!(notebook; code="1 + 1")
+        NOTEBOOKS[notebook.id] = notebook
+        register_all_cell_signals!(notebook)
+    end
+
+    # Track file modification times for CSS rebuild
+    pkg_root = normpath(joinpath(@__DIR__, "..", ".."))
+    input_css_path = joinpath(pkg_root, "input.css")
+    src_dir = joinpath(pkg_root, "src")
+    last_css_build = Ref(time())
+
+    function check_and_rebuild_css()
+        # Check if any .jl files or input.css changed since last build
+        needs_rebuild = false
+
+        if isfile(input_css_path) && mtime(input_css_path) > last_css_build[]
+            needs_rebuild = true
+        end
+
+        if !needs_rebuild && isdir(src_dir)
+            for (root, _, files) in walkdir(src_dir)
+                for file in files
+                    endswith(file, ".jl") || continue
+                    if mtime(joinpath(root, file)) > last_css_build[]
+                        needs_rebuild = true
+                        break
+                    end
+                end
+                needs_rebuild && break
+            end
+        end
+
+        if needs_rebuild
+            println("\n━━━ Files changed, rebuilding CSS ━━━")
+            _build_tailwind!()
+            last_css_build[] = time()
+            println("━━━ Ready ━━━\n")
+        end
+    end
+
+    # Dev handler wraps handle_stream with CSS rebuild check
+    last_check = Ref(time())
+    check_interval = 2.0  # Check every 2 seconds
+
+    function dev_handle_stream(stream::HTTP.Stream)
+        # Periodically check for file changes
+        if time() - last_check[] > check_interval
+            check_and_rebuild_css()
+            last_check[] = time()
+        end
+        handle_stream(stream)
+    end
+
+    # Find available port
+    actual_port = port
+    if auto_port
+        found_port = find_available_port(port, host)
+        if found_port === nothing
+            error("No available ports found (tried $port-$(port+9))")
+        end
+        if found_port != port
+            printstyled("Note: Port $port in use, using port $found_port\n", color=:yellow)
+        end
+        actual_port = found_port
+    end
+
+    println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    println("  Sessions.jl - Dev Server")
+    println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    println()
+    println("  Server:  http://$host:$actual_port")
+    println("  Watching: src/**/*.jl, input.css")
+    println("  Press Ctrl+C to stop")
+    println()
+
+    server = HTTP.listen!(dev_handle_stream, host, actual_port)
+
     try
         wait(server)
     catch e

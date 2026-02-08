@@ -234,8 +234,15 @@ function sessions_script()
         // Helpers
         // =====================================================================
 
+        // Channels that require notebook_id in their payload
+        var notebookChannels = {
+            execute:1, add_cell:1, delete_cell:1, move_cell:1, save:1,
+            run_all:1, set_bond:1, toggle_markdown:1, paste_content:1,
+            export_notebook:1, switch_notebook:1, close_notebook:1, create_notebook:1
+        };
+
         function sendAction(channel, data) {
-            if (!data.notebook_id) {
+            if (notebookChannels[channel] && !data.notebook_id) {
                 console.error('[Sessions] notebook_id is null for channel:', channel);
             }
             if (typeof TherapyWS !== 'undefined' && TherapyWS.isConnected()) {
@@ -883,6 +890,11 @@ function sessions_head_extra()
     # Register CodeMirror with Therapy.jl's external library pattern
     register_codemirror_pluto()
 
+    # Tailwind CSS (built by serve()/dev(), served at /styles.css)
+    tailwind_link = """
+    <link rel="stylesheet" href="/styles.css">
+    """
+
     # Suite.jl FOUC prevention (must be in <head>)
     theme_script = render_to_string(Suite.suite_theme_script())
 
@@ -898,5 +910,5 @@ function sessions_head_extra()
     ext_libs = external_library_script()
     ext_libs_str = ext_libs isa Therapy.RawHtml ? ext_libs.content : render_to_string(ext_libs)
 
-    theme_script * sessions_styles() * codemirror_sessions_theme() * cell_state_styles() * markdown_styles() * output_styles() * ws_str * router_str * ext_libs_str * sessions_script() * file_browser_script()
+    tailwind_link * theme_script * sessions_styles() * codemirror_sessions_theme() * cell_state_styles() * markdown_styles() * output_styles() * ws_str * router_str * ext_libs_str * sessions_script() * file_browser_script()
 end
