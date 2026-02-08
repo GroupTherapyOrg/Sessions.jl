@@ -818,5 +818,5 @@ function sessions_head_extra()
     ext_libs = external_library_script()
     ext_libs_str = ext_libs isa Therapy.RawHtml ? ext_libs.content : render_to_string(ext_libs)
 
-    theme_script * sessions_styles() * codemirror_sessions_theme() * cell_state_styles() * ws_str * router_str * ext_libs_str * sessions_script()
+    theme_script * sessions_styles() * codemirror_sessions_theme() * cell_state_styles() * markdown_styles() * ws_str * router_str * ext_libs_str * sessions_script()
 end

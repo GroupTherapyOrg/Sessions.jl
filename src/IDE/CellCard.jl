@@ -270,7 +270,7 @@ function IDECellsView(cells::Vector{Cell})
                     )
                 )
             ) : nothing,
-        # Cell list
-        [IDECellCard(cell) for cell in cells]...
+        # Cell list — markdown cells get special rendering
+        [is_markdown(cell) ? IDEMarkdownCell(cell) : IDECellCard(cell) for cell in cells]...
     )
 end
