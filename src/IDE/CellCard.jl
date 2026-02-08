@@ -213,12 +213,27 @@ function IDECellCard(cell::Cell)
         "cell-idle"
     end
 
+    # Error output
+    has_error = cell.state == CELL_ERROR && cell.output !== nothing && !isempty(cell.output.html)
+
     Div(:class => "cell group relative $state_class",
         Symbol("data-cell-id") => cell_id_str,
         Symbol("data-signal-match") => "$(state_signal):CELL_RUNNING:cell-running;$(state_signal):CELL_QUEUED:cell-queued;$(state_signal):CELL_ERROR:cell-error;$(state_signal):CELL_IDLE:cell-idle",
 
+        # State badge (shown for non-idle states)
+        cell.state != CELL_IDLE ?
+            Div(:class => "mb-1", CellStateBadge(cell.state)) : nothing,
+
+        # Stale indicator
+        cell.state == CELL_STALE ? CellStaleIndicator() : nothing,
+
         # 1. Output (above code card, in base layer)
-        IDECellOutput(cell),
+        has_error ?
+            CellErrorDisplay(cell.output.html; logs=cell.output.error_logs) :
+            IDECellOutput(cell),
+
+        # 1b. Running skeleton (shown via CSS when cell-running class is active)
+        CellRunningIndicator(),
 
         # 2. Dotted separator
         CellSeparator(cell),
