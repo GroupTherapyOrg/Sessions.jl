@@ -745,9 +745,14 @@ function sessions_script()
             if (typeof TherapyWS === 'undefined') return;
             TherapyWS.onChannelMessage('notebook_switched', function(data) {
                 updateActiveTab(data.notebook_id);
-                window.location.reload();
+                // Reload with notebook_id query param so server renders correct notebook
+                window.location.href = '/?notebook=' + data.notebook_id;
             });
-            TherapyWS.onChannelMessage('notebook_closed', function() {});
+            TherapyWS.onChannelMessage('notebook_closed', function(data) {
+                // Remove the closed tab from DOM, then reload to show remaining notebook
+                var closedTab = document.querySelector('[data-tab-id="' + data.notebook_id + '"]');
+                if (closedTab) closedTab.remove();
+            });
             TherapyWS.onChannelMessage('notebook_created', function() {});
             TherapyWS.onChannelMessage('notebook_opened', function() {});
         }

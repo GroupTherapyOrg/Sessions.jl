@@ -1330,6 +1330,115 @@ function setup_open_file_channel!()
 end
 
 # =============================================================================
+# SECTION 6B1b: MULTI-NOTEBOOK CHANNEL HANDLERS (SESSIONS-3701)
+# =============================================================================
+#
+# Channels for switching between, closing, and managing multiple open notebooks.
+# Each notebook has its own Malt worker and per-cell signals.
+
+"""
+Handle switch_notebook channel messages.
+Message: {notebook_id}
+Switches the connection's active notebook and triggers page reload.
+"""
+function setup_switch_notebook_channel!()
+    on_channel_message("switch_notebook") do conn, data
+        notebook_id_str = get(data, "notebook_id", "")
+        if isempty(notebook_id_str)
+            send_channel!("error", conn.id, Dict("message" => "Missing notebook_id"))
+            return
+        end
+
+        notebook_id = UUID(notebook_id_str)
+        if !haskey(NOTEBOOKS, notebook_id)
+            send_channel!("error", conn.id, Dict("message" => "Notebook not found"))
+            return
+        end
+
+        # Update connection's active notebook
+        CONN_NOTEBOOK[conn.id] = notebook_id
+        notebook = NOTEBOOKS[notebook_id]
+
+        # Register signals for the switched-to notebook's cells
+        register_all_cell_signals!(notebook)
+
+        # Broadcast switch event to trigger client reload
+        broadcast_channel!("notebook_switched", Dict(
+            "notebook_id" => string(notebook_id),
+            "title" => notebook.path !== nothing ? basename(notebook.path) : "Untitled"
+        ))
+        println("[Sessions] Switched to notebook: $(notebook.path !== nothing ? notebook.path : string(notebook_id))")
+    end
+end
+
+"""
+Handle close_notebook channel messages.
+Message: {notebook_id}
+Shuts down worker, unregisters signals, removes from NOTEBOOKS.
+Auto-switches to another notebook if available.
+"""
+function setup_close_notebook_channel!()
+    on_channel_message("close_notebook") do conn, data
+        notebook_id_str = get(data, "notebook_id", "")
+        if isempty(notebook_id_str)
+            send_channel!("error", conn.id, Dict("message" => "Missing notebook_id"))
+            return
+        end
+
+        notebook_id = UUID(notebook_id_str)
+        if !haskey(NOTEBOOKS, notebook_id)
+            return  # Already closed, ignore
+        end
+
+        notebook = NOTEBOOKS[notebook_id]
+        nb_path = notebook.path
+
+        # Shutdown the worker if running
+        if notebook.worker !== nothing
+            try
+                Malt.stop(notebook.worker)
+            catch
+                # Worker may already be dead
+            end
+            notebook.worker = nothing
+        end
+
+        # Unregister all cell signals for this notebook
+        for cell in values(notebook.cells)
+            unregister_cell_signals!(cell.id)
+        end
+
+        # Remove from NOTEBOOKS
+        delete!(NOTEBOOKS, notebook_id)
+
+        # Clean up any connections pointing to this notebook
+        for (conn_id, nb_id) in collect(CONN_NOTEBOOK)
+            if nb_id == notebook_id
+                delete!(CONN_NOTEBOOK, conn_id)
+            end
+        end
+
+        # Broadcast close event
+        broadcast_channel!("notebook_closed", Dict(
+            "notebook_id" => string(notebook_id)
+        ))
+
+        # If there are remaining notebooks, switch to the first one
+        if !isempty(NOTEBOOKS)
+            first_nb = first(values(NOTEBOOKS))
+            CONN_NOTEBOOK[conn.id] = first_nb.id
+            register_all_cell_signals!(first_nb)
+            broadcast_channel!("notebook_switched", Dict(
+                "notebook_id" => string(first_nb.id),
+                "title" => first_nb.path !== nothing ? basename(first_nb.path) : "Untitled"
+            ))
+        end
+
+        println("[Sessions] Closed notebook: $(nb_path !== nothing ? nb_path : string(notebook_id))")
+    end
+end
+
+# =============================================================================
 # SECTION 6B2: PACKAGE MANAGEMENT CHANNEL HANDLERS (SESSIONS-3602)
 # =============================================================================
 #
@@ -1427,6 +1536,65 @@ end
 function setup_pkg_status_channel!()
     on_channel_message("pkg_status") do conn, data
         @async run_pkg_operation!(conn.id, "status", Dict{String,Any}(data))
+    end
+end
+
+# =============================================================================
+# SECTION 6B3: WORKSPACE INSPECTOR CHANNEL HANDLER (SESSIONS-3606)
+# =============================================================================
+
+"""
+Query workspace variables from the notebook's Malt worker.
+Returns list of {name, type, size} dicts.
+"""
+function setup_workspace_vars_channel!()
+    on_channel_message("workspace_vars") do conn, data
+        nb_id = get(CONN_NOTEBOOK, conn.id, nothing)
+        if nb_id === nothing
+            send_channel!("workspace_vars", conn.id, Dict("variables" => []))
+            return
+        end
+
+        notebook = get(NOTEBOOKS, nb_id, nothing)
+        if notebook === nothing || notebook.worker === nothing
+            send_channel!("workspace_vars", conn.id, Dict("variables" => []))
+            return
+        end
+
+        @async try
+            result = Malt.remote_eval_wait(notebook.worker, quote
+                vars = []
+                for name in names(Main; all=false, imported=false)
+                    name === :Main && continue
+                    name === :Base && continue
+                    name === :Core && continue
+                    try
+                        val = getfield(Main, name)
+                        t = string(typeof(val))
+                        s = try
+                            if val isa AbstractArray
+                                join(size(val), "×")
+                            elseif val isa AbstractString
+                                string(length(val)) * " chars"
+                            elseif val isa AbstractDict
+                                string(length(val)) * " entries"
+                            else
+                                ""
+                            end
+                        catch
+                            ""
+                        end
+                        push!(vars, Dict("name" => string(name), "type" => t, "size" => s))
+                    catch
+                    end
+                end
+                sort!(vars, by=v -> lowercase(v["name"]))
+                vars
+            end)
+            send_channel!("workspace_vars", conn.id, Dict("variables" => result))
+        catch e
+            send_channel!("workspace_vars", conn.id, Dict("variables" => []))
+        end
     end
 end
 
@@ -1789,6 +1957,9 @@ function create_channels!()
     create_channel("pkg_error")     # Response: error message
     create_channel("pkg_success")   # Response: operation succeeded
 
+    # Workspace inspector channel (SESSIONS-3606)
+    create_channel("workspace_vars")
+
     # Terminal channels (SESSIONS-2110)
     create_channel("create_terminal")
     create_channel("terminal_input")
@@ -1843,11 +2014,18 @@ function setup_channels!()
     setup_rename_item_channel!()
     setup_open_file_channel!()
 
+    # Multi-notebook channels (SESSIONS-3701)
+    setup_switch_notebook_channel!()
+    setup_close_notebook_channel!()
+
     # Package management channels (SESSIONS-3602)
     setup_pkg_add_channel!()
     setup_pkg_remove_channel!()
     setup_pkg_update_channel!()
     setup_pkg_status_channel!()
+
+    # Workspace inspector (SESSIONS-3606)
+    setup_workspace_vars_channel!()
 
     # Terminal channels (SESSIONS-2110)
     setup_create_terminal_channel!()

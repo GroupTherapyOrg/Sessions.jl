@@ -338,8 +338,12 @@ function file_browser_script()
         if (typeof TherapyWS !== 'undefined') {
             TherapyWS.onChannelMessage('loaded', function(data) {
                 console.log('[Sessions] Notebook loaded:', data.path);
-                // Reload page to render the new notebook
-                window.location.reload();
+                // Reload with notebook_id to render the opened notebook
+                if (data.notebook_id) {
+                    window.location.href = '/?notebook=' + data.notebook_id;
+                } else {
+                    window.location.reload();
+                }
             });
 
             // Handle file browser updates — refresh tree without full reload

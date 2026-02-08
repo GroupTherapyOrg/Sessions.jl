@@ -65,24 +65,42 @@ using HTTP
 # We only import HTTP to handle the HTTP layer. Therapy.jl handles WebSocket.
 
 """
+    get_active_notebook(; notebook_id=nothing)
+
+Get the active notebook. Priority:
+1. Explicit notebook_id (from URL query param)
+2. First notebook in NOTEBOOKS
+3. Create a default welcome notebook
+
+Returns a Notebook instance.
+"""
+function get_active_notebook(; notebook_id::Union{UUID, Nothing}=nothing)
+    # 1. Explicit notebook_id
+    if notebook_id !== nothing && haskey(NOTEBOOKS, notebook_id)
+        return NOTEBOOKS[notebook_id]
+    end
+
+    # 2. First available notebook
+    if !isempty(NOTEBOOKS)
+        return first(values(NOTEBOOKS))
+    end
+
+    # 3. Create default
+    nb = Notebook()
+    add_cell!(nb; code="# Welcome to Sessions.jl\n# A reactive Julia notebook powered by Therapy.jl")
+    add_cell!(nb; code="1 + 1")
+    add_cell!(nb; code="x = 42")
+    add_cell!(nb; code="x * 2")
+    NOTEBOOKS[nb.id] = nb
+    register_all_cell_signals!(nb)
+    return nb
+end
+
+"""
 Render the main notebook content (cells + header).
 Returns a Therapy.jl component (no Layout wrapper).
 """
-function render_notebook_content()
-    # Get or create the first notebook
-    notebook = if !isempty(NOTEBOOKS)
-        first(values(NOTEBOOKS))
-    else
-        nb = Notebook()
-        add_cell!(nb; code="# Welcome to Sessions.jl\n# A reactive Julia notebook powered by Therapy.jl")
-        add_cell!(nb; code="1 + 1")
-        add_cell!(nb; code="x = 42")
-        add_cell!(nb; code="x * 2")
-        NOTEBOOKS[nb.id] = nb
-        register_all_cell_signals!(nb)
-        nb
-    end
-
+function render_notebook_content(notebook::Notebook)
     cells = cells_in_order(notebook)
 
     # Notebook content (without sidebar — Layout handles that)
@@ -115,17 +133,10 @@ end
 Build the sidebar content for the IDE layout.
 Uses IDESidebar from IDE/Sidebar.jl (SESSIONS-3401).
 """
-function render_sidebar_content()
+function render_sidebar_content(notebook::Notebook)
     workspace = pwd()
     file_entries = list_directory(workspace)
-
-    # Get current notebook path if one is open
-    nb_path = if !isempty(NOTEBOOKS)
-        nb = first(values(NOTEBOOKS))
-        nb.path !== nothing ? nb.path : ""
-    else
-        ""
-    end
+    nb_path = notebook.path !== nothing ? notebook.path : ""
 
     IDESidebar(
         entries=file_entries,
@@ -137,13 +148,11 @@ end
 """
 Build the tab bar from currently open notebooks.
 """
-function render_tabs()
+function render_tabs(active_notebook::Notebook)
     if isempty(NOTEBOOKS)
         return IDEEmptyTabs()
     end
 
-    # Build notebook info list for tabs
-    active_nb = first(values(NOTEBOOKS))
     notebooks_info = [
         Dict{String,Any}(
             "id" => nb.id,
@@ -154,7 +163,7 @@ function render_tabs()
     ]
 
     IDENotebookTabs(notebooks_info;
-        active_id=active_nb.id,
+        active_id=active_notebook.id,
         is_running=false
     )
 end
@@ -162,14 +171,8 @@ end
 """
 Build the status bar with current notebook context.
 """
-function render_statusbar()
-    # Get notebook path for display
-    nb_path = if !isempty(NOTEBOOKS)
-        nb = first(values(NOTEBOOKS))
-        nb.path !== nothing ? nb.path : ""
-    else
-        ""
-    end
+function render_statusbar(notebook::Notebook)
+    nb_path = notebook.path !== nothing ? notebook.path : ""
 
     IDEStatusBar(
         kernel_state="idle",
@@ -179,12 +182,17 @@ end
 
 """
 Render full notebook page with IDE Layout.
+
+# Arguments
+- `notebook_id::Union{UUID, Nothing}`: Specific notebook to display (from URL query param).
+  If nothing, displays the first available notebook.
 """
-function render_notebook_page()
-    content = render_notebook_content()
-    sidebar = render_sidebar_content()
-    tabs = render_tabs()
-    statusbar = render_statusbar()
+function render_notebook_page(; notebook_id::Union{UUID, Nothing}=nothing)
+    notebook = get_active_notebook(; notebook_id)
+    content = render_notebook_content(notebook)
+    sidebar = render_sidebar_content(notebook)
+    tabs = render_tabs(notebook)
+    statusbar = render_statusbar(notebook)
     terminal = IDETerminalPanel(collapsed=true)
 
     page = Layout(content;
@@ -240,7 +248,24 @@ function handle_stream(stream::HTTP.Stream)
     # Handle normal HTTP requests
     try
         if path == "/" || path == ""
-            html = render_notebook_page()
+            # Parse ?notebook=<uuid> query parameter for multi-notebook routing
+            uri = HTTP.URI(request.target)
+            notebook_id = nothing
+            query_str = uri.query
+            if !isempty(query_str)
+                for param in split(query_str, "&")
+                    kv = split(param, "="; limit=2)
+                    if length(kv) == 2 && kv[1] == "notebook"
+                        try
+                            notebook_id = UUID(kv[2])
+                        catch
+                            # Invalid UUID, ignore
+                        end
+                    end
+                end
+            end
+
+            html = render_notebook_page(; notebook_id)
             HTTP.setstatus(stream, 200)
             HTTP.setheader(stream, "Content-Type" => "text/html; charset=utf-8")
             HTTP.startwrite(stream)
