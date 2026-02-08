@@ -90,6 +90,7 @@ include("components/server/StatusBar.jl")
 # =============================================================================
 
 include("IDE/Layout.jl")
+include("IDE/Sidebar.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro

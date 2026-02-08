@@ -107,23 +107,24 @@ end
 
 """
 Build the sidebar content for the IDE layout.
+Uses IDESidebar from IDE/Sidebar.jl (SESSIONS-3401).
 """
 function render_sidebar_content()
     workspace = pwd()
     file_entries = list_directory(workspace)
 
-    Div(:class => "flex flex-col h-full",
-        # File browser
-        FileBrowser(
-            root_path = workspace,
-            current_path = workspace,
-            entries = file_entries
-        ),
+    # Get current notebook path if one is open
+    nb_path = if !isempty(NOTEBOOKS)
+        nb = first(values(NOTEBOOKS))
+        nb.path !== nothing ? nb.path : ""
+    else
+        ""
+    end
 
-        # Wordmark at bottom
-        Div(:class => "mt-auto p-4 border-t border-warm-200 dark:border-[#252422]",
-            SessionsWordmark(class="text-sm opacity-50")
-        )
+    IDESidebar(
+        entries=file_entries,
+        current_path=workspace,
+        current_notebook_path=nb_path
     )
 end
 
