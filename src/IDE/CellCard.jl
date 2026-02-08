@@ -99,6 +99,21 @@ function IDECodeCard(cell::Cell)
     accent = _accent_color(cell)
 
     Div(:class => "cell-code-card relative flex",
+        # Drag handle (grip icon, visible on hover)
+        Div(:class => "cell-drag-handle flex-shrink-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing",
+            :draggable => "true",
+            Symbol("data-drag-cell") => cell_id_str,
+            :title => "Drag to reorder",
+            Svg(:class => "w-3 h-3 text-warm-300 dark:text-warm-600", :fill => "currentColor", :viewBox => "0 0 16 16",
+                Circle(:cx => "5", :cy => "3", :r => "1"),
+                Circle(:cx => "11", :cy => "3", :r => "1"),
+                Circle(:cx => "5", :cy => "8", :r => "1"),
+                Circle(:cx => "11", :cy => "8", :r => "1"),
+                Circle(:cx => "5", :cy => "13", :r => "1"),
+                Circle(:cx => "11", :cy => "13", :r => "1")
+            )
+        ),
+
         # Left accent bar (2px)
         Div(:class => "cell-accent-bar w-0.5 rounded-l flex-shrink-0 $accent"),
 
