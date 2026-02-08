@@ -237,6 +237,8 @@ Renders a list of cells using IDECellCard.
 Includes empty state with "Begin your notebook" prompt.
 """
 function IDECellsView(cells::Vector{Cell})
+    last_cell_id = isempty(cells) ? nothing : string(cells[end].id)
+
     Div(:class => "cells-container space-y-6 pb-20",
         # Empty state
         isempty(cells) ?
@@ -251,6 +253,16 @@ function IDECellsView(cells::Vector{Cell})
                 )
             ) : nothing,
         # Cell list — markdown cells get special rendering
-        [is_markdown(cell) ? IDEMarkdownCell(cell) : IDECellCard(cell) for cell in cells]...
+        [is_markdown(cell) ? IDEMarkdownCell(cell) : IDECellCard(cell) for cell in cells]...,
+        # Bottom add-cell button (always visible after last cell)
+        last_cell_id !== nothing ?
+            Div(:class => "flex items-center justify-center pt-4",
+                Button(:class => "flex items-center gap-2 px-4 py-2 text-xs font-mono text-warm-400 dark:text-warm-500 hover:text-warm-600 dark:hover:text-warm-400 bg-warm-50 dark:bg-warm-900 rounded-full border border-dashed border-warm-200/50 dark:border-warm-700/50 hover:border-accent-500/50 transition-colors",
+                    :on_click => "addCellAfter('$(last_cell_id)')",
+                    :title => "Add cell at end",
+                    Span("+"),
+                    Span("Add cell")
+                )
+            ) : nothing
     )
 end

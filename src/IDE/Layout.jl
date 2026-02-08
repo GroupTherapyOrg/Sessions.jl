@@ -355,10 +355,17 @@ function sessions_script()
                 var container = document.querySelector('.cells-container');
                 if (!container) return;
 
+                // Animate insertion
+                newCell.style.opacity = '0';
+                newCell.style.transform = 'translateY(-8px)';
+
                 if (data.after_cell_id) {
-                    var afterCell = document.querySelector('[data-cell-id="' + data.after_cell_id + '"]');
+                    // Insert after the specified cell's group container
+                    var afterCell = container.querySelector('[data-cell-id="' + data.after_cell_id + '"]');
                     if (afterCell) {
-                        afterCell.after(newCell);
+                        // Find parent .cell.group container
+                        var afterGroup = afterCell.closest('.cell.group') || afterCell;
+                        afterGroup.after(newCell);
                     } else {
                         container.appendChild(newCell);
                     }
@@ -366,12 +373,33 @@ function sessions_script()
                     container.appendChild(newCell);
                 }
 
+                // Smooth fade-in animation
+                requestAnimationFrame(function() {
+                    newCell.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                    newCell.style.opacity = '1';
+                    newCell.style.transform = 'translateY(0)';
+                });
+
                 if (window.TherapyExternalLibs && window.TherapyExternalLibs.reinit) {
                     window.TherapyExternalLibs.reinit();
                 }
                 if (typeof TherapyWS !== 'undefined' && TherapyWS.discoverAndSubscribe) {
                     TherapyWS.discoverAndSubscribe();
                 }
+
+                // Focus the new cell's CodeMirror editor
+                setTimeout(function() {
+                    var cellId = newCell.getAttribute('data-cell-id') ||
+                                 (newCell.querySelector('[data-cell-id]') || {}).getAttribute('data-cell-id');
+                    if (cellId) {
+                        var cmEl = newCell.querySelector('[data-codemirror]');
+                        if (cmEl && cmEl._cmView) {
+                            cmEl._cmView.focus();
+                        }
+                    }
+                    // Scroll new cell into view
+                    newCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100);
 
                 var emptyState = container.querySelector('.text-center.py-20');
                 if (emptyState) emptyState.remove();
