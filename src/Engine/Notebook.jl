@@ -7,18 +7,24 @@ using OrderedCollections
 import Malt
 
 """
+    Notebook
+
 A notebook containing cells and execution context.
 
 # Fields
-- `id`: Unique notebook identifier
-- `path`: File path (nothing if unsaved)
-- `cells`: OrderedDict of cells by UUID
-- `cell_order`: Display order of cell IDs
+- `id::UUID`: Unique notebook identifier
+- `path::Union{Nothing, String}`: File path (nothing if unsaved)
+- `cells::OrderedDict{UUID, Cell}`: Cells by UUID
+- `cell_order::Vector{UUID}`: Display order of cell IDs
 - `topology`: PlutoDependencyExplorer topology for dependency tracking
-- `worker`: Malt.jl worker process for execution
-- `modified`: Whether notebook has unsaved changes
-- `project_toml`: Package environment Project.toml content
-- `manifest_toml`: Package environment Manifest.toml content
+- `worker::Union{Nothing, Malt.Worker}`: Malt.jl worker process for execution
+- `modified::Bool`: Whether notebook has unsaved changes
+- `project_toml::String`: Package environment Project.toml content
+- `manifest_toml::String`: Package environment Manifest.toml content
+- `title::String`: Notebook title (for display)
+- `author::String`: Author name
+- `created_at::Union{Nothing, Float64}`: Unix timestamp of creation
+- `sessions_version::String`: Sessions.jl version that last saved this notebook
 """
 mutable struct Notebook
     id::UUID
@@ -40,14 +46,22 @@ mutable struct Notebook
     # Package environment (embedded in notebook file)
     project_toml::String
     manifest_toml::String
+
+    # Notebook metadata
+    title::String
+    author::String
+    created_at::Union{Nothing, Float64}
+    sessions_version::String
 end
 
+const SESSIONS_VERSION = "0.1.0"
+
 """
-    Notebook(; path=nothing)
+    Notebook(; path=nothing, title="", author="")
 
 Create a new empty notebook.
 """
-function Notebook(; path::Union{Nothing, String}=nothing)
+function Notebook(; path::Union{Nothing, String}=nothing, title::String="", author::String="")
     Notebook(
         uuid4(),
         path,
@@ -57,7 +71,11 @@ function Notebook(; path::Union{Nothing, String}=nothing)
         nothing,  # worker
         false,    # modified
         "",       # project_toml
-        ""        # manifest_toml
+        "",       # manifest_toml
+        title,
+        author,
+        time(),   # created_at
+        SESSIONS_VERSION
     )
 end
 
@@ -189,13 +207,27 @@ end
     ensure_worker!(notebook)
 
 Ensure the notebook has an active worker process.
+The worker is started with the same project environment as the main process
+so that Sessions and its dependencies are available.
 """
 function ensure_worker!(notebook::Notebook)
     if notebook.worker === nothing || !Malt.isrunning(notebook.worker)
-        notebook.worker = Malt.Worker()
+        # Get the project path from the current LOAD_PATH
+        # This ensures the worker has access to Sessions and all dependencies
+        project_path = Base.active_project()
+
+        # Create worker with the same project environment
+        if project_path !== nothing
+            notebook.worker = Malt.Worker(exeflags=["--project=$(project_path)"])
+        else
+            notebook.worker = Malt.Worker()
+        end
+
         # Initialize worker with common setup
+        # Sessions is loaded to make @bind macro available
         Malt.remote_eval_wait(notebook.worker, quote
             using InteractiveUtils
+            using Sessions
         end)
     end
     return notebook.worker
@@ -236,6 +268,10 @@ function notebook_to_dict(notebook::Notebook)
         "id" => string(notebook.id),
         "path" => notebook.path,
         "modified" => notebook.modified,
+        "title" => notebook.title,
+        "author" => notebook.author,
+        "created_at" => notebook.created_at,
+        "sessions_version" => notebook.sessions_version,
         "cells" => [cell_to_dict(notebook.cells[id]) for id in notebook.cell_order if haskey(notebook.cells, id)],
         "cell_order" => [string(id) for id in notebook.cell_order]
     )

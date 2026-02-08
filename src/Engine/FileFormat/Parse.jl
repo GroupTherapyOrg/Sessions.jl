@@ -10,6 +10,7 @@ const CELL_MARKER_REGEX = r"^# ╔═╡ ([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a
 const CELL_ORDER_MARKER = "# ╔═╡ Cell order:"
 const PROJECT_TOML_MARKER = "# ╔═╡ Project.toml"
 const MANIFEST_TOML_MARKER = "# ╔═╡ Manifest.toml"
+const SESSIONS_METADATA_MARKER = "# ╔═╡ Sessions.jl metadata"
 const PLUTO_HEADER = "### A Pluto.jl notebook ###"
 
 # Cell order delimiters (Pluto uses these to indicate folded/visible state)
@@ -38,25 +39,62 @@ function load_notebook(path::String)
     in_cell_order = false
     in_project_toml = false
     in_manifest_toml = false
+    in_sessions_metadata = false
     project_lines = String[]
     manifest_lines = String[]
     cell_order_ids = UUID[]
     folded_cells = Set{UUID}()  # Track which cells are folded
 
     for line in lines[2:end]  # Skip header
+        # Check for new cell marker FIRST (before any section handlers)
+        # This ensures cell markers always exit any active section
+        m_cell = match(CELL_MARKER_REGEX, line)
+        if m_cell !== nothing
+            # Save previous cell
+            if current_cell_id !== nothing
+                save_current_cell!(notebook, current_cell_id, current_cell_lines)
+            end
+            # Start new cell, exit any section
+            current_cell_id = UUID(m_cell.captures[1])
+            current_cell_lines = String[]
+            in_cell_order = false
+            in_project_toml = false
+            in_manifest_toml = false
+            in_sessions_metadata = false
+            continue
+        end
+
+        # Check for Sessions.jl metadata section
+        if startswith(line, SESSIONS_METADATA_MARKER)
+            if current_cell_id !== nothing
+                save_current_cell!(notebook, current_cell_id, current_cell_lines)
+                current_cell_id = nothing
+            end
+            in_sessions_metadata = true
+            in_cell_order = false
+            in_project_toml = false
+            in_manifest_toml = false
+            continue
+        end
+
         # Check for cell order section
         if startswith(line, CELL_ORDER_MARKER)
             # Save current cell if any
             if current_cell_id !== nothing
                 save_current_cell!(notebook, current_cell_id, current_cell_lines)
+                current_cell_id = nothing
             end
             in_cell_order = true
+            in_sessions_metadata = false
+            in_project_toml = false
+            in_manifest_toml = false
             continue
         end
 
         # Check for Project.toml section
         if startswith(line, PROJECT_TOML_MARKER)
             in_cell_order = false
+            in_sessions_metadata = false
             in_project_toml = true
             in_manifest_toml = false
             continue
@@ -65,8 +103,34 @@ function load_notebook(path::String)
         # Check for Manifest.toml section
         if startswith(line, MANIFEST_TOML_MARKER)
             in_cell_order = false
+            in_sessions_metadata = false
             in_project_toml = false
             in_manifest_toml = true
+            continue
+        end
+
+        if in_sessions_metadata
+            # Parse metadata key = "value" lines
+            m = match(r"^# (\w+) = \"(.*)\"$", line)
+            if m !== nothing
+                key, value = m.captures[1], m.captures[2]
+                if key == "title"
+                    notebook.title = replace(value, "\\\"" => "\"")
+                elseif key == "author"
+                    notebook.author = replace(value, "\\\"" => "\"")
+                elseif key == "sessions_version"
+                    notebook.sessions_version = value
+                end
+            else
+                # Try numeric values (created_at)
+                m = match(r"^# (\w+) = ([0-9.e+-]+)$", line)
+                if m !== nothing
+                    key, value = m.captures[1], m.captures[2]
+                    if key == "created_at"
+                        notebook.created_at = parse(Float64, value)
+                    end
+                end
+            end
             continue
         end
 
@@ -94,19 +158,7 @@ function load_notebook(path::String)
             continue
         end
 
-        # Check for new cell marker
-        m = match(CELL_MARKER_REGEX, line)
-        if m !== nothing
-            # Save previous cell
-            if current_cell_id !== nothing
-                save_current_cell!(notebook, current_cell_id, current_cell_lines)
-            end
-            # Start new cell
-            current_cell_id = UUID(m.captures[1])
-            current_cell_lines = String[]
-            continue
-        end
-
+        # Cell markers are handled at the top of the loop.
         # Accumulate cell content
         if current_cell_id !== nothing
             push!(current_cell_lines, line)
@@ -125,11 +177,15 @@ function load_notebook(path::String)
     notebook.project_toml = join(project_lines, '\n')
     notebook.manifest_toml = join(manifest_lines, '\n')
 
-    # Set folded state on cells
+    # Set folded state and detect markdown cells
     for cell_id in folded_cells
         cell = get(notebook.cells, cell_id, nothing)
         if cell !== nothing
             cell.folded = true
+            # In Pluto format, folded cells starting with md" are markdown
+            if startswith(strip(cell.code), "md\"") || startswith(strip(cell.code), "md\"\"\"")
+                cell.cell_type = :markdown
+            end
         end
     end
 

@@ -12,9 +12,23 @@ Save a notebook to a Pluto-format .jl file.
 function save_notebook(notebook::Notebook, path::String)
     io = IOBuffer()
 
-    # Header
+    # Header (Pluto-compatible)
     println(io, "### A Pluto.jl notebook ###")
     println(io, "# v0.19.0")
+    println(io)
+
+    # Sessions.jl metadata (as comments — ignored by Pluto, parsed by Sessions)
+    println(io, "# ╔═╡ Sessions.jl metadata")
+    println(io, "# sessions_version = \"$(SESSIONS_VERSION)\"")
+    if !isempty(notebook.title)
+        println(io, "# title = \"$(escape_metadata(notebook.title))\"")
+    end
+    if !isempty(notebook.author)
+        println(io, "# author = \"$(escape_metadata(notebook.author))\"")
+    end
+    if notebook.created_at !== nothing
+        println(io, "# created_at = $(notebook.created_at)")
+    end
     println(io)
 
     # Write cells in topological order (so file can be run directly)
@@ -133,4 +147,11 @@ function escape_html_content(s::String)
     s = replace(s, "<" => "&lt;")
     s = replace(s, ">" => "&gt;")
     return s
+end
+
+"""
+Escape string for embedding in metadata comments.
+"""
+function escape_metadata(s::String)
+    replace(s, "\"" => "\\\"")
 end
