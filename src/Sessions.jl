@@ -40,27 +40,15 @@ include("Engine/FileFormat/Parse.jl")
 include("Engine/FileFormat/Write.jl")
 
 # =============================================================================
-# Components - Organized into Islands (interactive Wasm) and Server (SSR)
-# =============================================================================
-#
-# Islands: Interactive components compiled to WebAssembly
-# - CellEditor.jl: Interactive cell editing (run button, state indicators)
-# - DarkModeToggle.jl: Theme toggle with signal-based state
-#
-# Server: Server-side rendered components
-# - Layout.jl: Main application layout with nav, footer
-# - CellView.jl: Cell rendering with reactive signal bindings
-#
-# See SESSIONS-003 in ralph_loop/prd.json for architecture details.
+# Components - Islands (interactive Wasm) and Server (SSR)
 # =============================================================================
 
 # Islands - Interactive Wasm components
 include("components/islands/DarkModeToggle.jl")
 include("components/islands/CellEditor.jl")
 
-# Server - SSR components (must come after islands for DarkModeToggle)
+# Server - SSR components
 include("components/server/CellView.jl")
-include("components/server/Layout.jl")
 
 # =============================================================================
 # Server - Comprehensive Server Module
@@ -91,6 +79,17 @@ include("components/server/Sidebar.jl")
 
 # StatusBar component with kernel/git/connection status (SESSIONS-2203)
 include("components/server/StatusBar.jl")
+
+# =============================================================================
+# IDE Layout (Suite.jl rewrite — SESSIONS-3400)
+# =============================================================================
+#
+# New IDE shell layout using Suite.jl components. Replaces the old
+# components/server/Layout.jl with a proper IDE frame: sidebar, tabs,
+# terminal panel, status bar, Suite.jl theme controls.
+# =============================================================================
+
+include("IDE/Layout.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro

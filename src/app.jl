@@ -199,11 +199,11 @@ end
 Render the notebook header with title and cell count.
 """
 function notebook_header(notebook::Notebook, cells::Vector{Cell})
-    Div(:class => "mb-8 pb-6 border-b border-stone-200/30 dark:border-neutral-800/30",
-        H2(:class => "text-2xl font-serif font-medium text-stone-700 dark:text-stone-200 tracking-wide",
+    Div(:class => "mb-8 pb-6 border-b border-warm-200/30 dark:border-[#252422]/30",
+        H2(:class => "text-2xl font-serif font-medium text-warm-700 dark:text-warm-200 tracking-wide",
             notebook.path === nothing ? "Untitled Notebook" : basename(notebook.path)
         ),
-        P(:class => "text-xs text-stone-400 dark:text-stone-500 mt-2 tracking-wider uppercase",
+        P(:class => "text-xs text-warm-400 dark:text-warm-500 mt-2 tracking-wider uppercase",
             "$(length(cells)) cells"
         )
     )
@@ -232,10 +232,10 @@ Render the empty state for a notebook with no cells.
 """
 function empty_notebook_state(options::NotebookOptions)
     Div(:class => "text-center py-20",
-        Div(:class => "inline-block px-12 py-10 rounded-xl bg-stone-100/50 dark:bg-neutral-800/30 border border-stone-200/30 dark:border-neutral-700/30",
-            P(:class => "text-xl font-serif text-stone-500 dark:text-stone-400 mb-4", "Begin your notebook"),
+        Div(:class => "inline-block px-12 py-10 rounded-xl bg-warm-50/50 dark:bg-warm-950/30 border border-warm-200/30 dark:border-[#252422]/30",
+            P(:class => "text-xl font-serif text-warm-500 dark:text-warm-400 mb-4", "Begin your notebook"),
             options.editable ?
-                Button(:class => "flex items-center gap-2 mx-auto px-4 py-2 text-sm font-medium text-stone-600 dark:text-stone-300 bg-white dark:bg-neutral-800 rounded-full shadow-sm hover:shadow-md border border-stone-200 dark:border-neutral-700 transition-all duration-200",
+                Button(:class => "flex items-center gap-2 mx-auto px-4 py-2 text-sm font-medium text-warm-600 dark:text-warm-300 bg-warm-50 dark:bg-warm-950 rounded-full shadow-sm hover:shadow-md border border-warm-200 dark:border-[#252422] transition-all duration-200",
                     :on_click => "addCellAfter(null)",
                     Svg(:class => "w-4 h-4",
                         :fill => "none",

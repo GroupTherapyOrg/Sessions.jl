@@ -65,8 +65,8 @@ using HTTP
 # We only import HTTP to handle the HTTP layer. Therapy.jl handles WebSocket.
 
 """
-Render the main notebook page content.
-Returns a Therapy.jl component.
+Render the main notebook content (cells + header).
+Returns a Therapy.jl component (no Layout wrapper).
 """
 function render_notebook_content()
     # Get or create the first notebook
@@ -79,55 +79,67 @@ function render_notebook_content()
         add_cell!(nb; code="x = 42")
         add_cell!(nb; code="x * 2")
         NOTEBOOKS[nb.id] = nb
-        # Register per-cell signals for all cells
         register_all_cell_signals!(nb)
         nb
     end
 
     cells = cells_in_order(notebook)
 
-    # Get workspace directory for file browser
-    workspace = pwd()
-    file_entries = list_directory(workspace)
-
-    # Build page content with sidebar and notebook
-    Div(:class => "flex gap-6",
-        # File Browser Sidebar (SESSIONS-2100, context menus via SESSIONS-2102)
-        Div(:class => "w-64 flex-shrink-0 h-[calc(100vh-12rem)] sticky top-24",
-            FileBrowser(
-                root_path = workspace,
-                current_path = workspace,
-                entries = file_entries
+    # Notebook content (without sidebar — Layout handles that)
+    Div(:class => "space-y-8",
+        # Notebook header
+        Div(:class => "mb-8 pb-6 border-b border-warm-200/30 dark:border-[#252422]/30",
+            H2(:class => "text-2xl font-serif font-medium text-warm-700 dark:text-warm-200 tracking-wide",
+                notebook.path === nothing ? "Untitled Notebook" : basename(notebook.path)
+            ),
+            P(:class => "text-xs text-warm-400 dark:text-warm-500 mt-2 tracking-wider uppercase",
+                "$(length(cells)) cells"
             )
         ),
 
-        # Main notebook content
-        Div(:class => "flex-1 space-y-8",
-            # Notebook header - elegant, scholarly
-            Div(:class => "mb-8 pb-6 border-b border-stone-200/30 dark:border-neutral-800/30",
-                H2(:class => "text-2xl font-serif font-medium text-stone-700 dark:text-stone-200 tracking-wide",
-                    notebook.path === nothing ? "Untitled Notebook" : basename(notebook.path)
-                ),
-                P(:class => "text-xs text-stone-400 dark:text-stone-500 mt-2 tracking-wider uppercase",
-                    "$(length(cells)) cells"
-                )
-            ),
+        # Cells
+        CellsView(cells),
 
-            # Cells
-            CellsView(cells),
+        # Set notebook ID for client
+        Script("setNotebookId('$(notebook.id)');")
+    )
+end
 
-            # Set notebook ID for client
-            Script("setNotebookId('$(notebook.id)');")
+"""
+Build the sidebar content for the IDE layout.
+"""
+function render_sidebar_content()
+    workspace = pwd()
+    file_entries = list_directory(workspace)
+
+    Div(:class => "flex flex-col h-full",
+        # File browser
+        FileBrowser(
+            root_path = workspace,
+            current_path = workspace,
+            entries = file_entries
+        ),
+
+        # Wordmark at bottom
+        Div(:class => "mt-auto p-4 border-t border-warm-200 dark:border-[#252422]",
+            SessionsWordmark(class="text-sm opacity-50")
         )
     )
 end
 
 """
-Render full notebook page with Layout.
+Render full notebook page with IDE Layout.
 """
 function render_notebook_page()
     content = render_notebook_content()
-    render_page(Layout(content); title="Sessions - Julia Notebook", head_extra=sessions_head_extra())
+    sidebar = render_sidebar_content()
+
+    page = Layout(content;
+        sidebar=sidebar,
+        statusbar=StatusBar()
+    )
+
+    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_script())
 end
 
 """
