@@ -97,6 +97,9 @@ function render_notebook_content()
             )
         ),
 
+        # Search bar (hidden, toggled by Ctrl+F)
+        IDESearchBar(),
+
         # Cells (IDE design: output above, code card below)
         IDECellsView(cells),
 
@@ -188,7 +191,7 @@ function render_notebook_page()
         terminal=terminal
     )
 
-    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_ide_script() * terminal_panel_script() * package_panel_script() * keyboard_shortcuts_script() * run_controls_script())
+    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * search_styles() * statusbar_ide_script() * terminal_panel_script() * package_panel_script() * keyboard_shortcuts_script() * run_controls_script() * search_replace_script())
 end
 
 """
