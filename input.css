@@ -11,7 +11,7 @@
 @theme {
   --font-sans: 'Optima', 'Palatino Linotype', 'Book Antiqua', 'EB Garamond', serif;
   --font-serif: 'EB Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  --font-mono: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
+  --font-mono: 'JuliaMono', 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
 
   /* Warm neutral palette (shared across GroupTherapyOrg ecosystem) */
   --color-warm-50: #f8f7f4;
@@ -77,6 +77,13 @@
     --accent: var(--julia-green);
     --accent-secondary: var(--julia-blue);
 
+    /* Semantic layout tokens (SVG-matched) */
+    --bg-main: var(--color-warm-100);
+    --bg-sidebar: var(--color-warm-50);
+    --bg-card: var(--color-warm-50);
+    --bg-terminal: var(--color-warm-50);
+    --border: var(--color-warm-200);
+
     /* .jl wordmark tri-colors (exclude Green since it's the accent) */
     --jl-dot: #389826;  /* Green (dot stays green per design) */
     --jl-j: #cb3c33;    /* Red */
@@ -89,7 +96,7 @@
   }
 
   pre code {
-    font-family: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
+    font-family: 'JuliaMono', 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
   }
 }
 
@@ -102,6 +109,13 @@
     --text-primary: #d4d0c8;
     --text-secondary: #8a8680;
     --text-tertiary: #5a5855;
+
+    /* Semantic layout tokens (dark, SVG-matched) */
+    --bg-main: var(--color-warm-900);
+    --bg-sidebar: var(--color-warm-950);
+    --bg-card: var(--color-warm-950);
+    --bg-terminal: var(--color-warm-950);
+    --border: #252422;
   }
 }
 
@@ -577,7 +591,7 @@
 /* CodeMirror 6 theme override — warm neutrals */
 @layer components {
   .cm-editor {
-    font-family: 'JuliaMono', 'SF Mono', 'Fira Code', monospace !important;
+    font-family: 'JuliaMono', 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace !important;
     font-size: 12.5px !important;
     line-height: 20px !important;
     background: transparent !important;
