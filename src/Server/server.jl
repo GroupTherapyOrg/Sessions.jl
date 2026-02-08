@@ -1722,43 +1722,30 @@ function create_terminal_session!(session_id::String; cols::Int=80, rows::Int=24
     end
 
     try
-        # Create PTY process
-        # Note: On Unix, we use a subprocess with script to get a PTY
-        # On Windows, we'd use ConPTY but for now we use a simpler approach
+        env = copy(ENV)
+        env["TERM"] = "xterm-256color"
+        env["COLUMNS"] = string(cols)
+        env["LINES"] = string(rows)
 
-        if Sys.iswindows()
-            # Windows: Use cmd.exe with pipes (simplified, no true PTY)
-            process = open(`cmd.exe`, "r+")
-            session = Dict{String, Any}(
-                "id" => session_id,
-                "process" => process,
-                "shell" => "cmd.exe",
-                "cols" => cols,
-                "rows" => rows,
-                "created_at" => time(),
-                "active" => true
-            )
-        else
-            # Unix: Use script -q to allocate PTY
-            # The trick: `script -q /dev/null shell` gives us a PTY
-            env = copy(ENV)
-            env["TERM"] = "xterm-256color"
-            env["COLUMNS"] = string(cols)
-            env["LINES"] = string(rows)
+        # Use explicit Pipe objects for bidirectional I/O
+        inp = Pipe()
+        out = Pipe()
+        cmd = setenv(`$(shell)`, env)
+        proc = run(pipeline(cmd; stdin=inp, stdout=out, stderr=out), wait=false)
+        close(out.in)   # Close write end of output pipe (server reads from out)
+        close(inp.out)   # Close read end of input pipe (server writes to inp)
 
-            # Create process with PTY
-            process = open(pipeline(ignorestatus(`script -q /dev/null $(shell)`); env=env), "r+")
-
-            session = Dict{String, Any}(
-                "id" => session_id,
-                "process" => process,
-                "shell" => shell,
-                "cols" => cols,
-                "rows" => rows,
-                "created_at" => time(),
-                "active" => true
-            )
-        end
+        session = Dict{String, Any}(
+            "id" => session_id,
+            "process" => proc,
+            "stdin" => inp,
+            "stdout" => out,
+            "shell" => shell,
+            "cols" => cols,
+            "rows" => rows,
+            "created_at" => time(),
+            "active" => true
+        )
 
         TERMINAL_SESSIONS[session_id] = session
 
@@ -1783,30 +1770,24 @@ function start_terminal_reader!(session_id::String)
         return
     end
 
-    process = session["process"]
+    out = session["stdout"]
 
     # Create async task to read output
     task = @async begin
         try
-            while session["active"] && isopen(process)
-                # Read available data (non-blocking with timeout)
-                if bytesavailable(process) > 0
-                    data = read(process, bytesavailable(process))
-                    if !isempty(data)
-                        output = String(data)
-                        # Broadcast to all clients subscribed to this terminal
-                        broadcast_channel!("terminal_output_$session_id", Dict(
-                            "session_id" => session_id,
-                            "output" => output
-                        ))
-                    end
-                else
-                    # Small sleep to prevent busy loop
-                    sleep(0.05)
+            while session["active"] && !eof(out)
+                data = readavailable(out)
+                if !isempty(data)
+                    output = String(data)
+                    # Broadcast to all clients subscribed to this terminal
+                    broadcast_channel!("terminal_output_$session_id", Dict(
+                        "session_id" => session_id,
+                        "output" => output
+                    ))
                 end
             end
         catch e
-            if !(e isa EOFError || e isa IOError)
+            if !(e isa EOFError || e isa Base.IOError)
                 println("[Sessions] Terminal reader error: $(sprint(showerror, e))")
             end
         finally
@@ -1830,12 +1811,10 @@ function terminal_write!(session_id::String, data::String)
     end
 
     try
-        process = session["process"]
-        if isopen(process)
-            write(process, data)
-            flush(process)
-            return true
-        end
+        inp = session["stdin"]
+        write(inp, data)
+        flush(inp)
+        return true
     catch e
         println("[Sessions] Terminal write error: $(sprint(showerror, e))")
     end
@@ -1882,13 +1861,18 @@ function close_terminal_session!(session_id::String)
     session["active"] = false
 
     try
-        process = session["process"]
-        if isopen(process)
-            close(process)
+        # Close stdin pipe to signal EOF to the shell
+        inp = session["stdin"]
+        close(inp)
+    catch; end
+
+    try
+        # Kill the process
+        proc = session["process"]
+        if process_running(proc)
+            kill(proc)
         end
-    catch e
-        # Ignore close errors
-    end
+    catch; end
 
     # Cancel reader task
     if haskey(TERMINAL_CLEANUP_TASKS, session_id)
