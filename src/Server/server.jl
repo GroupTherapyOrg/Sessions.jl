@@ -1144,6 +1144,64 @@ function setup_create_folder_channel!()
 end
 
 """
+Handle create_notebook channel messages.
+Creates a new .jl file with Pluto notebook header, then opens it.
+Message: {name}
+"""
+function setup_create_notebook_channel!()
+    on_channel_message("create_notebook") do conn, data
+        state = get_filebrowser_state(conn.id)
+        name = get(data, "name", "notebook.jl")
+
+        # Ensure .jl extension
+        if !endswith(name, ".jl")
+            name = name * ".jl"
+        end
+
+        # Validate path
+        dir = state["current"]
+        validated = validate_path(dir, state["root"])
+        if validated === nothing
+            send_channel!("error", conn.id, Dict("message" => "Invalid path"))
+            return
+        end
+
+        file_path = joinpath(validated, name)
+        if isfile(file_path)
+            send_channel!("error", conn.id, Dict("message" => "File already exists: $name"))
+            return
+        end
+
+        try
+            # Create a new Pluto-format notebook
+            notebook = Notebook()
+            notebook.path = file_path
+            add_cell!(notebook; code="# $(replace(name, ".jl" => ""))")
+            add_cell!(notebook; code="")
+            save_notebook(notebook)
+
+            # Register and open the notebook
+            NOTEBOOKS[notebook.id] = notebook
+            register_all_cell_signals!(notebook)
+            CONN_NOTEBOOK[conn.id] = notebook.id
+
+            # Update file listing
+            update_filebrowser_listing!(validated)
+
+            # Notify client
+            send_channel!("loaded", conn.id, Dict(
+                "notebook_id" => string(notebook.id),
+                "path" => file_path,
+                "cell_count" => length(notebook.cells)
+            ))
+            println("[Sessions] Created notebook: $file_path")
+        catch e
+            send_channel!("error", conn.id, Dict("message" => "Failed to create notebook: $e"))
+        end
+    end
+end
+
+"""
 Handle delete_item channel messages.
 Message: {path}
 """
@@ -1616,6 +1674,7 @@ function create_channels!()
     create_channel("refresh_filebrowser")
     create_channel("create_file")
     create_channel("create_folder")
+    create_channel("create_notebook")
     create_channel("delete_item")
     create_channel("rename_item")
     create_channel("open_file")
@@ -1669,6 +1728,7 @@ function setup_channels!()
     setup_refresh_filebrowser_channel!()
     setup_create_file_channel!()
     setup_create_folder_channel!()
+    setup_create_notebook_channel!()
     setup_delete_item_channel!()
     setup_rename_item_channel!()
     setup_open_file_channel!()

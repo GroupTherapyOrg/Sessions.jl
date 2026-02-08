@@ -90,6 +90,7 @@ include("components/server/StatusBar.jl")
 # =============================================================================
 
 include("IDE/Layout.jl")
+include("IDE/FileBrowser.jl")
 include("IDE/Sidebar.jl")
 include("IDE/NotebookTabs.jl")
 include("IDE/StatusBar.jl")
@@ -189,9 +190,11 @@ export create_bond
 # PlutoUI-compatible widgets
 export Slider, TextField, CheckBox, Select, NumberField
 
-# File browser (SESSIONS-2100)
+# File browser (SESSIONS-2100 → SESSIONS-3600)
 export FileBrowser, BrowserToolbar, Breadcrumbs, FileList, FileItem, FileContextMenu, ContextMenuItem
 export FileEntry, list_directory, format_file_size
+export IDEFileBrowser, IDEBrowserToolbar, IDEFileContextMenu, IDEFileTreeItem
+export file_browser_script
 
 # Terminal (SESSIONS-2110)
 export TerminalPanel, TerminalTabs, TerminalUISession
