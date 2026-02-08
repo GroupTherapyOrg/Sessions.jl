@@ -111,17 +111,16 @@ function Sessions.validate_value(s::Select, val)
     return false
 end
 
-# HTML rendering
+# HTML rendering (Suite.jl-styled with warm/accent Tailwind classes)
 function Base.show(io::IO, ::MIME"text/html", s::Select)
     default_val = s.default !== nothing ? s.default : (isempty(s.options) ? nothing : first(s.options).first)
 
-    print(io, """<select style="padding: 0.25rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; background: white;">""")
+    select_class = "h-9 rounded-md border border-warm-200 dark:border-warm-700 bg-transparent px-3 py-1 text-sm text-warm-900 dark:text-warm-100 focus:outline-none focus:border-accent-600 focus:ring-2 focus:ring-accent-600/50 cursor-pointer transition-colors"
+    print(io, """<select class="$(select_class)">""")
 
     for (value, label) in s.options
         val_str = string(value)
-        # Escape HTML in label
         escaped_label = replace(label, "<" => "&lt;", ">" => "&gt;", "&" => "&amp;")
-        # Escape value for HTML attribute
         escaped_val = replace(val_str, "\"" => "&quot;", "<" => "&lt;", ">" => "&gt;", "&" => "&amp;")
 
         selected = default_val !== nothing && string(default_val) == val_str ? " selected" : ""

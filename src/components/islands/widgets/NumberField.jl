@@ -113,22 +113,19 @@ function Sessions.validate_value(nf::NumberField, val)
     return true
 end
 
-# HTML rendering
+# HTML rendering (Suite.jl-styled with warm/accent Tailwind classes)
 function Base.show(io::IO, ::MIME"text/html", nf::NumberField)
     default_val = Sessions.initial_value(nf)
 
-    print(io, """<input type="number" """)
-    print(io, """value="$(default_val)" """)
+    input_class = "h-9 w-32 rounded-md border border-warm-200 dark:border-warm-700 bg-transparent px-3 py-1 text-sm text-right font-mono text-warm-900 dark:text-warm-100 focus:outline-none focus:border-accent-600 focus:ring-2 focus:ring-accent-600/50 transition-colors"
+    print(io, """<input type="number" class="$(input_class)" value="$(default_val)" """)
 
     if nf.range !== nothing
         min_val = first(nf.range)
         max_val = last(nf.range)
         step_val = step(nf.range)
-        print(io, """min="$(min_val)" """)
-        print(io, """max="$(max_val)" """)
-        print(io, """step="$(step_val)" """)
+        print(io, """min="$(min_val)" max="$(max_val)" step="$(step_val)" """)
     end
 
-    print(io, """style="padding: 0.25rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; width: 8em; text-align: right;" """)
     print(io, """/>""")
 end
