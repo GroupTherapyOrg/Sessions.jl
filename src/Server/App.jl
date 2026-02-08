@@ -129,14 +129,41 @@ function render_sidebar_content()
 end
 
 """
+Build the tab bar from currently open notebooks.
+"""
+function render_tabs()
+    if isempty(NOTEBOOKS)
+        return IDEEmptyTabs()
+    end
+
+    # Build notebook info list for tabs
+    active_nb = first(values(NOTEBOOKS))
+    notebooks_info = [
+        Dict{String,Any}(
+            "id" => nb.id,
+            "title" => nb.path !== nothing ? basename(nb.path) : "Untitled",
+            "modified" => false
+        )
+        for nb in values(NOTEBOOKS)
+    ]
+
+    IDENotebookTabs(notebooks_info;
+        active_id=active_nb.id,
+        is_running=false
+    )
+end
+
+"""
 Render full notebook page with IDE Layout.
 """
 function render_notebook_page()
     content = render_notebook_content()
     sidebar = render_sidebar_content()
+    tabs = render_tabs()
 
     page = Layout(content;
         sidebar=sidebar,
+        tabs=tabs,
         statusbar=StatusBar()
     )
 

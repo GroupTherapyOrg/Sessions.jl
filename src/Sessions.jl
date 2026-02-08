@@ -91,6 +91,7 @@ include("components/server/StatusBar.jl")
 
 include("IDE/Layout.jl")
 include("IDE/Sidebar.jl")
+include("IDE/NotebookTabs.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
@@ -181,8 +182,9 @@ export FileEntry, list_directory, format_file_size
 export TerminalPanel, TerminalTabs, TerminalUISession
 export create_terminal_ui_session, get_terminal_ui_session, close_terminal_ui_session!
 
-# Notebook tabs (SESSIONS-2200)
+# Notebook tabs (SESSIONS-2200 → SESSIONS-3402)
 export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script
+export IDENotebookTabs, IDETab, IDEEmptyTabs, RunAllButton
 
 # Sidebar (SESSIONS-2201)
 export Sidebar, SidebarTabs, SidebarTabButton, RunningPanel, SettingsPanel, RunningItem
