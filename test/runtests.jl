@@ -1513,6 +1513,146 @@ y = 2
         end
     end
 
+    # =========================================================================
+    # SESSIONS-3703: Pluto File Format Compatibility (Comprehensive)
+    # =========================================================================
+    @testset "Pluto Compatibility (SESSIONS-3703)" begin
+        fixtures_dir = joinpath(@__DIR__, "fixtures")
+
+        @testset "Reactive execution order for Pluto notebooks" begin
+            # Test with basic.jl — has n, seq, sqrt(sum(seq)*6.0) dependency chain
+            path = joinpath(fixtures_dir, "pluto_sample_basic.jl")
+            if isfile(path)
+                nb = load_notebook(path)
+
+                # Analyze all cells for reactive dependencies
+                for cell in values(nb.cells)
+                    analyze_cell!(cell)
+                end
+
+                # Find cells by content
+                n_cell = nothing
+                seq_cell = nothing
+                result_cell = nothing
+                for cell in values(nb.cells)
+                    if cell.code == "n = 1:100000"
+                        n_cell = cell
+                    elseif occursin("seq = n .^ -2", cell.code)
+                        seq_cell = cell
+                    elseif occursin("sqrt(sum(seq)", cell.code)
+                        result_cell = cell
+                    end
+                end
+
+                # Verify dependency analysis found references
+                if n_cell !== nothing
+                    @test :n in n_cell.definitions
+                end
+                if seq_cell !== nothing
+                    @test :n in seq_cell.references
+                    @test :seq in seq_cell.definitions
+                end
+                if result_cell !== nothing
+                    @test :seq in result_cell.references
+                end
+
+                # Get execution order starting from n_cell
+                if n_cell !== nothing
+                    order = get_execution_order(nb, [n_cell.id])
+                    @test length(order) >= 2  # n_cell + downstream
+                end
+            end
+        end
+
+        @testset "Sessions.jl metadata round-trip" begin
+            nb = Notebook()
+            nb.title = "Test Notebook"
+            nb.author = "Test Author"
+            nb.created_at = time()
+            add_cell!(nb; code="x = 1")
+            add_cell!(nb; code="y = x + 1")
+
+            temp_path = tempname() * ".jl"
+            try
+                save_notebook(nb, temp_path)
+                content = read(temp_path, String)
+
+                # Sessions.jl metadata section present
+                @test occursin("# ╔═╡ Sessions.jl metadata", content)
+                @test occursin("title = \"Test Notebook\"", content)
+                @test occursin("author = \"Test Author\"", content)
+
+                # Still valid Pluto format
+                @test startswith(content, "### A Pluto.jl notebook ###")
+
+                # Reload and verify metadata preserved
+                nb2 = load_notebook(temp_path)
+                @test nb2.title == "Test Notebook"
+                @test nb2.author == "Test Author"
+                @test nb2.created_at !== nothing
+            finally
+                rm(temp_path; force=true)
+            end
+        end
+
+        @testset "Export to HTML" begin
+            nb = Notebook()
+            add_cell!(nb; code="x = 42")
+            cell2 = add_cell!(nb; code="md\"# Hello World\"")
+            cell2.folded = true
+            cell2.cell_type = :markdown
+
+            html = export_to_html(nb)
+            @test occursin("<!DOCTYPE html>", html)
+            @test occursin("x = 42", html)
+            @test occursin("Sessions.jl", html)
+            @test occursin("prefers-color-scheme", html)  # Dark mode support
+        end
+
+        @testset "Export to Julia script" begin
+            nb = Notebook()
+            add_cell!(nb; code="x = 42")
+            cell2 = add_cell!(nb; code="md\"\"\"# Hello World\"\"\"")
+            cell2.folded = true
+            cell2.cell_type = :markdown
+            add_cell!(nb; code="y = x + 1")
+
+            script = export_to_script(nb)
+            @test occursin("x = 42", script)
+            @test occursin("y = x + 1", script)
+            @test occursin("# Hello World", script)  # Markdown as comment
+            @test !occursin("md\"\"\"", script)  # md wrapper stripped
+        end
+
+        @testset "All 8 fixture files load without error" begin
+            all_fixtures = [
+                "basic_notebook.jl",
+                "folded_notebook.jl",
+                "with_pkgs_notebook.jl",
+                "pluto_sample_basic.jl",
+                "pluto_sample_hanoi.jl",
+                "pluto_sample_interactive.jl",
+                "pluto_getting_started.jl",
+                "pluto_plutoui_sample.jl"
+            ]
+
+            for fixture in all_fixtures
+                path = joinpath(fixtures_dir, fixture)
+                if isfile(path)
+                    @testset "Load: $fixture" begin
+                        nb = load_notebook(path)
+                        @test !isempty(nb.cells)
+                        @test length(nb.cell_order) == length(nb.cells)
+                        # Cell UUIDs are valid
+                        for id in nb.cell_order
+                            @test haskey(nb.cells, id)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
 end
 
 println("\nAll tests passed!")
