@@ -97,8 +97,8 @@ function render_notebook_content()
             )
         ),
 
-        # Cells
-        CellsView(cells),
+        # Cells (IDE design: output above, code card below)
+        IDECellsView(cells),
 
         # Set notebook ID for client
         Script("setNotebookId('$(notebook.id)');")

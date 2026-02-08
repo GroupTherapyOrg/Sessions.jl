@@ -93,6 +93,7 @@ include("IDE/Layout.jl")
 include("IDE/Sidebar.jl")
 include("IDE/NotebookTabs.jl")
 include("IDE/StatusBar.jl")
+include("IDE/CellCard.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
@@ -143,6 +144,7 @@ include("Server/App.jl")
 
 export Cell, CellState, CellOutput, CellType
 export CELL_IDLE, CELL_QUEUED, CELL_RUNNING, CELL_ERROR, CELL_STALE
+export IDECellCard, IDECellOutput, IDECodeCard, IDECellsView, CellAddButton
 export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
 export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!, cancel_cell!
