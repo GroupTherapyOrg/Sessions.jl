@@ -84,6 +84,31 @@ function PackagesSection()
 end
 
 # =============================================================================
+# Variables Section (Workspace Inspector)
+# =============================================================================
+
+"""
+    VariablesSection()
+
+Variables section with Suite.Collapsible header and IDEWorkspaceInspector content.
+Shows defined variables in the notebook workspace (SESSIONS-3606).
+"""
+function VariablesSection()
+    Suite.Collapsible(open=false,
+        Suite.CollapsibleTrigger(
+            Div(:class => "sessions-sidebar-section-label flex items-center w-full px-3 py-1.5",
+                Span(:class => "text-[11px] font-serif font-medium text-warm-500 dark:text-warm-500 uppercase tracking-[2px]",
+                    "Variables"
+                )
+            )
+        ),
+        Suite.CollapsibleContent(
+            IDEWorkspaceInspector()
+        )
+    )
+end
+
+# =============================================================================
 # Main Sidebar Component
 # =============================================================================
 
@@ -117,6 +142,12 @@ function IDESidebar(;
 
         # Packages
         PackagesSection(),
+
+        # Separator
+        Suite.Separator(),
+
+        # Variables (workspace inspector)
+        VariablesSection(),
 
         # Spacer
         Div(:class => "flex-1"),
