@@ -36,8 +36,8 @@ include("Engine/Worker.jl")      # Malt worker execution
 # File Format (Pluto-compatible)
 # =============================================================================
 
-include("FileFormat/Parse.jl")
-include("FileFormat/Write.jl")
+include("Engine/FileFormat/Parse.jl")
+include("Engine/FileFormat/Write.jl")
 
 # =============================================================================
 # Components - Organized into Islands (interactive Wasm) and Server (SSR)
@@ -61,12 +61,6 @@ include("components/islands/CellEditor.jl")
 # Server - SSR components (must come after islands for DarkModeToggle)
 include("components/server/CellView.jl")
 include("components/server/Layout.jl")
-
-# Legacy UI paths - re-export for backward compatibility
-# These will be removed in a future version
-include("UI/CellView.jl")
-include("UI/DarkModeToggle.jl")
-include("UI/Layout.jl")
 
 # =============================================================================
 # Server - Comprehensive Server Module
