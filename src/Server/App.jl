@@ -188,7 +188,7 @@ function render_notebook_page()
         terminal=terminal
     )
 
-    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_ide_script() * terminal_panel_script() * package_panel_script() * keyboard_shortcuts_script())
+    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_ide_script() * terminal_panel_script() * package_panel_script() * keyboard_shortcuts_script() * run_controls_script())
 end
 
 """

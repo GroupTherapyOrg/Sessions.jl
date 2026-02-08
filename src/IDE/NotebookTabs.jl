@@ -79,11 +79,11 @@ Shows a green dot indicator when cells are executing.
 """
 function RunAllButton(; is_running::Bool=false)
     Div(:class => "flex items-center gap-1.5 flex-shrink-0",
-        # Running indicator (green dot)
-        is_running ?
-            Span(:class => "w-2 h-2 rounded-full bg-accent-500 animate-pulse",
-                :title => "Cells executing"
-            ) : nothing,
+        # Running indicator (green dot) — updated by run_controls_script()
+        Span(:id => "run-all-indicator",
+            :class => "w-2 h-2 rounded-full bg-accent-500 animate-pulse $(is_running ? "" : "hidden")",
+            :title => "Cells executing"
+        ),
 
         # Run All pill
         Button(:class => "flex items-center gap-1 px-3 h-[22px] rounded bg-accent-500/10 text-accent-600 dark:text-accent-400 text-[9px] font-mono hover:bg-accent-500/20 transition-colors",

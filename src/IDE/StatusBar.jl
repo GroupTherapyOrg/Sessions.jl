@@ -88,16 +88,12 @@ Shows cell execution progress in center of status bar.
 Only visible when cells are running.
 """
 function IDECellProgress(; running::Int=0, total::Int=0)
-    if running == 0
-        return nothing
-    end
-
-    Div(:class => "flex items-center gap-1.5",
-        # Spinner dot
-        Span(:class => "w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse flex-shrink-0"),
-        Span(:class => "text-[10px] font-mono text-warm-500 dark:text-warm-400",
+    Div(:id => "ide-cell-progress",
+        :class => "flex items-center gap-1.5 $(running == 0 ? "hidden" : "")",
+        running > 0 ? Span(:class => "w-1.5 h-1.5 rounded-full bg-accent-500 animate-pulse flex-shrink-0") : nothing,
+        running > 0 ? Span(:class => "text-[10px] font-mono text-warm-500 dark:text-warm-400",
             "Running $running/$total cells"
-        )
+        ) : nothing
     )
 end
 
