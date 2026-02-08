@@ -1731,7 +1731,7 @@ function create_terminal_session!(session_id::String; cols::Int=80, rows::Int=24
         inp = Pipe()
         out = Pipe()
         cmd = setenv(`$(shell)`, env)
-        proc = run(pipeline(cmd; stdin=inp, stdout=out, stderr=out), wait=false)
+        proc = Base.run(pipeline(cmd; stdin=inp, stdout=out, stderr=out), wait=false)
         close(out.in)   # Close write end of output pipe (server reads from out)
         close(inp.out)   # Close read end of input pipe (server writes to inp)
 
