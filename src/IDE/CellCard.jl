@@ -109,30 +109,10 @@ function IDECodeCard(cell::Cell)
             Suite.CardContent(
                 :class => "relative p-0",
 
-                # Hover toolbar (run + delete, top-right)
-                Div(:class => "absolute top-2 right-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                    # Runtime badge
-                    Span(:class => "text-[10px] font-mono text-warm-400 dark:text-warm-500",
-                        Symbol("data-server-signal") => runtime_signal,
-                        cell.runtime_ms !== nothing ? "$(round(cell.runtime_ms, digits=1))ms" : ""
-                    ),
-                    # Run button (green pill)
-                    Button(:class => "flex items-center gap-1 px-2 py-1 text-[10px] font-mono rounded bg-accent-500/10 text-accent-600 dark:text-accent-400 hover:bg-accent-500/20 transition-colors",
-                        :on_click => "executeCell('$(cell_id_str)')",
-                        :title => "Run cell (Shift+Enter)",
-                        Svg(:class => "w-2.5 h-2.5", :fill => "currentColor", :viewBox => "0 0 20 20",
-                            Path(:d => "M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z")
-                        )
-                    ),
-                    # Delete button
-                    Button(:class => "p-1 text-warm-300 dark:text-warm-600 hover:text-rose-500 transition-colors",
-                        :on_click => "deleteCell('$(cell_id_str)')",
-                        :title => "Delete cell",
-                        Svg(:class => "w-3.5 h-3.5", :fill => "none", :viewBox => "0 0 24 24",
-                            :stroke => "currentColor", Symbol("stroke-width") => "1.5",
-                            Path(:d => "M6 18L18 6M6 6l12 12")
-                        )
-                    )
+                # Cell toolbar (run, move, fold, delete)
+                IDECellToolbar(cell_id_str;
+                    runtime_ms=cell.runtime_ms,
+                    is_folded=cell.folded
                 ),
 
                 # Code area (CodeMirror target)

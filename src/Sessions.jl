@@ -93,6 +93,7 @@ include("IDE/Layout.jl")
 include("IDE/Sidebar.jl")
 include("IDE/NotebookTabs.jl")
 include("IDE/StatusBar.jl")
+include("IDE/CellToolbar.jl")
 include("IDE/CellCard.jl")
 include("IDE/CellEditor.jl")
 include("IDE/CellState.jl")
@@ -155,6 +156,7 @@ export cell_state_styles
 export IDEMarkdownCell, MarkdownCellClosed, MarkdownCellOpen
 export render_markdown_html, markdown_styles, markdown_cell_script
 export output_styles, output_truncation_script
+export IDECellToolbar, cell_toolbar_script
 export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
 export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!, cancel_cell!
