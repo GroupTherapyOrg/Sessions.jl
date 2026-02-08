@@ -410,6 +410,23 @@ function sessions_script()
                 if (cell) cell.remove();
             });
 
+            TherapyWS.onChannelMessage('cell_folded', function(data) {
+                var cell = document.querySelector('[data-cell-id="' + data.cell_id + '"]');
+                if (!cell) return;
+                var group = cell.closest('.cell.group') || cell;
+                group.setAttribute('data-folded', data.folded ? 'true' : 'false');
+                if (data.folded) {
+                    group.classList.add('cell-folded');
+                } else {
+                    group.classList.remove('cell-folded');
+                }
+            });
+
+            TherapyWS.onChannelMessage('cell_moved', function(data) {
+                // Reload to reflect new order (simple approach)
+                window.location.reload();
+            });
+
             TherapyWS.onChannelMessage('paste_complete', function(data) {
                 if (data.cells_created > 0) {
                     console.log('[Sessions] Pasted ' + data.cells_created + ' cell(s)');

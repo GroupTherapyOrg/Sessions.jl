@@ -189,6 +189,18 @@ function cell_state_styles()
     .cell {
         transition: border-color 0.3s ease;
     }
+
+    /* Folded state — hide code card and separator, show fold indicator */
+    .cell.cell-folded .cell-code-card,
+    .cell.cell-folded .cell-separator {
+        display: none;
+    }
+    .cell.cell-folded .cell-fold-indicator {
+        display: flex;
+    }
+    .cell:not(.cell-folded) .cell-fold-indicator {
+        display: none;
+    }
     </style>
     """
 end

@@ -78,7 +78,7 @@ function CellSeparator(cell::Cell)
         return nothing
     end
 
-    Div(:class => "border-t border-dashed border-warm-200 dark:border-[#252422] my-1")
+    Div(:class => "cell-separator border-t border-dashed border-warm-200 dark:border-[#252422] my-1")
 end
 
 # =============================================================================
@@ -98,7 +98,7 @@ function IDECodeCard(cell::Cell)
     runtime_signal = "cell_runtime_$(cell_id_str)"
     accent = _accent_color(cell)
 
-    Div(:class => "relative flex",
+    Div(:class => "cell-code-card relative flex",
         # Left accent bar (2px)
         Div(:class => "cell-accent-bar w-0.5 rounded-l flex-shrink-0 $accent"),
 
@@ -196,8 +196,11 @@ function IDECellCard(cell::Cell)
     # Error output
     has_error = cell.state == CELL_ERROR && cell.output !== nothing && !isempty(cell.output.html)
 
-    Div(:class => "cell group relative $state_class",
+    fold_class = cell.folded ? "cell-folded" : ""
+
+    Div(:class => "cell group relative $state_class $fold_class",
         Symbol("data-cell-id") => cell_id_str,
+        Symbol("data-folded") => cell.folded ? "true" : "false",
         Symbol("data-signal-match") => "$(state_signal):CELL_RUNNING:cell-running;$(state_signal):CELL_QUEUED:cell-queued;$(state_signal):CELL_ERROR:cell-error;$(state_signal):CELL_IDLE:cell-idle",
 
         # State badge (shown for non-idle states)
@@ -215,14 +218,41 @@ function IDECellCard(cell::Cell)
         # 1b. Running skeleton (shown via CSS when cell-running class is active)
         CellRunningIndicator(),
 
-        # 2. Dotted separator
+        # 2. Dotted separator (CSS-hidden when folded)
         CellSeparator(cell),
 
-        # 3. Code card with left accent
+        # 3. Code card with left accent (CSS-hidden when folded)
         IDECodeCard(cell),
+
+        # 3b. Fold indicator (CSS-shown only when folded)
+        CellFoldedIndicator(cell_id_str),
 
         # 4. Add cell button (between cells)
         CellAddButton(cell_id_str)
+    )
+end
+
+# =============================================================================
+# Folded Cell Indicator
+# =============================================================================
+
+"""
+    CellFoldedIndicator(cell_id)
+
+Small indicator shown when a cell's code is folded (hidden).
+Click to unfold.
+"""
+function CellFoldedIndicator(cell_id::String)
+    Div(:class => "cell-fold-indicator items-center gap-2 py-1 px-2 cursor-pointer text-warm-400 dark:text-warm-500 hover:text-warm-600 dark:hover:text-warm-400 transition-colors",
+        :on_click => "toggleCellFold('$(cell_id)')",
+        :title => "Show code",
+        # Unfold icon
+        Svg(:class => "w-3 h-3", :fill => "none", :viewBox => "0 0 24 24",
+            :stroke => "currentColor", Symbol("stroke-width") => "1.5",
+            Path(:stroke_linecap => "round", :stroke_linejoin => "round",
+                :d => "M19.5 8.25l-7.5 7.5-7.5-7.5")
+        ),
+        Span(:class => "text-[10px] font-mono", "code hidden")
     )
 end
 

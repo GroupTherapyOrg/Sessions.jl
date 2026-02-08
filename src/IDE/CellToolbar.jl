@@ -131,5 +131,35 @@ function cell_toolbar_script()
     window.toggleCellFold = function(cellId) {
         sendAction('toggle_fold', { notebook_id: getNotebookId(), cell_id: cellId });
     };
+
+    window.foldAllCells = function() {
+        document.querySelectorAll('.cell.group:not(.cell-folded)').forEach(function(cell) {
+            var cellId = cell.getAttribute('data-cell-id') ||
+                         (cell.querySelector('[data-cell-id]') || {}).getAttribute('data-cell-id');
+            if (cellId) toggleCellFold(cellId);
+        });
+    };
+
+    window.unfoldAllCells = function() {
+        document.querySelectorAll('.cell.group.cell-folded').forEach(function(cell) {
+            var cellId = cell.getAttribute('data-cell-id') ||
+                         (cell.querySelector('[data-cell-id]') || {}).getAttribute('data-cell-id');
+            if (cellId) toggleCellFold(cellId);
+        });
+    };
+
+    // Ctrl+Shift+F to fold/unfold focused cell
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+            e.preventDefault();
+            var focused = document.activeElement;
+            var cell = focused ? focused.closest('.cell.group') : null;
+            if (cell) {
+                var cellId = cell.getAttribute('data-cell-id') ||
+                             (cell.querySelector('[data-cell-id]') || {}).getAttribute('data-cell-id');
+                if (cellId) toggleCellFold(cellId);
+            }
+        }
+    });
     """
 end
