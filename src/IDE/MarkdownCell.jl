@@ -27,12 +27,16 @@ Strips the md\"\"\"...\"\"\" wrapper if present.
 Returns HTML string with appropriate CSS classes for Sessions.jl typography.
 """
 function render_markdown_html(md_source::String)
-    # Strip md string wrapper
+    # Strip md string wrapper (use nextind/prevind for Unicode safety)
     source = strip(md_source)
     if startswith(source, "md\"\"\"") && endswith(source, "\"\"\"")
-        source = source[6:end-3]
+        start_idx = nextind(source, 0, 6)  # skip md"""  (5 chars + 1)
+        end_idx = prevind(source, lastindex(source) + 1, 3)  # skip """
+        source = source[start_idx:prevind(source, end_idx)]
     elseif startswith(source, "md\"") && endswith(source, "\"")
-        source = source[4:end-1]
+        start_idx = nextind(source, 0, 4)  # skip md"  (3 chars + 1)
+        end_idx = prevind(source, lastindex(source) + 1, 1)  # skip "
+        source = source[start_idx:prevind(source, end_idx)]
     end
 
     source = strip(source)
