@@ -65,8 +65,8 @@ end
 """
     PackagesSection()
 
-Packages section showing installed packages with version badges.
-Placeholder — actual package list comes from Malt worker in future stories (SESSIONS-3602).
+Packages section with Suite.Collapsible header and IDEPackagePanel content.
+Package list populated via Malt worker (SESSIONS-3602).
 """
 function PackagesSection()
     Suite.Collapsible(open=true,
@@ -78,9 +78,7 @@ function PackagesSection()
             )
         ),
         Suite.CollapsibleContent(
-            Div(:class => "px-3 py-2 text-[11px] text-warm-400 dark:text-warm-500",
-                "Package list available after first cell execution."
-            )
+            IDEPackagePanel()
         )
     )
 end

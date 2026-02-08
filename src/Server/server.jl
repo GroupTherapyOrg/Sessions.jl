@@ -1330,6 +1330,107 @@ function setup_open_file_channel!()
 end
 
 # =============================================================================
+# SECTION 6B2: PACKAGE MANAGEMENT CHANNEL HANDLERS (SESSIONS-3602)
+# =============================================================================
+#
+# Package management via Malt worker. Operations run Pkg commands in the
+# notebook's worker process so they don't block the server.
+
+"""
+Run a Pkg operation in the notebook's Malt worker.
+Returns the result or sends an error via pkg_error channel.
+"""
+function run_pkg_operation!(conn_id::String, operation::String, args::Dict)
+    # Find the notebook for this connection
+    nb_id = get(CONN_NOTEBOOK, conn_id, nothing)
+    if nb_id === nothing
+        send_channel!("pkg_error", conn_id, Dict("message" => "No notebook open. Run a cell first."))
+        return nothing
+    end
+
+    notebook = get(NOTEBOOKS, nb_id, nothing)
+    if notebook === nothing
+        send_channel!("pkg_error", conn_id, Dict("message" => "Notebook not found"))
+        return nothing
+    end
+
+    worker = notebook.worker
+    if worker === nothing
+        send_channel!("pkg_error", conn_id, Dict("message" => "No worker running. Run a cell first."))
+        return nothing
+    end
+
+    try
+        if operation == "add"
+            pkg_name = get(args, "name", "")
+            if isempty(pkg_name)
+                send_channel!("pkg_error", conn_id, Dict("message" => "Package name required"))
+                return nothing
+            end
+            Malt.remote_eval_wait(worker, :(import Pkg; Pkg.add($(pkg_name))))
+            send_channel!("pkg_success", conn_id, Dict("operation" => "add", "name" => pkg_name))
+        elseif operation == "remove"
+            pkg_name = get(args, "name", "")
+            if isempty(pkg_name)
+                send_channel!("pkg_error", conn_id, Dict("message" => "Package name required"))
+                return nothing
+            end
+            Malt.remote_eval_wait(worker, :(import Pkg; Pkg.rm($(pkg_name))))
+            send_channel!("pkg_success", conn_id, Dict("operation" => "remove", "name" => pkg_name))
+        elseif operation == "update"
+            Malt.remote_eval_wait(worker, :(import Pkg; Pkg.update()))
+            send_channel!("pkg_success", conn_id, Dict("operation" => "update"))
+        elseif operation == "status"
+            # Get package list from worker
+            result = Malt.remote_eval_wait(worker, quote
+                import Pkg
+                deps = Pkg.dependencies()
+                packages = []
+                for (uuid, info) in deps
+                    push!(packages, Dict(
+                        "name" => info.name,
+                        "version" => string(info.version),
+                        "is_direct" => info.is_direct_dep
+                    ))
+                end
+                sort!(packages, by=p -> lowercase(p["name"]))
+                packages
+            end)
+            send_channel!("pkg_list", conn_id, Dict("packages" => result))
+        end
+    catch e
+        msg = sprint(showerror, e)
+        send_channel!("pkg_error", conn_id, Dict("message" => msg))
+    end
+
+    return nothing
+end
+
+function setup_pkg_add_channel!()
+    on_channel_message("pkg_add") do conn, data
+        @async run_pkg_operation!(conn.id, "add", Dict{String,Any}(data))
+    end
+end
+
+function setup_pkg_remove_channel!()
+    on_channel_message("pkg_remove") do conn, data
+        @async run_pkg_operation!(conn.id, "remove", Dict{String,Any}(data))
+    end
+end
+
+function setup_pkg_update_channel!()
+    on_channel_message("pkg_update") do conn, data
+        @async run_pkg_operation!(conn.id, "update", Dict{String,Any}(data))
+    end
+end
+
+function setup_pkg_status_channel!()
+    on_channel_message("pkg_status") do conn, data
+        @async run_pkg_operation!(conn.id, "status", Dict{String,Any}(data))
+    end
+end
+
+# =============================================================================
 # SECTION 6C: TERMINAL CHANNEL HANDLERS (SESSIONS-2110)
 # =============================================================================
 #
@@ -1679,6 +1780,15 @@ function create_channels!()
     create_channel("rename_item")
     create_channel("open_file")
 
+    # Package management channels (SESSIONS-3602)
+    create_channel("pkg_add")
+    create_channel("pkg_remove")
+    create_channel("pkg_update")
+    create_channel("pkg_status")
+    create_channel("pkg_list")      # Response: package list
+    create_channel("pkg_error")     # Response: error message
+    create_channel("pkg_success")   # Response: operation succeeded
+
     # Terminal channels (SESSIONS-2110)
     create_channel("create_terminal")
     create_channel("terminal_input")
@@ -1732,6 +1842,12 @@ function setup_channels!()
     setup_delete_item_channel!()
     setup_rename_item_channel!()
     setup_open_file_channel!()
+
+    # Package management channels (SESSIONS-3602)
+    setup_pkg_add_channel!()
+    setup_pkg_remove_channel!()
+    setup_pkg_update_channel!()
+    setup_pkg_status_channel!()
 
     # Terminal channels (SESSIONS-2110)
     setup_create_terminal_channel!()
