@@ -129,16 +129,20 @@ Handles rich MIME output (HTML, SVG, images) for Therapy.jl rendering.
 """
 function execute_cell!(notebook::Notebook, cell::Cell)
     # Ensure worker exists
+    println("[Sessions] execute_cell! starting for cell $(cell.id)")
     worker = ensure_worker!(notebook)
+    println("[Sessions] Worker ready, executing code: $(cell.code[1:min(50, length(cell.code))])...")
 
     # Update state to running
     cell.state = CELL_RUNNING
 
     # Execute
     result = execute_code(worker, cell.code)
+    println("[Sessions] Execution complete: success=$(result.success), mime=$(result.mime_type), value_len=$(length(result.value))")
 
     # Update cell with results
     cell.runtime_ms = result.runtime_ms
+    cell.last_run_at = time()
 
     if result.success
         cell.state = CELL_IDLE

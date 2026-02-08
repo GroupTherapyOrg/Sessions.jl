@@ -5,14 +5,33 @@
 using UUIDs
 
 """
+    CellState
+
 Cell execution states.
+
+- `CELL_IDLE`: Not running, no pending changes
+- `CELL_QUEUED`: Waiting to run (dependency changed)
+- `CELL_RUNNING`: Currently executing
+- `CELL_ERROR`: Execution failed
+- `CELL_STALE`: Upstream changed but cell hasn't been re-run yet
 """
 @enum CellState begin
     CELL_IDLE       # Not running, no pending changes
     CELL_QUEUED     # Waiting to run (dependency changed)
     CELL_RUNNING    # Currently executing
     CELL_ERROR      # Execution failed
+    CELL_STALE      # Upstream changed, needs re-run
 end
+
+"""
+    CellType
+
+Cell content type — determines rendering and execution behavior.
+
+- `:code`: Julia code cell (default)
+- `:markdown`: Markdown content cell (rendered as HTML, not executed)
+"""
+const CellType = Symbol  # :code or :markdown
 
 """
 Output from cell execution.
@@ -28,19 +47,23 @@ end
 CellOutput() = CellOutput(nothing, "text/plain", "", String[], String[])
 
 """
+    Cell
+
 A notebook cell containing code and execution state.
 
 # Fields
-- `id`: Unique identifier
-- `code`: Julia source code
-- `output`: Result of last execution
-- `references`: Variables this cell reads (from ExpressionExplorer)
-- `definitions`: Variables this cell defines (from ExpressionExplorer)
-- `funcdefs`: Functions this cell defines
-- `state`: Current execution state
-- `runtime_ms`: Last execution time in milliseconds
-- `folded`: Whether the cell is collapsed in UI
-- `disabled`: Whether the cell is excluded from execution
+- `id::UUID`: Unique identifier
+- `code::String`: Julia source code
+- `output::Union{Nothing, CellOutput}`: Result of last execution
+- `references::Set{Symbol}`: Variables this cell reads (from ExpressionExplorer)
+- `definitions::Set{Symbol}`: Variables this cell defines (from ExpressionExplorer)
+- `funcdefs::Set{Symbol}`: Functions this cell defines
+- `state::CellState`: Current execution state
+- `runtime_ms::Union{Nothing, Float64}`: Last execution time in milliseconds
+- `cell_type::Symbol`: `:code` or `:markdown`
+- `last_run_at::Union{Nothing, Float64}`: Unix timestamp of last execution
+- `folded::Bool`: Whether the cell is collapsed in UI
+- `disabled::Bool`: Whether the cell is excluded from execution
 """
 mutable struct Cell
     id::UUID
@@ -55,6 +78,10 @@ mutable struct Cell
     # Execution state
     state::CellState
     runtime_ms::Union{Nothing, Float64}
+    last_run_at::Union{Nothing, Float64}
+
+    # Cell metadata
+    cell_type::Symbol  # :code or :markdown
 
     # UI state
     folded::Bool
@@ -62,11 +89,11 @@ mutable struct Cell
 end
 
 """
-    Cell(; code="", id=uuid4())
+    Cell(; code="", id=uuid4(), cell_type=:code)
 
-Create a new cell with optional code and ID.
+Create a new cell with optional code, ID, and type.
 """
-function Cell(; code::String="", id::UUID=uuid4())
+function Cell(; code::String="", id::UUID=uuid4(), cell_type::Symbol=:code)
     Cell(
         id,
         code,
@@ -76,6 +103,8 @@ function Cell(; code::String="", id::UUID=uuid4())
         Set{Symbol}(),
         CELL_IDLE,
         nothing,
+        nothing,
+        cell_type,
         false,
         false
     )
@@ -93,9 +122,12 @@ is_idle(cell::Cell) = cell.state == CELL_IDLE
 is_queued(cell::Cell) = cell.state == CELL_QUEUED
 is_running(cell::Cell) = cell.state == CELL_RUNNING
 is_error(cell::Cell) = cell.state == CELL_ERROR
+is_stale(cell::Cell) = cell.state == CELL_STALE
 
 has_output(cell::Cell) = cell.output !== nothing
 has_error(cell::Cell) = cell.state == CELL_ERROR
+is_markdown(cell::Cell) = cell.cell_type == :markdown
+is_code(cell::Cell) = cell.cell_type == :code
 
 # =============================================================================
 # Smart Multi-line Cell Parsing (Auto begin...end)
@@ -136,7 +168,8 @@ function parse_cell_code(code::String)
     expr = Base.Meta.parse(code, raise=false)
 
     # If it parsed cleanly as a single non-error expression, use it
-    if !(expr isa Expr && expr.head == :incomplete)
+    # Check for :incomplete (incomplete expression) or :error (e.g., multiple expressions)
+    if !(expr isa Expr && (expr.head == :incomplete || expr.head == :error))
         return expr
     end
 
@@ -212,14 +245,18 @@ function get_executable_code(code::String)
 end
 
 """
-Convert cell to JSON-serializable dictionary.
+    cell_to_dict(cell::Cell) -> Dict{String, Any}
+
+Convert cell to JSON-serializable dictionary for WebSocket state sync.
 """
 function cell_to_dict(cell::Cell)
     Dict{String, Any}(
         "id" => string(cell.id),
         "code" => cell.code,
         "state" => string(cell.state),
+        "cell_type" => string(cell.cell_type),
         "runtime_ms" => cell.runtime_ms,
+        "last_run_at" => cell.last_run_at,
         "folded" => cell.folded,
         "disabled" => cell.disabled,
         "output" => cell.output === nothing ? nothing : Dict(

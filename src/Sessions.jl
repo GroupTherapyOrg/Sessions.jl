@@ -139,8 +139,8 @@ include("Server/App.jl")
 # Public API
 # =============================================================================
 
-export Cell, CellState, CellOutput
-export CELL_IDLE, CELL_QUEUED, CELL_RUNNING, CELL_ERROR
+export Cell, CellState, CellOutput, CellType
+export CELL_IDLE, CELL_QUEUED, CELL_RUNNING, CELL_ERROR, CELL_STALE
 export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
 export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!
