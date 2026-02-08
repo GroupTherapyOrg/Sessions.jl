@@ -634,11 +634,24 @@ function setup_move_cell_channel!()
     on_channel_message("move_cell") do conn, data
         notebook_id = UUID(data["notebook_id"])
         cell_id = UUID(data["cell_id"])
-        new_index = data["new_index"]
-
         notebook = get(NOTEBOOKS, notebook_id, nothing)
         if notebook === nothing
             return
+        end
+
+        # Support both direction-based (from toolbar) and index-based moves
+        new_index = if haskey(data, "direction")
+            current_idx = findfirst(id -> id == cell_id, notebook.cell_order)
+            if current_idx === nothing
+                return
+            end
+            if data["direction"] == "up"
+                max(1, current_idx - 1)
+            else
+                min(length(notebook.cell_order), current_idx + 1)
+            end
+        else
+            data["new_index"]
         end
 
         if move_cell!(notebook, cell_id, new_index)
@@ -648,6 +661,33 @@ function setup_move_cell_channel!()
                 "new_index" => new_index
             ))
         end
+    end
+end
+
+"""
+Handle toggle fold. Toggles cell.folded and broadcasts.
+Message: {notebook_id, cell_id}
+"""
+function setup_toggle_fold_channel!()
+    on_channel_message("toggle_fold") do conn, data
+        notebook_id = UUID(data["notebook_id"])
+        cell_id = UUID(data["cell_id"])
+        notebook = get(NOTEBOOKS, notebook_id, nothing)
+        if notebook === nothing
+            return
+        end
+
+        cell = get_cell(notebook, cell_id)
+        if cell === nothing
+            return
+        end
+
+        cell.folded = !cell.folded
+        broadcast_channel!("cell_folded", Dict(
+            "notebook_id" => string(notebook_id),
+            "cell_id" => string(cell_id),
+            "folded" => cell.folded
+        ))
     end
 end
 
@@ -1561,6 +1601,7 @@ function create_channels!()
     create_channel("add_cell")
     create_channel("delete_cell")
     create_channel("move_cell")
+    create_channel("toggle_fold")
     create_channel("update_code")
     create_channel("paste_content")
     create_channel("interrupt")
@@ -1593,6 +1634,7 @@ function create_channels!()
     create_channel("cell_added")
     create_channel("cell_deleted")
     create_channel("cell_moved")
+    create_channel("cell_folded")
     create_channel("paste_complete")
     create_channel("interrupted")
     create_channel("restarted")
@@ -1612,6 +1654,7 @@ function setup_channels!()
     setup_add_cell_channel!()
     setup_delete_cell_channel!()
     setup_move_cell_channel!()
+    setup_toggle_fold_channel!()
     setup_update_code_channel!()
     setup_paste_content_channel!()
     setup_interrupt_channel!()
