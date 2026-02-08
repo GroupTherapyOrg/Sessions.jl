@@ -179,14 +179,16 @@ function render_notebook_page()
     sidebar = render_sidebar_content()
     tabs = render_tabs()
     statusbar = render_statusbar()
+    terminal = IDETerminalPanel(collapsed=true)
 
     page = Layout(content;
         sidebar=sidebar,
         tabs=tabs,
-        statusbar=statusbar
+        statusbar=statusbar,
+        terminal=terminal
     )
 
-    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_ide_script())
+    render_page(page; title="Sessions.jl", head_extra=sessions_head_extra() * statusbar_ide_script() * terminal_panel_script())
 end
 
 """

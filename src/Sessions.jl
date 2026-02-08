@@ -100,6 +100,7 @@ include("IDE/CellEditor.jl")
 include("IDE/CellState.jl")
 include("IDE/MarkdownCell.jl")
 include("IDE/OutputRenderer.jl")
+include("IDE/TerminalPanel.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
@@ -196,9 +197,10 @@ export FileEntry, list_directory, format_file_size
 export IDEFileBrowser, IDEBrowserToolbar, IDEFileContextMenu, IDEFileTreeItem
 export file_browser_script
 
-# Terminal (SESSIONS-2110)
+# Terminal (SESSIONS-2110 → SESSIONS-3601)
 export TerminalPanel, TerminalTabs, TerminalUISession
 export create_terminal_ui_session, get_terminal_ui_session, close_terminal_ui_session!
+export IDETerminalPanel, IDETerminalHeader, terminal_panel_script
 
 # Notebook tabs (SESSIONS-2200 → SESSIONS-3402)
 export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script

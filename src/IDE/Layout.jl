@@ -540,9 +540,10 @@ function sessions_script()
         // Terminal API
         // =====================================================================
 
-        var terminalInstances = {};
+        window.terminalInstances = window.terminalInstances || {};
+        var terminalInstances = window.terminalInstances;
 
-        function initTerminal(sessionId) {
+        window.initTerminal = function(sessionId) {
             var container = document.getElementById('terminal-' + sessionId);
             if (!container || !container.hasAttribute('data-xterm')) return null;
             if (terminalInstances[sessionId]) return terminalInstances[sessionId];
@@ -624,7 +625,7 @@ function sessions_script()
             sendAction('create_terminal', { session_id: sessionId, cols: term.cols, rows: term.rows });
             term.writeln('\\x1b[2mConnecting to server...\\x1b[0m');
             return terminalInstances[sessionId];
-        }
+        };
 
         function initAllTerminals() {
             var containers = document.querySelectorAll('[data-xterm]');
