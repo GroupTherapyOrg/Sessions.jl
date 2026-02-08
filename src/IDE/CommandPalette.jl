@@ -58,6 +58,9 @@ function IDECommandPalette()
                     _cmd_item("Save Notebook", "saveNotebook()", "$(mod)+S", ["save"]),
                     _cmd_item("New Notebook", "createNewNotebook()", "$(mod)+Shift+N", ["create"]),
                     _cmd_item("Open File", "openSearch()", "$(mod)+F", ["find", "search"]),
+                    _cmd_item("Export as HTML", "exportNotebook('html')", "", ["export", "download"]),
+                    _cmd_item("Export as Julia Script", "exportNotebook('script')", "", ["export", "download"]),
+                    _cmd_item("Export as Pluto .jl", "exportNotebook('pluto')", "", ["export", "download"]),
                 ),
 
                 Suite.CommandSeparator(),

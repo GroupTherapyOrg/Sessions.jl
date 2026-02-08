@@ -758,6 +758,34 @@ function sessions_script()
         }
 
         // =====================================================================
+        // Export / Download
+        // =====================================================================
+
+        window.exportNotebook = function(format) {
+            if (!notebookId) return;
+            sendAction('export_notebook', { notebook_id: notebookId, format: format });
+        };
+
+        function setupExportHandler() {
+            if (typeof TherapyWS === 'undefined') return;
+            TherapyWS.onChannelMessage('export_result', function(data) {
+                // Trigger browser download
+                var blob = new Blob([data.content], { type: data.mime });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                if (typeof Suite !== 'undefined' && Suite.toast) {
+                    Suite.toast.success('Exported as ' + data.filename);
+                }
+            });
+        }
+
+        // =====================================================================
         // Paste Handler
         // =====================================================================
 
@@ -790,6 +818,7 @@ function sessions_script()
         function init() {
             setupChannelHandlers();
             setupTabChannelHandlers();
+            setupExportHandler();
             setupPasteHandler();
             setupAllBonds();
             initAllTerminals();

@@ -204,6 +204,7 @@ export Notebook, add_cell!, delete_cell!, move_cell!, get_cell
 export analyze_cell!, get_execution_order, get_all_execution_order
 export execute_cell!, execute_reactive!, run_all!, cancel_cell!
 export load_notebook, save_notebook, is_pluto_notebook
+export export_to_html, export_to_script
 
 # Dependency tracking (SESSIONS-1902)
 export SessionsCell, update_topology!, compute_topology

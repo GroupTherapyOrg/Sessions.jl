@@ -908,6 +908,71 @@ function setup_load_channel!()
     end
 end
 
+"""
+Handle export_notebook channel messages.
+Message: {notebook_id, format}
+Formats: "html", "script", "pluto"
+Returns exported content via export_result channel.
+"""
+function setup_export_channel!()
+    on_channel_message("export_notebook") do conn, data
+        notebook_id_str = get(data, "notebook_id", "")
+        format = get(data, "format", "html")
+
+        if isempty(notebook_id_str)
+            send_channel!("error", conn.id, Dict("message" => "Missing notebook_id"))
+            return
+        end
+
+        notebook_id = UUID(notebook_id_str)
+        notebook = get(NOTEBOOKS, notebook_id, nothing)
+        if notebook === nothing
+            send_channel!("error", conn.id, Dict("message" => "Notebook not found"))
+            return
+        end
+
+        try
+            title = notebook.path !== nothing ? replace(basename(notebook.path), ".jl" => "") : "notebook"
+
+            if format == "html"
+                content = export_to_html(notebook)
+                send_channel!("export_result", conn.id, Dict(
+                    "content" => content,
+                    "filename" => "$(title).html",
+                    "mime" => "text/html"
+                ))
+            elseif format == "script"
+                content = export_to_script(notebook)
+                send_channel!("export_result", conn.id, Dict(
+                    "content" => content,
+                    "filename" => "$(title).jl",
+                    "mime" => "text/x-julia"
+                ))
+            elseif format == "pluto"
+                # Save to temp file and read back (save_notebook sets path)
+                original_path = notebook.path
+                tmp = tempname() * ".jl"
+                save_notebook(notebook, tmp)
+                content = read(tmp, String)
+                rm(tmp; force=true)
+                # Restore original path
+                notebook.path = original_path
+                send_channel!("export_result", conn.id, Dict(
+                    "content" => content,
+                    "filename" => "$(title).jl",
+                    "mime" => "text/x-julia"
+                ))
+            else
+                send_channel!("error", conn.id, Dict("message" => "Unknown format: $format"))
+            end
+
+            println("[Sessions] Exported notebook as $format: $title")
+        catch e
+            send_channel!("error", conn.id, Dict("message" => "Export failed: $(sprint(showerror, e))"))
+        end
+    end
+end
+
 # =============================================================================
 # SECTION 6b: BOND VALUE HANDLING
 # =============================================================================
@@ -2003,6 +2068,7 @@ function setup_channels!()
     setup_save_channel!()
     setup_load_channel!()
     setup_set_bond_channel!()  # @bind support
+    setup_export_channel!()    # Export (SESSIONS-3702)
 
     # File browser channels
     setup_navigate_directory_channel!()
