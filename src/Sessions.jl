@@ -106,6 +106,7 @@ include("IDE/KeyboardShortcuts.jl")
 include("IDE/RunControls.jl")
 include("IDE/SearchReplace.jl")
 include("IDE/WorkspaceInspector.jl")
+include("IDE/CommandPalette.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
@@ -221,6 +222,9 @@ export IDESearchBar, search_replace_script, search_styles
 
 # Workspace inspector (SESSIONS-3606)
 export IDEWorkspaceInspector, workspace_inspector_script
+
+# Command palette (SESSIONS-3607)
+export IDECommandPalette, command_palette_script
 
 # Notebook tabs (SESSIONS-2200 → SESSIONS-3402)
 export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script
