@@ -102,6 +102,7 @@ include("IDE/MarkdownCell.jl")
 include("IDE/OutputRenderer.jl")
 include("IDE/TerminalPanel.jl")
 include("IDE/PackagePanel.jl")
+include("IDE/KeyboardShortcuts.jl")
 
 # =============================================================================
 # Widgets - PlutoUI-compatible widgets for @bind macro
@@ -205,6 +206,9 @@ export IDETerminalPanel, IDETerminalHeader, terminal_panel_script
 
 # Package panel (SESSIONS-3602)
 export IDEPackagePanel, IDEPackageItem, package_panel_script
+
+# Keyboard shortcuts (SESSIONS-3603)
+export keyboard_shortcuts_script
 
 # Notebook tabs (SESSIONS-2200 → SESSIONS-3402)
 export NotebookTabs, Tab, EmptyTabsState, notebook_tabs_script
