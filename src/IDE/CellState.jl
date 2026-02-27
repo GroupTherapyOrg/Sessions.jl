@@ -142,19 +142,19 @@ function cell_state_styles()
 
     /* Queued state — amber accent bar */
     .cell.cell-queued .cell-accent-bar {
-        background-color: #f59e0b !important;
+        background-color: var(--color-amber-500, #f59e0b) !important;
         opacity: 0.6 !important;
     }
 
     /* Error state — red accent bar */
     .cell.cell-error .cell-accent-bar {
-        background-color: #cb3c33 !important;
+        background-color: var(--color-rose-600, #cb3c33) !important;
         opacity: 1 !important;
     }
 
     /* Stale state — amber dashed accent */
     .cell.cell-stale .cell-accent-bar {
-        background-color: #f59e0b !important;
+        background-color: var(--color-amber-500, #f59e0b) !important;
         opacity: 0.4 !important;
     }
 

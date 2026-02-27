@@ -585,7 +585,7 @@ function sessions_script()
             if (typeof Terminal === 'undefined') return null;
 
             var isDark = document.documentElement.classList.contains('dark');
-            var isIslands = document.documentElement.getAttribute('data-theme') === 'islands';
+            var isIslands = (document.querySelector('[data-theme]') || document.documentElement).getAttribute('data-theme') === 'islands';
 
             // Terminal themes: Islands (blue-gray) or Default (warm brown)
             var darkTheme = isIslands ? {
