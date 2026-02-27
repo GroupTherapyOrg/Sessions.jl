@@ -128,7 +128,7 @@ function IDENotebookTabs(notebooks::Vector; active_id=nothing, is_running::Bool=
         nothing
     end
 
-    Div(:class => "flex items-center h-7 bg-warm-100 dark:bg-warm-900 border-b border-warm-200 dark:border-[#252422] flex-shrink-0 relative",
+    Div(:class => "flex items-center h-7 bg-warm-100 dark:bg-warm-900 border-b border-warm-200 dark:border-warm-800 flex-shrink-0 relative",
 
         # Tab strip (horizontal scrollable)
         Div(:class => "flex-1 flex items-end gap-0 overflow-x-auto px-1 h-full",
@@ -189,7 +189,7 @@ end
 Shown when no notebooks are open. Provides a quick way to create or open one.
 """
 function IDEEmptyTabs()
-    Div(:class => "flex items-center h-7 bg-warm-100 dark:bg-warm-900 border-b border-warm-200 dark:border-[#252422] flex-shrink-0",
+    Div(:class => "flex items-center h-7 bg-warm-100 dark:bg-warm-900 border-b border-warm-200 dark:border-warm-800 flex-shrink-0",
         Div(:class => "flex items-center px-3",
             Button(:class => "flex items-center gap-1.5 text-[10px] font-mono text-warm-400 dark:text-warm-500 hover:text-warm-600 dark:hover:text-warm-400 transition-colors",
                 :onclick => "createNewNotebook()",

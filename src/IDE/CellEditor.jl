@@ -44,7 +44,7 @@ function codemirror_sessions_theme()
     }
 
     .cm-editor .cm-content {
-        caret-color: #389826;
+        caret-color: var(--color-accent-500);
     }
 
     /* Gutters (line numbers) */
@@ -63,48 +63,48 @@ function codemirror_sessions_theme()
 
     /* Light mode gutter/selection */
     :root:not(.dark) .cm-editor .cm-lineNumbers .cm-gutterElement {
-        color: #b5b0a8;
+        color: var(--color-warm-300);
     }
     :root:not(.dark) .cm-editor .cm-activeLine {
-        background: rgba(56, 152, 38, 0.04);
+        background: color-mix(in srgb, var(--color-accent-500) 4%, transparent);
     }
     :root:not(.dark) .cm-editor .cm-selectionBackground,
     :root:not(.dark) .cm-editor .cm-content ::selection {
-        background: rgba(56, 152, 38, 0.15) !important;
+        background: color-mix(in srgb, var(--color-accent-500) 15%, transparent) !important;
     }
     :root:not(.dark) .cm-editor .cm-matchingBracket {
-        background: rgba(56, 152, 38, 0.2);
-        outline: 1px solid rgba(56, 152, 38, 0.3);
+        background: color-mix(in srgb, var(--color-accent-500) 20%, transparent);
+        outline: 1px solid color-mix(in srgb, var(--color-accent-500) 30%, transparent);
     }
     :root:not(.dark) .cm-editor .cm-cursor {
-        border-left-color: #389826;
+        border-left-color: var(--color-accent-500);
     }
     :root:not(.dark) .cm-editor .cm-activeLineGutter {
         background: transparent;
-        color: #8a8680;
+        color: var(--color-warm-500);
     }
 
     /* Dark mode gutter/selection */
     .dark .cm-editor .cm-lineNumbers .cm-gutterElement {
-        color: #5a5855;
+        color: var(--color-warm-700);
     }
     .dark .cm-editor .cm-activeLine {
-        background: rgba(56, 152, 38, 0.06);
+        background: color-mix(in srgb, var(--color-accent-500) 6%, transparent);
     }
     .dark .cm-editor .cm-selectionBackground,
     .dark .cm-editor .cm-content ::selection {
-        background: rgba(56, 152, 38, 0.2) !important;
+        background: color-mix(in srgb, var(--color-accent-500) 20%, transparent) !important;
     }
     .dark .cm-editor .cm-matchingBracket {
-        background: rgba(56, 152, 38, 0.25);
-        outline: 1px solid rgba(56, 152, 38, 0.35);
+        background: color-mix(in srgb, var(--color-accent-500) 25%, transparent);
+        outline: 1px solid color-mix(in srgb, var(--color-accent-500) 35%, transparent);
     }
     .dark .cm-editor .cm-cursor {
-        border-left-color: #389826;
+        border-left-color: var(--color-accent-500);
     }
     .dark .cm-editor .cm-activeLineGutter {
         background: transparent;
-        color: #8a8680;
+        color: var(--color-warm-500);
     }
 
     /* Focus ring */
@@ -119,69 +119,69 @@ function codemirror_sessions_theme()
 
     /* Light mode syntax */
     :root:not(.dark) .cm-editor {
-        color: #2c2a28;
+        color: var(--color-warm-800);
     }
     :root:not(.dark) .cm-editor .tok-keyword,
     :root:not(.dark) .cm-editor .cm-keyword { color: #9558b2; }
 
     :root:not(.dark) .cm-editor .tok-typeName,
     :root:not(.dark) .cm-editor .tok-className,
-    :root:not(.dark) .cm-editor .cm-type { color: #4063d8; }
+    :root:not(.dark) .cm-editor .cm-type { color: var(--color-accent-secondary-500); }
 
     :root:not(.dark) .cm-editor .tok-string,
     :root:not(.dark) .cm-editor .tok-string2,
     :root:not(.dark) .cm-editor .cm-string { color: #cb3c33; }
 
     :root:not(.dark) .cm-editor .tok-number,
-    :root:not(.dark) .cm-editor .cm-number { color: #2c2a28; }
+    :root:not(.dark) .cm-editor .cm-number { color: var(--color-warm-800); }
 
     :root:not(.dark) .cm-editor .tok-comment,
-    :root:not(.dark) .cm-editor .cm-comment { color: #9a9590; }
+    :root:not(.dark) .cm-editor .cm-comment { color: var(--color-warm-400); }
 
     :root:not(.dark) .cm-editor .tok-operator,
-    :root:not(.dark) .cm-editor .cm-operator { color: #6b6560; }
+    :root:not(.dark) .cm-editor .cm-operator { color: var(--color-warm-600); }
 
     :root:not(.dark) .cm-editor .tok-function,
-    :root:not(.dark) .cm-editor .cm-function { color: #4063d8; opacity: 0.85; }
+    :root:not(.dark) .cm-editor .cm-function { color: var(--color-accent-secondary-500); opacity: 0.85; }
 
     :root:not(.dark) .cm-editor .tok-bool,
     :root:not(.dark) .cm-editor .cm-bool { color: #9558b2; }
 
     :root:not(.dark) .cm-editor .tok-macroName,
-    :root:not(.dark) .cm-editor .cm-macroName { color: #389826; }
+    :root:not(.dark) .cm-editor .cm-macroName { color: var(--color-accent-500); }
 
     /* Dark mode syntax */
     .dark .cm-editor {
-        color: #d4d0c8;
+        color: var(--color-warm-300);
     }
     .dark .cm-editor .tok-keyword,
     .dark .cm-editor .cm-keyword { color: #c9a0dc; }
 
     .dark .cm-editor .tok-typeName,
     .dark .cm-editor .tok-className,
-    .dark .cm-editor .cm-type { color: #6889f2; }
+    .dark .cm-editor .cm-type { color: var(--color-accent-secondary-400); }
 
     .dark .cm-editor .tok-string,
     .dark .cm-editor .tok-string2,
     .dark .cm-editor .cm-string { color: #e8a0a0; }
 
     .dark .cm-editor .tok-number,
-    .dark .cm-editor .cm-number { color: #d4d0c8; }
+    .dark .cm-editor .cm-number { color: var(--color-warm-300); }
 
     .dark .cm-editor .tok-comment,
-    .dark .cm-editor .cm-comment { color: #5a5855; }
+    .dark .cm-editor .cm-comment { color: var(--color-warm-700); }
 
     .dark .cm-editor .tok-operator,
-    .dark .cm-editor .cm-operator { color: #8a8680; }
+    .dark .cm-editor .cm-operator { color: var(--color-warm-500); }
 
     .dark .cm-editor .tok-function,
-    .dark .cm-editor .cm-function { color: #6889f2; }
+    .dark .cm-editor .cm-function { color: var(--color-accent-secondary-400); }
 
     .dark .cm-editor .tok-bool,
     .dark .cm-editor .cm-bool { color: #c9a0dc; }
 
     .dark .cm-editor .tok-macroName,
-    .dark .cm-editor .cm-macroName { color: #56b648; }
+    .dark .cm-editor .cm-macroName { color: var(--color-accent-400); }
 
     /* Fold gutter */
     .cm-editor .cm-foldGutter .cm-gutterElement {
@@ -189,15 +189,15 @@ function codemirror_sessions_theme()
         padding: 0 2px;
         cursor: pointer;
     }
-    :root:not(.dark) .cm-editor .cm-foldGutter .cm-gutterElement { color: #b5b0a8; }
-    .dark .cm-editor .cm-foldGutter .cm-gutterElement { color: #5a5855; }
+    :root:not(.dark) .cm-editor .cm-foldGutter .cm-gutterElement { color: var(--color-warm-300); }
+    .dark .cm-editor .cm-foldGutter .cm-gutterElement { color: var(--color-warm-700); }
 
     /* Placeholder */
     .cm-editor .cm-placeholder {
         font-style: italic;
     }
-    :root:not(.dark) .cm-editor .cm-placeholder { color: #b5b0a8; }
-    .dark .cm-editor .cm-placeholder { color: #5a5855; }
+    :root:not(.dark) .cm-editor .cm-placeholder { color: var(--color-warm-300); }
+    .dark .cm-editor .cm-placeholder { color: var(--color-warm-700); }
 
     /* Tooltip (autocomplete, hover info) */
     .cm-tooltip {
@@ -206,14 +206,14 @@ function codemirror_sessions_theme()
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
     :root:not(.dark) .cm-tooltip {
-        background: #f8f7f4;
-        border: 1px solid #e8e3d9;
-        color: #2c2a28;
+        background: var(--color-warm-50);
+        border: 1px solid var(--color-warm-200);
+        color: var(--color-warm-800);
     }
     .dark .cm-tooltip {
-        background: #1a1918;
-        border: 1px solid #252422;
-        color: #d4d0c8;
+        background: var(--color-warm-900);
+        border: 1px solid var(--color-warm-800);
+        color: var(--color-warm-300);
     }
 
     /* Autocomplete list */
@@ -221,12 +221,12 @@ function codemirror_sessions_theme()
         border-radius: 4px;
     }
     :root:not(.dark) .cm-tooltip-autocomplete ul li[aria-selected] {
-        background: rgba(56, 152, 38, 0.1);
-        color: #2c2a28;
+        background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
+        color: var(--color-warm-800);
     }
     .dark .cm-tooltip-autocomplete ul li[aria-selected] {
-        background: rgba(56, 152, 38, 0.15);
-        color: #d4d0c8;
+        background: color-mix(in srgb, var(--color-accent-500) 15%, transparent);
+        color: var(--color-warm-300);
     }
 
     /* Dirty indicator styling */

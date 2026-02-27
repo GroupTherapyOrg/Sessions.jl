@@ -1945,11 +1945,11 @@ y = 2
             # Error state → red
             error_cell = Cell(; code="x")
             error_cell.state = CELL_ERROR
-            @test Sessions._accent_color(error_cell) == "bg-[#cb3c33]"
+            @test Sessions._accent_color(error_cell) == "bg-rose-600"
 
             # Markdown → purple
             md_cell = Cell(; code="md\"test\"", cell_type=:markdown)
-            @test occursin("#9558b2", Sessions._accent_color(md_cell))
+            @test occursin("purple-600", Sessions._accent_color(md_cell))
 
             # Running → accent
             running_cell = Cell(; code="x")
@@ -2136,7 +2136,7 @@ y = 2
             html = Therapy.render_to_string(open_cell)
             @test occursin("Open Title", html)
             # Should have code card with purple accent
-            @test occursin("#9558b2", html) || occursin("9558b2", html)
+            @test occursin("purple-600", html) || occursin("bg-purple-600", html)
         end
     end
 
@@ -2168,8 +2168,8 @@ y = 2
             @test occursin("<style>", css)
             @test occursin("cm-editor", css)
             # Julia syntax colors
-            @test occursin("#9558b2", css) || occursin("9558b2", css)  # Purple keywords
-            @test occursin("#4063d8", css) || occursin("4063d8", css)  # Blue types
+            @test occursin("#9558b2", css) || occursin("9558b2", css)  # Purple keywords (hardcoded — Julia official color)
+            @test occursin("accent-secondary", css)  # Blue types use CSS var
         end
 
         @testset "output_styles()" begin

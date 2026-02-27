@@ -26,9 +26,9 @@ Get left accent bar color class based on cell state and type.
 """
 function _accent_color(cell::Cell)
     if cell.state == CELL_ERROR
-        return "bg-[#cb3c33]"
+        return "bg-rose-600"
     elseif cell.cell_type == :markdown
-        return "bg-[#9558b2] opacity-25"
+        return "bg-purple-600 opacity-25"
     elseif cell.state == CELL_RUNNING || cell.state == CELL_QUEUED
         return "bg-accent-500"
     elseif cell.output !== nothing && !isempty(cell.output.html)
@@ -78,7 +78,7 @@ function CellSeparator(cell::Cell)
         return nothing
     end
 
-    Div(:class => "cell-separator border-t border-dashed border-warm-200 dark:border-[#252422] my-1")
+    Div(:class => "cell-separator border-t border-dashed border-warm-200 dark:border-warm-800 my-1")
 end
 
 # =============================================================================
@@ -123,7 +123,7 @@ function IDECodeCard(cell::Cell; show_toolbar::Bool=true)
 
         # Code card body
         Suite.Card(
-            :class => "flex-1 rounded-l-none border-l-0 bg-warm-50 dark:bg-[#111110] border-warm-200/50 dark:border-[#252422]/50",
+            :class => "flex-1 rounded-l-none border-l-0 bg-warm-50 dark:bg-warm-950 border-warm-200/50 dark:border-warm-800/50",
 
             Suite.CardContent(
                 :class => "relative p-0",

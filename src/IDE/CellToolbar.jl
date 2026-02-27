@@ -173,7 +173,7 @@ function cell_toolbar_script()
             if (!dropIndicator) {
                 dropIndicator = document.createElement('div');
                 dropIndicator.className = 'cell-drop-indicator';
-                dropIndicator.style.cssText = 'height:2px;background:#389826;border-radius:1px;margin:4px 0;opacity:0;transition:opacity 0.15s;pointer-events:none;';
+                dropIndicator.style.cssText = 'height:2px;background:var(--color-accent-500);border-radius:1px;margin:4px 0;opacity:0;transition:opacity 0.15s;pointer-events:none;';
             }
             return dropIndicator;
         }

@@ -104,17 +104,17 @@ function markdown_styles()
 
     :root:not(.dark) .sessions-markdown h1,
     :root:not(.dark) .sessions-markdown h2,
-    :root:not(.dark) .sessions-markdown h3 { color: #2a2520; }
+    :root:not(.dark) .sessions-markdown h3 { color: var(--color-warm-800); }
     .dark .sessions-markdown h1,
     .dark .sessions-markdown h2,
-    .dark .sessions-markdown h3 { color: #d4d0c8; }
+    .dark .sessions-markdown h3 { color: var(--color-warm-300); }
 
     .sessions-markdown p {
         font-size: 0.8125rem;
         margin-bottom: 0.5rem;
     }
-    :root:not(.dark) .sessions-markdown p { color: #6b6560; }
-    .dark .sessions-markdown p { color: #8a8680; }
+    :root:not(.dark) .sessions-markdown p { color: var(--color-warm-600); }
+    .dark .sessions-markdown p { color: var(--color-warm-500); }
 
     .sessions-markdown strong { font-weight: 600; }
     .sessions-markdown em { font-style: italic; }
@@ -123,8 +123,8 @@ function markdown_styles()
         text-decoration: underline;
         text-underline-offset: 2px;
     }
-    :root:not(.dark) .sessions-markdown a { color: #4063d8; }
-    .dark .sessions-markdown a { color: #6889f2; }
+    :root:not(.dark) .sessions-markdown a { color: var(--color-accent-secondary-500); }
+    .dark .sessions-markdown a { color: var(--color-accent-secondary-400); }
 
     .sessions-markdown code {
         font-family: var(--font-mono, 'JetBrains Mono', 'SF Mono', monospace);
@@ -133,12 +133,12 @@ function markdown_styles()
         border-radius: 3px;
     }
     :root:not(.dark) .sessions-markdown code {
-        background: rgba(56, 152, 38, 0.06);
-        color: #2c2a28;
+        background: color-mix(in srgb, var(--color-accent-500) 6%, transparent);
+        color: var(--color-warm-800);
     }
     .dark .sessions-markdown code {
-        background: rgba(56, 152, 38, 0.1);
-        color: #d4d0c8;
+        background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
+        color: var(--color-warm-300);
     }
 
     .sessions-markdown pre {
@@ -151,12 +151,12 @@ function markdown_styles()
         margin: 0.5rem 0;
     }
     :root:not(.dark) .sessions-markdown pre {
-        background: #f8f7f4;
-        border: 1px solid #e8e3d9;
+        background: var(--color-warm-50);
+        border: 1px solid var(--color-warm-200);
     }
     .dark .sessions-markdown pre {
-        background: #111110;
-        border: 1px solid #252422;
+        background: var(--color-warm-950);
+        border: 1px solid var(--color-warm-800);
     }
     .sessions-markdown pre code {
         background: none;
@@ -170,9 +170,9 @@ function markdown_styles()
         font-size: 0.8125rem;
     }
     :root:not(.dark) .sessions-markdown ul,
-    :root:not(.dark) .sessions-markdown ol { color: #6b6560; }
+    :root:not(.dark) .sessions-markdown ol { color: var(--color-warm-600); }
     .dark .sessions-markdown ul,
-    .dark .sessions-markdown ol { color: #8a8680; }
+    .dark .sessions-markdown ol { color: var(--color-warm-500); }
 
     .sessions-markdown li { margin-bottom: 0.25rem; }
 
@@ -182,20 +182,20 @@ function markdown_styles()
         font-style: italic;
     }
     :root:not(.dark) .sessions-markdown blockquote {
-        border-left: 2px solid #e8e3d9;
-        color: #9a9590;
+        border-left: 2px solid var(--color-warm-200);
+        color: var(--color-warm-400);
     }
     .dark .sessions-markdown blockquote {
-        border-left: 2px solid #252422;
-        color: #5a5855;
+        border-left: 2px solid var(--color-warm-800);
+        color: var(--color-warm-700);
     }
 
     .sessions-markdown hr {
         border: none;
         margin: 1rem 0;
     }
-    :root:not(.dark) .sessions-markdown hr { border-top: 1px solid #e8e3d9; }
-    .dark .sessions-markdown hr { border-top: 1px solid #252422; }
+    :root:not(.dark) .sessions-markdown hr { border-top: 1px solid var(--color-warm-200); }
+    .dark .sessions-markdown hr { border-top: 1px solid var(--color-warm-800); }
 
     .sessions-markdown img {
         max-width: 100%;
@@ -215,22 +215,22 @@ function markdown_styles()
         text-align: left;
     }
     :root:not(.dark) .sessions-markdown th {
-        border-bottom: 2px solid #e8e3d9;
-        color: #2a2520;
+        border-bottom: 2px solid var(--color-warm-200);
+        color: var(--color-warm-800);
         font-weight: 500;
     }
     :root:not(.dark) .sessions-markdown td {
-        border-bottom: 1px solid #e8e3d9;
-        color: #6b6560;
+        border-bottom: 1px solid var(--color-warm-200);
+        color: var(--color-warm-600);
     }
     .dark .sessions-markdown th {
-        border-bottom: 2px solid #252422;
-        color: #d4d0c8;
+        border-bottom: 2px solid var(--color-warm-800);
+        color: var(--color-warm-300);
         font-weight: 500;
     }
     .dark .sessions-markdown td {
-        border-bottom: 1px solid #252422;
-        color: #8a8680;
+        border-bottom: 1px solid var(--color-warm-800);
+        color: var(--color-warm-500);
     }
 
     /* LaTeX (KaTeX/MathJax support) */
@@ -291,16 +291,16 @@ function MarkdownCellOpen(cell::Cell)
         ),
 
         # 2. Dotted separator
-        Div(:class => "border-t border-dashed border-warm-200 dark:border-[#252422] my-1"),
+        Div(:class => "border-t border-dashed border-warm-200 dark:border-warm-800 my-1"),
 
         # 3. Code card with purple left accent
         Div(:class => "relative flex",
             # Purple accent bar
-            Div(:class => "w-0.5 rounded-l flex-shrink-0 bg-[#9558b2] opacity-25"),
+            Div(:class => "w-0.5 rounded-l flex-shrink-0 bg-purple-600 opacity-25"),
 
             # Code card
             Suite.Card(
-                :class => "flex-1 rounded-l-none border-l-0 bg-warm-50 dark:bg-[#111110] border-warm-200/50 dark:border-[#252422]/50",
+                :class => "flex-1 rounded-l-none border-l-0 bg-warm-50 dark:bg-warm-950 border-warm-200/50 dark:border-warm-800/50",
 
                 Suite.CardContent(
                     :class => "relative p-0",
