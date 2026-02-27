@@ -271,6 +271,85 @@
     --text-secondary: #78716c;
     --text-tertiary: #57534e;
   }
+
+  /* Islands theme — VSCode Dark Islands: blue-gray neutrals, blue accent, glass panels */
+  [data-theme="islands"] {
+    /* Blue-gray neutral scale (replaces warm brown) */
+    --color-warm-50: #f4f4f6;
+    --color-warm-100: #eaeaed;
+    --color-warm-200: #d4d5d9;
+    --color-warm-300: #bcbec4;
+    --color-warm-400: #9a9ea5;
+    --color-warm-500: #7a7e85;
+    --color-warm-600: #6f737a;
+    --color-warm-700: #4e5157;
+    --color-warm-800: #2b2d30;
+    --color-warm-900: #181a1d;
+    --color-warm-950: #121216;
+
+    /* Accent scale — Islands Blue #548af7 */
+    --color-accent-50: #eff4fe;
+    --color-accent-100: #dbe5fd;
+    --color-accent-200: #bfd2fb;
+    --color-accent-300: #93b5f8;
+    --color-accent-400: #6d9df8;
+    --color-accent-500: #548af7;
+    --color-accent-600: #3b6de6;
+    --color-accent-700: #2f57d3;
+    --color-accent-800: #2c49ab;
+    --color-accent-900: #293f87;
+    --color-accent-950: #1c2953;
+
+    /* Secondary accent — Islands Orange #cf8e6d */
+    --color-accent-secondary-50: #fdf5f0;
+    --color-accent-secondary-100: #fae8dc;
+    --color-accent-secondary-200: #f4ccb5;
+    --color-accent-secondary-300: #e8ac88;
+    --color-accent-secondary-400: #cf8e6d;
+    --color-accent-secondary-500: #c47a56;
+    --color-accent-secondary-600: #b06443;
+    --color-accent-secondary-700: #934e37;
+    --color-accent-secondary-800: #794131;
+    --color-accent-secondary-900: #64382c;
+    --color-accent-secondary-950: #351b15;
+
+    /* .jl wordmark: exclude Blue (accent), use Purple/Green/Red */
+    --jl-dot: #9558b2;
+    --jl-j: #389826;
+    --jl-l: #cb3c33;
+
+    /* Generous radius (Islands 14-24px floating panels) */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.5rem;
+    --radius-2xl: 2rem;
+
+    /* Deeper shadows for glass effect */
+    --shadow-sm: 0 2px 4px -1px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 8px -2px rgba(0,0,0,0.12), 0 2px 4px -2px rgba(0,0,0,0.08);
+
+    /* Design system overrides for light mode */
+    --bg-primary: #f4f4f6;
+    --bg-secondary: #eaeaed;
+    --bg-tertiary: #d4d5d9;
+    --text-primary: #1a1b1f;
+    --text-secondary: #5a5c63;
+    --text-tertiary: #7a7e85;
+  }
+  .dark[data-theme="islands"] {
+    /* Dark mode backgrounds from Islands Dark palette */
+    --bg-primary: #121216;
+    --bg-secondary: #161619;
+    --bg-tertiary: #181a1d;
+    --text-primary: #bcbec4;
+    --text-secondary: #7a7e85;
+    --text-tertiary: #4e5157;
+
+    /* Deeper shadows for dark glass */
+    --shadow-sm: 0 2px 8px 0 rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px 0 rgba(0,0,0,0.4);
+  }
 }
 
 /* Calendar selection states */
@@ -309,6 +388,68 @@
   .suite-hl-operator { color: #89ddff; }
 }
 
+/* ====================================================================
+   ISLANDS GLASS PANEL UTILITIES
+   Directional borders + shadow simulate floating glass panels.
+   Scoped to [data-theme='islands'] — NO-OP for all other themes.
+   ==================================================================== */
+
+/* Dark mode glass — bright top/left borders, deep shadow */
+.dark[data-theme='islands'] .glass-panel {
+    border-top: 1px solid rgba(255,255,255,0.10);
+    border-left: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.3);
+}
+
+.dark[data-theme='islands'] .glass-panel-elevated {
+    border-top: 1px solid rgba(255,255,255,0.12);
+    border-left: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    box-shadow: 0 4px 12px 0 rgba(0,0,0,0.4);
+}
+
+/* Light mode glass — subtle shadow borders */
+[data-theme='islands']:not(.dark) .glass-panel {
+    border-top: 1px solid rgba(0,0,0,0.04);
+    border-left: 1px solid rgba(0,0,0,0.03);
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    border-right: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.08);
+}
+
+[data-theme='islands']:not(.dark) .glass-panel-elevated {
+    border-top: 1px solid rgba(0,0,0,0.06);
+    border-left: 1px solid rgba(0,0,0,0.04);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    border-right: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 4px 12px 0 rgba(0,0,0,0.12);
+}
+
+/* Glass hover-reveal transition */
+[data-theme='islands'] .glass-hover {
+    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ====================================================================
+   SESSIONS ISLAND LAYOUT UTILITIES
+   ==================================================================== */
+@layer components {
+  /* Canvas: the very dark background behind all islands */
+  .sessions-canvas {
+    @apply min-h-screen bg-warm-950;
+    padding: 6px;
+    display: grid;
+  }
+
+  /* Island: a floating rounded panel on the canvas */
+  .sessions-island {
+    @apply rounded-2xl overflow-hidden bg-warm-900;
+  }
+}
+
 /* ==========================================================================
    Sessions.jl-specific styles
    ========================================================================== */
@@ -317,15 +458,15 @@
 @layer base {
   :root {
     /* Cell accent bar colors (2px left bar, colored by state) */
-    --cell-accent-output: rgba(56, 152, 38, 0.35);    /* Green — has output */
+    --cell-accent-output: color-mix(in srgb, var(--color-accent-500) 35%, transparent);    /* Accent — has output */
     --cell-accent-markdown: rgba(149, 88, 178, 0.25);  /* Purple — markdown */
     --cell-accent-idle: var(--color-warm-200);           /* Neutral — no output */
     --cell-accent-error: rgba(203, 60, 51, 0.35);       /* Red — error */
     --cell-accent-stale: rgba(245, 158, 11, 0.35);      /* Amber — stale */
-    --cell-accent-running: rgba(56, 152, 38, 0.5);      /* Green bright — running */
+    --cell-accent-running: color-mix(in srgb, var(--color-accent-500) 50%, transparent);   /* Accent bright — running */
 
     /* Output text */
-    --output-color: rgba(56, 152, 38, 0.55);
+    --output-color: color-mix(in srgb, var(--color-accent-500) 55%, transparent);
 
     /* Dotted separator */
     --separator-color: var(--color-warm-200);
@@ -400,8 +541,8 @@
   .sessions-cell-run {
     @apply absolute top-1 right-1 opacity-0 transition-opacity;
     @apply px-2 py-0.5 rounded-[5px] text-[9px] font-mono;
-    background: rgba(56, 152, 38, 0.1);
-    color: rgba(56, 152, 38, 0.6);
+    background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
+    color: color-mix(in srgb, var(--color-accent-500) 60%, transparent);
   }
   .sessions-cell:hover .sessions-cell-run {
     @apply opacity-100;
@@ -474,11 +615,11 @@
   /* Active file highlight */
   .sessions-file-tree-item[data-active="true"] {
     @apply mx-2 px-3 rounded;
-    background: rgba(56, 152, 38, 0.08);
-    color: rgba(56, 152, 38, 0.8);
+    background: color-mix(in srgb, var(--color-accent-500) 8%, transparent);
+    color: color-mix(in srgb, var(--color-accent-500) 80%, transparent);
   }
   :is(.dark) .sessions-file-tree-item[data-active="true"] {
-    background: rgba(56, 152, 38, 0.1);
+    background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
   }
 
   /* Muted config files */
@@ -543,21 +684,21 @@
   /* Run All button */
   .sessions-run-all {
     @apply ml-auto mr-3 px-3 py-1 rounded text-[9px] font-mono;
-    background: rgba(56, 152, 38, 0.1);
-    color: rgba(56, 152, 38, 0.7);
+    background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
+    color: color-mix(in srgb, var(--color-accent-500) 70%, transparent);
   }
   .sessions-run-all:hover {
-    background: rgba(56, 152, 38, 0.15);
+    background: color-mix(in srgb, var(--color-accent-500) 15%, transparent);
   }
 
   /* Running indicator dot */
   .sessions-running-dot {
     @apply inline-block w-2 h-2 rounded-full mr-2;
-    background: rgba(56, 152, 38, 0.4);
+    background: color-mix(in srgb, var(--color-accent-500) 40%, transparent);
     animation: sessions-pulse 1.5s ease-in-out infinite;
   }
   :is(.dark) .sessions-running-dot {
-    background: rgba(56, 152, 38, 0.5);
+    background: color-mix(in srgb, var(--color-accent-500) 50%, transparent);
   }
 
   @keyframes sessions-pulse {
@@ -575,11 +716,11 @@
 
   .sessions-terminal-tab {
     @apply inline-flex items-center px-3 py-0.5 rounded text-[9px] font-mono;
-    background: rgba(56, 152, 38, 0.08);
-    color: rgba(56, 152, 38, 0.7);
+    background: color-mix(in srgb, var(--color-accent-500) 8%, transparent);
+    color: color-mix(in srgb, var(--color-accent-500) 70%, transparent);
   }
   :is(.dark) .sessions-terminal-tab {
-    background: rgba(56, 152, 38, 0.1);
+    background: color-mix(in srgb, var(--color-accent-500) 10%, transparent);
   }
 
   .sessions-terminal-collapse {
@@ -609,18 +750,18 @@
   }
   .cm-editor .cm-activeLineGutter,
   .cm-editor .cm-activeLine {
-    background: rgba(56, 152, 38, 0.04) !important;
+    background: color-mix(in srgb, var(--color-accent-500) 4%, transparent) !important;
   }
   :is(.dark) .cm-editor .cm-activeLineGutter,
   :is(.dark) .cm-editor .cm-activeLine {
-    background: rgba(56, 152, 38, 0.06) !important;
+    background: color-mix(in srgb, var(--color-accent-500) 6%, transparent) !important;
   }
   .cm-editor .cm-selectionBackground {
-    background: rgba(56, 152, 38, 0.12) !important;
+    background: color-mix(in srgb, var(--color-accent-500) 12%, transparent) !important;
   }
   .cm-editor .cm-matchingBracket {
-    background: rgba(56, 152, 38, 0.15) !important;
-    outline: 1px solid rgba(56, 152, 38, 0.3);
+    background: color-mix(in srgb, var(--color-accent-500) 15%, transparent) !important;
+    outline: 1px solid color-mix(in srgb, var(--color-accent-500) 30%, transparent);
   }
   .cm-editor .cm-tooltip {
     @apply bg-warm-50 dark:bg-warm-900 border border-warm-200 dark:border-[#252422];
@@ -630,7 +771,7 @@
     @apply text-warm-800 dark:text-warm-300;
   }
   .cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
-    background: rgba(56, 152, 38, 0.1) !important;
+    background: color-mix(in srgb, var(--color-accent-500) 10%, transparent) !important;
     @apply text-warm-800 dark:text-warm-300;
   }
 
@@ -659,7 +800,7 @@
 
   /* Julia REPL prompt color */
   .sessions-repl-prompt {
-    color: rgba(56, 152, 38, 0.6);
+    color: color-mix(in srgb, var(--color-accent-500) 60%, transparent);
     font-family: 'JuliaMono', 'SF Mono', 'Fira Code', monospace;
     font-size: 11px;
   }
