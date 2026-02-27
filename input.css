@@ -439,15 +439,30 @@
 @layer components {
   /* Canvas: the very dark background behind all islands */
   .sessions-canvas {
-    @apply min-h-screen bg-warm-950;
+    @apply h-screen bg-warm-950 flex flex-col overflow-hidden;
     padding: 6px;
-    display: grid;
   }
 
   /* Island: a floating rounded panel on the canvas */
   .sessions-island {
     @apply rounded-2xl overflow-hidden bg-warm-900;
   }
+}
+
+/* Islands-specific ResizableHandle: transparent 6px gap showing canvas */
+[data-theme='islands'] [data-suite-resizable-handle] {
+  background: transparent !important;
+}
+[data-theme='islands'] [data-suite-resizable-handle][data-suite-resizable-direction="horizontal"] {
+  width: 6px !important;
+  min-width: 6px;
+}
+[data-theme='islands'] [data-suite-resizable-handle][data-suite-resizable-direction="vertical"] {
+  height: 6px !important;
+  min-height: 6px;
+}
+[data-theme='islands'] [data-suite-resizable-handle]:hover {
+  background: color-mix(in srgb, var(--color-accent-500) 20%, transparent) !important;
 }
 
 /* ==========================================================================

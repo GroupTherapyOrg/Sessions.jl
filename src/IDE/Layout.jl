@@ -1,23 +1,23 @@
-# IDE/Layout.jl - Sessions.jl IDE Layout (Suite.jl rewrite)
+# IDE/Layout.jl - Sessions.jl IDE Layout (Dark Islands theme)
 #
 # The root layout component for the Sessions.jl IDE.
 # Uses Suite.jl components throughout — zero raw HTML for UI structure.
+# Dark Islands theme: floating rounded panels on very dark canvas.
 #
 # Structure:
-#   ┌─────────────────────────────────────────────────┐
-#   │  Title Bar: Sessions.jl wordmark + theme toggle  │
-#   ├────────┬────────────────────────────────────────┤
-#   │  SIDE  │  Tab Bar + Run All                      │
-#   │  BAR   │  ─────────────────────────────────────  │
-#   │  220px │  Notebook cells                         │
-#   │        │                                         │
-#   │  FILE  │                                         │
-#   │  TREE  │                                         │
-#   │        │                                         │
-#   │  PKGS  │                                         │
-#   │        ├─────────────────────────────────────────┤
-#   │ S.jl   │  Terminal panel (collapsible)            │
-#   └────────┴─────────────────────────────────────────┘
+#   ┌──────────────────────────────────────────────────────┐
+#   │  Canvas (bg-warm-950, p-[6px])                        │
+#   │  ┌──────────┐ ┌──────────────────────────────────────┐│
+#   │  │          │ │  Editor Island (glass-panel)          ││
+#   │  │ Sidebar  │ │  ┌─ TitleBar + Tabs ────────────┐    ││
+#   │  │ Island   │ │  │  Cells (scrollable)           │    ││
+#   │  │ (glass-  │ │  │  ...                          │    ││
+#   │  │  panel)  │ │  └──────────────────────────────┘    ││
+#   │  │          │ ├──────────────────────────────────────┤│
+#   │  │          │ │  Terminal Island (glass-panel)        ││
+#   │  └──────────┘ └──────────────────────────────────────┘│
+#   │  StatusBar                                             │
+#   └──────────────────────────────────────────────────────┘
 
 import Suite
 
@@ -56,9 +56,10 @@ end
 
 """
 Title bar with wordmark, theme controls, and mobile hamburger.
+Sits inside the editor island — no background/border (island provides surface).
 """
 function TitleBar(; sidebar_content=nothing)
-    Header(:class => "h-9 flex items-center justify-between px-4 bg-warm-50 dark:bg-warm-950 border-b border-warm-200 dark:border-[#252422] flex-shrink-0 z-50",
+    Header(:class => "h-9 flex items-center justify-between px-4 border-b border-warm-200 dark:border-warm-800 flex-shrink-0 z-50",
         # Left: mobile hamburger + wordmark
         Div(:class => "flex items-center gap-2",
             # Mobile sidebar toggle (Sheet)
@@ -101,7 +102,7 @@ end
 """
     Layout(content; sidebar=nothing, tabs=nothing, statusbar=nothing, terminal=nothing)
 
-Main IDE layout component for Sessions.jl.
+Main IDE layout component for Sessions.jl — Dark Islands theme.
 
 # Arguments
 - `content`: Main notebook content area
@@ -111,11 +112,13 @@ Main IDE layout component for Sessions.jl.
 - `terminal`: Terminal panel component
 
 # Structure
-Uses a flexbox layout with:
-- Title bar (fixed top)
-- Sidebar (220px, collapsible, hidden on mobile → Sheet)
-- Main area with tab bar + content + terminal
-- Status bar (fixed bottom)
+Islands layout: floating rounded panels on a very dark canvas.
+- Canvas: bg-warm-950 with 6px padding (gap between islands)
+- Sidebar island: ResizablePanel (15%, glass-panel, rounded-2xl)
+- Editor island: TitleBar + tabs + scrollable cells (glass-panel, rounded-2xl)
+- Terminal island: ResizablePanel (30%, glass-panel, rounded-2xl)
+- StatusBar: thin bar at bottom of canvas (outside islands)
+- Suite.ResizablePanelGroup for sidebar/main and editor/terminal splits
 """
 function Layout(content;
     sidebar=nothing,
@@ -123,38 +126,63 @@ function Layout(content;
     statusbar=nothing,
     terminal=nothing
 )
-    Div(:class => "h-screen flex flex-col bg-warm-100 dark:bg-warm-900 overflow-hidden",
-        # Title bar
+    # Build the editor island content
+    editor_island = Div(:class => "sessions-island glass-panel h-full flex flex-col",
+        # Title bar inside editor island
         TitleBar(sidebar_content=sidebar),
 
-        # Main body: sidebar + content
-        Div(:class => "flex flex-1 overflow-hidden",
-            # Desktop sidebar (hidden on mobile)
-            sidebar !== nothing ?
-                Aside(:id => "sessions-sidebar",
-                    :class => "hidden md:flex md:flex-col w-[220px] flex-shrink-0 bg-warm-50 dark:bg-warm-950 border-r border-warm-200 dark:border-[#252422] overflow-y-auto",
-                    sidebar
-                ) : nothing,
+        # Tab bar
+        tabs !== nothing ? tabs : nothing,
 
-            # Main content area
-            Div(:class => "flex flex-1 flex-col overflow-hidden",
-                # Tab bar
-                tabs !== nothing ? tabs : nothing,
-
-                # Notebook content (scrollable)
-                MainEl(:id => "page-content",
-                    :class => "flex-1 overflow-y-auto px-6 py-8",
-                    Div(:class => "max-w-4xl mx-auto",
-                        content
-                    )
-                ),
-
-                # Terminal panel (collapsible, at bottom)
-                terminal !== nothing ? terminal : nothing,
+        # Notebook content (scrollable)
+        MainEl(:id => "page-content",
+            :class => "flex-1 overflow-y-auto px-6 py-8",
+            Div(:class => "max-w-4xl mx-auto",
+                content
             )
         ),
+    )
 
-        # Status bar (fixed bottom)
+    # Build the main column (editor + optional terminal)
+    main_content = if terminal !== nothing
+        Suite.ResizablePanelGroup(direction="vertical",
+            # Editor panel
+            Suite.ResizablePanel(default_size=70,
+                editor_island
+            ),
+            Suite.ResizableHandle(),
+            # Terminal island
+            Suite.ResizablePanel(default_size=30, min_size=5,
+                Div(:class => "sessions-island glass-panel h-full flex flex-col",
+                    terminal
+                )
+            ),
+        )
+    else
+        editor_island
+    end
+
+    Div(:class => "sessions-canvas dark", :data_theme => "islands",
+        # Horizontal split: sidebar | main
+        Suite.ResizablePanelGroup(direction="horizontal", class="flex-1 min-h-0",
+            # Sidebar island (hidden on mobile, shown on md+)
+            sidebar !== nothing ? Fragment(
+                Suite.ResizablePanel(default_size=15, min_size=10, class="hidden md:flex",
+                    Div(:id => "sessions-sidebar",
+                        :class => "sessions-island glass-panel h-full flex flex-col overflow-y-auto",
+                        sidebar
+                    )
+                ),
+                Suite.ResizableHandle(),
+            ) : nothing,
+
+            # Main panel (editor + terminal)
+            Suite.ResizablePanel(default_size=sidebar !== nothing ? 85 : 100,
+                main_content
+            ),
+        ),
+
+        # Status bar (outside islands, at bottom of canvas)
         statusbar !== nothing ? statusbar : nothing,
 
         # Suite.jl Toast notifications
@@ -557,17 +585,22 @@ function sessions_script()
             if (typeof Terminal === 'undefined') return null;
 
             var isDark = document.documentElement.classList.contains('dark');
-            var term = new Terminal({
-                fontFamily: "var(--font-mono, 'JuliaMono', 'SF Mono', 'Fira Code', monospace)",
-                fontSize: 13,
-                lineHeight: 1.5,
-                cursorBlink: true,
-                cursorStyle: 'bar',
-                theme: isDark ? {
-                    background: '#111110',
-                    foreground: '#d4d0c8',
-                    cursor: '#389826',
-                    selectionBackground: 'rgba(56, 152, 38, 0.3)',
+            var isIslands = document.documentElement.getAttribute('data-theme') === 'islands';
+
+            // Terminal themes: Islands (blue-gray) or Default (warm brown)
+            var darkTheme = isIslands ? {
+                    background: '#121216', foreground: '#bcbec4',
+                    cursor: '#548af7', selectionBackground: 'rgba(84, 138, 247, 0.3)',
+                    black: '#121216', red: '#cb3c33', green: '#389826',
+                    yellow: '#cf8e6d', blue: '#548af7', magenta: '#9558b2',
+                    cyan: '#7dd3e8', white: '#bcbec4',
+                    brightBlack: '#4e5157', brightRed: '#e8a0a0',
+                    brightGreen: '#56b648', brightYellow: '#e8ac88',
+                    brightBlue: '#6d9df8', brightMagenta: '#c9a0dc',
+                    brightCyan: '#98e0f0', brightWhite: '#f4f4f6'
+                } : {
+                    background: '#111110', foreground: '#d4d0c8',
+                    cursor: '#389826', selectionBackground: 'rgba(56, 152, 38, 0.3)',
                     black: '#1a1918', red: '#cb3c33', green: '#389826',
                     yellow: '#f0c674', blue: '#4063d8', magenta: '#9558b2',
                     cyan: '#7dd3e8', white: '#d4d0c8',
@@ -575,11 +608,20 @@ function sessions_script()
                     brightGreen: '#56b648', brightYellow: '#f8d898',
                     brightBlue: '#6889f2', brightMagenta: '#c9a0dc',
                     brightCyan: '#98e0f0', brightWhite: '#f8f7f4'
+                };
+            var lightTheme = isIslands ? {
+                    background: '#f4f4f6', foreground: '#1a1b1f',
+                    cursor: '#548af7', selectionBackground: 'rgba(84, 138, 247, 0.2)',
+                    black: '#1a1b1f', red: '#cb3c33', green: '#389826',
+                    yellow: '#cf8e6d', blue: '#548af7', magenta: '#9558b2',
+                    cyan: '#0077aa', white: '#f4f4f6',
+                    brightBlack: '#7a7e85', brightRed: '#e8a0a0',
+                    brightGreen: '#56b648', brightYellow: '#e8ac88',
+                    brightBlue: '#6d9df8', brightMagenta: '#c9a0dc',
+                    brightCyan: '#7dd3e8', brightWhite: '#ffffff'
                 } : {
-                    background: '#f8f7f4',
-                    foreground: '#2c2a28',
-                    cursor: '#389826',
-                    selectionBackground: 'rgba(56, 152, 38, 0.2)',
+                    background: '#f8f7f4', foreground: '#2c2a28',
+                    cursor: '#389826', selectionBackground: 'rgba(56, 152, 38, 0.2)',
                     black: '#2c2a28', red: '#cb3c33', green: '#389826',
                     yellow: '#b8860b', blue: '#4063d8', magenta: '#9558b2',
                     cyan: '#0077aa', white: '#f8f7f4',
@@ -587,7 +629,15 @@ function sessions_script()
                     brightGreen: '#56b648', brightYellow: '#f0c674',
                     brightBlue: '#6889f2', brightMagenta: '#c9a0dc',
                     brightCyan: '#7dd3e8', brightWhite: '#ffffff'
-                }
+                };
+
+            var term = new Terminal({
+                fontFamily: "var(--font-mono, 'JuliaMono', 'SF Mono', 'Fira Code', monospace)",
+                fontSize: 13,
+                lineHeight: 1.5,
+                cursorBlink: true,
+                cursorStyle: 'bar',
+                theme: isDark ? darkTheme : lightTheme
             });
 
             var fitAddon = null;
