@@ -135,7 +135,7 @@ function cell_state_styles()
 
     /* Running state — green pulse on accent bar */
     .cell.cell-running .cell-accent-bar {
-        background-color: #389826 !important;
+        background-color: var(--color-accent-500) !important;
         opacity: 1 !important;
         animation: cell-accent-pulse 1.5s ease-in-out infinite;
     }

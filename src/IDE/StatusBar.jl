@@ -180,7 +180,7 @@ function IDEStatusBar(;
     total_cells::Int=0
 )
     Div(:id => "ide-status-bar",
-        :class => "h-6 flex items-center justify-between px-3 bg-warm-50 dark:bg-warm-950 border-t border-warm-200 dark:border-[#252422] flex-shrink-0 z-40",
+        :class => "h-6 flex items-center justify-between px-3 bg-warm-50 dark:bg-warm-950 border-t border-warm-200 dark:border-warm-800 flex-shrink-0 z-40",
 
         # Left: kernel + notebook path
         Div(:class => "flex items-center gap-2",

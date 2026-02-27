@@ -26,7 +26,7 @@ Toggled visible by Ctrl/Cmd+F (from search_replace_script).
 """
 function IDESearchBar()
     Div(:id => "search-bar",
-        :class => "hidden sticky top-0 z-30 border-b border-warm-200 dark:border-[#252422] bg-warm-50/95 dark:bg-warm-950/95 backdrop-blur-sm px-3 py-2",
+        :class => "hidden sticky top-0 z-30 border-b border-warm-200 dark:border-warm-800 bg-warm-50/95 dark:bg-warm-950/95 backdrop-blur-sm px-3 py-2",
 
         # Search row
         Div(:class => "flex items-center gap-2",
@@ -473,7 +473,7 @@ function search_styles()
     """
     <style>
     .search-match-active {
-        outline: 2px solid rgb(var(--accent-500));
+        outline: 2px solid var(--color-accent-500);
         outline-offset: 2px;
         border-radius: 0.5rem;
     }

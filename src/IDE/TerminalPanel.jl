@@ -34,7 +34,7 @@ const _TERM_ICON_X = "M6 18L18 6M6 6l12 12"
 Header bar for the terminal panel with title, collapse toggle, and controls.
 """
 function IDETerminalHeader(; session_id::String="default", is_collapsed::Bool=true)
-    Div(:class => "flex items-center justify-between h-8 px-3 border-t border-warm-200 dark:border-[#252422] bg-warm-50 dark:bg-warm-950 cursor-pointer select-none",
+    Div(:class => "flex items-center justify-between h-8 px-3 border-t border-warm-200 dark:border-warm-800 bg-warm-50 dark:bg-warm-950 cursor-pointer select-none",
         :onclick => "toggleTerminalPanel()",
         :id => "terminal-header",
 
@@ -141,7 +141,7 @@ function IDETerminalPanel(;
     end
 
     Div(:id => "terminal-panel",
-        :class => "flex-shrink-0 border-t border-warm-200 dark:border-[#252422]",
+        :class => "flex-shrink-0 border-t border-warm-200 dark:border-warm-800",
         Symbol("data-terminal-id") => session_id,
         Symbol("data-collapsed") => collapsed ? "true" : "false",
 
@@ -154,7 +154,7 @@ function IDETerminalPanel(;
             :style => "height: $(height);",
 
             # xterm.js container
-            Div(:class => "h-full bg-[#111110] dark:bg-[#111110]",
+            Div(:class => "h-full bg-warm-950 dark:bg-warm-950",
                 :id => "terminal-$(session_id)",
                 Symbol("data-xterm") => "true",
                 Symbol("data-session-id") => session_id,
