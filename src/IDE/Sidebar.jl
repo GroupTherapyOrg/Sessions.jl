@@ -153,7 +153,7 @@ function IDESidebar(;
         Div(:class => "flex-1"),
 
         # Wordmark at bottom
-        Div(:class => "p-3 border-t border-warm-200 dark:border-[#252422]",
+        Div(:class => "p-3 border-t border-warm-200 dark:border-warm-800",
             SessionsWordmark(class="text-sm opacity-40")
         )
     )

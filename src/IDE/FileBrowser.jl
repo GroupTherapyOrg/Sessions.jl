@@ -100,14 +100,14 @@ Uses warm-* tokens and Suite.jl-style menu item design.
 """
 function IDEFileContextMenu()
     Div(:id => "file-context-menu",
-        :class => "hidden fixed z-[100] min-w-[180px] bg-warm-50 dark:bg-warm-900 rounded-md shadow-xl border border-warm-200 dark:border-[#252422] py-1 overflow-hidden",
+        :class => "hidden fixed z-[100] min-w-[180px] bg-warm-50 dark:bg-warm-900 rounded-md shadow-xl border border-warm-200 dark:border-warm-800 py-1 overflow-hidden",
 
         # Open (shown only for .jl files / directories)
         Div(:id => "ctx-menu-open",
             _context_menu_item("Open", _FB_ICON_OPEN, "contextMenuOpen()")
         ),
         Div(:id => "ctx-menu-separator-open",
-            :class => "border-t border-warm-200 dark:border-[#252422] my-1"
+            :class => "border-t border-warm-200 dark:border-warm-800 my-1"
         ),
 
         # New Notebook
@@ -120,7 +120,7 @@ function IDEFileContextMenu()
         _context_menu_item("New Folder", _FB_ICON_FOLDER_PLUS, "createFolder()"),
 
         # Separator
-        Div(:class => "border-t border-warm-200 dark:border-[#252422] my-1"),
+        Div(:class => "border-t border-warm-200 dark:border-warm-800 my-1"),
 
         # Rename
         _context_menu_item("Rename", _FB_ICON_PENCIL, "contextMenuRename()"),
@@ -130,7 +130,7 @@ function IDEFileContextMenu()
             is_danger=true),
 
         # Separator
-        Div(:class => "border-t border-warm-200 dark:border-[#252422] my-1"),
+        Div(:class => "border-t border-warm-200 dark:border-warm-800 my-1"),
 
         # Copy Path
         _context_menu_item("Copy Path", _FB_ICON_COPY, "contextMenuCopyPath()")
@@ -289,7 +289,7 @@ function IDEFileBrowser(;
 
         # Current path breadcrumb
         current_path != "" ?
-            Div(:class => "px-3 py-1 text-[10px] text-warm-400 dark:text-warm-500 truncate font-mono border-b border-warm-200/50 dark:border-[#252422]/50",
+            Div(:class => "px-3 py-1 text-[10px] text-warm-400 dark:text-warm-500 truncate font-mono border-b border-warm-200/50 dark:border-warm-800/50",
                 :title => current_path,
                 basename(current_path)
             ) : nothing,
