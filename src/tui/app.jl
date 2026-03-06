@@ -502,12 +502,14 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Delete/Backspace: open delete cell confirm dialog
+    # Delete/Backspace: confirm delete of selected cells or focused cell
     if evt.key == :delete || evt.key == :backspace
         nv = app.notebook_view
-        idx = nv.focused_idx
-        if !isempty(nv.cell_widgets) && length(nv.cell_widgets) > 1
-            _open_confirm_delete!(app, idx)
+        if has_selection(nv)
+            n_sel = count(cw -> cw.selected, nv.cell_widgets)
+            _open_confirm_delete_selection!(app, n_sel)
+        elseif !isempty(nv.cell_widgets) && length(nv.cell_widgets) > 1
+            _open_confirm_delete!(app, nv.focused_idx)
         end
         return
     end
@@ -614,11 +616,23 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         evt.y >= nb_vp.y && evt.y < nb_vp.y + nb_vp.height
 
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press && in_notebook
-        # Shift+click: range selection
+        # Shift+click: range selection (enter normal mode)
         if evt.shift
             idx = cell_at_y(nv, evt.y)
             if idx !== nothing
                 select_range!(nv, nv.focused_idx, idx)
+                _exit_insert_mode!(app)
+            end
+            return
+        end
+
+        # Ctrl+click (Cmd+click on macOS): toggle individual cell selection
+        if evt.ctrl
+            idx = cell_at_y(nv, evt.y)
+            if idx !== nothing
+                nv.cell_widgets[idx].selected = !nv.cell_widgets[idx].selected
+                focus_cell!(nv, idx)
+                _exit_insert_mode!(app)
             end
             return
         end
@@ -1145,6 +1159,19 @@ function _open_confirm_delete!(app::SessionsApp, cell_idx::Int)
         "Are you sure you want to delete this cell?",
         () -> begin
             delete_focused_cell_with_undo!(app)
+        end,
+        :no, false, false)
+    app.mode = :confirm
+end
+
+"""Open a centered confirm dialog for deleting selected cells."""
+function _open_confirm_delete_selection!(app::SessionsApp, n_sel::Int)
+    msg = n_sel == 1 ? "Delete 1 selected cell?" : "Delete $n_sel selected cells?"
+    app.confirm_dialog = ConfirmDialog(
+        "Delete Cells",
+        msg,
+        () -> begin
+            delete_selected_cells!(app)
         end,
         :no, false, false)
     app.mode = :confirm
