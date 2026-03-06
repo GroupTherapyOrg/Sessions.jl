@@ -4,15 +4,6 @@
 # ╔═╡ 66ef225a-dd9b-4b36-880c-5e777688f37a
 using Markdown
 
-# ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
-using UnicodePlots
-
-# ╔═╡ 0b7a9ca3-5430-4e6a-9894-cd2339447be5
-@bind n Slider(2:20, default=8)
-
-# ╔═╡ 3d413fde-745c-4222-836a-24e5a6e7a481
-heatmap(randn(n, n); title="$(n)x$(n) heatmap")
-
 # ╔═╡ f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 md"""
 # Welcome to Sessions.jl
@@ -31,6 +22,26 @@ Try editing a cell and pressing `Ctrl+R` to run it!
 
 > "The best way to predict the future is to invent it." — Alan Kay
 """
+
+# ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
+using UnicodePlots
+
+# ╔═╡ 0b7a9ca3-5430-4e6a-9894-cd2339447be5
+md"""
+### Damped Ripple Surface
+
+A 3D surface plot of `cos(ω√(x²+y²)) · e^(−0.3√(x²+y²))` — a radial ripple with exponential decay. The slider controls the wave frequency ω.
+
+- **2–4** — smooth dome
+- **8–12** — concentric ripples
+- **16–20** — fine oscillations
+"""
+
+# ╔═╡ 1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
+@bind n Slider(2:20, default=8)
+
+# ╔═╡ 3d413fde-745c-4222-836a-24e5a6e7a481
+surfaceplot(-2:.05:2, -2:.05:2, (x, y) -> cos(n/3 * sqrt(x^2+y^2)) * exp(-0.3*sqrt(x^2+y^2)); width=50, height=20, title="$(n)-fold ripple")
 
 # ╔═╡ 6e7bfb3a-23f5-499a-92b3-66207a5d898f
 function add_2(x)
@@ -100,10 +111,11 @@ Normal
 
 # ╔═╡ Cell order:
 # ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
+# ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 # ╠═9c606da0-915a-4cfb-91fc-cdc93a454b8e
-# ╠═0b7a9ca3-5430-4e6a-9894-cd2339447be5
-# ╠═3d413fde-745c-4222-836a-24e5a6e7a481
-# ╠═f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
+# ╟─0b7a9ca3-5430-4e6a-9894-cd2339447be5
+# ╟─1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
+# ╟─3d413fde-745c-4222-836a-24e5a6e7a481
 # ╠═6e7bfb3a-23f5-499a-92b3-66207a5d898f
 # ╠═4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
 # ╠═00000001-0000-0000-0000-000000000001

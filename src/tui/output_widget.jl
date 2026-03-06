@@ -12,9 +12,9 @@ OutputWidget(cell::Cell) = OutputWidget(cell, false, false)
 
 """Format cell output as displayable lines.
 
-Uses MIME\"text/plain\" with color disabled and controlled display size,
+Uses MIME\"text/plain\" with color enabled and controlled display size,
 matching Pluto's `format_output_default` approach but adapted for TUI.
-ANSI escape codes are stripped since Tachikoma uses its own styled buffer.
+ANSI escape codes are parsed into Tachikoma styles during rendering.
 """
 function output_lines(cell::Cell)
     out = cell.output
@@ -31,15 +31,15 @@ function output_lines(cell::Cell)
     end
 
     if out.error === nothing && out.result !== nothing
-        # Render via text/plain with color disabled (Pluto parity: IOContext with displaysize)
-        # :color => false prevents ANSI codes that corrupt Tachikoma's character buffer
+        # Render via text/plain with color enabled (Pluto parity: IOContext with displaysize)
+        # ANSI codes are parsed into Tachikoma styles by _parse_ansi_line during rendering
         text = try
-            sprint(; context=IOContext(devnull, :color => false, :limit => true, :displaysize => (40, 80))) do io
+            sprint(; context=IOContext(devnull, :color => true, :limit => true, :displaysize => (40, 80))) do io
                 Base.invokelatest(show, io, MIME"text/plain"(), out.result)
             end
         catch
             try
-                sprint(; context=IOContext(devnull, :color => false, :limit => true)) do io
+                sprint(; context=IOContext(devnull, :color => true, :limit => true)) do io
                     Base.invokelatest(show, io, out.result)
                 end
             catch
@@ -47,12 +47,12 @@ function output_lines(cell::Cell)
             end
         end
         # Split into individual lines (UnicodePlots, matrices, etc. produce multi-line output)
-        for line in split(_strip_ansi(text), '\n')
+        for line in split(text, '\n')
             push!(lines, String(line))
         end
     elseif out.error === nothing && out.result === nothing && !isempty(out.text_representation)
         # Cached output from .session.toml — result not available, use text_representation
-        for line in split(_strip_ansi(out.text_representation), '\n')
+        for line in split(out.text_representation, '\n')
             push!(lines, String(line))
         end
     end
@@ -63,6 +63,106 @@ end
 """Strip ANSI escape codes from a string (safety net for color leaks)."""
 function _strip_ansi(s::AbstractString)::String
     replace(s, r"\e\[[0-9;]*[A-Za-z]" => "")
+end
+
+# --- ANSI SGR → Tachikoma.Style parsing ---
+
+const _ANSI_CSI_RE = r"\e\[([0-9;]*)([A-Za-z])"
+
+"""Parse a line with ANSI escape codes into styled `MdSegment`s for rendering.
+
+Supports SGR sequences (ESC[...m):
+- Reset (0), bold (1), dim (2), italic (3), underline (4)
+- Standard fg (30–37), bright fg (90–97)
+- Standard bg (40–47), bright bg (100–107)
+- 256-color (38;5;N / 48;5;N) and 24-bit RGB (38;2;R;G;B / 48;2;R;G;B)
+- Default fg (39), default bg (49)
+Non-SGR CSI sequences are silently consumed.
+"""
+function _parse_ansi_line(line::String, base_style::Tachikoma.Style)::MdLine
+    # Fast path: no escape codes at all
+    occursin('\e', line) || return [MdSegment(line, base_style)]
+
+    segs = MdSegment[]
+    parts = split(line, _ANSI_CSI_RE; keepempty=true)
+    code_matches = collect(eachmatch(_ANSI_CSI_RE, line))
+
+    # Current ANSI state — initialized from base style
+    fg::Tachikoma.AbstractColor        = base_style.fg
+    bg::Tachikoma.AbstractColor        = base_style.bg
+    bold::Bool      = base_style.bold
+    dim_flag::Bool  = base_style.dim
+    italic::Bool    = base_style.italic
+    ul::Bool        = base_style.underline
+
+    for (i, part) in enumerate(parts)
+        if !isempty(part)
+            push!(segs, MdSegment(part,
+                Tachikoma.Style(; fg, bg, bold, dim=dim_flag, italic, underline=ul)))
+        end
+        i > length(code_matches) && continue
+
+        final_byte = code_matches[i].captures[2]
+        final_byte == "m" || continue   # only process SGR
+
+        params_str = something(code_matches[i].captures[1], "")
+        params = _parse_sgr_params(params_str)
+        j = 1
+        while j <= length(params)
+            c = params[j]
+            if c == 0       # Reset
+                fg = base_style.fg;  bg = base_style.bg
+                bold = base_style.bold;  dim_flag = base_style.dim
+                italic = base_style.italic;  ul = base_style.underline
+            elseif c == 1;  bold = true
+            elseif c == 2;  dim_flag = true
+            elseif c == 3;  italic = true
+            elseif c == 4;  ul = true
+            elseif c == 22; bold = false; dim_flag = false
+            elseif c == 23; italic = false
+            elseif c == 24; ul = false
+            elseif 30 <= c <= 37
+                fg = Tachikoma.Color256(c - 30)
+            elseif c == 38  # Extended fg
+                if j+1 <= length(params) && params[j+1] == 5 && j+2 <= length(params)
+                    fg = Tachikoma.Color256(params[j+2]);  j += 2
+                elseif j+1 <= length(params) && params[j+1] == 2 && j+4 <= length(params)
+                    fg = Tachikoma.ColorRGB(UInt8(clamp(params[j+2],0,255)),
+                                            UInt8(clamp(params[j+3],0,255)),
+                                            UInt8(clamp(params[j+4],0,255)));  j += 4
+                end
+            elseif c == 39; fg = base_style.fg
+            elseif 40 <= c <= 47
+                bg = Tachikoma.Color256(c - 40)
+            elseif c == 48  # Extended bg
+                if j+1 <= length(params) && params[j+1] == 5 && j+2 <= length(params)
+                    bg = Tachikoma.Color256(params[j+2]);  j += 2
+                elseif j+1 <= length(params) && params[j+1] == 2 && j+4 <= length(params)
+                    bg = Tachikoma.ColorRGB(UInt8(clamp(params[j+2],0,255)),
+                                            UInt8(clamp(params[j+3],0,255)),
+                                            UInt8(clamp(params[j+4],0,255)));  j += 4
+                end
+            elseif c == 49; bg = base_style.bg
+            elseif 90 <= c <= 97;   fg = Tachikoma.Color256(c - 90 + 8)
+            elseif 100 <= c <= 107; bg = Tachikoma.Color256(c - 100 + 8)
+            end
+            j += 1
+        end
+    end
+
+    isempty(segs) && push!(segs, MdSegment("", base_style))
+    segs
+end
+
+"""Parse semicolon-separated SGR parameter string into integers."""
+function _parse_sgr_params(s::AbstractString)::Vector{Int}
+    isempty(s) && return Int[0]   # bare ESC[m = reset
+    codes = Int[]
+    for part in split(s, ';')
+        n = tryparse(Int, part)
+        n !== nothing && push!(codes, n)
+    end
+    codes
 end
 
 """Height needed for output display (borderless — just the lines + 1 for top padding)."""
@@ -130,7 +230,17 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         row = rect.y + i - 1
         row > rect.y + rect.height - 1 && break
         Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
-        Tachikoma.set_string!(buf, text_x, row, first(line, max_width), text_style)
+        # Parse ANSI escape codes into styled segments
+        styled_segs = _parse_ansi_line(line, text_style)
+        x = text_x
+        max_x = text_x + max_width - 1
+        for seg in styled_segs
+            remaining = max_x - x + 1
+            remaining <= 0 && break
+            text = first(seg.text, remaining)
+            Tachikoma.set_string!(buf, x, row, text, seg.style)
+            x += length(text)
+        end
     end
 end
 

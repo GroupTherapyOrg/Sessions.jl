@@ -16,13 +16,18 @@ mutable struct NotebookView
     hovered_control::Symbol    # :none, :plus_gap, :eye, :ellipsis, :run
     hovered_control_idx::Int   # which cell index the hovered control belongs to
     hovered_bond_idx::Int      # cell index where mouse hovers over a bond widget (0 = none)
+    run_all_rect::Tachikoma.Rect   # clickable "▶ Run All" button in bottom border
+    run_all_hovered::Bool          # mouse hovering over run-all button
+    save_rect::Tachikoma.Rect      # clickable "Save" button in top border
+    save_hovered::Bool             # mouse hovering over save button
+    dirty::Bool                    # notebook has unsaved changes
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false)
 end
 
 """Rebuild widgets when cells change."""
@@ -334,7 +339,8 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     # ── Rounded border for notebook pane (inset to match cell island style) ──
     hi = Theme.CELL_H_INSET
     vi = Theme.CELL_V_INSET
-    border_style = Tachikoma.Style(; fg=Theme.BORDER_DIM, bg=Theme.CANVAS_BG)
+    border_fg = nv.dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_DIM
+    border_style = Tachikoma.Style(; fg=border_fg, bg=Theme.CANVAS_BG)
 
     # Fill entire rect with canvas bg (overflow visible around border)
     for fy in rect.y:(rect.y + rect.height - 1)
@@ -526,6 +532,49 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     for fy in (by + 1):(by + bh - 2)
         Tachikoma.set_char!(buf, bx, fy, '│', border_style)
         Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
+    end
+
+    # ── "▶ Run All" button in bottom-right border (after re-draw so it's not overwritten) ──
+    run_label = " ▶ Run All "
+    run_len = length(run_label)
+    run_x = bx + bw - 1 - run_len - 1  # 1 char inside right border
+    bot_border_y = by + bh - 1          # bottom border row
+    if run_x > bx + 2
+        is_busy = any(c -> c.state == cell_running || c.state == cell_queued, values(nv.nb.cells))
+        run_fg = if is_busy
+            Theme.ORANGE
+        elseif nv.run_all_hovered
+            Theme.GREEN_BRIGHT
+        else
+            Theme.GREEN
+        end
+        run_s = Tachikoma.Style(; fg=run_fg, bg=Theme.CANVAS_BG, bold=nv.run_all_hovered)
+        Tachikoma.set_string!(buf, run_x, bot_border_y, run_label, run_s)
+        nv.run_all_rect = Tachikoma.Rect(run_x, bot_border_y, run_len, 1)
+    else
+        nv.run_all_rect = Tachikoma.Rect()
+    end
+
+    # ── "Save" button in top-right border ──
+    save_label = nv.dirty ? " ● Save " : " Save "
+    save_len = length(save_label)
+    save_x = bx + bw - 1 - save_len - 1
+    top_border_y = by
+    if save_x > bx + 2
+        save_fg = if nv.dirty && nv.save_hovered
+            Theme.ORANGE
+        elseif nv.dirty
+            Theme.DIRTY_BORDER_FG
+        elseif nv.save_hovered
+            Theme.ACCENT
+        else
+            Theme.FG_MUTED
+        end
+        save_s = Tachikoma.Style(; fg=save_fg, bg=Theme.CANVAS_BG, bold=nv.save_hovered)
+        Tachikoma.set_string!(buf, save_x, top_border_y, save_label, save_s)
+        nv.save_rect = Tachikoma.Rect(save_x, top_border_y, save_len, 1)
+    else
+        nv.save_rect = Tachikoma.Rect()
     end
 end
 

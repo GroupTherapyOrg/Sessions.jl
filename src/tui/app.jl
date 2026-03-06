@@ -71,6 +71,21 @@ function _snapshot_notebook(nb::Notebook)
     snap
 end
 
+"""Check if notebook differs from the last saved snapshot."""
+function _is_notebook_dirty(app::SessionsApp)
+    app.last_disk_nb === nothing && return false
+    snap = app.last_disk_nb
+    nb = app.nb
+    nb.cell_order != snap.cell_order && return true
+    for id in nb.cell_order
+        haskey(snap.cells, id) || return true
+        nb.cells[id].code != snap.cells[id].code && return true
+        nb.cells[id].folded != snap.cells[id].folded && return true
+        nb.cells[id].disabled != snap.cells[id].disabled && return true
+    end
+    false
+end
+
 function SessionsApp(nb::Notebook)
     ws = Workspace()
     nv = NotebookView(nb)
@@ -234,6 +249,9 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
                 cw.focused = false
             end
         end
+
+        # Update dirty flag by comparing current cell codes to last saved snapshot
+        app.notebook_view.dirty = _is_notebook_dirty(app)
 
         Tachikoma.render(app.notebook_view, notebook_rect, buf)
 
@@ -641,6 +659,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Shift+R: Run all cells (normal mode only)
+    if evt.key == :char && evt.char == 'R'
+        run_all_cells_async!(app)
+        return
+    end
+
     # Delete/Backspace: confirm delete of selected cells or focused cell
     if evt.key == :delete || evt.key == :backspace
         nv = app.notebook_view
@@ -819,6 +843,42 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         end
 
         return
+    end
+
+    # ── "Run All" button in notebook top border ──
+    ra = nv.run_all_rect
+    if ra.width > 0 && evt.x >= ra.x && evt.x < ra.x + ra.width && evt.y == ra.y
+        if evt.action == Tachikoma.mouse_move
+            nv.run_all_hovered = true
+        end
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            run_all_cells_async!(app)
+        end
+        return
+    elseif evt.action == Tachikoma.mouse_move
+        nv.run_all_hovered = false
+    end
+
+    # ── "Save" button in notebook top border ──
+    sa = nv.save_rect
+    if sa.width > 0 && evt.x >= sa.x && evt.x < sa.x + sa.width && evt.y == sa.y
+        if evt.action == Tachikoma.mouse_move
+            nv.save_hovered = true
+        end
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            save_notebook(app.nb)
+            app.last_save_time = time()
+            app.last_disk_nb = _snapshot_notebook(app.nb)
+            n_stale = run_stale_cells!(app)
+            if n_stale > 0
+                app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
+            else
+                app.message = "Saved: $(basename(app.nb.path))"
+            end
+        end
+        return
+    elseif evt.action == Tachikoma.mouse_move
+        nv.save_hovered = false
     end
 
     # ── All remaining events require the click to be inside the notebook pane ──

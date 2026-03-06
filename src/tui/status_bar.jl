@@ -49,7 +49,7 @@ function make_bottom_bar(; mode::Symbol=:normal, editor_type::Symbol=:notebook)
     elseif mode == :insert
         "Esc: Normal mode  Ctrl+R: Run  Ctrl+S: Save  Ctrl+C: Copy"
     else  # :normal
-        "Esc: Panel  Enter: Edit  Ctrl+R: Run  Ctrl+S: Save  Ctrl+C: Copy cell"
+        "Esc: Panel  Enter: Edit  Ctrl+R: Run  R: Run All  Ctrl+S: Save  Ctrl+C: Copy cell"
     end
 
     Tachikoma.StatusBar(; left=[Tachikoma.Span(" " * keys, Theme.S_DIM)])
