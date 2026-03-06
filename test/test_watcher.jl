@@ -453,4 +453,176 @@ using UUIDs
 
         rm(path; force=true)
     end
+
+    # --- Smart merge tests (SESSIONS-6018) ---
+
+    @testset "merge_external_changes! — user local edit + agent disk edit both preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        save_notebook(nb)
+
+        # Take snapshot (simulates last_disk_nb)
+        last_disk_nb = deepcopy(nb)
+
+        # User edits c1 locally (in-memory only)
+        nb.cells[c1.id].code = "a = 100"
+
+        # Agent edits c2 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c2.id].code = "b = 200"
+        save_notebook(nb_ext, path)
+
+        # Smart merge: should update c2 from disk, preserve user's c1 edit
+        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test nb.cells[c1.id].code == "a = 100"  # user edit preserved
+        @test nb.cells[c2.id].code == "b = 200"  # agent edit applied
+        @test length(diff.changed) == 1
+        @test diff.changed[1][1] == c2.id
+    end
+
+    @testset "merge_external_changes! — agent adds cell, user has local edits" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        last_disk_nb = deepcopy(nb)
+
+        # User edits c1 locally
+        nb.cells[c1.id].code = "x = 999"
+
+        # Agent adds a new cell on disk
+        nb_ext = load_notebook(path)
+        c2 = add_cell!(nb_ext, "y = 2")
+        save_notebook(nb_ext, path)
+
+        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test nb.cells[c1.id].code == "x = 999"  # user edit preserved
+        @test haskey(nb.cells, c2.id)             # agent cell added
+        @test nb.cells[c2.id].code == "y = 2"
+        @test length(diff.added) == 1
+    end
+
+    @testset "merge_external_changes! — agent removes cell" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        save_notebook(nb)
+
+        last_disk_nb = deepcopy(nb)
+
+        # Agent removes c2 on disk
+        nb_ext = load_notebook(path)
+        remove_cell!(nb_ext, c2.id)
+        save_notebook(nb_ext, path)
+
+        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test haskey(nb.cells, c1.id)
+        @test !haskey(nb.cells, c2.id)
+        @test length(diff.removed) == 1
+    end
+
+    @testset "merge_external_changes! — agent reorders cells" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "first = 1")
+        c2 = add_cell!(nb, "second = 2")
+        save_notebook(nb)
+
+        last_disk_nb = deepcopy(nb)
+
+        # Agent reorders on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cell_order = [c2.id, c1.id]
+        save_notebook(nb_ext, path)
+
+        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test nb.cell_order == [c2.id, c1.id]
+    end
+
+    @testset "merge_external_changes! — changed cell becomes stale" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "s = 1")
+        mark_executed!(c1)
+        c1.state = cell_done
+        c1.output.result = 1
+        save_notebook(nb)
+
+        last_disk_nb = deepcopy(nb)
+
+        # Agent changes c1 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "s = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test nb.cells[c1.id].code == "s = 999"
+        @test is_stale(nb.cells[c1.id])
+        @test nb.cells[c1.id].output.result == 1  # old output preserved
+    end
+
+    @testset "merge_external_changes! — no disk changes is no-op" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "noop = 42")
+        save_notebook(nb)
+
+        last_disk_nb = deepcopy(nb)
+
+        # User edits locally
+        nb.cells[c1.id].code = "noop = 999"
+
+        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test isempty(diff.added)
+        @test isempty(diff.removed)
+        @test isempty(diff.changed)
+        @test nb.cells[c1.id].code == "noop = 999"  # user edit preserved
+
+        rm(path; force=true)
+    end
+
+    @testset "merge_external_changes! — combined add+change+remove" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        c3 = add_cell!(nb, "c = 3")
+        save_notebook(nb)
+
+        last_disk_nb = deepcopy(nb)
+
+        # User edits c3 locally
+        nb.cells[c3.id].code = "c = 300"
+
+        # Agent: change c1, remove c2, add c4
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "a = 100"
+        remove_cell!(nb_ext, c2.id)
+        c4 = add_cell!(nb_ext, "d = 4")
+        save_notebook(nb_ext, path)
+
+        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+
+        @test nb.cells[c1.id].code == "a = 100"   # agent change
+        @test !haskey(nb.cells, c2.id)              # agent removal
+        @test nb.cells[c3.id].code == "c = 300"    # user edit preserved
+        @test haskey(nb.cells, c4.id)               # agent addition
+        @test nb.cells[c4.id].code == "d = 4"
+
+        @test length(diff.changed) == 1
+        @test length(diff.removed) == 1
+        @test length(diff.added) == 1
+
+        rm(path; force=true)
+    end
 end

@@ -77,6 +77,39 @@ function reload_notebook!(nb::Notebook)
     diff
 end
 
+"""Smart merge: diff disk vs last-known-disk, apply only disk-originated changes.
+Preserves user's unsaved local edits for cells not changed on disk.
+Returns the diff of what changed on disk."""
+function merge_external_changes!(nb::Notebook, last_disk_nb::Notebook)
+    isfile(nb.path) || error("File not found: $(nb.path)")
+    disk_nb = load_notebook(nb.path)
+
+    # Diff: what changed on disk since we last loaded/saved?
+    diff = diff_notebooks(last_disk_nb, disk_nb)
+
+    # Apply only disk-originated changes to in-memory notebook:
+    # 1. Remove cells deleted on disk
+    for id in diff.removed
+        delete!(nb.cells, id)
+    end
+
+    # 2. Add cells added on disk
+    for cell in diff.added
+        nb.cells[cell.id] = cell
+    end
+
+    # 3. Update cells changed on disk (overwrite code, preserve output)
+    for (id, new_code) in diff.changed
+        haskey(nb.cells, id) || continue
+        nb.cells[id].code = new_code
+    end
+
+    # 4. Update cell order to match disk
+    nb.cell_order = copy(diff.new_order)
+
+    diff
+end
+
 # --- File watcher ---
 
 """
