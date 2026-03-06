@@ -624,18 +624,57 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Click on a file entry
+    # Left click on a file entry — open file or enter directory
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
         idx = entry_at_y(fp, evt.y)
         if idx !== nothing
             fp.cursor_idx = idx
             result = activate!(fp)
             if result !== nothing
-                # Clicked a file — open it
                 _open_file!(app, result)
             end
         end
     end
+
+    # Right click on a file entry — delete with confirmation
+    if evt.button == Tachikoma.mouse_right && evt.action == Tachikoma.mouse_press
+        idx = entry_at_y(fp, evt.y)
+        if idx !== nothing
+            entry = fp.entries[idx]
+            # Don't allow deleting ".." parent entry
+            entry.name == ".." && return
+            _request_delete_file!(app, entry)
+        end
+    end
+end
+
+"""Request deletion of a file or directory with confirmation dialog."""
+function _request_delete_file!(app::SessionsApp, entry::FileEntry)
+    kind = entry.is_dir ? "directory" : "file"
+    title = "Delete $(titlecase(kind))"
+    msg = "Permanently delete $(kind) \"$(entry.name)\"?"
+
+    app.confirm_dialog = ConfirmDialog(title, msg,
+        () -> begin
+            try
+                if entry.is_dir
+                    rm(entry.path; recursive=true)
+                else
+                    rm(entry.path)
+                end
+                app.message = "Deleted: $(entry.name)"
+                # Close any open tabs for this file
+                for i in length(app.tabs):-1:1
+                    if app.tabs[i].path == entry.path
+                        _close_tab!(app, i)
+                    end
+                end
+                refresh_entries!(app.file_panel)
+            catch e
+                app.message = "Delete failed: $(sprint(showerror, e))"
+            end
+        end, :no, false, false)
+    app.mode = :confirm
 end
 
 """Open a file in a new tab (or switch to existing)."""
