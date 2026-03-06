@@ -105,6 +105,11 @@ function _on_external_change!(app::SessionsApp)
         n_changes == 0 && return
 
         rebuild_widgets!(app.notebook_view)
+        app.cell_dropdown = nothing
+        app.mode = :normal
+        for cw in app.notebook_view.cell_widgets
+            cw.selected = false
+        end
         app.message = "$n_changes cell(s) changed externally"
     catch e
         app.message = "Reload error: $(sprint(showerror, e))"

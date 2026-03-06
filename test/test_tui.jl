@@ -1417,4 +1417,119 @@ using Markdown: @md_str
 
         rm(path; force=true)
     end
+
+    # --- TUI External Change Notification (SESSIONS-6021) ---
+
+    @testset "external change — message includes cell count" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "notify_a = 1")
+        c2 = add_cell!(nb, "notify_b = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        # Agent changes both cells on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "notify_a = 10"
+        nb_ext.cells[c2.id].code = "notify_b = 20"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+        @test contains(app.message, "2 cell(s) changed externally")
+
+        rm(path; force=true)
+    end
+
+    @testset "external change — dropdown closes" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "dd_test = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        app.cell_dropdown = Sessions.CellDropdown(1, 10, 5, Sessions.DROPDOWN_ITEMS, 0)
+        app.mode = :dropdown
+
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "dd_test = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+        @test app.cell_dropdown === nothing
+        @test app.mode == :normal
+
+        rm(path; force=true)
+    end
+
+    @testset "external change — selection clears" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "sel_a = 1")
+        c2 = add_cell!(nb, "sel_b = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        # Select all widgets
+        for cw in app.notebook_view.cell_widgets
+            cw.selected = true
+        end
+
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "sel_a = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+        @test all(!cw.selected for cw in app.notebook_view.cell_widgets)
+
+        rm(path; force=true)
+    end
+
+    @testset "external change — focus preserved by UUID" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "focus_a = 1")
+        c2 = add_cell!(nb, "focus_b = 2")
+        c3 = add_cell!(nb, "focus_c = 3")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        # Focus on c2
+        app.notebook_view.focused_idx = 2
+
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "focus_a = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+        # Focus should still be on c2 (preserved by UUID in rebuild_widgets!)
+        @test app.notebook_view.focused_idx == 2
+        @test app.notebook_view.cell_widgets[2].cell.id == c2.id
+
+        rm(path; force=true)
+    end
+
+    @testset "external change — renders updated cell code after change" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "render_msg = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "render_msg = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+        @test contains(app.message, "changed externally")
+
+        # Render and verify new cell code is visible
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+        @test Tachikoma.find_text(tb, "render_msg = 999") !== nothing
+
+        rm(path; force=true)
+    end
 end
