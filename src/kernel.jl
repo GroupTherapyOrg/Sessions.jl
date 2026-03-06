@@ -51,6 +51,97 @@ function text_representation(value)::String
     end
 end
 
+# --- Error formatting ---
+
+"""Format an exception with a clean, filtered stacktrace for display."""
+function format_error(ex::Exception, bt)::String
+    lines = String[]
+
+    # Error message
+    push!(lines, _format_error_message(ex))
+
+    # Convert bt to StackFrames depending on format
+    raw_frames = _to_stackframes(bt)
+    frames = _filter_frames(raw_frames)
+    if !isempty(frames)
+        push!(lines, "Stacktrace:")
+        for (i, frame) in enumerate(frames)
+            file = string(frame.file)
+            line_no = frame.line
+            func = frame.func
+            push!(lines, " [$i] $func at $file:$line_no")
+        end
+    end
+
+    join(lines, '\n')
+end
+
+"""Format a user-friendly error message for specific exception types."""
+function _format_error_message(ex::Exception)::String
+    if ex isa UndefVarError
+        return "UndefVarError: `$(ex.var)` is not defined"
+    elseif ex isa MethodError
+        f = ex.f
+        args = ex.args
+        types = join([string(typeof(a)) for a in args], ", ")
+        return "MethodError: no method matching $(f)($(types))"
+    elseif ex isa BoundsError
+        if isdefined(ex, :i)
+            return "BoundsError: attempt to access at index $(ex.i)"
+        else
+            return "BoundsError: attempt to access out of bounds"
+        end
+    elseif ex isa StackOverflowError
+        return "StackOverflowError: infinite recursion detected"
+    elseif ex isa InterruptException
+        return "Execution interrupted"
+    elseif ex isa Meta.ParseError
+        return "ParseError: $(ex.msg)"
+    elseif ex isa ErrorException
+        return string(ex.msg)
+    else
+        return sprint(showerror, ex)
+    end
+end
+
+"""Convert various backtrace formats to Vector{StackFrame}."""
+function _to_stackframes(bt)::Vector{Base.StackTraces.StackFrame}
+    # Already processed: Vector{Tuple{StackFrame, Int}} from CapturedException
+    if bt isa Vector && !isempty(bt) && bt[1] isa Tuple
+        return [frame for (frame, _) in bt]
+    end
+    # Raw backtrace (from catch_backtrace())
+    try
+        return stacktrace(bt)
+    catch
+        return Base.StackTraces.StackFrame[]
+    end
+end
+
+"""Filter stackframes to remove internal frames (eval, Core, Base internals)."""
+function _filter_frames(frames::Vector{Base.StackTraces.StackFrame})
+    filter(frames) do frame
+        file = string(frame.file)
+        func = string(frame.func)
+        # Skip internal Julia frames
+        any(startswith(file, p) for p in ("./", "boot.jl", "loading.jl", "essentials.jl")) && return false
+        func in ("eval", "top-level scope", "include", "macro expansion") && return false
+        startswith(func, "#") && return false  # generated function names
+        contains(file, "Base") && return false
+        contains(file, "Core") && return false
+        true
+    end
+end
+
+"""Format a cell error from a CellOutput for TUI display."""
+function format_cell_error(output::CellOutput)::String
+    output.error === nothing && return ""
+    ce = output.error
+    # CapturedException has .processed_bt, not .bt
+    bt = hasproperty(ce, :processed_bt) ? ce.processed_bt : backtrace()
+    format_error(ce.ex, bt)
+end
+
 """
 The Workspace holds all cell-evaluated state in a dedicated module.
 Each notebook gets its own workspace module so variables don't leak.
