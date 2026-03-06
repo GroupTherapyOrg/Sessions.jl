@@ -634,9 +634,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         cell_right = inner_x + inner_w - pad
         margin_x = max(cell_left - Theme.MARGIN_CTRL_WIDTH, inner_x)
 
-        # Check if click is in the left margin area (for +, eye controls)
-        # Expand hit zone: margin area + 1 char padding on each side
-        if evt.x >= max(margin_x - 1, nb_vp.x) && evt.x <= cell_left
+        # Check if click is in the left margin area (for ▲, +, ▼, eye controls)
+        # Expand hit zone: covers ▲ at margin_x-2 through ▼ at margin_x+4
+        if evt.x >= max(margin_x - 3, nb_vp.x) && evt.x <= margin_x + 4
             hit = _hit_test_margin_control(nv, evt.x, evt.y, margin_x)
             if hit !== nothing
                 _handle_margin_click!(app, hit)
@@ -704,7 +704,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             cell_right = inner_x + inner_w - pad
             margin_x = max(cell_left - Theme.MARGIN_CTRL_WIDTH, inner_x)
 
-            if evt.x >= max(margin_x - 1, nb_vp.x) && evt.x <= cell_left
+            if evt.x >= max(margin_x - 3, nb_vp.x) && evt.x <= margin_x + 4
                 hit = _hit_test_margin_control(nv, evt.x, evt.y, margin_x)
                 if hit !== nothing
                     nv.hovered_control = hit[1]
@@ -773,7 +773,7 @@ function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_ri
     end
 end
 
-"""Hit test margin controls. Returns (:plus_gap, insert_pos), (:eye, idx), or nothing.
+"""Hit test margin controls. Returns (:plus_gap, pos), (:eye, idx), (:move_up, idx), (:move_down, idx), or nothing.
 Hit zones are expanded ±1 row around each icon for easier clicking."""
 function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, margin_x::Int)
     isempty(nv.cell_widgets) && return nothing
@@ -803,17 +803,55 @@ function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, 
             return (:eye, target_idx)
         end
 
-        # Gap ABOVE this cell — insert at position target_idx
+        # Gap ABOVE this cell — ▲ + ▼ controls
         gap_above_y = target_idx == 1 ? y - 1 : y - Theme.CELL_GAP + gap_mid
         if click_y >= gap_above_y - 1 && click_y <= gap_above_y + 1
-            return (:plus_gap, target_idx)
+            hit = _gap_control_at_x(click_x, margin_x, target_idx, n_cells)
+            if hit !== nothing
+                return hit
+            end
         end
 
-        # Gap BELOW this cell — insert at position target_idx + 1
+        # Gap BELOW this cell — ▲ + ▼ controls (insert pos = target_idx + 1)
         gap_below_y = y + ch + oh + gap_mid
         if click_y >= gap_below_y - 1 && click_y <= gap_below_y + 1
-            return (:plus_gap, target_idx + 1)
+            hit = _gap_control_at_x(click_x, margin_x, target_idx + 1, n_cells)
+            if hit !== nothing
+                return hit
+            end
         end
+    end
+
+    nothing
+end
+
+"""Determine which gap control was clicked based on x-coordinate.
+`gap_idx` is the insert position for the + (1-based).
+Returns (:move_up, cell_idx), (:move_down, cell_idx), (:plus_gap, gap_idx), or nothing."""
+function _gap_control_at_x(click_x::Int, margin_x::Int, gap_idx::Int, n_cells::Int)
+    # ▲ at margin_x - 2 (move the cell below the gap upward)
+    arrow_up_x = margin_x - 2
+    if click_x >= arrow_up_x - 1 && click_x <= arrow_up_x
+        # ▲ moves cell at gap_idx up (swaps with gap_idx - 1)
+        cell_to_move = gap_idx  # cell below the gap
+        if cell_to_move >= 2 && cell_to_move <= n_cells
+            return (:move_up, cell_to_move)
+        end
+    end
+
+    # ▼ at margin_x + 3 (move the cell above the gap downward)
+    arrow_dn_x = margin_x + 3
+    if click_x >= arrow_dn_x && click_x <= arrow_dn_x + 1
+        # ▼ moves cell at gap_idx - 1 down (swaps with gap_idx)
+        cell_to_move = gap_idx - 1  # cell above the gap
+        if cell_to_move >= 1 && cell_to_move <= n_cells - 1
+            return (:move_down, cell_to_move)
+        end
+    end
+
+    # + in the middle (margin_x to margin_x + 2)
+    if click_x >= margin_x - 1 && click_x <= margin_x + 2
+        return (:plus_gap, gap_idx)
     end
 
     nothing
@@ -838,6 +876,14 @@ function _handle_margin_click!(app::SessionsApp, hit::Tuple{Symbol, Int})
             cells[idx].folded = !cells[idx].folded
             rebuild_widgets!(nv)
         end
+    elseif action == :move_up
+        # Move cell at idx up (swap with idx - 1)
+        focus_cell!(nv, idx)
+        move_cell_up!(nv)
+    elseif action == :move_down
+        # Move cell at idx down (swap with idx + 1)
+        focus_cell!(nv, idx)
+        move_cell_down!(nv)
     end
 end
 

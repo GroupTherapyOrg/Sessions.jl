@@ -401,7 +401,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         cw.hovered = is_hovered && !is_focused
 
-        # --- Gap ABOVE this cell (single "+" centered in gap) ---
+        # --- Gap ABOVE this cell: ▲ + ▼ controls centered in gap ---
         # Shown when this cell or the previous cell shows controls.
         # For the first cell, the gap is the top margin area.
         prev_shows = i > 1 && (i - 1 == nv.focused_idx || i - 1 == nv.hovered_idx)
@@ -412,10 +412,32 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
                 gap_center_y = y - 1  # top margin: just above cell 1
             end
             if gap_center_y >= visible_start && gap_center_y <= visible_end
+                # The active cell for move controls is the one showing controls
+                active_idx = is_focused ? i : (is_hovered ? i : (prev_shows ? i - 1 : i))
+                can_up = active_idx > 1
+                can_down = active_idx < n_cells
+
+                # ▲ (move up) — 2 chars left of +
+                if can_up
+                    up_hover = nv.hovered_control == :move_up && nv.hovered_control_idx == i
+                    up_fg = up_hover ? Theme.ACCENT : Theme.FG_MUTED
+                    Tachikoma.set_string!(buf, margin_x - 2, gap_center_y, "▲",
+                        Tachikoma.Style(; fg=up_fg, bg=Theme.MARGIN_BG))
+                end
+
+                # + (add cell)
                 plus_hover = nv.hovered_control == :plus_gap && nv.hovered_control_idx == i
                 plus_fg = plus_hover ? Theme.GREEN : Theme.FG_MUTED
                 Tachikoma.set_string!(buf, margin_x, gap_center_y, " + ",
                     Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
+
+                # ▼ (move down) — 1 char right of +
+                if can_down
+                    dn_hover = nv.hovered_control == :move_down && nv.hovered_control_idx == i
+                    dn_fg = dn_hover ? Theme.ACCENT : Theme.FG_MUTED
+                    Tachikoma.set_string!(buf, margin_x + 3, gap_center_y, "▼",
+                        Tachikoma.Style(; fg=dn_fg, bg=Theme.MARGIN_BG))
+                end
             end
         end
 
@@ -467,10 +489,18 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             end
         end
 
-        # --- Gap AFTER last cell (single "+" at bottom) ---
+        # --- Gap AFTER last cell: ▲ + controls at bottom ---
         if i == n_cells && show_controls
             bot_y = y + gap_mid
             if bot_y >= visible_start && bot_y <= visible_end
+                # ▲ (move last cell up) — only if more than 1 cell
+                if n_cells > 1
+                    up_hover = nv.hovered_control == :move_up && nv.hovered_control_idx == n_cells + 1
+                    up_fg = up_hover ? Theme.ACCENT : Theme.FG_MUTED
+                    Tachikoma.set_string!(buf, margin_x - 2, bot_y, "▲",
+                        Tachikoma.Style(; fg=up_fg, bg=Theme.MARGIN_BG))
+                end
+
                 plus_hover = nv.hovered_control == :plus_gap && nv.hovered_control_idx == n_cells + 1
                 plus_fg = plus_hover ? Theme.GREEN : Theme.FG_MUTED
                 Tachikoma.set_string!(buf, margin_x, bot_y, " + ",
