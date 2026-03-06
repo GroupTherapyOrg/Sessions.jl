@@ -38,6 +38,9 @@ include("run.jl")
 include("session.jl")
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
+# Layer 2: Watcher (needed by TUI app for DebouncedWatcher type)
+include("watcher.jl")
+
 # Layer 2: TUI
 include("tui/theme.jl")
 include("tui/cell_widget.jl")
@@ -50,7 +53,6 @@ include("tui/app.jl")
 
 # Layer 3: CLI
 include("cli.jl")
-include("watcher.jl")
 
 # Precompilation workload
 using PrecompileTools

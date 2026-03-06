@@ -1200,4 +1200,148 @@ using Markdown: @md_str
 
         rm(path; force=true)
     end
+
+    # --- Watcher integration (SESSIONS-6019) ---
+
+    @testset "SessionsApp — watcher field initially nothing" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+        @test app.watcher === nothing
+    end
+
+    @testset "_on_external_change! — merges agent edit and rebuilds" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "watch_a = 1")
+        c2 = add_cell!(nb, "watch_b = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        # Simulate execution
+        execute_cell!(app.workspace, c1)
+        execute_cell!(app.workspace, c2)
+        @test c1.state == cell_done
+
+        # Agent edits c1 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "watch_a = 999"
+        save_notebook(nb_ext, path)
+
+        # Trigger external change handler directly
+        Sessions._on_external_change!(app)
+
+        @test app.nb.cells[c1.id].code == "watch_a = 999"
+        @test is_stale(app.nb.cells[c1.id])
+        @test contains(app.message, "changed externally")
+        # c2 unchanged
+        @test app.nb.cells[c2.id].code == "watch_b = 2"
+
+        rm(path; force=true)
+    end
+
+    @testset "_on_external_change! — agent adds cell, widgets rebuilt" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "ext_x = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        @test length(app.notebook_view.cell_widgets) == 1
+
+        # Agent adds cell on disk
+        nb_ext = load_notebook(path)
+        c2 = add_cell!(nb_ext, "ext_y = 2")
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+
+        @test length(app.nb.cell_order) == 2
+        @test haskey(app.nb.cells, c2.id)
+        @test length(app.notebook_view.cell_widgets) == 2
+
+        rm(path; force=true)
+    end
+
+    @testset "_on_external_change! — no auto-execution" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "no_auto = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+        @test c1.state == cell_done
+
+        # Agent changes cell on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "no_auto = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+
+        # Cell should be stale but NOT re-executed
+        @test c1.code == "no_auto = 999"
+        @test is_stale(c1)
+        @test c1.output.result == 1  # old result, NOT 999
+
+        rm(path; force=true)
+    end
+
+    @testset "Ctrl+Q stops watcher" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "quit_test = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        # Manually set up a watcher
+        Sessions._start_watcher!(app)
+        @test app.watcher !== nothing
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'q'))
+        @test app.quit == true
+        @test app.watcher === nothing
+
+        rm(path; force=true)
+    end
+
+    @testset "_on_external_change! — no changes is silent" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "silent = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        app.message = "previous message"
+
+        # No disk changes — should not update message
+        Sessions._on_external_change!(app)
+        @test app.message == "previous message"
+
+        rm(path; force=true)
+    end
+
+    @testset "_start_watcher! — starts for valid file path" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "start_w = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions._start_watcher!(app)
+        @test app.watcher !== nothing
+
+        Sessions.stop_watching!(app.watcher)
+        app.watcher = nothing
+        rm(path; force=true)
+    end
+
+    @testset "_start_watcher! — skips for empty path" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+        Sessions._start_watcher!(app)
+        @test app.watcher === nothing
+    end
 end

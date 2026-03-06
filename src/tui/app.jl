@@ -38,6 +38,7 @@ mutable struct SessionsApp <: Tachikoma.Model
     progress_recently::Set{UUID}   # cells seen running/queued this execution batch
     progress_done_tick::Int        # tick when batch completed (0 = not done yet)
     last_disk_nb::Union{Notebook, Nothing}  # snapshot of notebook as last loaded/saved from disk
+    watcher::Union{DebouncedWatcher, Nothing}  # file watcher for external changes
 end
 
 function SessionsApp(nb::Notebook)
@@ -48,7 +49,7 @@ function SessionsApp(nb::Notebook)
     ab = ActivityBar()
     snapshot = deepcopy(nb)
     SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
-        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot)
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing)
 end
 
 function SessionsApp(path::String)
@@ -60,10 +61,45 @@ Tachikoma.should_quit(app::SessionsApp) = app.quit
 Tachikoma.task_queue(app::SessionsApp) = app.tq
 
 """Enable any-event mouse tracking (1003) for true hover support.
-Also loads CommonMark.jl extension for markdown rendering."""
+Also loads CommonMark.jl extension for markdown rendering.
+Starts file watcher if notebook has a valid path."""
 function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
     print(t.io, "\e[?1003h")  # upgrade to any-event tracking
     try; Tachikoma.enable_markdown(); catch; end  # load CommonMark extension
+    _start_watcher!(app)
+end
+
+"""Start or restart the file watcher for external change detection."""
+function _start_watcher!(app::SessionsApp)
+    # Stop existing watcher if any
+    if app.watcher !== nothing
+        stop_watching!(app.watcher)
+        app.watcher = nothing
+    end
+
+    path = app.nb.path
+    (isempty(path) || !isfile(path)) && return
+
+    app.watcher = DebouncedWatcher(app.nb, _ -> _on_external_change!(app);
+                                    delay=0.5, poll_interval=0.3)
+    start_watching!(app.watcher)
+end
+
+"""Handle external file change: smart merge + rebuild widgets."""
+function _on_external_change!(app::SessionsApp)
+    app.last_disk_nb === nothing && return
+    try
+        diff = merge_external_changes!(app.nb, app.last_disk_nb)
+        app.last_disk_nb = deepcopy(app.nb)
+
+        n_changes = length(diff.added) + length(diff.changed) + length(diff.removed)
+        n_changes == 0 && return
+
+        rebuild_widgets!(app.notebook_view)
+        app.message = "$n_changes cell(s) changed externally"
+    catch e
+        app.message = "Reload error: $(sprint(showerror, e))"
+    end
 end
 
 function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
@@ -265,6 +301,7 @@ function _open_file!(app::SessionsApp, path::String)
         app.workspace = Workspace()
         app.notebook_view = NotebookView(nb)
         app.last_disk_nb = deepcopy(nb)
+        _start_watcher!(app)
         app.message = "Opened: $(basename(path))"
     catch e
         app.message = "Error: $(sprint(showerror, e))"
@@ -301,6 +338,7 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     app.cell_dropdown = nothing
     app.mode = :normal
     app.last_disk_nb = deepcopy(nb)
+    _start_watcher!(app)
     app.message = "Opened workspace: $(basename(dir))"
 end
 
@@ -319,6 +357,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # Ctrl+Q: quit
     if evt.key == :ctrl && evt.char == 'q'
+        if app.watcher !== nothing
+            stop_watching!(app.watcher)
+            app.watcher = nothing
+        end
         app.quit = true
         return
     end
