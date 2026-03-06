@@ -1,8 +1,9 @@
-# TUI: Integrated Julia REPL — multi-tab, pipe-based subprocess with async I/O
+# TUI: Integrated REPL — multi-tab Julia + Shell with PTY support
 
-"""Single REPL tab — owns a Julia subprocess and its I/O state."""
+"""Single REPL tab — owns a subprocess (Julia or Shell) and its I/O state."""
 mutable struct ReplTab
     name::String
+    tab_type::Symbol              # :julia or :shell
     process::Union{Base.Process, Nothing}
     proc_in::Union{IO, Nothing}
     proc_out::Union{IO, Nothing}
@@ -16,13 +17,14 @@ mutable struct ReplTab
     alive::Bool
     read_task::Union{Task, Nothing}
     prompt::String
-    repl_mode::Symbol
+    repl_mode::Symbol             # :julia, :pkg, :help, :shell (julia tabs only)
     max_scrollback::Int
 end
 
-function ReplTab(name::String="Julia")
-    ReplTab(name, nothing, nothing, nothing, String[], Char[], 0, 0,
-        String[], 0, "", false, nothing, "julia> ", :julia, 5000)
+function ReplTab(name::String="Julia", tab_type::Symbol=:julia)
+    prompt = tab_type == :shell ? "\$ " : "julia> "
+    ReplTab(name, tab_type, nothing, nothing, nothing, String[], Char[], 0, 0,
+        String[], 0, "", false, nothing, prompt, :julia, 5000)
 end
 
 """Multi-tab REPL panel."""
@@ -31,15 +33,17 @@ mutable struct ReplPanel
     active_idx::Int
     focused::Bool
     viewport::Tachikoma.Rect
-    tab_rects::Vector{Tachikoma.Rect}    # cached for mouse hit testing
-    close_rects::Vector{Tachikoma.Rect}  # cached for × buttons
-    plus_rect::Tachikoma.Rect            # cached for + button
-    next_tab_num::Int                     # counter for naming new tabs
+    tab_rects::Vector{Tachikoma.Rect}
+    close_rects::Vector{Tachikoma.Rect}
+    plus_rect::Tachikoma.Rect            # + (Julia) button
+    shell_rect::Tachikoma.Rect           # $ (Shell) button
+    next_julia_num::Int
+    next_shell_num::Int
 end
 
 function ReplPanel()
     ReplPanel(ReplTab[], 0, false, Tachikoma.Rect(),
-        Tachikoma.Rect[], Tachikoma.Rect[], Tachikoma.Rect(), 2)
+        Tachikoma.Rect[], Tachikoma.Rect[], Tachikoma.Rect(), Tachikoma.Rect(), 2, 1)
 end
 
 """Get the active REPL tab, or nothing."""
@@ -49,8 +53,10 @@ active_tab(panel::ReplPanel) = panel.active_idx >= 1 && panel.active_idx <= leng
 """Convenience: is any tab alive?"""
 is_alive(panel::ReplPanel) = (t = active_tab(panel); t !== nothing && t.alive)
 
-"""Start the Julia subprocess for a specific tab."""
-function spawn_repl_tab!(tab::ReplTab, dir::String=".")
+# ── Spawning ──────────────────────────────────────────────────────
+
+"""Start a Julia subprocess for a tab."""
+function _spawn_julia_tab!(tab::ReplTab, dir::String)
     tab.alive && return
 
     julia_bin = joinpath(Sys.BINDIR, "julia")
@@ -73,29 +79,96 @@ function spawn_repl_tab!(tab::ReplTab, dir::String=".")
     tab.alive = true
     tab.output_lines = String[]
 
-    tab.read_task = @async _read_output_loop!(tab, out.out, proc)
+    tab.read_task = @async _read_julia_loop!(tab, out.out)
     nothing
 end
 
-"""Spawn on the panel's active tab (convenience for _toggle_repl!)."""
+"""Start a Shell subprocess with PTY via `script` (cross-platform)."""
+function _spawn_shell_tab!(tab::ReplTab, dir::String)
+    tab.alive && return
+
+    dir = abspath(dir)
+    isdir(dir) || (dir = pwd())
+
+    shell = get(ENV, "SHELL", Sys.iswindows() ? "cmd.exe" : "/bin/sh")
+    env = copy(ENV)
+    env["TERM"] = "xterm-256color"
+
+    # Use `script` to allocate a PTY — syntax differs by platform
+    cmd = if Sys.isapple()
+        # macOS: script -q /dev/null <shell>
+        setenv(`script -q /dev/null $shell`, env; dir)
+    elseif Sys.islinux()
+        # Linux: script -qfc <shell> /dev/null
+        setenv(`script -qfc $shell /dev/null`, env; dir)
+    else
+        # Fallback: no PTY, just run the shell directly (interactive programs may not work)
+        env["TERM"] = "dumb"
+        setenv(`$shell`, env; dir)
+    end
+
+    inp = Pipe()
+    out = Pipe()
+    proc = Base.run(pipeline(cmd; stdin=inp, stdout=out, stderr=out); wait=false)
+    close(out.in)
+    close(inp.out)
+
+    tab.process = proc
+    tab.proc_in = inp.in
+    tab.proc_out = out.out
+    tab.alive = true
+    tab.output_lines = String[]
+
+    # Disable shell prompt to reduce noise — we render our own
+    # Send after a short delay so shell is ready
+    tab.read_task = @async begin
+        _init_shell!(tab)
+        _read_shell_loop!(tab, out.out)
+    end
+    nothing
+end
+
+"""Send shell init commands to suppress the default prompt and clear."""
+function _init_shell!(tab::ReplTab)
+    sleep(0.3)  # wait for shell to start
+    tab.alive || return
+    tab.proc_in === nothing && return
+    try
+        # Set a minimal prompt and disable right-prompt, then clear
+        write(tab.proc_in, "export PS1=''; export PS2=''; export RPS1=''; clear\n")
+        flush(tab.proc_in)
+        sleep(0.2)
+        # Clear any startup noise
+        empty!(tab.output_lines)
+    catch; end
+end
+
+"""Spawn the appropriate subprocess type for a tab."""
+function spawn_repl_tab!(tab::ReplTab, dir::String=".")
+    if tab.tab_type == :shell
+        _spawn_shell_tab!(tab, dir)
+    else
+        _spawn_julia_tab!(tab, dir)
+    end
+end
+
+"""Spawn on the panel's active tab."""
 function spawn_repl!(panel::ReplPanel, dir::String=".")
     tab = active_tab(panel)
     tab === nothing && return
     spawn_repl_tab!(tab, dir)
 end
 
-"""Async loop: read julia output line by line."""
-function _read_output_loop!(tab::ReplTab, out::IO, proc::Base.Process)
+# ── Output reading ────────────────────────────────────────────────
+
+"""Async loop: read Julia output line by line."""
+function _read_julia_loop!(tab::ReplTab, out::IO)
     try
         while tab.alive && !eof(out)
             line = readline(out; keep=false)
             _is_signal_noise(line) && continue
             push!(tab.output_lines, replace(line, '\r' => ""))
-            if length(tab.output_lines) > tab.max_scrollback
-                excess = length(tab.output_lines) - tab.max_scrollback
-                deleteat!(tab.output_lines, 1:excess)
-                tab.scroll_offset = max(0, tab.scroll_offset - excess)
-            end
+            _trim_scrollback!(tab)
         end
     catch e
         e isa EOFError && return
@@ -106,7 +179,38 @@ function _read_output_loop!(tab::ReplTab, out::IO, proc::Base.Process)
     end
 end
 
-"""Filter noise from signal termination."""
+"""Async loop: read Shell output line by line, filtering PTY noise."""
+function _read_shell_loop!(tab::ReplTab, out::IO)
+    try
+        while tab.alive && !eof(out)
+            line = readline(out; keep=false)
+            _is_signal_noise(line) && continue
+            # Clean up line
+            cleaned = replace(line, '\r' => "")
+            # Filter PTY control noise
+            _is_pty_noise(cleaned) && continue
+            push!(tab.output_lines, cleaned)
+            _trim_scrollback!(tab)
+        end
+    catch e
+        e isa EOFError && return
+        e isa Base.IOError && return
+        @warn "Shell reader error" exception=e
+    finally
+        tab.alive = false
+    end
+end
+
+"""Trim scrollback if over limit."""
+function _trim_scrollback!(tab::ReplTab)
+    if length(tab.output_lines) > tab.max_scrollback
+        excess = length(tab.output_lines) - tab.max_scrollback
+        deleteat!(tab.output_lines, 1:excess)
+        tab.scroll_offset = max(0, tab.scroll_offset - excess)
+    end
+end
+
+"""Filter signal termination noise."""
 function _is_signal_noise(line::String)
     s = _strip_ansi_simple(line)
     startswith(s, "[") && contains(s, "signal") && return true
@@ -117,6 +221,21 @@ function _is_signal_noise(line::String)
     contains(s, "in expression starting at none:") && return true
     false
 end
+
+"""Filter PTY/shell prompt noise (escape sequences for prompt rendering, bracket paste, etc.)."""
+function _is_pty_noise(line::String)
+    s = _strip_ansi_simple(line)
+    # Empty after stripping
+    stripped = strip(s)
+    isempty(stripped) && return false  # keep blank lines from output
+    # Shell prompt patterns (zsh %/$ markers)
+    stripped == "%" && return true
+    # Lines that are just whitespace padding from prompt rendering
+    all(c -> c == ' ', s) && return true
+    false
+end
+
+# ── Input ─────────────────────────────────────────────────────────
 
 """Send input to the active tab's subprocess."""
 function send_input!(panel::ReplPanel, line::String)
@@ -129,6 +248,14 @@ function _send_input_tab!(tab::ReplTab, line::String)
     tab.alive || return
     tab.proc_in === nothing && return
 
+    if tab.tab_type == :shell
+        _send_shell_input!(tab, line)
+    else
+        _send_julia_input!(tab, line)
+    end
+end
+
+function _send_julia_input!(tab::ReplTab, line::String)
     prompt_display = _mode_prompt(tab.repl_mode)
     push!(tab.output_lines, prompt_display * line)
 
@@ -155,6 +282,25 @@ function _send_input_tab!(tab::ReplTab, line::String)
         tab.prompt = "julia> "
     end
 
+    _update_history!(tab, line)
+end
+
+function _send_shell_input!(tab::ReplTab, line::String)
+    # Echo input to transcript with our prompt
+    push!(tab.output_lines, "\$ " * line)
+
+    try
+        write(tab.proc_in, line * "\n")
+        flush(tab.proc_in)
+    catch e
+        push!(tab.output_lines, "# Shell disconnected: $(sprint(showerror, e))")
+        tab.alive = false
+    end
+
+    _update_history!(tab, line)
+end
+
+function _update_history!(tab::ReplTab, line::String)
     if !isempty(line) && (isempty(tab.history) || tab.history[end] != line)
         push!(tab.history, line)
     end
@@ -163,7 +309,7 @@ function _send_input_tab!(tab::ReplTab, line::String)
     tab.scroll_offset = 0
 end
 
-"""Stop a single REPL tab's subprocess."""
+"""Stop a single tab's subprocess."""
 function stop_repl_tab!(tab::ReplTab)
     tab.alive = false
     if tab.proc_in !== nothing
@@ -181,24 +327,34 @@ function stop_repl_tab!(tab::ReplTab)
     tab.read_task = nothing
 end
 
-"""Stop all REPL tabs."""
+"""Stop all tabs."""
 function stop_repl!(panel::ReplPanel)
     for tab in panel.tabs
         stop_repl_tab!(tab)
     end
 end
 
-"""Add a new REPL tab and make it active."""
+"""Add a new Julia REPL tab."""
 function add_repl_tab!(panel::ReplPanel, dir::String=".")
-    name = "Julia $(panel.next_tab_num)"
-    panel.next_tab_num += 1
-    tab = ReplTab(name)
+    name = "Julia $(panel.next_julia_num)"
+    panel.next_julia_num += 1
+    tab = ReplTab(name, :julia)
     push!(panel.tabs, tab)
     panel.active_idx = length(panel.tabs)
     spawn_repl_tab!(tab, dir)
 end
 
-"""Close a REPL tab by index."""
+"""Add a new Shell tab with PTY."""
+function add_shell_tab!(panel::ReplPanel, dir::String=".")
+    name = "Shell $(panel.next_shell_num)"
+    panel.next_shell_num += 1
+    tab = ReplTab(name, :shell)
+    push!(panel.tabs, tab)
+    panel.active_idx = length(panel.tabs)
+    spawn_repl_tab!(tab, dir)
+end
+
+"""Close a tab by index."""
 function close_repl_tab!(panel::ReplPanel, idx::Int)
     (idx < 1 || idx > length(panel.tabs)) && return
     stop_repl_tab!(panel.tabs[idx])
@@ -212,7 +368,7 @@ function close_repl_tab!(panel::ReplPanel, idx::Int)
     end
 end
 
-"""Switch to a different REPL tab."""
+"""Switch to a different tab."""
 function switch_repl_tab!(panel::ReplPanel, idx::Int)
     (idx < 1 || idx > length(panel.tabs) || idx == panel.active_idx) && return
     panel.active_idx = idx
@@ -226,15 +382,20 @@ function _mode_prompt(mode::Symbol)
     return "julia> "
 end
 
+# ── Key handling ──────────────────────────────────────────────────
+
 """Handle a key event when the REPL is focused."""
 function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
     tab = active_tab(panel)
     tab === nothing && return false
 
+    is_shell = tab.tab_type == :shell
+
     # Character input
     if evt.key == :char
         c = evt.char
-        if tab.input_cursor == 0 && isempty(tab.input_buffer)
+        # Mode switching only for Julia tabs
+        if !is_shell && tab.input_cursor == 0 && isempty(tab.input_buffer)
             if c == ']'
                 tab.repl_mode = :pkg
                 tab.prompt = "pkg> "
@@ -259,8 +420,10 @@ function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
             if !isempty(tab.input_buffer)
                 empty!(tab.input_buffer)
                 tab.input_cursor = 0
-                tab.repl_mode = :julia
-                tab.prompt = "julia> "
+                if !is_shell
+                    tab.repl_mode = :julia
+                    tab.prompt = "julia> "
+                end
             elseif tab.alive && tab.process !== nothing
                 try Base.kill(tab.process, Base.SIGINT) catch end
             end
@@ -285,12 +448,11 @@ function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
             end
             return true
         elseif evt.char == 't'
-            # Ctrl+T: new REPL tab
-            dir = pwd()
-            add_repl_tab!(panel, dir)
+            # Ctrl+T: new Julia tab
+            add_repl_tab!(panel, pwd())
             return true
         elseif evt.char == 'w'
-            # Ctrl+W: close current REPL tab (if more than one)
+            # Ctrl+W: close current tab (if >1)
             if length(panel.tabs) > 1
                 close_repl_tab!(panel, panel.active_idx)
             end
@@ -311,7 +473,7 @@ function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
         if tab.input_cursor > 0
             deleteat!(tab.input_buffer, tab.input_cursor)
             tab.input_cursor -= 1
-        elseif isempty(tab.input_buffer) && tab.repl_mode != :julia
+        elseif !is_shell && isempty(tab.input_buffer) && tab.repl_mode != :julia
             tab.repl_mode = :julia
             tab.prompt = "julia> "
         end
@@ -372,7 +534,7 @@ function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
     end
 
     if evt.key == :escape
-        if tab.repl_mode != :julia
+        if !is_shell && tab.repl_mode != :julia
             tab.repl_mode = :julia
             tab.prompt = "julia> "
             return true
@@ -406,10 +568,17 @@ end
 function handle_repl_click!(panel::ReplPanel, evt::Tachikoma.MouseEvent)
     evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press || return
 
-    # Check + button
+    # Check + (Julia) button
     pr = panel.plus_rect
     if pr.width > 0 && evt.x >= pr.x && evt.x < pr.x + pr.width && evt.y == pr.y
         add_repl_tab!(panel, pwd())
+        return
+    end
+
+    # Check $ (Shell) button
+    sr = panel.shell_rect
+    if sr.width > 0 && evt.x >= sr.x && evt.x < sr.x + sr.width && evt.y == sr.y
+        add_shell_tab!(panel, pwd())
         return
     end
 
@@ -433,8 +602,6 @@ function handle_repl_click!(panel::ReplPanel, evt::Tachikoma.MouseEvent)
 end
 
 # ── Rendering ──────────────────────────────────────────────────────
-
-const REPL_TAB_BAR_H = 1  # tab row height inside border
 
 function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     panel.viewport = rect
@@ -482,6 +649,7 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
     panel.tab_rects = Tachikoma.Rect[]
     panel.close_rects = Tachikoma.Rect[]
     panel.plus_rect = Tachikoma.Rect()
+    panel.shell_rect = Tachikoma.Rect()
 
     if has_tabs
         _render_repl_tab_bar!(panel, inner_x, tab_row_y, inner_w, buf)
@@ -489,7 +657,7 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
 
     # Content area starts after tab bar row
     content_y = tab_row_y + (has_tabs ? 1 : 0)
-    content_h = (by + bh - 1) - content_y - 1  # -1 for bottom border
+    content_h = (by + bh - 1) - content_y - 1
     content_h < 2 && return
 
     tab = active_tab(panel)
@@ -499,7 +667,9 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
     input_y = content_y + content_h - 1
 
     prompt = tab.prompt
-    prompt_fg = if tab.repl_mode == :pkg; Theme.REPL_PKG_FG
+    prompt_fg = if tab.tab_type == :shell
+        Theme.REPL_SHELL_FG
+    elseif tab.repl_mode == :pkg; Theme.REPL_PKG_FG
     elseif tab.repl_mode == :help; Theme.REPL_HELP_FG
     elseif tab.repl_mode == :shell; Theme.REPL_SHELL_FG
     else; Theme.REPL_PROMPT_FG end
@@ -548,7 +718,8 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
     output_h = divider_y - content_y
     output_h < 1 && return
 
-    filtered = _filter_prompts(tab.output_lines)
+    # Filter prompts only for Julia tabs (shell tabs handle their own)
+    filtered = tab.tab_type == :julia ? _filter_prompts(tab.output_lines) : tab.output_lines
     n_lines = length(filtered)
     end_idx = max(0, n_lines - tab.scroll_offset)
     start_idx = max(1, end_idx - output_h + 1)
@@ -588,7 +759,6 @@ end
 
 """Render the REPL tab bar row inside the panel."""
 function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Tachikoma.Buffer)
-    bg = Tachikoma.Style(; bg=Theme.REPL_BG)
     sep_style = Tachikoma.Style(; fg=Theme.BORDER_DIM, bg=Theme.REPL_BG)
 
     cx = x
@@ -597,14 +767,14 @@ function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Ta
     for (i, tab) in enumerate(panel.tabs)
         is_active = (i == panel.active_idx)
 
-        # Tab label: " name ×"
-        label = " $(tab.name) "
+        # Tab icon: ⊳ for Julia, $ for Shell
+        icon = tab.tab_type == :shell ? "\$" : "⊳"
+        label = " $(icon) $(tab.name) "
         close_char = "×"
-        tab_w = length(label) + length(close_char) + 1  # +1 for space after ×
+        tab_w = length(label) + length(close_char) + 1
 
-        cx + tab_w + 1 > max_x && break  # no room
+        cx + tab_w + 1 > max_x && break
 
-        # Tab name
         name_fg = is_active ? Theme.FG : Theme.FG_MUTED
         name_style = if is_active
             Tachikoma.Style(; fg=name_fg, bg=Theme.REPL_BG, bold=true)
@@ -614,7 +784,6 @@ function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Ta
         Tachikoma.set_string!(buf, cx, y, label, name_style)
         push!(panel.tab_rects, Tachikoma.Rect(cx, y, length(label), 1))
 
-        # × close button
         close_x = cx + length(label)
         close_fg = is_active ? Theme.FG_DIM : Theme.FG_FAINT
         Tachikoma.set_string!(buf, close_x, y, close_char,
@@ -623,20 +792,25 @@ function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Ta
 
         cx += tab_w
 
-        # Separator
         if i < length(panel.tabs)
             Tachikoma.set_string!(buf, cx, y, "│", sep_style)
             cx += 1
         end
     end
 
-    # + button at the end
-    if cx + 3 <= max_x
+    # + (Julia) and $ (Shell) buttons
+    if cx + 5 <= max_x
         cx += 1
-        plus_fg = Theme.FG_DIM
+        # + button for Julia
         Tachikoma.set_string!(buf, cx, y, "+",
-            Tachikoma.Style(; fg=plus_fg, bg=Theme.REPL_BG))
+            Tachikoma.Style(; fg=Theme.REPL_PROMPT_FG, bg=Theme.REPL_BG))
         panel.plus_rect = Tachikoma.Rect(cx, y, 1, 1)
+        cx += 2
+
+        # $ button for Shell
+        Tachikoma.set_string!(buf, cx, y, "\$",
+            Tachikoma.Style(; fg=Theme.REPL_SHELL_FG, bg=Theme.REPL_BG))
+        panel.shell_rect = Tachikoma.Rect(cx, y, 1, 1)
     end
 end
 
