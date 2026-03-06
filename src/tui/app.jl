@@ -133,6 +133,21 @@ function _load_from_tab!(app::SessionsApp, idx::Int)
     app.drag_active = false
     app.slider_drag = false
     app.file_panel.hovered_idx = 0
+
+    # Sync file panel cursor to the active tab's file
+    _sync_file_panel_cursor!(app)
+end
+
+"""Move the file panel cursor to match the active tab's file."""
+function _sync_file_panel_cursor!(app::SessionsApp)
+    tab = app.tabs[app.active_tab_idx]
+    target = basename(tab.path)
+    for (i, entry) in enumerate(app.file_panel.entries)
+        if entry.name == target
+            app.file_panel.cursor_idx = i
+            return
+        end
+    end
 end
 
 """Switch to a different tab by index."""
