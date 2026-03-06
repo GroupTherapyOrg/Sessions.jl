@@ -12,4 +12,6 @@ using Sessions
     include("test_kernel.jl")
     include("test_run.jl")
     include("test_tui.jl")
+    include("test_cli.jl")
+    include("test_watcher.jl")
 end

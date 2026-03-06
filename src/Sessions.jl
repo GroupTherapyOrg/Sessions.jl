@@ -40,7 +40,7 @@ include("tui/notebook_view.jl")
 include("tui/app.jl")
 
 # Layer 3: CLI
-# include("cli.jl")
-# include("watcher.jl")
+include("cli.jl")
+include("watcher.jl")
 
 end # module
