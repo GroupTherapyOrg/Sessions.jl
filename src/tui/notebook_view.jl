@@ -405,14 +405,14 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         end
 
         # --- Cell rendering ---
-        # Clamp cell rect to notebook bounds (top and bottom). Set clip_top
-        # so the CellWidget can offset its CodeEditor scroll to show the
-        # correct lines when the cell top is scrolled above the viewport.
+        # Pass full virtual rect so CellWidget draws its border/code at the
+        # correct virtual position. Buffer in_bounds silently clips writes
+        # outside the terminal. The notebook border re-draw after this loop
+        # seals any overflow into the inset/border area.
         if y + ch > visible_start && y <= visible_end
-            cr_y = max(y, rect.y)
-            cr_h = min(ch - (cr_y - y), rect.y + rect.height - cr_y)
-            cw.clip_top = cr_y - y  # rows hidden above
-            cr_h > 0 && Tachikoma.render(cw, Tachikoma.Rect(cx, cr_y, cw_width, cr_h), buf)
+            cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
+                            ch - max(0, rect.y - y))
+            Tachikoma.render(cw, cell_rect, buf)
         end
 
         # --- Eye button (left margin, vertically centered) ---
@@ -431,9 +431,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- Output rendering ---
         if oh > 0
             if y + oh > visible_start && y <= visible_end
-                or_y = max(y, rect.y)
-                or_h = min(oh - (or_y - y), rect.y + rect.height - or_y)
-                or_h > 0 && Tachikoma.render(ow, Tachikoma.Rect(cx, or_y, cw_width, or_h), buf)
+                out_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
+                                oh - max(0, rect.y - y))
+                Tachikoma.render(ow, out_rect, buf)
             end
             y += oh
         end
