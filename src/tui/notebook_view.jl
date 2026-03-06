@@ -429,10 +429,11 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         y += ch
 
         # --- Output rendering ---
+        # Pass full virtual rect (same approach as cells) — buffer in_bounds
+        # silently clips writes outside the visible viewport.
         if oh > 0
             if y + oh > visible_start && y <= visible_end
-                out_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
-                                oh - max(0, rect.y - y))
+                out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
                 Tachikoma.render(ow, out_rect, buf)
             end
             y += oh
