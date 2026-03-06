@@ -6,6 +6,7 @@ struct FileEntry
     path::String
     is_dir::Bool
     is_hidden::Bool
+    is_notebook::Bool  # cached: is this a Pluto/Sessions notebook?
     size::Int64
 end
 
@@ -17,19 +18,23 @@ mutable struct FilePanel
     scroll_offset::Int
     viewport::Tachikoma.Rect
     show_hidden::Bool
+    hovered_idx::Int       # which entry the mouse is hovering (0 = none)
     # Folder picker mode (for "Open Folder" workflow)
     picker_mode::Bool
     picker_dir::String
     picker_entries::Vector{FileEntry}
     picker_cursor::Int
     picker_scroll::Int
+    picker_hovered_idx::Int   # hover in picker (0 = none)
+    picker_parent_hovered::Bool
+    picker_select_hovered::Bool
     last_refresh_tick::Int  # tick when entries were last refreshed
 end
 
 function FilePanel(dir::String=".")
     dir = abspath(dir)
-    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false,
-                   false, homedir(), FileEntry[], 1, 0, 0)
+    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false, 0,
+                   false, dir, FileEntry[], 1, 0, 0, false, false, 0)
     refresh_entries!(fp)
     fp
 end
@@ -52,10 +57,11 @@ function refresh_entries!(fp::FilePanel)
         (!fp.show_hidden && is_hidden) && continue
         full = joinpath(fp.current_dir, name)
         if isdir(full)
-            push!(dirs, FileEntry(name, full, true, is_hidden, 0))
+            push!(dirs, FileEntry(name, full, true, is_hidden, false, 0))
         else
             sz = try; filesize(full); catch; Int64(0); end
-            push!(files, FileEntry(name, full, false, is_hidden, sz))
+            is_nb = endswith(name, ".jl") ? is_notebook_file(full) : false
+            push!(files, FileEntry(name, full, false, is_hidden, is_nb, sz))
         end
     end
 
@@ -121,12 +127,15 @@ end
 
 # ── Folder picker mode ───────────────────────────────────────────────
 
-"""Enter picker mode — browse directories starting from home."""
+"""Enter picker mode — browse directories starting from current dir."""
 function enter_picker_mode!(fp::FilePanel)
     fp.picker_mode = true
-    fp.picker_dir = homedir()
+    fp.picker_dir = fp.current_dir
     fp.picker_cursor = 1
     fp.picker_scroll = 0
+    fp.picker_hovered_idx = 0
+    fp.picker_parent_hovered = false
+    fp.picker_select_hovered = false
     refresh_picker!(fp)
 end
 
@@ -145,7 +154,7 @@ function refresh_picker!(fp::FilePanel)
         startswith(name, '.') && continue
         full = joinpath(fp.picker_dir, name)
         isdir(full) || continue
-        push!(fp.picker_entries, FileEntry(name, full, true, false, 0))
+        push!(fp.picker_entries, FileEntry(name, full, true, false, false, 0))
     end
     fp.picker_cursor = clamp(fp.picker_cursor, 1, max(length(fp.picker_entries), 1))
     fp.picker_scroll = 0
@@ -203,8 +212,9 @@ end
 const ICON_FOLDER     = "▸"
 const ICON_FOLDER_OPEN = "▾"
 const ICON_FILE       = "·"
-const ICON_JULIA      = "◆"
-const ICON_PYTHON     = "◇"
+const ICON_JULIA_NB   = "◆"   # filled diamond — Pluto/Sessions notebook
+const ICON_JULIA      = "◇"   # hollow diamond — plain .jl file
+const ICON_PYTHON     = "⊙"
 const ICON_MARKDOWN   = "≡"
 const ICON_JSON       = "⟐"
 const ICON_YAML       = "⟐"
@@ -213,12 +223,16 @@ const ICON_GIT        = "●"
 const ICON_SHELL      = "⊞"
 const ICON_IMAGE      = "◻"
 const ICON_ARCHIVE    = "⊠"
+const ICON_SESSION    = "◈"   # session cache file
 const ICON_PARENT     = "⊖"
 
 function file_icon(entry::FileEntry)
     entry.is_dir && return ICON_FOLDER
     ext = lowercase(splitext(entry.name)[2])
-    ext == ".jl"    && return ICON_JULIA
+    if ext == ".jl"
+        return entry.is_notebook ? ICON_JULIA_NB : ICON_JULIA
+    end
+    endswith(entry.name, ".session") && return ICON_SESSION
     ext == ".py"    && return ICON_PYTHON
     ext == ".md"    && return ICON_MARKDOWN
     ext == ".json"  && return ICON_JSON
@@ -241,16 +255,19 @@ end
 function icon_color(entry::FileEntry)
     entry.is_dir && return Theme.ACCENT
     ext = lowercase(splitext(entry.name)[2])
-    ext == ".jl"    && return Theme.GREEN
+    if ext == ".jl"
+        return entry.is_notebook ? Theme.GREEN : Theme.GREEN_DIM
+    end
+    endswith(entry.name, ".session") && return Theme.FG_MUTED
     ext == ".py"    && return Theme.CYAN
     ext == ".md"    && return Theme.FG_DIM
     ext == ".json"  && return Theme.ORANGE
     ext == ".yaml"  && return Theme.ORANGE
     ext == ".yml"   && return Theme.ORANGE
     ext == ".toml"  && return Theme.ORANGE
-    ext == ".sh"    && return Theme.GREEN
-    ext == ".bash"  && return Theme.GREEN
-    ext == ".zsh"   && return Theme.GREEN
+    ext == ".sh"    && return Theme.GREEN_DIM
+    ext == ".bash"  && return Theme.GREEN_DIM
+    ext == ".zsh"   && return Theme.GREEN_DIM
     ext == ".png"   && return Theme.RED
     ext == ".jpg"   && return Theme.RED
     ext == ".zip"   && return Theme.RED
@@ -387,23 +404,39 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
         entry = fp.entries[ei]
         row = entries_start_y + vi
         is_cursor = (ei == fp.cursor_idx)
+        is_hovered = (ei == fp.hovered_idx)
+        is_jl = endswith(entry.name, ".jl")
 
         # Cursor indicator
-        cursor_char = is_cursor ? "›" : " "
-        cursor_style = Tachikoma.Style(;
-            fg=is_cursor ? Theme.ACCENT_GLOW : Theme.FG_MUTED,
-            bg=Theme.SIDEBAR_BG)
-        Tachikoma.set_string!(buf, inner_x, row, cursor_char, cursor_style)
+        cursor_char = is_cursor ? "›" : (is_hovered ? "›" : " ")
+        cursor_fg = is_cursor ? Theme.ACCENT_GLOW : (is_hovered ? Theme.ACCENT_DIM : Theme.FG_MUTED)
+        Tachikoma.set_string!(buf, inner_x, row, cursor_char,
+            Tachikoma.Style(; fg=cursor_fg, bg=Theme.SIDEBAR_BG))
 
-        # Icon
+        # Icon — brighten on hover
         icon = file_icon(entry)
         ic = icon_color(entry)
+        if is_hovered && !is_cursor
+            ic = Theme.ACCENT_GLOW
+        end
         Tachikoma.set_string!(buf, inner_x + 2, row, icon,
             Tachikoma.Style(; fg=ic, bg=Theme.SIDEBAR_BG))
 
-        # Filename
+        # Filename — color varies by state and file type
         name = first(entry.name, max_name_w)
-        name_fg = is_cursor ? Theme.FG : (entry.is_hidden ? Theme.FG_MUTED : Theme.FG_DIM)
+        name_fg = if is_cursor
+            Theme.FG
+        elseif is_hovered
+            Theme.FG  # bright on hover
+        elseif entry.is_dir
+            Theme.FG_DIM
+        elseif is_jl
+            Theme.FG_DIM
+        elseif entry.is_hidden
+            Theme.FG_MUTED
+        else
+            Theme.FG_MUTED  # non-.jl files are dimmer
+        end
         Tachikoma.set_string!(buf, inner_x + 4, row, name,
             Tachikoma.Style(; fg=name_fg, bg=Theme.SIDEBAR_BG))
     end
@@ -465,7 +498,8 @@ function _render_picker!(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buf
 
     # Parent row: "⊖ .." to go up
     parent_y = by + 2
-    parent_style = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.SIDEBAR_BG)
+    parent_fg = fp.picker_parent_hovered ? Theme.ACCENT_GLOW : Theme.FG_DIM
+    parent_style = Tachikoma.Style(; fg=parent_fg, bg=Theme.SIDEBAR_BG)
     Tachikoma.set_string!(buf, inner_x + 1, parent_y, "⊖ ..", parent_style)
     # Show current dir on right
     dir_name = basename(fp.picker_dir)
@@ -508,15 +542,17 @@ function _render_picker!(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buf
         entry = fp.picker_entries[ei]
         row = entries_start + vi_idx
         is_cursor = (ei == fp.picker_cursor)
+        is_hovered = (ei == fp.picker_hovered_idx)
 
-        cursor_char = is_cursor ? "›" : " "
-        cursor_fg = is_cursor ? Theme.ACCENT_GLOW : Theme.FG_MUTED
+        cursor_char = (is_cursor || is_hovered) ? "›" : " "
+        cursor_fg = is_cursor ? Theme.ACCENT_GLOW : (is_hovered ? Theme.ACCENT_DIM : Theme.FG_MUTED)
         Tachikoma.set_string!(buf, inner_x, row, cursor_char,
             Tachikoma.Style(; fg=cursor_fg, bg=Theme.SIDEBAR_BG))
+        icon_fg = is_hovered ? Theme.ACCENT_GLOW : Theme.ACCENT
         Tachikoma.set_string!(buf, inner_x + 2, row, ICON_FOLDER,
-            Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.SIDEBAR_BG))
+            Tachikoma.Style(; fg=icon_fg, bg=Theme.SIDEBAR_BG))
         name = first(entry.name, max_name_w)
-        name_fg = is_cursor ? Theme.FG : Theme.FG_DIM
+        name_fg = (is_cursor || is_hovered) ? Theme.FG : Theme.FG_DIM
         Tachikoma.set_string!(buf, inner_x + 4, row, name,
             Tachikoma.Style(; fg=name_fg, bg=Theme.SIDEBAR_BG))
     end
@@ -525,9 +561,10 @@ function _render_picker!(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buf
     sel_text = " Select "
     sel_x = bx + div(bw - length(sel_text) - 2, 2)
     if sel_x > bx
+        sel_fg = fp.picker_select_hovered ? Theme.GREEN_BRIGHT : Theme.ACCENT_GLOW
         Tachikoma.set_char!(buf, sel_x, by + bh - 1, '┤', border_style)
         Tachikoma.set_string!(buf, sel_x + 1, by + bh - 1, sel_text,
-            Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.SIDEBAR_BG, bold=true))
+            Tachikoma.Style(; fg=sel_fg, bg=Theme.SIDEBAR_BG, bold=true))
         Tachikoma.set_char!(buf, sel_x + 1 + length(sel_text), by + bh - 1, '├', border_style)
     end
 end

@@ -350,6 +350,13 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
+    # Hover — highlight entry under mouse
+    if evt.action == Tachikoma.mouse_move
+        idx = entry_at_y(fp, evt.y)
+        fp.hovered_idx = idx !== nothing ? idx : 0
+        return
+    end
+
     # Click on a file entry
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
         idx = entry_at_y(fp, evt.y)
@@ -357,10 +364,8 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             fp.cursor_idx = idx
             result = activate!(fp)
             if result !== nothing
-                # Clicked a file — open it as notebook if it's .jl
-                if endswith(result, ".jl")
-                    _open_file!(app, result)
-                end
+                # Clicked a file — open it
+                _open_file!(app, result)
             end
         end
     end
@@ -376,6 +381,15 @@ function _handle_picker_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
     if evt.button == Tachikoma.mouse_scroll_up
         fp.picker_cursor = max(1, fp.picker_cursor - 1)
+        return
+    end
+
+    # Hover — highlight picker entries, parent, and select button
+    if evt.action == Tachikoma.mouse_move
+        hit = picker_hit_at_y(fp, evt.y)
+        fp.picker_parent_hovered = (hit == :parent)
+        fp.picker_select_hovered = (hit == :select)
+        fp.picker_hovered_idx = (hit isa Integer && hit >= 1) ? hit : 0
         return
     end
 
@@ -653,6 +667,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     # Clear status message on any click
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
         app.message = ""
+    end
+
+    # Clear hover states on every mouse move (specific handlers re-set them)
+    if evt.action == Tachikoma.mouse_move
+        app.activity_bar.hovered = :none
+        app.file_panel.hovered_idx = 0
+        app.file_panel.picker_hovered_idx = 0
+        app.file_panel.picker_parent_hovered = false
+        app.file_panel.picker_select_hovered = false
     end
 
     # Activity bar clicks — toggle sidebar / open folder picker

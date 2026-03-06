@@ -89,11 +89,11 @@ function Tachikoma.render(ab::ActivityBar, rect::Tachikoma.Rect, buf::Tachikoma.
                 '▎', Tachikoma.Style(; fg=Theme.ACTIVITY_INDICATOR, bg=Theme.ACTIVITY_BG))
         end
 
-        # Icon
+        # Icon — glow on hover, bright when active
         icon_fg = if is_active
             Theme.ACTIVITY_ICON_ACTIVE_FG
         elseif is_hovered
-            Theme.FG_DIM
+            Theme.ACCENT_GLOW
         else
             Theme.ACTIVITY_ICON_FG
         end

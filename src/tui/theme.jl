@@ -34,6 +34,7 @@ const ACCENT_GLOW   = ColorRGB(0x6e, 0xa2, 0xff)   # brighter accent for glow ef
 # Semantic
 const GREEN         = ColorRGB(0x6a, 0xab, 0x73)   # #6aab73 — success, string
 const GREEN_BRIGHT  = ColorRGB(0x8c, 0xd4, 0x96)   # brighter green for glow
+const GREEN_DIM     = ColorRGB(0x4d, 0x80, 0x55)   # dimmer green for plain .jl files
 const ORANGE        = ColorRGB(0xcf, 0x8e, 0x6d)   # #cf8e6d — warning, keyword
 const RED           = ColorRGB(0xf7, 0x54, 0x64)   # #f75464 — error
 const PURPLE        = ColorRGB(0xc7, 0x7d, 0xbb)   # #c77dbb — type, special
