@@ -626,8 +626,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
-        # Ctrl+click (Cmd+click on macOS): toggle individual cell selection
-        if evt.ctrl
+        # Ctrl+click or Alt+click (Cmd+click on macOS): toggle individual cell selection
+        if evt.ctrl || evt.alt
             idx = cell_at_y(nv, evt.y)
             if idx !== nothing
                 nv.cell_widgets[idx].selected = !nv.cell_widgets[idx].selected

@@ -253,7 +253,14 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
         _render_folded_preview(cw, inner, buf, surface_bg)
 
     elseif cw.selected
-        _draw_rounded_border!(buf, border_rect, Theme.CYAN, surface_bg)
+        # Selected cells look like normal-mode focused: gray border + accent left bar
+        border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_BRIGHT
+        _draw_rounded_border!(buf, border_rect, border_color, surface_bg)
+        bar_color = dirty ? Theme.ORANGE : Theme.ACCENT_DIM
+        bar_style = Tachikoma.Style(; fg=bar_color, bg=surface_bg)
+        for by in (border_rect.y):(Tachikoma.bottom(border_rect))
+            Tachikoma.set_char!(buf, border_rect.x, by, '▎', bar_style)
+        end
         _render_code!(cw, inner, buf, surface_bg)
 
     elseif dirty
