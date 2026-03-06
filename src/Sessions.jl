@@ -35,6 +35,9 @@ export format_error, format_cell_error
 
 include("run.jl")
 
+include("session.jl")
+export session_path, save_session!
+
 # Layer 2: TUI
 include("tui/theme.jl")
 include("tui/cell_widget.jl")
