@@ -59,3 +59,15 @@ function main(args::Vector{String}=ARGS)
         end
     end
 end
+
+"""Install the `sessions` CLI wrapper to ~/.local/bin/sessions."""
+function install_cli(; dest::String=expanduser("~/.local/bin/sessions"))
+    wrapper = """#!/bin/sh
+exec julia --startup-file=no --project=@Sessions -e 'using Sessions; Sessions.main()' -- "\$@"
+"""
+    mkpath(dirname(dest))
+    Base.write(dest, wrapper)
+    chmod(dest, 0o755)
+    println("Installed sessions CLI to $dest")
+    dest
+end

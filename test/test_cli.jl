@@ -52,4 +52,39 @@ using Sessions
     @testset "main unknown command errors" begin
         @test_throws Exception Sessions.main(["invalidcommand"])
     end
+
+    @testset "bin/sessions wrapper exists and is executable" begin
+        wrapper = joinpath(@__DIR__, "..", "bin", "sessions")
+        @test isfile(wrapper)
+        # Check executable permission (Unix)
+        @test (filemode(wrapper) & 0o111) != 0
+    end
+
+    @testset "bin/sessions wrapper content is correct" begin
+        wrapper = joinpath(@__DIR__, "..", "bin", "sessions")
+        content = read(wrapper, String)
+        @test startswith(content, "#!/bin/sh")
+        @test contains(content, "Sessions.main()")
+        @test contains(content, "julia")
+    end
+
+    @testset "install_cli creates wrapper" begin
+        dest = tempname()
+        result = Sessions.install_cli(; dest)
+        @test isfile(dest)
+        @test result == dest
+        content = read(dest, String)
+        @test startswith(content, "#!/bin/sh")
+        @test contains(content, "Sessions.main()")
+        # Executable
+        @test (filemode(dest) & 0o111) != 0
+        rm(dest; force=true)
+    end
+
+    @testset "install_cli creates parent directories" begin
+        dest = joinpath(tempdir(), "sessions_test_install", "bin", "sessions")
+        result = Sessions.install_cli(; dest)
+        @test isfile(dest)
+        rm(dirname(dirname(dest)); force=true, recursive=true)
+    end
 end

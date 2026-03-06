@@ -1,0 +1,2 @@
+#!/bin/sh
+exec julia --startup-file=no --project=@Sessions -e 'using Sessions; Sessions.main()' -- "$@"

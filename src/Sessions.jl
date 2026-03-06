@@ -46,4 +46,35 @@ include("tui/app.jl")
 include("cli.jl")
 include("watcher.jl")
 
+# Precompilation workload
+using PrecompileTools
+
+@setup_workload begin
+    _pc_source = """### A Pluto.jl notebook ###
+# v0.19.0
+
+# ╔═╡ 00000001-0000-0000-0000-000000000001
+x = 1 + 1
+
+# ╔═╡ 00000002-0000-0000-0000-000000000002
+y = x * 2
+
+# ╔═╡ Cell order:
+# ╠═00000001-0000-0000-0000-000000000001
+# ╠═00000002-0000-0000-0000-000000000002
+"""
+    @compile_workload begin
+        _pc_nb = parse_notebook(_pc_source; path="precompile.jl")
+        serialize_notebook(_pc_nb)
+        analyze_cell(_pc_nb.cells[_pc_nb.cell_order[1]])
+        build_topology(_pc_nb)
+        execution_order(_pc_nb)
+        source_hash(_pc_nb.cells[_pc_nb.cell_order[1]])
+        is_stale(_pc_nb.cells[_pc_nb.cell_order[1]])
+        classify_output(2)
+        text_representation(2)
+        # Note: Workspace/execute_cell! cannot be precompiled (uses eval in dynamic Module)
+    end
+end
+
 end # module
