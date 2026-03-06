@@ -1,34 +1,57 @@
-# TUI: Integrated Julia REPL — pipe-based subprocess with async I/O
+# TUI: Integrated Julia REPL — multi-tab, pipe-based subprocess with async I/O
 
-"""Integrated Julia REPL panel."""
-mutable struct ReplPanel
+"""Single REPL tab — owns a Julia subprocess and its I/O state."""
+mutable struct ReplTab
+    name::String
     process::Union{Base.Process, Nothing}
-    proc_in::Union{IO, Nothing}       # write to julia's stdin
-    proc_out::Union{IO, Nothing}      # read from julia's stdout+stderr
-    output_lines::Vector{String}       # output transcript (raw with ANSI codes)
-    input_buffer::Vector{Char}         # current input line
-    input_cursor::Int                  # 0-based cursor position in input
-    scroll_offset::Int                 # lines scrolled up from bottom
-    focused::Bool
-    viewport::Tachikoma.Rect
-    history::Vector{String}            # input history
-    history_idx::Int                   # 0 = current input, 1+ = history
-    history_stash::String              # stashed current input when browsing history
-    alive::Bool                        # process is running
-    read_task::Union{Task, Nothing}    # async output reader
-    prompt::String                     # current display prompt
-    repl_mode::Symbol                  # :julia, :pkg, :help, :shell
-    max_scrollback::Int                # max output lines to keep
+    proc_in::Union{IO, Nothing}
+    proc_out::Union{IO, Nothing}
+    output_lines::Vector{String}
+    input_buffer::Vector{Char}
+    input_cursor::Int
+    scroll_offset::Int
+    history::Vector{String}
+    history_idx::Int
+    history_stash::String
+    alive::Bool
+    read_task::Union{Task, Nothing}
+    prompt::String
+    repl_mode::Symbol
+    max_scrollback::Int
 end
 
-function ReplPanel()
-    ReplPanel(nothing, nothing, nothing, String[], Char[], 0, 0, false, Tachikoma.Rect(),
+function ReplTab(name::String="Julia")
+    ReplTab(name, nothing, nothing, nothing, String[], Char[], 0, 0,
         String[], 0, "", false, nothing, "julia> ", :julia, 5000)
 end
 
-"""Start the Julia subprocess with explicit pipes."""
-function spawn_repl!(panel::ReplPanel, dir::String=".")
-    panel.alive && return  # already running
+"""Multi-tab REPL panel."""
+mutable struct ReplPanel
+    tabs::Vector{ReplTab}
+    active_idx::Int
+    focused::Bool
+    viewport::Tachikoma.Rect
+    tab_rects::Vector{Tachikoma.Rect}    # cached for mouse hit testing
+    close_rects::Vector{Tachikoma.Rect}  # cached for × buttons
+    plus_rect::Tachikoma.Rect            # cached for + button
+    next_tab_num::Int                     # counter for naming new tabs
+end
+
+function ReplPanel()
+    ReplPanel(ReplTab[], 0, false, Tachikoma.Rect(),
+        Tachikoma.Rect[], Tachikoma.Rect[], Tachikoma.Rect(), 2)
+end
+
+"""Get the active REPL tab, or nothing."""
+active_tab(panel::ReplPanel) = panel.active_idx >= 1 && panel.active_idx <= length(panel.tabs) ?
+    panel.tabs[panel.active_idx] : nothing
+
+"""Convenience: is any tab alive?"""
+is_alive(panel::ReplPanel) = (t = active_tab(panel); t !== nothing && t.alive)
+
+"""Start the Julia subprocess for a specific tab."""
+function spawn_repl_tab!(tab::ReplTab, dir::String=".")
+    tab.alive && return
 
     julia_bin = joinpath(Sys.BINDIR, "julia")
     dir = abspath(dir)
@@ -38,37 +61,40 @@ function spawn_repl!(panel::ReplPanel, dir::String=".")
     env["TERM"] = "dumb"
     cmd = setenv(`$julia_bin -i --color=yes --banner=short --startup-file=no`, env; dir)
 
-    # Use explicit Pipe objects so we get proper read/write ends
     inp = Pipe()
     out = Pipe()
     proc = Base.run(pipeline(cmd; stdin=inp, stdout=out, stderr=out); wait=false)
-    close(out.in)   # close write end in parent (subprocess writes to it)
-    close(inp.out)   # close read end in parent (subprocess reads from it)
+    close(out.in)
+    close(inp.out)
 
-    panel.process = proc
-    panel.proc_in = inp.in
-    panel.proc_out = out.out
-    panel.alive = true
-    panel.output_lines = String[]
+    tab.process = proc
+    tab.proc_in = inp.in
+    tab.proc_out = out.out
+    tab.alive = true
+    tab.output_lines = String[]
 
-    # Async output reader — uses blocking readline (not bytesavailable polling)
-    panel.read_task = @async _read_output_loop!(panel, out.out, proc)
+    tab.read_task = @async _read_output_loop!(tab, out.out, proc)
     nothing
 end
 
-"""Async loop: read julia output line by line (blocking readline)."""
-function _read_output_loop!(panel::ReplPanel, out::IO, proc::Base.Process)
+"""Spawn on the panel's active tab (convenience for _toggle_repl!)."""
+function spawn_repl!(panel::ReplPanel, dir::String=".")
+    tab = active_tab(panel)
+    tab === nothing && return
+    spawn_repl_tab!(tab, dir)
+end
+
+"""Async loop: read julia output line by line."""
+function _read_output_loop!(tab::ReplTab, out::IO, proc::Base.Process)
     try
-        while panel.alive && !eof(out)
+        while tab.alive && !eof(out)
             line = readline(out; keep=false)
-            # Filter signal crash dump lines from kill
             _is_signal_noise(line) && continue
-            push!(panel.output_lines, replace(line, '\r' => ""))
-            # Trim scrollback
-            if length(panel.output_lines) > panel.max_scrollback
-                excess = length(panel.output_lines) - panel.max_scrollback
-                deleteat!(panel.output_lines, 1:excess)
-                panel.scroll_offset = max(0, panel.scroll_offset - excess)
+            push!(tab.output_lines, replace(line, '\r' => ""))
+            if length(tab.output_lines) > tab.max_scrollback
+                excess = length(tab.output_lines) - tab.max_scrollback
+                deleteat!(tab.output_lines, 1:excess)
+                tab.scroll_offset = max(0, tab.scroll_offset - excess)
             end
         end
     catch e
@@ -76,11 +102,11 @@ function _read_output_loop!(panel::ReplPanel, out::IO, proc::Base.Process)
         e isa Base.IOError && return
         @warn "REPL reader error" exception=e
     finally
-        panel.alive = false
+        tab.alive = false
     end
 end
 
-"""Filter noise from signal termination (crash dump, psynch_cvwait, etc.)."""
+"""Filter noise from signal termination."""
 function _is_signal_noise(line::String)
     s = _strip_ansi_simple(line)
     startswith(s, "[") && contains(s, "signal") && return true
@@ -92,69 +118,104 @@ function _is_signal_noise(line::String)
     false
 end
 
-"""Send a line of input to the Julia subprocess."""
+"""Send input to the active tab's subprocess."""
 function send_input!(panel::ReplPanel, line::String)
-    panel.alive || return
-    panel.proc_in === nothing && return
+    tab = active_tab(panel)
+    tab === nothing && return
+    _send_input_tab!(tab, line)
+end
 
-    # Echo input to output transcript
-    prompt_display = _mode_prompt(panel.repl_mode)
-    push!(panel.output_lines, prompt_display * line)
+function _send_input_tab!(tab::ReplTab, line::String)
+    tab.alive || return
+    tab.proc_in === nothing && return
 
-    # Translate REPL modes to actual Julia code
-    actual_input = if panel.repl_mode == :pkg
+    prompt_display = _mode_prompt(tab.repl_mode)
+    push!(tab.output_lines, prompt_display * line)
+
+    actual_input = if tab.repl_mode == :pkg
         "import Pkg; Pkg.REPLMode.pkgstr(\"$(escape_string(line))\")"
-    elseif panel.repl_mode == :help
+    elseif tab.repl_mode == :help
         "@doc $(line)"
-    elseif panel.repl_mode == :shell
+    elseif tab.repl_mode == :shell
         "Base.run(`$(line)`)"
     else
         line
     end
 
     try
-        write(panel.proc_in, actual_input * "\n")
-        flush(panel.proc_in)
+        write(tab.proc_in, actual_input * "\n")
+        flush(tab.proc_in)
     catch e
-        push!(panel.output_lines, "# REPL disconnected: $(sprint(showerror, e))")
-        panel.alive = false
+        push!(tab.output_lines, "# REPL disconnected: $(sprint(showerror, e))")
+        tab.alive = false
     end
 
-    # Reset mode after sending (like the real REPL)
-    if panel.repl_mode != :julia
-        panel.repl_mode = :julia
-        panel.prompt = "julia> "
+    if tab.repl_mode != :julia
+        tab.repl_mode = :julia
+        tab.prompt = "julia> "
     end
 
-    # Add to history (skip empty and duplicates)
-    if !isempty(line) && (isempty(panel.history) || panel.history[end] != line)
-        push!(panel.history, line)
+    if !isempty(line) && (isempty(tab.history) || tab.history[end] != line)
+        push!(tab.history, line)
     end
-    panel.history_idx = 0
-    panel.history_stash = ""
-
-    # Auto-scroll to bottom on new input
-    panel.scroll_offset = 0
+    tab.history_idx = 0
+    tab.history_stash = ""
+    tab.scroll_offset = 0
 end
 
-"""Stop the Julia subprocess."""
+"""Stop a single REPL tab's subprocess."""
+function stop_repl_tab!(tab::ReplTab)
+    tab.alive = false
+    if tab.proc_in !== nothing
+        try close(tab.proc_in) catch end
+        tab.proc_in = nothing
+    end
+    if tab.process !== nothing
+        try kill(tab.process) catch end
+        tab.process = nothing
+    end
+    if tab.proc_out !== nothing
+        try close(tab.proc_out) catch end
+        tab.proc_out = nothing
+    end
+    tab.read_task = nothing
+end
+
+"""Stop all REPL tabs."""
 function stop_repl!(panel::ReplPanel)
-    panel.alive = false
-    if panel.proc_in !== nothing
-        try close(panel.proc_in) catch end
-        panel.proc_in = nothing
+    for tab in panel.tabs
+        stop_repl_tab!(tab)
     end
-    if panel.process !== nothing
-        try
-            kill(panel.process)
-        catch; end
-        panel.process = nothing
+end
+
+"""Add a new REPL tab and make it active."""
+function add_repl_tab!(panel::ReplPanel, dir::String=".")
+    name = "Julia $(panel.next_tab_num)"
+    panel.next_tab_num += 1
+    tab = ReplTab(name)
+    push!(panel.tabs, tab)
+    panel.active_idx = length(panel.tabs)
+    spawn_repl_tab!(tab, dir)
+end
+
+"""Close a REPL tab by index."""
+function close_repl_tab!(panel::ReplPanel, idx::Int)
+    (idx < 1 || idx > length(panel.tabs)) && return
+    stop_repl_tab!(panel.tabs[idx])
+    deleteat!(panel.tabs, idx)
+    if isempty(panel.tabs)
+        panel.active_idx = 0
+    elseif panel.active_idx > length(panel.tabs)
+        panel.active_idx = length(panel.tabs)
+    elseif panel.active_idx > idx
+        panel.active_idx -= 1
     end
-    if panel.proc_out !== nothing
-        try close(panel.proc_out) catch end
-        panel.proc_out = nothing
-    end
-    panel.read_task = nothing
+end
+
+"""Switch to a different REPL tab."""
+function switch_repl_tab!(panel::ReplPanel, idx::Int)
+    (idx < 1 || idx > length(panel.tabs) || idx == panel.active_idx) && return
+    panel.active_idx = idx
 end
 
 """Get the mode-specific prompt string."""
@@ -165,182 +226,215 @@ function _mode_prompt(mode::Symbol)
     return "julia> "
 end
 
-"""Handle a key event when the REPL is focused. Returns true if consumed."""
+"""Handle a key event when the REPL is focused."""
 function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
+    tab = active_tab(panel)
+    tab === nothing && return false
+
     # Character input
     if evt.key == :char
         c = evt.char
-
-        # Mode switching at position 0 with empty buffer
-        if panel.input_cursor == 0 && isempty(panel.input_buffer)
+        if tab.input_cursor == 0 && isempty(tab.input_buffer)
             if c == ']'
-                panel.repl_mode = :pkg
-                panel.prompt = "pkg> "
+                tab.repl_mode = :pkg
+                tab.prompt = "pkg> "
                 return true
             elseif c == '?'
-                panel.repl_mode = :help
-                panel.prompt = "help?> "
+                tab.repl_mode = :help
+                tab.prompt = "help?> "
                 return true
             elseif c == ';'
-                panel.repl_mode = :shell
-                panel.prompt = "shell> "
+                tab.repl_mode = :shell
+                tab.prompt = "shell> "
                 return true
             end
         end
-
-        insert!(panel.input_buffer, panel.input_cursor + 1, c)
-        panel.input_cursor += 1
+        insert!(tab.input_buffer, tab.input_cursor + 1, c)
+        tab.input_cursor += 1
         return true
     end
 
-    # Ctrl+key combos
     if evt.key == :ctrl
         if evt.char == 'c'
-            # Ctrl+C: interrupt or clear input
-            if !isempty(panel.input_buffer)
-                empty!(panel.input_buffer)
-                panel.input_cursor = 0
-                panel.repl_mode = :julia
-                panel.prompt = "julia> "
-            elseif panel.alive && panel.process !== nothing
-                try
-                    Base.kill(panel.process, Base.SIGINT)
-                catch; end
+            if !isempty(tab.input_buffer)
+                empty!(tab.input_buffer)
+                tab.input_cursor = 0
+                tab.repl_mode = :julia
+                tab.prompt = "julia> "
+            elseif tab.alive && tab.process !== nothing
+                try Base.kill(tab.process, Base.SIGINT) catch end
             end
             return true
         elseif evt.char == 'l'
-            # Ctrl+L: clear output
-            empty!(panel.output_lines)
-            panel.scroll_offset = 0
+            empty!(tab.output_lines)
+            tab.scroll_offset = 0
             return true
         elseif evt.char == 'a'
-            panel.input_cursor = 0
+            tab.input_cursor = 0
             return true
         elseif evt.char == 'e'
-            panel.input_cursor = length(panel.input_buffer)
+            tab.input_cursor = length(tab.input_buffer)
             return true
         elseif evt.char == 'u'
-            # Ctrl+U: clear line before cursor
-            deleteat!(panel.input_buffer, 1:panel.input_cursor)
-            panel.input_cursor = 0
+            deleteat!(tab.input_buffer, 1:tab.input_cursor)
+            tab.input_cursor = 0
             return true
         elseif evt.char == 'k'
-            # Ctrl+K: clear line after cursor
-            if panel.input_cursor < length(panel.input_buffer)
-                deleteat!(panel.input_buffer, (panel.input_cursor+1):length(panel.input_buffer))
+            if tab.input_cursor < length(tab.input_buffer)
+                deleteat!(tab.input_buffer, (tab.input_cursor+1):length(tab.input_buffer))
+            end
+            return true
+        elseif evt.char == 't'
+            # Ctrl+T: new REPL tab
+            dir = pwd()
+            add_repl_tab!(panel, dir)
+            return true
+        elseif evt.char == 'w'
+            # Ctrl+W: close current REPL tab (if more than one)
+            if length(panel.tabs) > 1
+                close_repl_tab!(panel, panel.active_idx)
             end
             return true
         end
     end
 
     if evt.key == :enter
-        line = String(panel.input_buffer)
-        empty!(panel.input_buffer)
-        panel.input_cursor = 0
-        panel.scroll_offset = 0  # scroll to bottom
-        send_input!(panel, line)
+        line = String(tab.input_buffer)
+        empty!(tab.input_buffer)
+        tab.input_cursor = 0
+        tab.scroll_offset = 0
+        _send_input_tab!(tab, line)
         return true
     end
 
     if evt.key == :backspace
-        if panel.input_cursor > 0
-            deleteat!(panel.input_buffer, panel.input_cursor)
-            panel.input_cursor -= 1
-        elseif isempty(panel.input_buffer) && panel.repl_mode != :julia
-            # Backspace on empty in special mode → return to julia mode
-            panel.repl_mode = :julia
-            panel.prompt = "julia> "
+        if tab.input_cursor > 0
+            deleteat!(tab.input_buffer, tab.input_cursor)
+            tab.input_cursor -= 1
+        elseif isempty(tab.input_buffer) && tab.repl_mode != :julia
+            tab.repl_mode = :julia
+            tab.prompt = "julia> "
         end
         return true
     end
 
     if evt.key == :delete
-        if panel.input_cursor < length(panel.input_buffer)
-            deleteat!(panel.input_buffer, panel.input_cursor + 1)
+        if tab.input_cursor < length(tab.input_buffer)
+            deleteat!(tab.input_buffer, tab.input_cursor + 1)
         end
         return true
     end
 
     if evt.key == :left
-        panel.input_cursor = max(0, panel.input_cursor - 1)
+        tab.input_cursor = max(0, tab.input_cursor - 1)
         return true
     end
 
     if evt.key == :right
-        panel.input_cursor = min(length(panel.input_buffer), panel.input_cursor + 1)
+        tab.input_cursor = min(length(tab.input_buffer), tab.input_cursor + 1)
         return true
     end
 
     if evt.key == :home
-        panel.input_cursor = 0
+        tab.input_cursor = 0
         return true
     end
 
     if evt.key == :end_key
-        panel.input_cursor = length(panel.input_buffer)
+        tab.input_cursor = length(tab.input_buffer)
         return true
     end
 
     if evt.key == :up
-        # History navigation — up
-        if panel.history_idx == 0 && !isempty(panel.history)
-            panel.history_stash = String(panel.input_buffer)
-            panel.history_idx = length(panel.history)
-            _load_history_entry!(panel)
-        elseif panel.history_idx > 1
-            panel.history_idx -= 1
-            _load_history_entry!(panel)
+        if tab.history_idx == 0 && !isempty(tab.history)
+            tab.history_stash = String(tab.input_buffer)
+            tab.history_idx = length(tab.history)
+            _load_history_entry!(tab)
+        elseif tab.history_idx > 1
+            tab.history_idx -= 1
+            _load_history_entry!(tab)
         end
         return true
     end
 
     if evt.key == :down
-        # History navigation — down
-        if panel.history_idx > 0
-            panel.history_idx += 1
-            if panel.history_idx > length(panel.history)
-                # Back to current input
-                panel.history_idx = 0
-                panel.input_buffer = collect(panel.history_stash)
-                panel.input_cursor = length(panel.input_buffer)
+        if tab.history_idx > 0
+            tab.history_idx += 1
+            if tab.history_idx > length(tab.history)
+                tab.history_idx = 0
+                tab.input_buffer = collect(tab.history_stash)
+                tab.input_cursor = length(tab.input_buffer)
             else
-                _load_history_entry!(panel)
+                _load_history_entry!(tab)
             end
         end
         return true
     end
 
     if evt.key == :escape
-        # Escape: exit REPL focus (handled by app, but clear mode first)
-        if panel.repl_mode != :julia
-            panel.repl_mode = :julia
-            panel.prompt = "julia> "
+        if tab.repl_mode != :julia
+            tab.repl_mode = :julia
+            tab.prompt = "julia> "
             return true
         end
-        return false  # let app handle escape
+        return false
     end
 
     false
 end
 
 """Load a history entry into the input buffer."""
-function _load_history_entry!(panel::ReplPanel)
-    entry = panel.history[panel.history_idx]
-    panel.input_buffer = collect(entry)
-    panel.input_cursor = length(panel.input_buffer)
+function _load_history_entry!(tab::ReplTab)
+    entry = tab.history[tab.history_idx]
+    tab.input_buffer = collect(entry)
+    tab.input_cursor = length(tab.input_buffer)
 end
 
 """Handle mouse scroll in the REPL panel."""
 function handle_repl_scroll!(panel::ReplPanel, evt::Tachikoma.MouseEvent)
+    tab = active_tab(panel)
+    tab === nothing && return
     if evt.button == Tachikoma.mouse_scroll_up
-        panel.scroll_offset = min(panel.scroll_offset + 3,
-            max(0, length(panel.output_lines) - 1))
+        tab.scroll_offset = min(tab.scroll_offset + 3,
+            max(0, length(tab.output_lines) - 1))
     elseif evt.button == Tachikoma.mouse_scroll_down
-        panel.scroll_offset = max(0, panel.scroll_offset - 3)
+        tab.scroll_offset = max(0, tab.scroll_offset - 3)
+    end
+end
+
+"""Handle mouse click in the REPL panel (tab bar clicks)."""
+function handle_repl_click!(panel::ReplPanel, evt::Tachikoma.MouseEvent)
+    evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press || return
+
+    # Check + button
+    pr = panel.plus_rect
+    if pr.width > 0 && evt.x >= pr.x && evt.x < pr.x + pr.width && evt.y == pr.y
+        add_repl_tab!(panel, pwd())
+        return
+    end
+
+    # Check × close buttons
+    for (i, cr) in enumerate(panel.close_rects)
+        if cr.width > 0 && evt.x >= cr.x && evt.x < cr.x + cr.width && evt.y == cr.y
+            if length(panel.tabs) > 1
+                close_repl_tab!(panel, i)
+            end
+            return
+        end
+    end
+
+    # Check tab label clicks
+    for (i, tr) in enumerate(panel.tab_rects)
+        if tr.width > 0 && evt.x >= tr.x && evt.x < tr.x + tr.width && evt.y == tr.y
+            switch_repl_tab!(panel, i)
+            return
+        end
     end
 end
 
 # ── Rendering ──────────────────────────────────────────────────────
+
+const REPL_TAB_BAR_H = 1  # tab row height inside border
 
 function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     panel.viewport = rect
@@ -378,41 +472,45 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
         Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
     end
 
-    # Title in top border
-    title = panel.alive ? " REPL " : " REPL (stopped) "
-    title_x = bx + 2
-    if title_x + length(title) < bx + bw - 2
-        title_fg = panel.alive ? Theme.REPL_INDICATOR : Theme.FG_MUTED
-        Tachikoma.set_string!(buf, title_x, by, title,
-            Tachikoma.Style(; fg=title_fg, bg=Theme.REPL_BG, bold=panel.focused))
+    inner_x = bx + 1
+    inner_w = bw - 2
+    inner_w < 2 && return
+
+    # ── Tab bar row (inside border, first inner row) ──
+    has_tabs = length(panel.tabs) > 0
+    tab_row_y = by + 1
+    panel.tab_rects = Tachikoma.Rect[]
+    panel.close_rects = Tachikoma.Rect[]
+    panel.plus_rect = Tachikoma.Rect()
+
+    if has_tabs
+        _render_repl_tab_bar!(panel, inner_x, tab_row_y, inner_w, buf)
     end
 
-    inner_x = bx + 1
-    inner_y = by + 1
-    inner_w = bw - 2
-    inner_h = bh - 2
-    inner_w < 2 && return
-    inner_h < 2 && return
+    # Content area starts after tab bar row
+    content_y = tab_row_y + (has_tabs ? 1 : 0)
+    content_h = (by + bh - 1) - content_y - 1  # -1 for bottom border
+    content_h < 2 && return
 
-    # ── Input line at bottom ──
-    input_y = inner_y + inner_h - 1
+    tab = active_tab(panel)
+    tab === nothing && return
 
-    # Prompt
-    prompt = panel.prompt
-    prompt_fg = if panel.repl_mode == :pkg; Theme.REPL_PKG_FG
-    elseif panel.repl_mode == :help; Theme.REPL_HELP_FG
-    elseif panel.repl_mode == :shell; Theme.REPL_SHELL_FG
+    # ── Input line at bottom of content ──
+    input_y = content_y + content_h - 1
+
+    prompt = tab.prompt
+    prompt_fg = if tab.repl_mode == :pkg; Theme.REPL_PKG_FG
+    elseif tab.repl_mode == :help; Theme.REPL_HELP_FG
+    elseif tab.repl_mode == :shell; Theme.REPL_SHELL_FG
     else; Theme.REPL_PROMPT_FG end
     prompt_style = Tachikoma.Style(; fg=prompt_fg, bg=Theme.REPL_BG, bold=true)
     Tachikoma.set_string!(buf, inner_x + 1, input_y, prompt, prompt_style)
 
-    # Input text
     input_x = inner_x + 1 + length(prompt)
-    input_text = String(panel.input_buffer)
+    input_text = String(tab.input_buffer)
     max_input_w = inner_w - length(prompt) - 2
     if max_input_w > 0
-        # Scroll input if wider than available space
-        visible_start = max(0, panel.input_cursor - max_input_w + 1)
+        visible_start = max(0, tab.input_cursor - max_input_w + 1)
         visible_text = if visible_start > 0
             input_text[nextind(input_text, 0, visible_start+1):end]
         else
@@ -423,12 +521,11 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
         end
         Tachikoma.set_string!(buf, input_x, input_y, visible_text, Theme.S_REPL_INPUT)
 
-        # Cursor
         if panel.focused
-            cursor_screen_x = input_x + panel.input_cursor - visible_start
+            cursor_screen_x = input_x + tab.input_cursor - visible_start
             if cursor_screen_x >= input_x && cursor_screen_x < input_x + max_input_w
-                c = if panel.input_cursor < length(panel.input_buffer)
-                    panel.input_buffer[panel.input_cursor + 1]
+                c = if tab.input_cursor < length(tab.input_buffer)
+                    tab.input_buffer[tab.input_cursor + 1]
                 else
                     ' '
                 end
@@ -440,35 +537,31 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
 
     # ── Divider line above input ──
     divider_y = input_y - 1
-    if divider_y > inner_y
+    if divider_y > content_y
         for cx in inner_x:(inner_x + inner_w - 1)
             Tachikoma.set_char!(buf, cx, divider_y, '─',
                 Tachikoma.Style(; fg=Theme.BORDER_DIM, bg=Theme.REPL_BG))
         end
     end
 
-    # ── Output area (above divider) ──
-    output_h = divider_y - inner_y
+    # ── Output area ──
+    output_h = divider_y - content_y
     output_h < 1 && return
 
-    # Filter out bare prompt lines from julia output (we show our own echo)
-    filtered = _filter_prompts(panel.output_lines)
-
+    filtered = _filter_prompts(tab.output_lines)
     n_lines = length(filtered)
-    # Visible window: show the last `output_h` lines, offset by scroll
-    end_idx = max(0, n_lines - panel.scroll_offset)
+    end_idx = max(0, n_lines - tab.scroll_offset)
     start_idx = max(1, end_idx - output_h + 1)
 
     text_style = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.REPL_BG)
 
     for row_offset in 0:(output_h - 1)
         line_idx = start_idx + row_offset
-        screen_y = inner_y + row_offset
+        screen_y = content_y + row_offset
         screen_y >= divider_y && break
 
         if line_idx >= 1 && line_idx <= n_lines
             line = filtered[line_idx]
-            # Parse ANSI and render styled segments
             styled_segs = _parse_ansi_line(line, text_style)
             x = inner_x + 1
             max_x = inner_x + inner_w - 1
@@ -483,8 +576,8 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
     end
 
     # Scroll indicator
-    if panel.scroll_offset > 0
-        indicator = " ↓$(panel.scroll_offset) "
+    if tab.scroll_offset > 0
+        indicator = " ↓$(tab.scroll_offset) "
         ind_x = bx + bw - 1 - length(indicator) - 1
         if ind_x > bx + 2
             Tachikoma.set_string!(buf, ind_x, by + bh - 1, indicator,
@@ -493,12 +586,65 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
     end
 end
 
-"""Filter out bare prompt lines from julia output (we render our own prompt)."""
+"""Render the REPL tab bar row inside the panel."""
+function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Tachikoma.Buffer)
+    bg = Tachikoma.Style(; bg=Theme.REPL_BG)
+    sep_style = Tachikoma.Style(; fg=Theme.BORDER_DIM, bg=Theme.REPL_BG)
+
+    cx = x
+    max_x = x + w
+
+    for (i, tab) in enumerate(panel.tabs)
+        is_active = (i == panel.active_idx)
+
+        # Tab label: " name ×"
+        label = " $(tab.name) "
+        close_char = "×"
+        tab_w = length(label) + length(close_char) + 1  # +1 for space after ×
+
+        cx + tab_w + 1 > max_x && break  # no room
+
+        # Tab name
+        name_fg = is_active ? Theme.FG : Theme.FG_MUTED
+        name_style = if is_active
+            Tachikoma.Style(; fg=name_fg, bg=Theme.REPL_BG, bold=true)
+        else
+            Tachikoma.Style(; fg=name_fg, bg=Theme.REPL_BG)
+        end
+        Tachikoma.set_string!(buf, cx, y, label, name_style)
+        push!(panel.tab_rects, Tachikoma.Rect(cx, y, length(label), 1))
+
+        # × close button
+        close_x = cx + length(label)
+        close_fg = is_active ? Theme.FG_DIM : Theme.FG_FAINT
+        Tachikoma.set_string!(buf, close_x, y, close_char,
+            Tachikoma.Style(; fg=close_fg, bg=Theme.REPL_BG))
+        push!(panel.close_rects, Tachikoma.Rect(close_x, y, 1, 1))
+
+        cx += tab_w
+
+        # Separator
+        if i < length(panel.tabs)
+            Tachikoma.set_string!(buf, cx, y, "│", sep_style)
+            cx += 1
+        end
+    end
+
+    # + button at the end
+    if cx + 3 <= max_x
+        cx += 1
+        plus_fg = Theme.FG_DIM
+        Tachikoma.set_string!(buf, cx, y, "+",
+            Tachikoma.Style(; fg=plus_fg, bg=Theme.REPL_BG))
+        panel.plus_rect = Tachikoma.Rect(cx, y, 1, 1)
+    end
+end
+
+"""Filter out bare prompt lines from julia output."""
 function _filter_prompts(lines::Vector{String})
     filtered = String[]
     for line in lines
         stripped = _strip_ansi_simple(line)
-        # Skip bare prompts (julia> , pkg> , help?> , shell> ) with nothing after
         is_prompt = stripped == "julia> " || stripped == "julia>" ||
                     stripped == "pkg> " || stripped == "pkg>" ||
                     stripped == "help?> " || stripped == "help?>" ||

@@ -154,22 +154,19 @@ function _sync_file_panel_cursor!(app::SessionsApp)
     end
 end
 
-"""Toggle the REPL panel open/closed. Spawns Julia subprocess on first open."""
+"""Toggle the REPL panel open/closed. Creates first tab on first open."""
 function _toggle_repl!(app::SessionsApp)
     app.repl_open = !app.repl_open
     if app.repl_open
-        # Spawn REPL if not already running
-        if !app.repl_panel.alive
+        # Create first REPL tab if none exist
+        if isempty(app.repl_panel.tabs)
             dir = isempty(app.nb.path) ? pwd() : dirname(abspath(app.nb.path))
-            spawn_repl!(app.repl_panel, dir)
+            add_repl_tab!(app.repl_panel, dir)
         end
-        # Focus the REPL
         app.mode = :repl
         app.repl_panel.focused = true
-        # Activity bar indicator
         push!(app.activity_bar.active, :terminal)
     else
-        # Unfocus REPL, return to normal mode
         if app.mode == :repl
             app.mode = :normal
         end
@@ -737,7 +734,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             return
         end
         # Escape exits REPL focus back to normal mode
-        if evt.key == :escape && app.repl_panel.repl_mode == :julia
+        repl_tab = active_tab(app.repl_panel)
+        if evt.key == :escape && (repl_tab === nothing || repl_tab.repl_mode == :julia)
             app.mode = :normal
             app.repl_panel.focused = false
             return
@@ -965,8 +963,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             handle_repl_scroll!(app.repl_panel, evt)
             return
         end
-        # Click to focus
+        # Click — handle tab bar clicks, then focus
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            handle_repl_click!(app.repl_panel, evt)
             app.mode = :repl
             app.repl_panel.focused = true
             return
