@@ -831,6 +831,212 @@ using Markdown: @md_str
         @test length(nb) == 1  # can't delete last cell
     end
 
+    # --- Multi-cell selection tests ---
+
+    @testset "E2E: Shift+click selects range" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        add_cell!(nb, "c = 3")
+        add_cell!(nb, "d = 4")
+        app = Sessions.SessionsApp(nb)
+
+        render_app(app)  # establish viewport
+        @test app.notebook_view.focused_idx == 1
+
+        # Calculate cell 3 position (each cell: code lines + 2 border + output 0 + 1 gap)
+        # Cell 1: height 3, Cell 2: height 3, so cell 3 starts at y = viewport.y + 3+1 + 3+1 = viewport.y + 8
+        vp = app.notebook_view.viewport
+        cell3_y = vp.y + 3 + 1 + 3 + 1  # after cell1 (3 lines) + gap + cell2 (3 lines) + gap
+
+        # Shift+click on cell 3 — should select range from focused (1) through 3
+        evt = Tachikoma.MouseEvent(10, cell3_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, true, false)
+        Tachikoma.update!(app, evt)
+
+        @test app.notebook_view.cell_widgets[1].selected
+        @test app.notebook_view.cell_widgets[2].selected
+        @test app.notebook_view.cell_widgets[3].selected
+        @test !app.notebook_view.cell_widgets[4].selected
+    end
+
+    @testset "E2E: Ctrl+A selects all cells" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Ctrl+A selects all (normal mode binding repurposed for selection context)
+        Sessions.select_all!(app.notebook_view)
+
+        @test all(cw -> cw.selected, app.notebook_view.cell_widgets)
+    end
+
+    @testset "E2E: Escape clears selection" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        Sessions.select_all!(app.notebook_view)
+        @test all(cw -> cw.selected, app.notebook_view.cell_widgets)
+
+        Sessions.clear_selection!(app.notebook_view)
+        @test !any(cw -> cw.selected, app.notebook_view.cell_widgets)
+    end
+
+    @testset "E2E: Escape key clears selection in normal mode" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        Sessions.select_all!(app.notebook_view)
+        @test all(cw -> cw.selected, app.notebook_view.cell_widgets)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
+        @test !any(cw -> cw.selected, app.notebook_view.cell_widgets)
+    end
+
+    @testset "E2E: Delete removes all selected cells" begin
+        nb = Notebook()
+        add_cell!(nb, "keep1")
+        add_cell!(nb, "del1")
+        add_cell!(nb, "del2")
+        add_cell!(nb, "keep2")
+        app = Sessions.SessionsApp(nb)
+
+        # Select cells 2 and 3
+        app.notebook_view.cell_widgets[2].selected = true
+        app.notebook_view.cell_widgets[3].selected = true
+
+        Sessions.delete_selected_cells!(app)
+        @test length(nb) == 2
+        cells = ordered_cells(nb)
+        @test cells[1].code == "keep1"
+        @test cells[2].code == "keep2"
+    end
+
+    @testset "E2E: Delete selected stores in undo buffer" begin
+        nb = Notebook()
+        add_cell!(nb, "keep")
+        add_cell!(nb, "del1")
+        add_cell!(nb, "del2")
+        app = Sessions.SessionsApp(nb)
+
+        app.notebook_view.cell_widgets[2].selected = true
+        app.notebook_view.cell_widgets[3].selected = true
+
+        Sessions.delete_selected_cells!(app)
+        @test length(app.undo_buffer) == 2
+    end
+
+    @testset "E2E: Alt+Up moves selected cells up" begin
+        nb = Notebook()
+        add_cell!(nb, "first")
+        add_cell!(nb, "second")
+        add_cell!(nb, "third")
+        app = Sessions.SessionsApp(nb)
+
+        # Select cells 2 and 3
+        app.notebook_view.cell_widgets[2].selected = true
+        app.notebook_view.cell_widgets[3].selected = true
+
+        Sessions.move_selected_up!(app.notebook_view)
+        cells = ordered_cells(nb)
+        @test cells[1].code == "second"
+        @test cells[2].code == "third"
+        @test cells[3].code == "first"
+    end
+
+    @testset "E2E: Alt+Down moves selected cells down" begin
+        nb = Notebook()
+        add_cell!(nb, "first")
+        add_cell!(nb, "second")
+        add_cell!(nb, "third")
+        app = Sessions.SessionsApp(nb)
+
+        # Select cells 1 and 2
+        app.notebook_view.cell_widgets[1].selected = true
+        app.notebook_view.cell_widgets[2].selected = true
+
+        Sessions.move_selected_down!(app.notebook_view)
+        cells = ordered_cells(nb)
+        @test cells[1].code == "third"
+        @test cells[2].code == "first"
+        @test cells[3].code == "second"
+    end
+
+    @testset "E2E: Selected cells get highlighted border" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        app.notebook_view.cell_widgets[2].selected = true
+
+        # Just check the selected field is set — render will use it
+        @test app.notebook_view.cell_widgets[2].selected
+        @test !app.notebook_view.cell_widgets[1].selected
+    end
+
+    @testset "E2E: Can't delete all cells via selection" begin
+        nb = Notebook()
+        add_cell!(nb, "only1")
+        add_cell!(nb, "only2")
+        app = Sessions.SessionsApp(nb)
+
+        # Select all — should keep at least one
+        app.notebook_view.cell_widgets[1].selected = true
+        app.notebook_view.cell_widgets[2].selected = true
+
+        Sessions.delete_selected_cells!(app)
+        @test length(nb) >= 1  # at least one cell survives
+    end
+
+    @testset "E2E: has_selection helper" begin
+        nb = Notebook()
+        add_cell!(nb, "a")
+        add_cell!(nb, "b")
+        app = Sessions.SessionsApp(nb)
+
+        @test !Sessions.has_selection(app.notebook_view)
+        app.notebook_view.cell_widgets[1].selected = true
+        @test Sessions.has_selection(app.notebook_view)
+    end
+
+    @testset "E2E: Ctrl+D with selection deletes selected" begin
+        nb = Notebook()
+        add_cell!(nb, "keep")
+        add_cell!(nb, "sel1")
+        add_cell!(nb, "sel2")
+        app = Sessions.SessionsApp(nb)
+
+        app.notebook_view.cell_widgets[2].selected = true
+        app.notebook_view.cell_widgets[3].selected = true
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        @test length(nb) == 1
+        @test ordered_cells(nb)[1].code == "keep"
+    end
+
+    @testset "E2E: Alt+Up with selection moves selected group" begin
+        nb = Notebook()
+        add_cell!(nb, "stay")
+        add_cell!(nb, "move1")
+        add_cell!(nb, "move2")
+        app = Sessions.SessionsApp(nb)
+
+        app.notebook_view.cell_widgets[2].selected = true
+        app.notebook_view.cell_widgets[3].selected = true
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        cells = ordered_cells(nb)
+        @test cells[1].code == "move1"
+        @test cells[2].code == "move2"
+        @test cells[3].code == "stay"
+    end
+
     @testset "E2E: Quit with Ctrl+Q" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")

@@ -234,6 +234,75 @@ function merge_with_next!(nv::NotebookView)
     rebuild_widgets!(nv)
 end
 
+"""Select all cells."""
+function select_all!(nv::NotebookView)
+    for cw in nv.cell_widgets
+        cw.selected = true
+    end
+end
+
+"""Clear all cell selections."""
+function clear_selection!(nv::NotebookView)
+    for cw in nv.cell_widgets
+        cw.selected = false
+    end
+end
+
+"""Check if any cells are selected."""
+function has_selection(nv::NotebookView)
+    any(cw -> cw.selected, nv.cell_widgets)
+end
+
+"""Select range of cells from idx_a to idx_b (inclusive)."""
+function select_range!(nv::NotebookView, from::Int, to::Int)
+    lo, hi = minmax(from, to)
+    for (i, cw) in enumerate(nv.cell_widgets)
+        cw.selected = lo <= i <= hi
+    end
+end
+
+"""Move all selected cells up by one position."""
+function move_selected_up!(nv::NotebookView)
+    isempty(nv.cell_widgets) && return
+    selected_indices = [i for (i, cw) in enumerate(nv.cell_widgets) if cw.selected]
+    isempty(selected_indices) && return
+    # Can't move up if first selected is already at position 1
+    first(selected_indices) <= 1 && return
+
+    # Swap each selected cell with the one above it, in order
+    for i in selected_indices
+        nb = nv.nb
+        nb.cell_order[i], nb.cell_order[i-1] = nb.cell_order[i-1], nb.cell_order[i]
+    end
+    # Track which IDs were selected
+    selected_ids = Set(nv.cell_widgets[i].cell.id for i in selected_indices)
+    rebuild_widgets!(nv)
+    # Restore selection on the moved cells
+    for (i, cw) in enumerate(nv.cell_widgets)
+        cw.selected = cw.cell.id in selected_ids
+    end
+end
+
+"""Move all selected cells down by one position."""
+function move_selected_down!(nv::NotebookView)
+    isempty(nv.cell_widgets) && return
+    selected_indices = [i for (i, cw) in enumerate(nv.cell_widgets) if cw.selected]
+    isempty(selected_indices) && return
+    # Can't move down if last selected is already at end
+    last(selected_indices) >= length(nv.cell_widgets) && return
+
+    # Swap each selected cell with the one below it, in reverse order
+    for i in reverse(selected_indices)
+        nb = nv.nb
+        nb.cell_order[i], nb.cell_order[i+1] = nb.cell_order[i+1], nb.cell_order[i]
+    end
+    selected_ids = Set(nv.cell_widgets[i].cell.id for i in selected_indices)
+    rebuild_widgets!(nv)
+    for (i, cw) in enumerate(nv.cell_widgets)
+        cw.selected = cw.cell.id in selected_ids
+    end
+end
+
 """Focus a cell by index directly (for mouse click)."""
 function focus_cell!(nv::NotebookView, idx::Int)
     idx < 1 || idx > length(nv.cell_widgets) && return

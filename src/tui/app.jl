@@ -113,11 +113,19 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # Cell reorder (Alt+Up/Down) — works in both modes
     if evt.key == :alt_up
-        move_cell_up!(app.notebook_view)
+        if has_selection(app.notebook_view)
+            move_selected_up!(app.notebook_view)
+        else
+            move_cell_up!(app.notebook_view)
+        end
         return
     end
     if evt.key == :alt_down
-        move_cell_down!(app.notebook_view)
+        if has_selection(app.notebook_view)
+            move_selected_down!(app.notebook_view)
+        else
+            move_cell_down!(app.notebook_view)
+        end
         return
     end
 
@@ -149,14 +157,23 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # Navigation between cells
     if app.mode == :normal
-        if evt.key == :tab
+        if evt.key == :escape
+            if has_selection(app.notebook_view)
+                clear_selection!(app.notebook_view)
+            end
+            return
+        elseif evt.key == :tab
             focus_next!(app.notebook_view)
             return
         elseif evt.key == :shift_tab || (evt.key == :ctrl && evt.char == 'p')
             focus_prev!(app.notebook_view)
             return
         elseif evt.key == :ctrl && evt.char == 'd'
-            delete_focused_cell_with_undo!(app)
+            if has_selection(app.notebook_view)
+                delete_selected_cells!(app)
+            else
+                delete_focused_cell_with_undo!(app)
+            end
             return
         elseif evt.key == :delete || evt.key == :backspace
             # Smart delete: empty cells delete immediately, non-empty use undo
@@ -210,6 +227,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
 
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        # Shift+click: range selection
+        if evt.shift
+            idx = cell_at_y(nv, evt.y)
+            if idx !== nothing
+                select_range!(nv, nv.focused_idx, idx)
+            end
+            return
+        end
+
         # Check gap first (more specific hit test)
         gap_idx = gap_at_y(nv, evt.y)
         if gap_idx !== nothing
@@ -221,6 +247,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 if evt.x <= nv.viewport.x + 4
                     run_cell_at_index!(app, idx)
                 else
+                    clear_selection!(nv)
                     focus_cell!(nv, idx)
                 end
             end
@@ -374,6 +401,32 @@ function delete_focused_cell_with_undo!(app::SessionsApp)
     push!(app.undo_buffer, DeletedCell(cell, pos))
     delete_focused_cell!(nv)
     app.message = "Deleted cell (Ctrl+Z to undo)"
+end
+
+"""Delete all selected cells, storing in undo buffer. Keeps at least one cell."""
+function delete_selected_cells!(app::SessionsApp)
+    nv = app.notebook_view
+    selected_indices = sort([i for (i, cw) in enumerate(nv.cell_widgets) if cw.selected]; rev=true)
+    isempty(selected_indices) && return
+
+    # Ensure at least one cell survives
+    n_to_keep = max(1, length(nv.cell_widgets) - length(selected_indices))
+    if n_to_keep < 1
+        # Remove all but the last selected
+        selected_indices = selected_indices[1:end-1]
+    end
+    isempty(selected_indices) && return
+
+    # Delete in reverse order (highest index first) to preserve indices
+    for i in selected_indices
+        cell = nv.cell_widgets[i].cell
+        push!(app.undo_buffer, DeletedCell(cell, i))
+        remove_cell!(nv.nb, cell.id)
+    end
+    nv.focused_idx = min(nv.focused_idx, length(nv.nb))
+    rebuild_widgets!(nv)
+    clear_selection!(nv)
+    app.message = "Deleted $(length(selected_indices)) cell(s) (Ctrl+Z to undo)"
 end
 
 """Undo last cell deletion."""

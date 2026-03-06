@@ -6,12 +6,13 @@ mutable struct CellWidget
     editor::Tachikoma.CodeEditor
     focused::Bool
     collapsed::Bool  # Whether output is collapsed
+    selected::Bool   # Whether this cell is part of multi-cell selection
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
-    CellWidget(cell, editor, focused, false)
+    CellWidget(cell, editor, focused, false, false)
 end
 
 """Sync editor text back to cell."""
@@ -69,7 +70,9 @@ Tachikoma.focusable(::CellWidget) = true
 
 function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     char, style = state_indicator(cw.cell)
-    border_style = cw.focused ? Tachikoma.tstyle(:accent) : Tachikoma.Style()
+    border_style = cw.focused ? Tachikoma.tstyle(:accent) :
+                   cw.selected ? Tachikoma.Style(; fg=Tachikoma.Color256(45)) :  # cyan for selected
+                   Tachikoma.Style()
 
     # Build title suffix
     suffix = cw.cell.disabled ? " [disabled]" : cw.cell.folded ? " [folded]" : ""
