@@ -23,7 +23,7 @@ export CellState, cell_idle, cell_queued, cell_running, cell_done, cell_errored
 export CellOutput, Cell, Notebook
 export add_cell!, insert_cell!, remove_cell!, get_cell, ordered_cells, swap_cell_up!, swap_cell_down!
 export source_hash, is_stale, is_never_run, stale_cells, never_run_cells, mark_executed!
-export load_notebook, save_notebook, parse_notebook, serialize_notebook
+export load_notebook, save_notebook, parse_notebook, serialize_notebook, is_notebook_file
 
 include("analysis.jl")
 export analyze_cell, cell_definitions, cell_references, build_topology, execution_order, downstream_dependents
@@ -49,8 +49,9 @@ include("watcher.jl")
 include("tui/theme.jl")
 include("tui/cell_widget.jl")
 include("tui/output_widget.jl")
-include("tui/status_bar.jl")
 include("tui/notebook_view.jl")
+include("tui/file_editor_view.jl")
+include("tui/status_bar.jl")
 include("tui/file_panel.jl")
 include("tui/activity_bar.jl")
 include("tui/app.jl")

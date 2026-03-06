@@ -34,6 +34,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
     workspace::Workspace
     notebook_view::NotebookView
+    file_editor_view::Union{Nothing, FileEditorView}  # non-nothing in file editor mode
+    editor_type::Symbol      # :notebook or :file
     file_panel::FilePanel
     activity_bar::ActivityBar
     tq::Tachikoma.TaskQueue
@@ -76,8 +78,21 @@ function SessionsApp(nb::Notebook)
     fp = FilePanel(dir)
     ab = ActivityBar()
     snapshot = _snapshot_notebook(nb)
-    SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
+    SessionsApp(nb, ws, nv, nothing, :notebook, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
+        false, 0, false, 0)
+end
+
+function SessionsApp(fev::FileEditorView)
+    # File editor mode: create a dummy notebook for compatibility
+    nb = Notebook(; path=fev.path)
+    ws = Workspace()
+    nv = NotebookView(nb)
+    dir = dirname(abspath(fev.path))
+    fp = FilePanel(dir)
+    ab = ActivityBar()
+    SessionsApp(nb, ws, nv, fev, :file, fp, ab, Tachikoma.TaskQueue(), :insert, false, "", nothing, nothing,
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
         false, 0, false, 0)
 end
 
@@ -204,17 +219,27 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.render(app.file_panel, sidebar_rect, buf)
     end
 
-    # Editor cursor only visible in insert mode on the focused cell
-    # In panel mode, no cell is focused (all unfocused appearance)
-    for (i, cw) in enumerate(app.notebook_view.cell_widgets)
-        cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
-        if app.mode == :panel
-            cw.focused = false
+    if app.editor_type == :file && app.file_editor_view !== nothing
+        # File editor mode: render the file editor view
+        fev = app.file_editor_view
+        fev.editor.focused = (app.mode == :insert)
+        Tachikoma.render(fev, notebook_rect, buf)
+    else
+        # Notebook mode: render cell-based notebook view
+        # Editor cursor only visible in insert mode on the focused cell
+        # In panel mode, no cell is focused (all unfocused appearance)
+        for (i, cw) in enumerate(app.notebook_view.cell_widgets)
+            cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
+            if app.mode == :panel
+                cw.focused = false
+            end
         end
-    end
 
-    # Notebook view (main content — fills remaining space)
-    Tachikoma.render(app.notebook_view, notebook_rect, buf)
+        Tachikoma.render(app.notebook_view, notebook_rect, buf)
+
+        # Progress bar — overlays notebook pane top border during execution
+        _update_and_render_progress!(app, notebook_rect, buf)
+    end
 
     # Repaint areas above/below notebook to hide cell/output overflow past notebook boundary
     for fy in area.y:(notebook_rect.y - 1)
@@ -225,9 +250,6 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     for fy in nb_bottom:screen_bottom
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
-
-    # Progress bar — overlays notebook pane top border during execution
-    _update_and_render_progress!(app, notebook_rect, buf)
 
     # Cell dropdown overlay
     if app.cell_dropdown !== nothing
@@ -377,13 +399,24 @@ end
 """Open a .jl file as a notebook."""
 function _open_file!(app::SessionsApp, path::String)
     try
-        nb = load_notebook_with_session(path)
-        app.nb = nb
-        app.workspace = Workspace()
-        app.notebook_view = NotebookView(nb)
-        app.last_disk_nb = _snapshot_notebook(nb)
-        _start_watcher!(app)
-        app.message = "Opened: $(basename(path))"
+        if is_notebook_file(path)
+            nb = load_notebook_with_session(path)
+            app.nb = nb
+            app.workspace = Workspace()
+            app.notebook_view = NotebookView(nb)
+            app.file_editor_view = nothing
+            app.editor_type = :notebook
+            app.mode = :normal
+            app.last_disk_nb = _snapshot_notebook(nb)
+            _start_watcher!(app)
+            app.message = "Opened notebook: $(basename(path))"
+        else
+            fev = FileEditorView(path)
+            app.file_editor_view = fev
+            app.editor_type = :file
+            app.mode = :insert
+            app.message = "Opened file: $(basename(path))"
+        end
     catch e
         app.message = "Error: $(sprint(showerror, e))"
     end
@@ -414,6 +447,8 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     app.nb = nb
     app.workspace = Workspace()
     app.notebook_view = NotebookView(nb)
+    app.file_editor_view = nothing
+    app.editor_type = :notebook
     app.file_panel = FilePanel(dir)
     app.undo_buffer = DeletedCell[]
     app.cell_dropdown = nothing
@@ -451,6 +486,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         if evt.key == :escape
             close_dropdown!(app)
         end
+        return
+    end
+
+    # --- File editor mode: route keys to CodeEditor ---
+    if app.editor_type == :file && app.file_editor_view !== nothing
+        _handle_file_editor_key!(app, evt)
         return
     end
 
@@ -695,6 +736,65 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             app.cell_dropdown.hovered_idx = something(_dropdown_hit_test(app.cell_dropdown, evt.x, evt.y), 0)
             return
         end
+        return
+    end
+
+    # ── File editor mode: handle scroll and basic mouse interactions ──
+    if app.editor_type == :file && app.file_editor_view !== nothing
+        fev = app.file_editor_view
+        ce = fev.editor
+        n_lines = length(ce.lines)
+
+        # Compute visible height from viewport
+        hi = Theme.CELL_H_INSET
+        vi = Theme.CELL_V_INSET
+        vp = fev.viewport
+        visible_h = max(1, vp.height - 2 * vi - 2)
+
+        if evt.button == Tachikoma.mouse_scroll_down
+            ce.scroll_offset = min(ce.scroll_offset + 3, max(0, n_lines - 5))
+            # Move cursor into visible range so render doesn't snap back
+            if ce.cursor_row < ce.scroll_offset + 1
+                ce.cursor_row = min(ce.scroll_offset + 1, n_lines)
+                ce.cursor_col = 0
+            end
+            return
+        end
+        if evt.button == Tachikoma.mouse_scroll_up
+            ce.scroll_offset = max(ce.scroll_offset - 3, 0)
+            # Move cursor into visible range so render doesn't snap back
+            if ce.cursor_row > ce.scroll_offset + visible_h
+                ce.cursor_row = max(ce.scroll_offset + visible_h, 1)
+                ce.cursor_col = 0
+            end
+            return
+        end
+
+        # Click to position cursor
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            vp = fev.viewport
+            if vp.width > 0 && evt.x >= vp.x && evt.x < vp.x + vp.width &&
+               evt.y >= vp.y && evt.y < vp.y + vp.height
+                hi = Theme.CELL_H_INSET
+                vi = Theme.CELL_V_INSET
+                inner_x = vp.x + hi + 1
+                inner_y = vp.y + vi + 1
+                # Account for line number gutter
+                gw = ndigits(n_lines) + 1
+                code_x = inner_x + gw
+                row = (evt.y - inner_y) + 1 + ce.scroll_offset
+                col = evt.x - code_x
+                row = clamp(row, 1, n_lines)
+                col = clamp(col, 0, length(ce.lines[row]))
+                ce.cursor_row = row
+                ce.cursor_col = col
+                # Enter insert mode on click
+                ce.mode = :insert
+                app.mode = :insert
+            end
+            return
+        end
+
         return
     end
 
@@ -1417,15 +1517,26 @@ end
 """Check if any background tasks are running."""
 is_busy(app::SessionsApp) = app.tq.active[] > 0
 
-"""Launch the TUI app for a notebook file."""
+"""Launch the TUI app for a .jl file — auto-detects notebook vs plain file."""
 function open(path::String)
-    nb = load_notebook_with_session(path)
-    open(nb)
+    if is_notebook_file(path)
+        nb = load_notebook_with_session(path)
+        open(nb)
+    else
+        edit(path)
+    end
 end
 
 """Launch the TUI app for a notebook."""
 function open(nb::Notebook)
     a = SessionsApp(nb)
+    Tachikoma.app(a; fps=30, default_bindings=false)
+end
+
+"""Launch the TUI file editor for a plain .jl file."""
+function edit(path::String)
+    fev = FileEditorView(path)
+    a = SessionsApp(fev)
     Tachikoma.app(a; fps=30, default_bindings=false)
 end
 
@@ -1760,4 +1871,57 @@ function _render_confirm_dialog!(cd::ConfirmDialog, buf::Tachikoma.Buffer, area:
     yes_fg = yes_active ? Theme.FG : Theme.FG_DIM
     Tachikoma.set_string!(buf, yes_x, btn_y, CONFIRM_BTN_YES,
         Tachikoma.Style(; fg=yes_fg, bg=yes_bg, bold=yes_active))
+end
+
+# ── File Editor Mode ─────────────────────────────────────────────────
+
+"""Handle key events in file editor mode."""
+function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
+    fev = app.file_editor_view
+
+    # Ctrl+Q / Ctrl+C: quit (force quit if dirty warning already shown)
+    if evt.key == :ctrl && (evt.char == 'q' || evt.char == 'c')
+        if fev.dirty && !startswith(app.message, "Unsaved")
+            app.message = "Unsaved changes! Ctrl+Q again or Ctrl+S to save"
+        else
+            app.quit = true
+        end
+        return
+    end
+
+    # Ctrl+S: save file
+    if evt.key == :ctrl && evt.char == 's'
+        save_file!(fev)
+        app.message = "Saved: $(fev.path)"
+        return
+    end
+
+    # Ctrl+B: toggle sidebar
+    if evt.key == :ctrl && evt.char == 'b'
+        app.sidebar_open = !app.sidebar_open
+        return
+    end
+
+    # Track dirty state — any key that modifies the buffer marks dirty
+    old_lines = length(fev.editor.lines)
+    old_text_hash = hash(Tachikoma.text(fev.editor))
+
+    # Delegate all other keys to the CodeEditor (vim keybindings, undo, search, etc.)
+    Tachikoma.handle_key!(fev.editor, evt)
+
+    # Sync mode: CodeEditor's mode ↔ app.mode
+    ce_mode = fev.editor.mode
+    if ce_mode == :insert
+        app.mode = :insert
+    elseif ce_mode == :normal
+        app.mode = :normal
+    elseif ce_mode == :search
+        app.mode = :insert  # search is still "active editing"
+    end
+
+    # Check if text changed
+    new_text_hash = hash(Tachikoma.text(fev.editor))
+    if new_text_hash != old_text_hash
+        fev.dirty = true
+    end
 end

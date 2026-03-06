@@ -9,7 +9,8 @@ Usage:
     julia -e 'using Sessions; Sessions.main()' -- [command] [options]
 
 Commands:
-    open <file.jl>     Open notebook in TUI (default if file given)
+    open <file.jl>     Open notebook in TUI (auto-detects notebook vs plain file)
+    edit <file.jl>     Open plain .jl file in editor
     run <file.jl>      Run notebook headlessly
     new [file.jl]      Create new notebook and open in TUI
 
@@ -18,10 +19,11 @@ Options:
 """
 function main(args::Vector{String}=ARGS)
     if isempty(args)
-        println("Sessions.jl v2 — Terminal-Native Reactive Julia Notebook")
+        println("Sessions.jl v2 — Terminal-Native Reactive Julia Notebook & Editor")
         println()
         println("Usage:")
-        println("  sessions open <file.jl>   Open notebook in TUI")
+        println("  sessions open <file.jl>   Open notebook or file in TUI")
+        println("  sessions edit <file.jl>   Open plain .jl file in editor")
         println("  sessions run <file.jl>    Run notebook headlessly")
         println("  sessions new [file.jl]    Create new notebook")
         println()
@@ -35,6 +37,9 @@ function main(args::Vector{String}=ARGS)
     if cmd == "open"
         isempty(rest) && error("Usage: sessions open <file.jl>")
         open(rest[1])
+    elseif cmd == "edit"
+        isempty(rest) && error("Usage: sessions edit <file.jl>")
+        edit(rest[1])
     elseif cmd == "run"
         isempty(rest) && error("Usage: sessions run <file.jl>")
         verbose = "--verbose" in rest || "-v" in rest
@@ -55,7 +60,7 @@ function main(args::Vector{String}=ARGS)
         if endswith(cmd, ".jl") && isfile(cmd)
             open(cmd)
         else
-            error("Unknown command: $cmd. Use open, run, or new.")
+            error("Unknown command: $cmd. Use open, edit, run, or new.")
         end
     end
 end

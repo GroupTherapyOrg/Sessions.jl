@@ -21,9 +21,28 @@ function make_top_bar(nb::Notebook)
     Tachikoma.StatusBar(; left=[path_span, status])
 end
 
+"""Create top status bar for file editor mode."""
+function make_top_bar(fev::FileEditorView)
+    name = file_basename(fev)
+    dirty = fev.dirty ? " ●" : ""
+    path_span = Tachikoma.Span(" " * name * dirty,
+        Tachikoma.Style(; fg=Theme.ACCENT, bold=true))
+    row, col = cursor_pos(fev)
+    lines = line_count(fev)
+    info = Tachikoma.Span("  $(lines) lines  Ln $(row), Col $(col)",
+        Theme.S_DIM)
+    Tachikoma.StatusBar(; left=[path_span, info])
+end
+
 """Create the bottom status bar showing keybindings."""
-function make_bottom_bar(; mode::Symbol=:normal)
-    keys = if mode == :dropdown
+function make_bottom_bar(; mode::Symbol=:normal, editor_type::Symbol=:notebook)
+    keys = if editor_type == :file
+        if mode == :insert
+            "Esc: Normal  Ctrl+S: Save  Ctrl+Q: Quit  /: Search"
+        else
+            "i: Insert  Ctrl+S: Save  Ctrl+Q: Quit  /: Search  u: Undo"
+        end
+    elseif mode == :dropdown
         "Click action  Esc: Close"
     elseif mode == :panel
         "Ctrl+C: Quit  Arrow: Navigate  Enter: Edit"

@@ -144,4 +144,77 @@ using UUIDs
         cells = ordered_cells(nb2)
         @test cells[1].code == code
     end
+
+    @testset "is_notebook_file — detects Pluto notebooks" begin
+        @test Sessions.is_notebook_file("test/fixtures/basic_notebook.jl") == true
+        @test Sessions.is_notebook_file("test/fixtures/test_basic.jl") == true
+        @test Sessions.is_notebook_file("test/fixtures/folded_notebook.jl") == true
+    end
+
+    @testset "is_notebook_file — rejects plain .jl files" begin
+        @test Sessions.is_notebook_file("test/fixtures/hello_script.jl") == false
+        @test Sessions.is_notebook_file("test/fixtures/long_script.jl") == false
+        @test Sessions.is_notebook_file("src/Sessions.jl") == false
+    end
+
+    @testset "is_notebook_file — handles edge cases" begin
+        @test Sessions.is_notebook_file("nonexistent_file.jl") == false
+        @test Sessions.is_notebook_file("") == false
+    end
+end
+
+@testset "File editor" begin
+    @testset "FileEditorView — load plain file" begin
+        fev = Sessions.FileEditorView("test/fixtures/hello_script.jl")
+        @test Sessions.file_basename(fev) == "hello_script.jl"
+        @test fev.dirty == false
+        @test Sessions.line_count(fev) > 10
+        row, col = Sessions.cursor_pos(fev)
+        @test row == 1
+        @test col == 1
+    end
+
+    @testset "FileEditorView — save and reload" begin
+        tmp = tempname() * ".jl"
+        # Write initial content
+        Base.write(tmp, "x = 1\ny = 2\n")
+        fev = Sessions.FileEditorView(tmp)
+        @test Sessions.line_count(fev) == 3  # 2 lines + trailing empty
+
+        # Modify and save
+        import Tachikoma
+        Tachikoma.set_text!(fev.editor, "x = 42\ny = 99\nz = x + y\n")
+        fev.dirty = true
+        Sessions.save_file!(fev)
+        @test fev.dirty == false
+
+        # Verify file on disk
+        content = read(tmp, String)
+        @test contains(content, "x = 42")
+        @test contains(content, "z = x + y")
+
+        # Reload
+        Base.write(tmp, "replaced content\n")
+        Sessions.reload_file!(fev)
+        @test contains(Tachikoma.text(fev.editor), "replaced content")
+        rm(tmp; force=true)
+    end
+
+    @testset "FileEditorView — editor mode" begin
+        tmp = tempname() * ".jl"
+        Base.write(tmp, "println(\"hi\")\n")
+        fev = Sessions.FileEditorView(tmp)
+        @test Sessions.editor_mode(fev) == :normal
+        fev.editor.mode = :insert
+        @test Sessions.editor_mode(fev) == :insert
+        rm(tmp; force=true)
+    end
+
+    @testset "SessionsApp — file editor constructor" begin
+        fev = Sessions.FileEditorView("test/fixtures/hello_script.jl")
+        app = Sessions.SessionsApp(fev)
+        @test app.editor_type == :file
+        @test app.file_editor_view !== nothing
+        @test app.mode == :insert  # file editor starts in insert mode
+    end
 end

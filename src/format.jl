@@ -9,6 +9,24 @@ const CELL_FOLDED_PREFIX = "# ╟─"
 const PROJECT_TOML_MARKER = "# ╔═╡ Project.toml"
 const MANIFEST_TOML_MARKER = "# ╔═╡ Manifest.toml"
 
+"""Check if a .jl file is a Pluto/Sessions notebook (has cell markers)."""
+function is_notebook_file(path::String)::Bool
+    isfile(path) || return false
+    # Read just the first few lines — notebook files start with the Pluto header
+    # or contain cell markers early on
+    io = Base.open(path)
+    try
+        for _ in 1:10
+            eof(io) && return false
+            line = readline(io)
+            (line == PLUTO_HEADER || startswith(line, CELL_MARKER)) && return true
+        end
+    finally
+        close(io)
+    end
+    false
+end
+
 """Parse a Pluto .jl notebook file into a Notebook."""
 function load_notebook(path::String)
     content = read(path, String)
