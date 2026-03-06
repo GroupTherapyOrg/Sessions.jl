@@ -54,6 +54,9 @@ end
 
 """Height needed to render this cell widget (editor only, output separate)."""
 function cell_height(cw::CellWidget)
+    if cw.cell.folded
+        return 3  # block border (2) + 1 line of folded preview
+    end
     n_lines = count(==('\n'), cw.cell.code) + 1
     n_lines + 2  # +2 for block border
 end
@@ -62,15 +65,24 @@ Tachikoma.focusable(::CellWidget) = true
 
 function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     char, style = state_indicator(cw.cell)
-    title = "$(char) Cell"
     border_style = cw.focused ? Tachikoma.tstyle(:accent) : Tachikoma.Style()
 
-    block = Tachikoma.Block(; title, border_style)
-    Tachikoma.render(block, rect, buf)
-
-    # Render editor inside block (inset by 1 for border)
-    inner = Tachikoma.Rect(rect.x + 1, rect.y + 1, max(rect.width - 2, 1), max(rect.height - 2, 1))
-    Tachikoma.render(cw.editor, inner, buf)
+    if cw.cell.folded
+        first_line = first(split(cw.cell.code, '\n'; limit=2))
+        preview = isempty(first_line) ? "…" : first_line * " …"
+        title = "$(char) Cell [folded]"
+        block = Tachikoma.Block(; title, border_style)
+        Tachikoma.render(block, rect, buf)
+        inner = Tachikoma.Rect(rect.x + 1, rect.y + 1, max(rect.width - 2, 1), max(rect.height - 2, 1))
+        para = Tachikoma.Paragraph([Tachikoma.Span(preview, Tachikoma.Style(; fg=Tachikoma.Color256(245)))])
+        Tachikoma.render(para, inner, buf)
+    else
+        title = "$(char) Cell"
+        block = Tachikoma.Block(; title, border_style)
+        Tachikoma.render(block, rect, buf)
+        inner = Tachikoma.Rect(rect.x + 1, rect.y + 1, max(rect.width - 2, 1), max(rect.height - 2, 1))
+        Tachikoma.render(cw.editor, inner, buf)
+    end
 end
 
 function Tachikoma.handle_key!(cw::CellWidget, evt)

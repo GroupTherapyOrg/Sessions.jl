@@ -275,6 +275,65 @@ using Markdown: @md_str
         @test Tachikoma.find_text(tb, "gamma") !== nothing
     end
 
+    @testset "E2E: Fold cell with Ctrl+F" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1\ny = 2\nz = 3")
+        app = Sessions.SessionsApp(nb)
+
+        @test !c1.folded
+
+        # Ctrl+F in normal mode toggles fold
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'f'))
+        @test c1.folded
+
+        # Render shows "[folded]" and first line
+        tb = render_app(app)
+        @test Tachikoma.find_text(tb, "folded") !== nothing
+        @test Tachikoma.find_text(tb, "x = 1") !== nothing
+
+        # Unfold
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'f'))
+        @test !c1.folded
+    end
+
+    @testset "E2E: Folded cell height is minimal" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "line1\nline2\nline3\nline4\nline5")
+        app = Sessions.SessionsApp(nb)
+
+        cw = Sessions.focused_widget(app.notebook_view)
+        unfolded_h = Sessions.cell_height(cw)
+        @test unfolded_h == 7  # 5 lines + 2 border
+
+        c1.folded = true
+        @test Sessions.cell_height(cw) == 3  # 1 line + 2 border
+    end
+
+    @testset "E2E: Ctrl+F does nothing in insert mode" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        app.mode = :insert
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'f'))
+        @test !c1.folded  # should not fold in insert mode
+    end
+
+    @testset "E2E: Fold state preserved in format roundtrip" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "visible = 1")
+        c2 = add_cell!(nb, "hidden = 2"; folded=true)
+
+        save_notebook(nb)
+        nb2 = load_notebook(path)
+        cells = ordered_cells(nb2)
+        @test !cells[1].folded
+        @test cells[2].folded
+
+        rm(path; force=true)
+    end
+
     @testset "E2E: Delete cell with Ctrl+D" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")

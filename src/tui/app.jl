@@ -95,6 +95,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Cell fold/unfold toggle (normal mode only)
+    if app.mode == :normal && evt.key == :ctrl && evt.char == 'f'
+        cell = focused_cell(app.notebook_view)
+        if cell !== nothing
+            cell.folded = !cell.folded
+            rebuild_widgets!(app.notebook_view)
+        end
+        return
+    end
+
     # Navigation between cells
     if app.mode == :normal
         if evt.key == :tab
