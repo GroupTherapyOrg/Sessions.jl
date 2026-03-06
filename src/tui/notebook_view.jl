@@ -405,10 +405,13 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         end
 
         # --- Cell rendering ---
+        # Pass full virtual rect so CellWidget draws its border/code at the
+        # correct virtual position. Buffer in_bounds silently clips writes
+        # outside the terminal. The notebook border re-draw after this loop
+        # seals any overflow into the inset/border area.
         if y + ch > visible_start && y <= visible_end
-            clipped_y = max(y, visible_start)
-            clipped_h = min(ch - (clipped_y - y), visible_end - clipped_y + 1)
-            cell_rect = Tachikoma.Rect(cx, clipped_y, cw_width, clipped_h)
+            cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
+                            ch - max(0, rect.y - y))
             Tachikoma.render(cw, cell_rect, buf)
         end
 
@@ -428,9 +431,8 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- Output rendering ---
         if oh > 0
             if y + oh > visible_start && y <= visible_end
-                out_clipped_y = max(y, visible_start)
-                out_clipped_h = min(oh - (out_clipped_y - y), visible_end - out_clipped_y + 1)
-                out_rect = Tachikoma.Rect(cx, out_clipped_y, cw_width, out_clipped_h)
+                out_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
+                                oh - max(0, rect.y - y))
                 Tachikoma.render(ow, out_rect, buf)
             end
             y += oh
@@ -456,8 +458,17 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
     clamp_scroll!(nv, rect)
 
-    # ── Re-draw border AFTER content to seal any overflow ──
-    # This ensures cells/outputs that overflow don't overwrite the notebook frame.
+    # ── Overpaint inset + border areas to seal any cell overflow ──
+    # Cells render at full virtual rect, so they may write into border/inset zones.
+    # Top inset area (rect.y to by-1)
+    for fy in rect.y:(by - 1)
+        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, Theme.S_CANVAS)
+    end
+    # Bottom inset area (by+bh to rect.y+rect.height-1)
+    for fy in (by + bh):(rect.y + rect.height - 1)
+        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, Theme.S_CANVAS)
+    end
+    # Re-draw border
     Tachikoma.set_char!(buf, bx, by, '╭', border_style)
     Tachikoma.set_char!(buf, bx + bw - 1, by, '╮', border_style)
     Tachikoma.set_char!(buf, bx, by + bh - 1, '╰', border_style)
