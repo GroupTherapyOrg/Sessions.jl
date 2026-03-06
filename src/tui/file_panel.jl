@@ -1,5 +1,6 @@
 # TUI: File explorer panel — superfile-inspired sidebar
 # Rounded borders, file type icons, cursor indicator, click navigation
+# Navigate directories inline: click folders to enter, .. to go up
 
 struct FileEntry
     name::String
@@ -19,22 +20,12 @@ mutable struct FilePanel
     viewport::Tachikoma.Rect
     show_hidden::Bool
     hovered_idx::Int       # which entry the mouse is hovering (0 = none)
-    # Folder picker mode (for "Open Folder" workflow)
-    picker_mode::Bool
-    picker_dir::String
-    picker_entries::Vector{FileEntry}
-    picker_cursor::Int
-    picker_scroll::Int
-    picker_hovered_idx::Int   # hover in picker (0 = none)
-    picker_parent_hovered::Bool
-    picker_select_hovered::Bool
     last_refresh_tick::Int  # tick when entries were last refreshed
 end
 
 function FilePanel(dir::String=".")
     dir = abspath(dir)
-    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false, 0,
-                   false, dir, FileEntry[], 1, 0, 0, false, false, 0)
+    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false, 0, 0)
     refresh_entries!(fp)
     fp
 end
@@ -43,6 +34,12 @@ end
 function refresh_entries!(fp::FilePanel)
     fp.entries = FileEntry[]
     isdir(fp.current_dir) || return
+
+    # Add parent directory entry (..) if not at filesystem root
+    parent = dirname(fp.current_dir)
+    if parent != fp.current_dir
+        push!(fp.entries, FileEntry("..", parent, true, false, false, 0))
+    end
 
     names = try
         readdir(fp.current_dir)
@@ -84,6 +81,7 @@ end
 """Navigate to parent directory."""
 function go_up!(fp::FilePanel)
     parent = dirname(fp.current_dir)
+    parent == fp.current_dir && return  # already at root
     old_name = basename(fp.current_dir)
     fp.current_dir = parent
     fp.cursor_idx = 1
@@ -111,7 +109,10 @@ end
 function activate!(fp::FilePanel)
     isempty(fp.entries) && return nothing
     entry = fp.entries[fp.cursor_idx]
-    if entry.is_dir
+    if entry.name == ".." && entry.is_dir
+        go_up!(fp)
+        return nothing
+    elseif entry.is_dir
         enter_dir!(fp, entry.path)
         return nothing
     else
@@ -123,87 +124,6 @@ end
 function toggle_hidden!(fp::FilePanel)
     fp.show_hidden = !fp.show_hidden
     refresh_entries!(fp)
-end
-
-# ── Folder picker mode ───────────────────────────────────────────────
-
-"""Enter picker mode — browse directories starting from current dir."""
-function enter_picker_mode!(fp::FilePanel)
-    fp.picker_mode = true
-    fp.picker_dir = fp.current_dir
-    fp.picker_cursor = 1
-    fp.picker_scroll = 0
-    fp.picker_hovered_idx = 0
-    fp.picker_parent_hovered = false
-    fp.picker_select_hovered = false
-    refresh_picker!(fp)
-end
-
-"""Exit picker mode."""
-function exit_picker_mode!(fp::FilePanel)
-    fp.picker_mode = false
-end
-
-"""Refresh picker directory listing (dirs only + parent)."""
-function refresh_picker!(fp::FilePanel)
-    fp.picker_entries = FileEntry[]
-    isdir(fp.picker_dir) || return
-
-    names = try readdir(fp.picker_dir) catch; String[] end
-    for name in sort(names)
-        startswith(name, '.') && continue
-        full = joinpath(fp.picker_dir, name)
-        isdir(full) || continue
-        push!(fp.picker_entries, FileEntry(name, full, true, false, false, 0))
-    end
-    fp.picker_cursor = clamp(fp.picker_cursor, 1, max(length(fp.picker_entries), 1))
-    fp.picker_scroll = 0
-end
-
-"""Navigate picker into a subdirectory."""
-function picker_enter!(fp::FilePanel, path::String)
-    isdir(path) || return
-    fp.picker_dir = abspath(path)
-    fp.picker_cursor = 1
-    refresh_picker!(fp)
-end
-
-"""Navigate picker to parent directory."""
-function picker_go_up!(fp::FilePanel)
-    parent = dirname(fp.picker_dir)
-    parent == fp.picker_dir && return  # already at root
-    old_name = basename(fp.picker_dir)
-    fp.picker_dir = parent
-    fp.picker_cursor = 1
-    refresh_picker!(fp)
-    for (i, e) in enumerate(fp.picker_entries)
-        if e.name == old_name
-            fp.picker_cursor = i
-            break
-        end
-    end
-end
-
-"""Map screen y to a picker entry index, or :parent, or :select, or nothing."""
-function picker_hit_at_y(fp::FilePanel, screen_y::Int)
-    vp = fp.viewport
-    vp.width == 0 && return nothing
-    hi = Theme.CELL_H_INSET
-    vi = Theme.CELL_V_INSET
-    by = vp.y + vi
-
-    # Row layout inside border: header(1) | parent_row(1) | divider(1) | entries...
-    parent_y = by + 2
-    screen_y == parent_y && return :parent
-
-    # Select button at bottom border
-    select_y = by + max(vp.height - 2 * vi, 3) - 1  # bottom border row
-    screen_y == select_y && return :select
-
-    entries_start = by + 4
-    entry_idx = screen_y - entries_start + fp.picker_scroll
-    (entry_idx < 0 || entry_idx >= length(fp.picker_entries)) && return nothing
-    return entry_idx + 1
 end
 
 # ── Icons & colors per file type ──────────────────────────────────────
@@ -227,6 +147,7 @@ const ICON_SESSION    = "◈"   # session cache file
 const ICON_PARENT     = "⊖"
 
 function file_icon(entry::FileEntry)
+    entry.name == ".." && return ICON_PARENT
     entry.is_dir && return ICON_FOLDER
     ext = lowercase(splitext(entry.name)[2])
     if ext == ".jl"
@@ -253,6 +174,7 @@ function file_icon(entry::FileEntry)
 end
 
 function icon_color(entry::FileEntry)
+    entry.name == ".." && return Theme.FG_DIM
     entry.is_dir && return Theme.ACCENT
     ext = lowercase(splitext(entry.name)[2])
     if ext == ".jl"
@@ -320,11 +242,6 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     if tick - fp.last_refresh_tick >= FILE_PANEL_REFRESH_INTERVAL
         fp.last_refresh_tick = tick
         refresh_entries!(fp)
-    end
-
-    if fp.picker_mode
-        _render_picker!(fp, rect, buf)
-        return
     end
 
     # ── Rounded border (inset to match cell island style) ─────────────
@@ -398,11 +315,11 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
 
     max_name_w = inner_w - 5  # cursor(1) + space(1) + icon(1) + space(1) + padding(1)
 
-    for vi in 0:(entries_height - 1)
-        ei = fp.scroll_offset + vi + 1
+    for vi_idx in 0:(entries_height - 1)
+        ei = fp.scroll_offset + vi_idx + 1
         ei > length(fp.entries) && break
         entry = fp.entries[ei]
-        row = entries_start_y + vi
+        row = entries_start_y + vi_idx
         is_cursor = (ei == fp.cursor_idx)
         is_hovered = (ei == fp.hovered_idx)
         is_jl = endswith(entry.name, ".jl")
@@ -428,6 +345,8 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
             Theme.FG
         elseif is_hovered
             Theme.FG  # bright on hover
+        elseif entry.name == ".."
+            Theme.FG_DIM
         elseif entry.is_dir
             Theme.FG_DIM
         elseif is_jl
@@ -452,120 +371,6 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
             Tachikoma.set_char!(buf, pos_x + length(pos_text), by + bh - 1,
                 '├', border_style)
         end
-    end
-end
-
-"""Render the folder picker overlay (directory-only browser with select button)."""
-function _render_picker!(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
-    hi = Theme.CELL_H_INSET
-    vi = Theme.CELL_V_INSET
-    border_style = Tachikoma.Style(; fg=Theme.ACCENT_DIM, bg=Theme.SIDEBAR_BG)
-    bg = Tachikoma.Style(; bg=Theme.SIDEBAR_BG)
-
-    # Fill
-    for fy in rect.y:(rect.y + rect.height - 1)
-        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, bg)
-    end
-
-    # Border inset
-    bx = rect.x + hi
-    by = rect.y + vi
-    bw = max(rect.width - 2 * hi, 3)
-    bh = max(rect.height - 2 * vi, 3)
-
-    Tachikoma.set_char!(buf, bx, by, '╭', border_style)
-    Tachikoma.set_char!(buf, bx + bw - 1, by, '╮', border_style)
-    Tachikoma.set_char!(buf, bx, by + bh - 1, '╰', border_style)
-    Tachikoma.set_char!(buf, bx + bw - 1, by + bh - 1, '╯', border_style)
-    for cx in (bx + 1):(bx + bw - 2)
-        Tachikoma.set_char!(buf, cx, by, '─', border_style)
-        Tachikoma.set_char!(buf, cx, by + bh - 1, '─', border_style)
-    end
-    for fy in (by + 1):(by + bh - 2)
-        Tachikoma.set_char!(buf, bx, fy, '│', border_style)
-        Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
-    end
-
-    inner_x = bx + 1
-    inner_w = bw - 2
-    inner_w < 2 && return
-
-    # Header: "Open Folder"
-    header_y = by + 1
-    title = "Open Folder"
-    title_style = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.SIDEBAR_BG, bold=true)
-    Tachikoma.set_string!(buf, inner_x + 1, header_y, first(title, inner_w - 2), title_style)
-
-    # Parent row: "⊖ .." to go up
-    parent_y = by + 2
-    parent_fg = fp.picker_parent_hovered ? Theme.ACCENT_GLOW : Theme.FG_DIM
-    parent_style = Tachikoma.Style(; fg=parent_fg, bg=Theme.SIDEBAR_BG)
-    Tachikoma.set_string!(buf, inner_x + 1, parent_y, "⊖ ..", parent_style)
-    # Show current dir on right
-    dir_name = basename(fp.picker_dir)
-    if isempty(dir_name); dir_name = fp.picker_dir; end
-    dir_max = inner_w - 7
-    if dir_max > 0
-        dir_text = first(dir_name, dir_max)
-        Tachikoma.set_string!(buf, inner_x + 6, parent_y, dir_text,
-            Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.SIDEBAR_BG))
-    end
-
-    # Divider
-    div_y = by + 3
-    Tachikoma.set_char!(buf, bx, div_y, '├', border_style)
-    Tachikoma.set_char!(buf, bx + bw - 1, div_y, '┤', border_style)
-    for cx in (bx + 1):(bx + bw - 2)
-        Tachikoma.set_char!(buf, cx, div_y, '─', border_style)
-    end
-
-    # Directory entries
-    entries_start = by + 4
-    # Reserve 1 row for select button on bottom border
-    entries_height = bh - 5  # border(2) + header(1) + parent(1) + divider(1)
-    entries_height < 1 && return
-
-    # Auto-scroll
-    if fp.picker_cursor - 1 < fp.picker_scroll
-        fp.picker_scroll = fp.picker_cursor - 1
-    end
-    if fp.picker_cursor - 1 >= fp.picker_scroll + entries_height
-        fp.picker_scroll = fp.picker_cursor - entries_height
-    end
-    fp.picker_scroll = clamp(fp.picker_scroll, 0, max(0, length(fp.picker_entries) - entries_height))
-
-    max_name_w = inner_w - 5
-
-    for vi_idx in 0:(entries_height - 1)
-        ei = fp.picker_scroll + vi_idx + 1
-        ei > length(fp.picker_entries) && break
-        entry = fp.picker_entries[ei]
-        row = entries_start + vi_idx
-        is_cursor = (ei == fp.picker_cursor)
-        is_hovered = (ei == fp.picker_hovered_idx)
-
-        cursor_char = (is_cursor || is_hovered) ? "›" : " "
-        cursor_fg = is_cursor ? Theme.ACCENT_GLOW : (is_hovered ? Theme.ACCENT_DIM : Theme.FG_MUTED)
-        Tachikoma.set_string!(buf, inner_x, row, cursor_char,
-            Tachikoma.Style(; fg=cursor_fg, bg=Theme.SIDEBAR_BG))
-        icon_fg = is_hovered ? Theme.ACCENT_GLOW : Theme.ACCENT
-        Tachikoma.set_string!(buf, inner_x + 2, row, ICON_FOLDER,
-            Tachikoma.Style(; fg=icon_fg, bg=Theme.SIDEBAR_BG))
-        name = first(entry.name, max_name_w)
-        name_fg = (is_cursor || is_hovered) ? Theme.FG : Theme.FG_DIM
-        Tachikoma.set_string!(buf, inner_x + 4, row, name,
-            Tachikoma.Style(; fg=name_fg, bg=Theme.SIDEBAR_BG))
-    end
-
-    # Select button on bottom border — "┤ Select ├"
-    sel_text = " Select "
-    sel_x = bx + div(bw - length(sel_text) - 2, 2)
-    if sel_x > bx
-        sel_fg = fp.picker_select_hovered ? Theme.GREEN_BRIGHT : Theme.ACCENT_GLOW
-        Tachikoma.set_char!(buf, sel_x, by + bh - 1, '┤', border_style)
-        Tachikoma.set_string!(buf, sel_x + 1, by + bh - 1, sel_text,
-            Tachikoma.Style(; fg=sel_fg, bg=Theme.SIDEBAR_BG, bold=true))
-        Tachikoma.set_char!(buf, sel_x + 1 + length(sel_text), by + bh - 1, '├', border_style)
     end
 end
 

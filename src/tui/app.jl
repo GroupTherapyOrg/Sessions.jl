@@ -648,46 +648,6 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
 end
 
-"""Handle mouse events in the folder picker."""
-function _handle_picker_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
-    fp = app.file_panel
-
-    if evt.button == Tachikoma.mouse_scroll_down
-        fp.picker_cursor = min(length(fp.picker_entries), fp.picker_cursor + 1)
-        return
-    end
-    if evt.button == Tachikoma.mouse_scroll_up
-        fp.picker_cursor = max(1, fp.picker_cursor - 1)
-        return
-    end
-
-    # Hover — highlight picker entries, parent, and select button
-    if evt.action == Tachikoma.mouse_move
-        hit = picker_hit_at_y(fp, evt.y)
-        fp.picker_parent_hovered = (hit == :parent)
-        fp.picker_select_hovered = (hit == :select)
-        fp.picker_hovered_idx = (hit isa Integer && hit >= 1) ? hit : 0
-        return
-    end
-
-    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
-        hit = picker_hit_at_y(fp, evt.y)
-        if hit == :parent
-            picker_go_up!(fp)
-        elseif hit == :select
-            # Select current picker_dir as workspace
-            reset_to_folder!(app, fp.picker_dir)
-            exit_picker_mode!(fp)
-            push!(app.activity_bar.active, :explorer)
-            delete!(app.activity_bar.active, :open_folder)
-        elseif hit isa Integer && hit >= 1 && hit <= length(fp.picker_entries)
-            fp.picker_cursor = hit
-            # Double-purpose: click enters the directory to browse deeper
-            picker_enter!(fp, fp.picker_entries[hit].path)
-        end
-    end
-end
-
 """Open a file in a new tab (or switch to existing)."""
 function _open_file!(app::SessionsApp, path::String)
     _open_in_tab!(app, path)
@@ -982,9 +942,6 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     if evt.action == Tachikoma.mouse_move
         app.activity_bar.hovered = :none
         app.file_panel.hovered_idx = 0
-        app.file_panel.picker_hovered_idx = 0
-        app.file_panel.picker_parent_hovered = false
-        app.file_panel.picker_select_hovered = false
     end
 
     # ── Tab bar clicks ──
@@ -1024,30 +981,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Activity bar clicks — toggle sidebar / open folder picker
+    # Activity bar clicks — toggle sidebar or REPL
     ar = app.activity_rect
     if ar.width > 0 && evt.x >= ar.x && evt.x < ar.x + ar.width &&
        evt.y >= ar.y && evt.y < ar.y + ar.height
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
             btn_id = button_at_y(app.activity_bar, evt.y)
             if btn_id == :explorer
-                # If in picker mode, exit it first
-                if app.file_panel.picker_mode
-                    exit_picker_mode!(app.file_panel)
-                end
                 toggle!(app.activity_bar, btn_id)
                 app.sidebar_open = is_active(app.activity_bar, :explorer)
-            elseif btn_id == :open_folder
-                # Toggle folder picker mode
-                if app.file_panel.picker_mode
-                    exit_picker_mode!(app.file_panel)
-                    push!(app.activity_bar.active, :explorer)
-                    delete!(app.activity_bar.active, :open_folder)
-                else
-                    enter_picker_mode!(app.file_panel)
-                    push!(app.activity_bar.active, :open_folder)
-                    app.sidebar_open = true
-                end
             elseif btn_id == :terminal
                 _toggle_repl!(app)
             end
@@ -1061,11 +1003,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     sr = app.sidebar_rect
     if sr.width > 0 && evt.x >= sr.x && evt.x < sr.x + sr.width &&
        evt.y >= sr.y && evt.y < sr.y + sr.height
-        if app.file_panel.picker_mode
-            _handle_picker_mouse!(app, evt)
-        else
-            _handle_file_panel_mouse!(app, evt)
-        end
+        _handle_file_panel_mouse!(app, evt)
         return
     end
 
