@@ -74,9 +74,9 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     end
     Tachikoma.render(top_bar, rects[1], buf)
 
-    # Control cursor: only show in focused cell during insert mode
+    # Cursor always visible in the focused cell (no normal/insert mode distinction)
     for (i, cw) in enumerate(app.notebook_view.cell_widgets)
-        cw.editor.focused = (app.mode == :insert && i == app.notebook_view.focused_idx)
+        cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode != :dropdown)
     end
 
     # Notebook view (main content)
@@ -129,28 +129,18 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Escape: exit insert mode or clear selection
+    # Escape: clear selection
     if evt.key == :escape
-        if app.mode == :insert
-            app.mode = :normal
-        elseif has_selection(app.notebook_view)
+        if has_selection(app.notebook_view)
             clear_selection!(app.notebook_view)
         end
         return
     end
 
-    # Enter or click into cell: enter insert mode for editing
-    if app.mode == :normal && evt.key == :enter
-        app.mode = :insert
-        return
-    end
-
-    # In insert mode, pass keys to the code editor
-    if app.mode == :insert
-        cw = focused_widget(app.notebook_view)
-        if cw !== nothing
-            Tachikoma.handle_key!(cw, evt)
-        end
+    # All other keys go to the focused cell's code editor
+    cw = focused_widget(app.notebook_view)
+    if cw !== nothing
+        Tachikoma.handle_key!(cw, evt)
     end
 end
 

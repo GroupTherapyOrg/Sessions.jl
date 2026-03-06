@@ -228,18 +228,18 @@ using Tachikoma
         @test app.quit == true
     end
 
-    @testset "SessionsApp — mode switching" begin
+    @testset "SessionsApp — always-editing (no mode switch)" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
         @test app.mode == :normal
 
-        # Enter insert mode
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
-        @test app.mode == :insert
+        # Typing goes directly to editor — no Enter needed
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:char, 'y'))
+        @test app.mode == :normal  # stays normal (always editing)
 
-        # Back to normal
+        # Escape doesn't change mode
         Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
         @test app.mode == :normal
     end
@@ -451,16 +451,12 @@ using Tachikoma
         @test c1.output.result == 55
     end
 
-    @testset "SessionsApp — Shift+Enter works in insert mode" begin
+    @testset "SessionsApp — Shift+Enter runs cell" begin
         nb = Notebook()
         c1 = add_cell!(nb, "insert_shift_val = 66")
         app = Sessions.SessionsApp(nb)
 
-        # Enter insert mode
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
-        @test app.mode == :insert
-
-        # Shift+Enter should still run the cell
+        # Shift+Enter runs the cell (always in editing mode)
         Tachikoma.update!(app, Tachikoma.KeyEvent(:shift_enter))
         @test contains(app.message, "Executing")
 
@@ -766,23 +762,22 @@ using Tachikoma
         @test app.notebook_view.focused_idx == 1
     end
 
-    @testset "Mouse click — works in insert mode" begin
+    @testset "Mouse click — switches focus between cells" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")
         add_cell!(nb, "b = 2")
         app = Sessions.SessionsApp(nb)
-        app.mode = :insert
 
         # Render to establish viewport
         tb = TestBackend(80, 24)
         frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
         Tachikoma.view(app, frame)
 
-        # Click on cell 2 — should focus it, stay in insert mode
+        # Click on cell 2 — should focus it, stays in normal (always-editing)
         # Cell 2 starts at row 8 (top_margin=1, cell1=3 rows, gap=2)
         Tachikoma.update!(app, Tachikoma.MouseEvent(10, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 2
-        @test app.mode == :insert
+        @test app.mode == :normal
     end
 
     @testset "Mouse scroll — adjusts scroll offset" begin

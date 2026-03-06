@@ -23,14 +23,10 @@ end
 
 """Create the bottom status bar showing keybindings."""
 function make_bottom_bar(; mode::Symbol=:normal)
-    keys = if mode == :normal
-        "Click cell to focus  Click ▶ to run  Click + to add  Ctrl+R: Run  Ctrl+S: Save  Ctrl+Q: Quit"
-    elseif mode == :insert
-        "Editing cell  Esc: Done  Ctrl+R: Run  Ctrl+S: Save"
-    elseif mode == :dropdown
+    keys = if mode == :dropdown
         "Click action  Esc: Close"
     else
-        "Ctrl+Q: Quit"
+        "Click ▶ to run  Click + to add  Ctrl+R: Run  Ctrl+S: Save  Ctrl+Q: Quit"
     end
 
     Tachikoma.StatusBar(; left=[Tachikoma.Span(" " * keys, Theme.S_DIM)])

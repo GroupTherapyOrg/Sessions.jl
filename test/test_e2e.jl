@@ -62,16 +62,15 @@ using Markdown: @md_str
         @test app.notebook_view.focused_idx == 3
     end
 
-    @testset "E2E: Enter/exit insert mode" begin
+    @testset "E2E: Always in editing mode (no normal/insert distinction)" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
         @test app.mode == :normal
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
-        @test app.mode == :insert
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
-        @test app.mode == :normal
+        # Typing goes directly to the cell — no Enter needed to start editing
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:char, 'y'))
+        @test app.mode == :normal  # stays in normal (which is always-editing)
     end
 
     @testset "E2E: Execute cell and verify output" begin
@@ -365,7 +364,6 @@ using Markdown: @md_str
         c1 = add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
-        app.mode = :insert
         # disabled is false by default — no action taken
         @test !c1.disabled
     end
@@ -392,9 +390,8 @@ using Markdown: @md_str
         c1 = add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
-        app.mode = :insert
-        # folded is false by default — no action taken
-        @test !c1.folded  # should not fold in insert mode
+        # folded is false by default
+        @test !c1.folded
     end
 
     @testset "E2E: Fold state preserved in format roundtrip" begin
@@ -516,9 +513,8 @@ using Markdown: @md_str
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
-        app.mode = :insert
 
-        @test app.mode == :insert
+        @test app.mode == :normal
         @test app.cell_dropdown === nothing
     end
 
@@ -709,7 +705,7 @@ using Markdown: @md_str
         nb = Notebook()
         c1 = add_cell!(nb, "line1\nline2\nline3")
         app = Sessions.SessionsApp(nb)
-        app.mode = :insert
+        # (no mode switch needed — always editing)
 
         # Set cursor to middle of line 2 (after "li" on line 2)
         editor = Sessions.focused_widget(app.notebook_view).editor
@@ -729,7 +725,7 @@ using Markdown: @md_str
         nb = Notebook()
         add_cell!(nb, "all code here")
         app = Sessions.SessionsApp(nb)
-        app.mode = :insert
+        # (no mode switch needed — always editing)
 
         editor = Sessions.focused_widget(app.notebook_view).editor
         editor.cursor_row = 1
@@ -747,7 +743,7 @@ using Markdown: @md_str
         nb = Notebook()
         add_cell!(nb, "code")
         app = Sessions.SessionsApp(nb)
-        app.mode = :insert
+        # (no mode switch needed — always editing)
 
         editor = Sessions.focused_widget(app.notebook_view).editor
         editor.cursor_row = 1
