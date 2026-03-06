@@ -257,6 +257,13 @@ end
 """Render code editor (folded cells are handled before this is called)."""
 function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
                         buf::Tachikoma.Buffer, surface_bg)
+    # Reset scroll when all lines fit — prevents stale scroll_offset from
+    # hiding top lines after a cell was partially clipped at viewport edge.
+    n_lines = length(cw.editor.lines)
+    if n_lines <= inner.height
+        cw.editor.scroll_offset = 0
+    end
+
     if cw.focused
         # Suppress built-in block cursor; we draw thin bar cursor after
         was_focused = cw.editor.focused

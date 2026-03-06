@@ -1968,6 +1968,22 @@ using Markdown: @md_str
         @test Tachikoma.find_text(tb, "x = 999") !== nothing
     end
 
+    # --- Editor scroll reset ---
+
+    @testset "editor scroll_offset resets when all lines fit" begin
+        cell = Cell("begin\n    sleep(5)\n    c = b * 2\nend")
+        cw = Sessions.CellWidget(cell; focused=false)
+        # Artificially set scroll_offset as if editor was previously scrolled
+        cw.editor.scroll_offset = 2
+        # Render in a buffer tall enough for all 4 lines
+        tb = TestBackend(60, 8)
+        Tachikoma.render_widget!(tb, cw)
+        # scroll_offset should be reset since all lines fit
+        @test cw.editor.scroll_offset == 0
+        # Line 1 should be visible
+        @test Tachikoma.find_text(tb, "begin") !== nothing
+    end
+
     # --- Running/queued cell indicator ---
 
     @testset "running cell — left border bar renders ▎" begin
