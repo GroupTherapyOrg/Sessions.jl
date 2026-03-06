@@ -753,13 +753,13 @@ using Tachikoma
         # Each cell is 3 lines (1 line code + 2 border) + 2-row gap, top margin=1
         # Top bar = row 1, notebook starts at row 2, top margin → first cell at row 3
         # Cell 1: rows 3-5, Gap: 6-7, Cell 2: rows 8-10, Gap: 11-12, Cell 3: rows 13-15
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 9, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 9, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 2
 
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 14, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 14, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 3
 
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 4, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 4, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 1
     end
 
@@ -776,7 +776,7 @@ using Tachikoma
 
         # Click on cell 2 — should focus it, stays in normal (always-editing)
         # Cell 2 starts at row 8 (top_margin=1, cell1=3 rows, gap=2)
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 2
         @test app.mode == :normal
     end
@@ -796,12 +796,12 @@ using Tachikoma
         initial_offset = app.notebook_view.scroll_offset
 
         # Scroll down
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_scroll_down, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 10, Tachikoma.mouse_scroll_down, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.scroll_offset >= initial_offset
 
         # Scroll up — clamped at 0
         for _ in 1:20
-            Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_scroll_up, Tachikoma.mouse_press, false, false, false))
+            Tachikoma.update!(app, Tachikoma.MouseEvent(40, 10, Tachikoma.mouse_scroll_up, Tachikoma.mouse_press, false, false, false))
         end
         @test app.notebook_view.scroll_offset >= 0
     end
@@ -817,11 +817,11 @@ using Tachikoma
         Tachikoma.view(app, frame)
 
         # Click on top bar area (row 1) — should not crash
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 1  # unchanged
 
         # Click way below content — does NOT insert (only explicit + clicks)
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 23, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 23, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test length(nb) == 1  # unchanged — no accidental insertion
         @test app.notebook_view.focused_idx == 1  # unchanged
     end
@@ -840,7 +840,7 @@ using Tachikoma
         @test Tachikoma.find_text(tb, "m2 = 2") !== nothing
 
         # Click on cell 2 (cell 2 starts at row 8: top_margin=1 + cell1=3 + gap=2 + vp.y=2)
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         tb2 = TestBackend(80, 24)
         frame2 = Tachikoma.Frame(tb2.buf, Rect(1, 1, 80, 24), [], [])
         Tachikoma.view(app, frame2)
@@ -864,7 +864,7 @@ using Tachikoma
         Tachikoma.view(app, frame)
 
         # Mouse release should not change focus
-        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 6, Tachikoma.mouse_left, Tachikoma.mouse_release, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 6, Tachikoma.mouse_left, Tachikoma.mouse_release, false, false, false))
         @test app.notebook_view.focused_idx == 1
     end
 end

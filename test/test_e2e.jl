@@ -693,7 +693,7 @@ using Markdown: @md_str
         # Click on cell 2 body: top_margin(1) + cell1_height + gap(2) + 1 inside cell2
         ch1 = Sessions.cell_height(app.notebook_view.cell_widgets[1])
         cell2_y = app.notebook_view.viewport.y + 1 + ch1 + 2 + 1
-        evt = Tachikoma.MouseEvent(10, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        evt = Tachikoma.MouseEvent(40, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
         # Should focus but not run
@@ -859,7 +859,7 @@ using Markdown: @md_str
 
         # Shift+click on cell 3 — should select range from focused (1) through 3
         # MouseEvent field order: x, y, button, action, shift, alt, ctrl
-        evt = Tachikoma.MouseEvent(10, cell3_y, Tachikoma.mouse_left, Tachikoma.mouse_press, true, false, false)
+        evt = Tachikoma.MouseEvent(40, cell3_y, Tachikoma.mouse_left, Tachikoma.mouse_press, true, false, false)
         Tachikoma.update!(app, evt)
 
         @test app.notebook_view.cell_widgets[1].selected

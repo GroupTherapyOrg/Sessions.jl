@@ -41,6 +41,7 @@ include("tui/cell_widget.jl")
 include("tui/output_widget.jl")
 include("tui/status_bar.jl")
 include("tui/notebook_view.jl")
+include("tui/file_panel.jl")
 include("tui/app.jl")
 
 # Layer 3: CLI

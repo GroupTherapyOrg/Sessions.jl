@@ -24,18 +24,23 @@ mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
     workspace::Workspace
     notebook_view::NotebookView
+    file_panel::FilePanel
     tq::Tachikoma.TaskQueue
     mode::Symbol        # :normal, :insert, or :dropdown
     quit::Bool
     message::String     # Status message (temporary)
     cell_dropdown::Union{Nothing, CellDropdown}
     undo_buffer::Vector{DeletedCell}
+    sidebar_rect::Tachikoma.Rect   # cached for mouse hit testing
 end
 
 function SessionsApp(nb::Notebook)
     ws = Workspace()
     nv = NotebookView(nb)
-    SessionsApp(nb, ws, nv, Tachikoma.TaskQueue(), :normal, false, "", nothing, DeletedCell[])
+    dir = isempty(nb.path) ? pwd() : dirname(abspath(nb.path))
+    fp = FilePanel(dir)
+    SessionsApp(nb, ws, nv, fp, Tachikoma.TaskQueue(), :normal, false, "", nothing,
+        DeletedCell[], Tachikoma.Rect())
 end
 
 function SessionsApp(path::String)
@@ -83,8 +88,9 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     sidebar_rect = h_rects[1]
     notebook_rect = h_rects[2]
 
-    # Sidebar placeholder
-    _render_sidebar(app, sidebar_rect, buf)
+    # File explorer sidebar
+    app.sidebar_rect = sidebar_rect
+    Tachikoma.render(app.file_panel, sidebar_rect, buf)
 
     # Cursor always visible in the focused cell (no normal/insert mode distinction)
     for (i, cw) in enumerate(app.notebook_view.cell_widgets)
@@ -104,29 +110,46 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     end
 end
 
-"""Render the sidebar placeholder — file explorer will go here later."""
-function _render_sidebar(app::SessionsApp, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
-    # Fill sidebar with sidebar bg
-    for fy in rect.y:(rect.y + rect.height - 1)
-        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, Theme.S_SIDEBAR)
+"""Handle mouse events in the file panel sidebar."""
+function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
+    fp = app.file_panel
+
+    # Scroll in sidebar
+    if evt.button == Tachikoma.mouse_scroll_down
+        cursor_down!(fp)
+        return
+    end
+    if evt.button == Tachikoma.mouse_scroll_up
+        cursor_up!(fp)
+        return
     end
 
-    # Header
-    Tachikoma.set_string!(buf, rect.x + 1, rect.y, " EXPLORER", Theme.S_SIDEBAR_HEADER)
-
-    # Right border (separator line)
-    border_x = rect.x + rect.width - 1
-    border_style = Tachikoma.Style(; fg=Theme.SIDEBAR_BORDER_FG, bg=Theme.SIDEBAR_BG)
-    for fy in rect.y:(rect.y + rect.height - 1)
-        Tachikoma.set_char!(buf, border_x, fy, '│', border_style)
+    # Click on a file entry
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        idx = entry_at_y(fp, evt.y)
+        if idx !== nothing
+            fp.cursor_idx = idx
+            result = activate!(fp)
+            if result !== nothing
+                # Clicked a file — open it as notebook if it's .jl
+                if endswith(result, ".jl")
+                    _open_file!(app, result)
+                end
+            end
+        end
     end
+end
 
-    # Show notebook filename
-    nb_name = basename(app.nb.path)
-    if !isempty(nb_name)
-        max_w = max(rect.width - 4, 1)
-        Tachikoma.set_string!(buf, rect.x + 2, rect.y + 2,
-            first(nb_name, max_w), Theme.S_SIDEBAR)
+"""Open a .jl file as a notebook."""
+function _open_file!(app::SessionsApp, path::String)
+    try
+        nb = load_notebook(path)
+        app.nb = nb
+        app.workspace = Workspace()
+        app.notebook_view = NotebookView(nb)
+        app.message = "Opened: $(basename(path))"
+    catch e
+        app.message = "Error: $(sprint(showerror, e))"
     end
 end
 
@@ -186,6 +209,14 @@ end
 """Handle mouse events — Pluto-style click zones for cell controls."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
+
+    # File panel clicks — if click is in sidebar area
+    sr = app.sidebar_rect
+    if sr.width > 0 && evt.x >= sr.x && evt.x < sr.x + sr.width &&
+       evt.y >= sr.y && evt.y < sr.y + sr.height
+        _handle_file_panel_mouse!(app, evt)
+        return
+    end
 
     # Dropdown mode: handle clicks inside dropdown or click-away to dismiss
     if app.mode == :dropdown && app.cell_dropdown !== nothing
