@@ -735,11 +735,12 @@ function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_ri
             return
         end
 
-        # Run button hover (in gap below cell+output)
-        gap_y = y + ch + oh
+        # Run button hover (centered in gap below cell+output)
+        gap_mid = div(Theme.CELL_GAP, 2)
+        run_y = y + ch + oh + gap_mid
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
-        if my >= gap_y - 1 && my <= gap_y + 1 &&
+        if my >= run_y - 1 && my <= run_y + 1 &&
            mx >= run_x - 2 && mx <= cell_right + 2
             nv.hovered_control = :run
             nv.hovered_control_idx = target_idx
@@ -748,18 +749,20 @@ function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_ri
     end
 end
 
-"""Hit test margin controls. Returns (:plus_above, idx), (:plus_below, idx), (:eye, idx), or nothing.
+"""Hit test margin controls. Returns (:plus_gap, insert_pos), (:eye, idx), or nothing.
 Hit zones are expanded ±1 row around each icon for easier clicking."""
 function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, margin_x::Int)
     isempty(nv.cell_widgets) && return nothing
     vp = nv.viewport
+    gap_mid = div(Theme.CELL_GAP, 2)
+    n_cells = length(nv.cell_widgets)
 
     # Controls appear on focused OR hovered cell
     for target_idx in (nv.focused_idx, nv.hovered_idx)
-        (target_idx < 1 || target_idx > length(nv.cell_widgets)) && continue
+        (target_idx < 1 || target_idx > n_cells) && continue
 
         vi = Theme.CELL_V_INSET
-        y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset  # inset + border
+        y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset
         for j in 1:target_idx-1
             j_oh = output_height(nv.output_widgets[j])
             y += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
@@ -770,22 +773,22 @@ function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, 
         oh = output_height(nv.output_widgets[target_idx])
         ch = cell_height(nv.cell_widgets[target_idx]; has_output=oh > 0)
 
-        # Eye icon first (highest priority — prevents overshadow by ± when folded)
+        # Eye icon first (highest priority)
         eye_y = y + div(ch, 2)
         if click_y >= eye_y - 1 && click_y <= eye_y + 1
             return (:eye, target_idx)
         end
 
-        # "+" above: icon at y-1, hit zone y-2 to y
-        plus_above_y = y - 1
-        if click_y >= plus_above_y - 1 && click_y <= plus_above_y + 1
-            return (:plus_above, target_idx)
+        # Gap ABOVE this cell — insert at position target_idx
+        gap_above_y = target_idx == 1 ? y - 1 : y - Theme.CELL_GAP + gap_mid
+        if click_y >= gap_above_y - 1 && click_y <= gap_above_y + 1
+            return (:plus_gap, target_idx)
         end
 
-        # "+" below: icon at y+ch+oh, hit zone ±1 row
-        plus_below_y = y + ch + oh
-        if click_y >= plus_below_y - 1 && click_y <= plus_below_y + 1
-            return (:plus_below, target_idx)
+        # Gap BELOW this cell — insert at position target_idx + 1
+        gap_below_y = y + ch + oh + gap_mid
+        if click_y >= gap_below_y - 1 && click_y <= gap_below_y + 1
+            return (:plus_gap, target_idx + 1)
         end
     end
 
@@ -797,20 +800,12 @@ function _handle_margin_click!(app::SessionsApp, hit::Tuple{Symbol, Int})
     action, idx = hit
     nv = app.notebook_view
 
-    if action == :plus_above
-        # Insert cell above the target cell
+    if action == :plus_gap
+        # Insert cell at the gap position (idx = insert position)
         cell = Cell()
         insert_cell!(nv.nb, idx, cell)
         rebuild_widgets!(nv)
         nv.focused_idx = idx
-        update_focus!(nv)
-    elseif action == :plus_below
-        # Insert cell below the target cell
-        pos = idx + 1
-        cell = Cell()
-        insert_cell!(nv.nb, pos, cell)
-        rebuild_widgets!(nv)
-        nv.focused_idx = pos
         update_focus!(nv)
     elseif action == :eye
         cells = ordered_cells(nv.nb)
@@ -860,12 +855,12 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
             return true
         end
 
-        # ▶ run button in gap below cell (right-aligned)
+        # ▶ run button centered in gap below cell (right-aligned)
         # Hit zone: ±1 row, ±2 cols padding
-        gap_y = y + ch + oh
+        run_gap_y = y + ch + oh + div(Theme.CELL_GAP, 2)
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
-        if click_y >= gap_y - 1 && click_y <= gap_y + 1 &&
+        if click_y >= run_gap_y - 1 && click_y <= run_gap_y + 1 &&
            click_x >= run_x - 2 && click_x <= cell_right + 2
             focus_cell!(nv, target_idx)
             run_cell_at_index!(app, target_idx)

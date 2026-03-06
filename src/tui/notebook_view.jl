@@ -13,7 +13,7 @@ mutable struct NotebookView
     scroll_offset::Int
     viewport::Tachikoma.Rect   # stored during render for mouse hit testing
     user_scrolling::Bool       # true when user is manually scrolling (suppress auto-scroll)
-    hovered_control::Symbol    # :none, :plus_above, :plus_below, :eye, :ellipsis, :run
+    hovered_control::Symbol    # :none, :plus_gap, :eye, :ellipsis, :run
     hovered_control_idx::Int   # which cell index the hovered control belongs to
 end
 
@@ -386,6 +386,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     # Right boundary for any content (inside right border)
     content_right = inner_x + inner_w - 1
 
+    n_cells = length(nv.cell_widgets)
+    gap_mid = div(Theme.CELL_GAP, 2)  # center row offset within gap
+
     for i in eachindex(nv.cell_widgets)
         cw = nv.cell_widgets[i]
         ow = nv.output_widgets[i]
@@ -398,24 +401,25 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         cw.hovered = is_hovered && !is_focused
 
-        # --- "+" add-above (in gap row above cell) ---
-        # Skip if previous cell is also showing controls (its "+" below covers the same gap)
+        # --- Gap ABOVE this cell (single "+" centered in gap) ---
+        # Shown when this cell or the previous cell shows controls.
+        # For the first cell, the gap is the top margin area.
         prev_shows = i > 1 && (i - 1 == nv.focused_idx || i - 1 == nv.hovered_idx)
-        if show_controls && !prev_shows
-            plus_above_y = y - 1
-            if plus_above_y >= visible_start && plus_above_y <= visible_end
-                plus_above_hover = nv.hovered_control == :plus_above && nv.hovered_control_idx == i
-                plus_fg = plus_above_hover ? Theme.GREEN : Theme.FG_MUTED
-                Tachikoma.set_string!(buf, margin_x, plus_above_y, " + ",
+        if show_controls || prev_shows
+            # Insert position = i (insert before this cell)
+            gap_center_y = y - Theme.CELL_GAP + gap_mid
+            if i == 1
+                gap_center_y = y - 1  # top margin: just above cell 1
+            end
+            if gap_center_y >= visible_start && gap_center_y <= visible_end
+                plus_hover = nv.hovered_control == :plus_gap && nv.hovered_control_idx == i
+                plus_fg = plus_hover ? Theme.GREEN : Theme.FG_MUTED
+                Tachikoma.set_string!(buf, margin_x, gap_center_y, " + ",
                     Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
             end
         end
 
         # --- Cell rendering ---
-        # Pass full virtual rect so CellWidget draws its border/code at the
-        # correct virtual position. Buffer in_bounds silently clips writes
-        # outside the terminal. The notebook border re-draw after this loop
-        # seals any overflow into the inset/border area.
         if y + ch > visible_start && y <= visible_end
             cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
                             ch - max(0, rect.y - y))
@@ -437,8 +441,6 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         y += ch
 
         # --- Output rendering ---
-        # Pass full virtual rect (same approach as cells) — buffer in_bounds
-        # silently clips writes outside the visible viewport.
         if oh > 0
             if y + oh > visible_start && y <= visible_end
                 out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
@@ -447,14 +449,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             y += oh
         end
 
-        # --- "+" add-below and "▶ Xms" run button (in gap below cell) ---
+        # --- Run button (in gap below cell, right-aligned) ---
         if show_controls
-            gap_y = y
-            if gap_y >= visible_start && gap_y <= visible_end
-                plus_below_hover = nv.hovered_control == :plus_below && nv.hovered_control_idx == i
-                plus_fg = plus_below_hover ? Theme.GREEN : Theme.FG_MUTED
-                Tachikoma.set_string!(buf, margin_x, gap_y, " + ",
-                    Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
+            run_y = y + gap_mid
+            if run_y >= visible_start && run_y <= visible_end
                 run_text = run_button_text(cw.cell)
                 run_hover = nv.hovered_control == :run && nv.hovered_control_idx == i
                 run_style = if run_hover
@@ -463,10 +461,20 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
                     run_button_style(cw.cell, Theme.tick())
                 end
                 run_x = cx + cw_width - length(run_text)
-                # Clamp run button to inner area
                 if run_x >= cx && run_x + length(run_text) - 1 <= content_right
-                    Tachikoma.set_string!(buf, run_x, gap_y, run_text, run_style)
+                    Tachikoma.set_string!(buf, run_x, run_y, run_text, run_style)
                 end
+            end
+        end
+
+        # --- Gap AFTER last cell (single "+" at bottom) ---
+        if i == n_cells && show_controls
+            bot_y = y + gap_mid
+            if bot_y >= visible_start && bot_y <= visible_end
+                plus_hover = nv.hovered_control == :plus_gap && nv.hovered_control_idx == n_cells + 1
+                plus_fg = plus_hover ? Theme.GREEN : Theme.FG_MUTED
+                Tachikoma.set_string!(buf, margin_x, bot_y, " + ",
+                    Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
             end
         end
 
