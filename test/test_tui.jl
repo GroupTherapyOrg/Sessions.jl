@@ -1509,6 +1509,63 @@ using Markdown: @md_str
         rm(path; force=true)
     end
 
+    # --- Cached output dimming (SESSIONS-6022) ---
+
+    @testset "cached stale cell — output renders with text_representation" begin
+        cell = Cell("x = 42")
+        cell.state = cell_done
+        cell.output.output_type = :text
+        cell.output.text_representation = "42"
+        mark_executed!(cell)
+        # Make stale by changing code
+        cell.code = "x = 99"
+        @test is_stale(cell)
+
+        # Output should still render (from text_representation fallback)
+        ow = Sessions.OutputWidget(cell)
+        lines = Sessions.output_lines(cell)
+        @test any(l -> occursin("42", l), lines)  # old cached value
+
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "42") !== nothing
+    end
+
+    @testset "cached clean cell — output renders normally" begin
+        cell = Cell("x = 42")
+        cell.state = cell_done
+        cell.output.output_type = :text
+        cell.output.text_representation = "42"
+        mark_executed!(cell)
+        @test !is_stale(cell)
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "42") !== nothing
+    end
+
+    @testset "never-run cell — no output shown" begin
+        cell = Cell("x = 42")
+        @test cell.state == cell_idle
+
+        ow = Sessions.OutputWidget(cell)
+        @test Sessions.output_height(ow) == 0
+    end
+
+    @testset "stale indicator for cached-stale cell" begin
+        cell = Cell("x = 42")
+        cell.output.output_type = :text
+        cell.output.text_representation = "42"
+        mark_executed!(cell)
+        cell.state = cell_done
+        cell.code = "x = 99"  # stale
+        @test is_stale(cell)
+
+        char, _ = Sessions.state_indicator(cell)
+        @test char == "○"  # hollow circle for stale
+    end
+
     @testset "external change — renders updated cell code after change" begin
         path = tempname() * ".jl"
         nb = Notebook(; path)
