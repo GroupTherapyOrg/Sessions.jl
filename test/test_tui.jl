@@ -113,9 +113,10 @@ using Tachikoma
 
     @testset "StatusBar — bottom bar" begin
         bar = Sessions.make_bottom_bar(; mode=:normal)
-        tb = TestBackend(80, 1)
+        tb = TestBackend(120, 1)
         Tachikoma.render_widget!(tb, bar)
         @test Tachikoma.find_text(tb, "Ctrl+Q") !== nothing
+        @test Tachikoma.find_text(tb, "Save+Run") !== nothing
     end
 
     @testset "NotebookView" begin
@@ -220,6 +221,97 @@ using Tachikoma
 
         Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
         @test app.notebook_view.focused_idx == 3
+    end
+
+    @testset "SessionsApp — run_stale_cells! no stale" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Execute the cell first so it's not stale
+        execute_cell!(app.workspace, nb.cells[nb.cell_order[1]])
+        @test isempty(stale_cells(nb))
+
+        n = Sessions.run_stale_cells!(app)
+        @test n == 0
+    end
+
+    @testset "SessionsApp — run_stale_cells! with stale cell" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x_stale_test = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Execute to establish baseline
+        execute_cell!(app.workspace, c1)
+        @test !is_stale(c1)
+
+        # Edit cell → becomes stale
+        c1.code = "x_stale_test = 999"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+        @test is_stale(c1)
+
+        n = Sessions.run_stale_cells!(app)
+        @test n == 1
+        @test !is_stale(c1)
+        @test c1.state == cell_done
+    end
+
+    @testset "SessionsApp — run_stale_cells! respects dependencies" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "stale_a = 1")
+        c2 = add_cell!(nb, "stale_b = stale_a + 1")
+        c3 = add_cell!(nb, "stale_c = 100")  # independent
+        app = Sessions.SessionsApp(nb)
+
+        # Execute all cells
+        execute_notebook!(nb; workspace=app.workspace)
+        @test c1.state == cell_done
+        @test c2.state == cell_done
+        @test c3.state == cell_done
+
+        # Edit c1 → makes it stale, c2 should re-run as dependent
+        c1.code = "stale_a = 999"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+        @test is_stale(c1)
+        @test !is_stale(c3)  # independent, not stale
+
+        n = Sessions.run_stale_cells!(app)
+        @test n == 1  # only c1 is stale (c2 runs as dependent via execute_changed!)
+        @test c1.state == cell_done
+        @test !is_stale(c1)
+    end
+
+    @testset "SessionsApp — Ctrl+S saves + runs stale" begin
+        nb = Notebook(; path=tempname() * ".jl")
+        c1 = add_cell!(nb, "ctrl_s_x = 42")
+        app = Sessions.SessionsApp(nb)
+
+        # Execute first
+        execute_cell!(app.workspace, c1)
+
+        # Edit cell
+        c1.code = "ctrl_s_x = 99"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+        @test is_stale(c1)
+
+        # Ctrl+S
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+        @test !is_stale(c1)
+        @test contains(app.message, "stale")
+    end
+
+    @testset "SessionsApp — run_stale_cells! with error" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "good_val = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Execute, then make it error
+        execute_cell!(app.workspace, c1)
+        c1.code = "error(\"stale_boom\")"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+
+        Sessions.run_stale_cells!(app)
+        @test c1.state == cell_errored
     end
 
     @testset "SessionsApp — view renders" begin

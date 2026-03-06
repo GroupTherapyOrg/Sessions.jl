@@ -21,7 +21,7 @@ end
 """Create the bottom status bar showing keybindings."""
 function make_bottom_bar(; mode::Symbol=:normal)
     keys = if mode == :normal
-        "Ctrl+Enter: Run  Tab: Next Cell  Ctrl+N: New Cell  Ctrl+S: Save  Ctrl+Q: Quit"
+        "Ctrl+Enter: Run  Tab: Next  Ctrl+N: New  Ctrl+S: Save+Run  Ctrl+A: Run All  Ctrl+Q: Quit"
     elseif mode == :insert
         "Esc: Normal Mode  Ctrl+Enter: Run Cell"
     else

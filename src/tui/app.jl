@@ -57,7 +57,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
-        app.message = "Saved: $(app.nb.path)"
+        n_stale = run_stale_cells!(app)
+        if n_stale > 0
+            app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
+        else
+            app.message = "Saved: $(app.nb.path)"
+        end
         return
     end
 
@@ -122,6 +127,22 @@ function run_focused_cell!(app::SessionsApp)
 
     execute_changed!(app.nb, [cell]; workspace=app.workspace)
     app.message = "Ran cell + dependents"
+end
+
+"""Execute all stale cells in topological order. Returns the count of cells executed."""
+function run_stale_cells!(app::SessionsApp)
+    # Sync all editors first
+    for cw in app.notebook_view.cell_widgets
+        sync_to_cell!(cw)
+    end
+
+    sc = stale_cells(app.nb)
+    isempty(sc) && return 0
+
+    # Use execute_changed! which computes the right topological order
+    # and includes downstream dependents
+    execute_changed!(app.nb, sc; workspace=app.workspace)
+    length(sc)
 end
 
 """Execute all cells in the notebook."""
