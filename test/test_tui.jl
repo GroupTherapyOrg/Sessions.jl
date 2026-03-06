@@ -430,7 +430,7 @@ using Tachikoma
         c1 = add_cell!(nb, "ctrl_enter_val = 77")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '\r'))
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_enter))
         @test contains(app.message, "Executing")
 
         sleep(0.5)

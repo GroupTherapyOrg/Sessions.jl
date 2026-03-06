@@ -20,7 +20,7 @@ using Sessions
         old_stdout = stdout
         rd, wr = redirect_stdout()
         try
-            Sessions.main(["run", "test/fixtures/basic_notebook.jl"])
+            Sessions.main(["run", "test/fixtures/test_basic.jl"])
         finally
             redirect_stdout(old_stdout)
             close(wr)
@@ -34,7 +34,7 @@ using Sessions
         old_stdout = stdout
         rd, wr = redirect_stdout()
         try
-            Sessions.main(["run", "test/fixtures/basic_notebook.jl", "--verbose"])
+            Sessions.main(["run", "test/fixtures/test_basic.jl", "--verbose"])
         finally
             redirect_stdout(old_stdout)
             close(wr)

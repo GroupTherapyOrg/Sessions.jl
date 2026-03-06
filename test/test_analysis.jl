@@ -136,7 +136,7 @@ using UUIDs
     end
 
     @testset "execution_order from loaded notebook" begin
-        nb = load_notebook("test/fixtures/basic_notebook.jl")
+        nb = load_notebook("test/fixtures/test_basic.jl")
         result = Sessions.execution_order(nb)
         @test isempty(result.errable)
         @test length(result.runnable) == 3

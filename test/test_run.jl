@@ -3,7 +3,7 @@ using Sessions
 
 @testset "run.jl" begin
     @testset "Sessions.run with file path" begin
-        nb = Sessions.run("test/fixtures/basic_notebook.jl")
+        nb = Sessions.run("test/fixtures/test_basic.jl")
         @test nb isa Sessions.Notebook
         @test length(nb) == 3
 

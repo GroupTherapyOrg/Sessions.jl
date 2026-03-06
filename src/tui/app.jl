@@ -124,8 +124,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Ctrl+R / Ctrl+Enter / Shift+Enter: run focused cell
-    if (evt.key == :ctrl && evt.char == 'r') || (evt.key == :ctrl && evt.char == '\r') || evt.key == :shift_enter
+    # Run focused cell: Ctrl+R, Shift+Enter, Ctrl+Enter
+    if (evt.key == :ctrl && evt.char == 'r') ||
+       evt.key == :shift_enter || evt.key == :ctrl_enter || evt.key == :shift_ctrl_enter
         run_focused_cell_async!(app)
         return
     end

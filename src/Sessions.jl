@@ -78,4 +78,53 @@ y = x * 2
     end
 end
 
+# ── Monkey-patch: add :shift_enter / :ctrl_enter to Kitty protocol ───
+# Tachikoma v1.0.3 discards shift/ctrl modifiers for Enter (keycode 13).
+# Must live in __init__ because Julia 1.12 forbids method overwriting
+# during precompilation.
+function __init__()
+    @eval function Tachikoma._kitty_keycode_to_event(
+            keycode::Int, shift::Bool, alt::Bool, ctrl::Bool,
+            action::Tachikoma.KeyAction)
+        if ctrl && !alt && keycode == 13
+            return Tachikoma.KeyEvent(shift ? :shift_ctrl_enter : :ctrl_enter, action)
+        end
+        if ctrl && !alt
+            if keycode == Int('c') && !shift
+                return Tachikoma.KeyEvent(:ctrl_c, action)
+            elseif keycode == Int(' ') && !shift
+                return Tachikoma.KeyEvent(:ctrl_space, action)
+            elseif !shift && keycode >= Int('a') && keycode <= Int('z')
+                return Tachikoma.KeyEvent(:ctrl, Char(keycode), action)
+            elseif !shift
+                ctrl_byte = get(Tachikoma._CTRL_KEYCODE_TO_BYTE, keycode, nothing)
+                if ctrl_byte !== nothing
+                    mapped = ctrl_byte == 0x00 ? '\0' : Char(ctrl_byte + 0x60)
+                    return Tachikoma.KeyEvent(:ctrl, mapped, action)
+                end
+            end
+        end
+        if shift && !alt && !ctrl && keycode == 9
+            return Tachikoma.KeyEvent(:backtab, action)
+        end
+        if shift && !ctrl && !alt && keycode == 13
+            return Tachikoma.KeyEvent(:shift_enter, action)
+        end
+        sym = get(Tachikoma.KITTY_FUNCTIONAL_KEYS, keycode, nothing)
+        sym !== nothing && return Tachikoma.KeyEvent(sym, action)
+        keycode == 27  && return Tachikoma.KeyEvent(:escape, action)
+        keycode == 13  && return Tachikoma.KeyEvent(:enter, action)
+        keycode == 9   && return Tachikoma.KeyEvent(:tab, action)
+        keycode == 127 && return Tachikoma.KeyEvent(:backspace, action)
+        if keycode >= 32 && keycode <= 0x10FFFF
+            c = Char(keycode)
+            if shift && !ctrl && !alt
+                c = c >= 'a' && c <= 'z' ? uppercase(c) : get(Tachikoma._SHIFT_SYMBOL_MAP, c, c)
+            end
+            isvalid(c) && return Tachikoma.KeyEvent(:char, c, action)
+        end
+        return Tachikoma.KeyEvent(:unknown, action)
+    end
+end
+
 end # module

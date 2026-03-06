@@ -132,7 +132,7 @@ using UUIDs
     end
 
     @testset "execute_notebook! — loaded fixture" begin
-        nb = load_notebook("test/fixtures/basic_notebook.jl")
+        nb = load_notebook("test/fixtures/test_basic.jl")
         Sessions.execute_notebook!(nb)
 
         cells = ordered_cells(nb)
