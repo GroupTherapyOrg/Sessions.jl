@@ -35,6 +35,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     sidebar_open::Bool         # whether file panel is visible
     sidebar_rect::Tachikoma.Rect   # cached for mouse hit testing
     activity_rect::Tachikoma.Rect  # cached for mouse hit testing
+    progress_recently::Set{UUID}   # cells seen running/queued this execution batch
+    progress_done_tick::Int        # tick when batch completed (0 = not done yet)
 end
 
 function SessionsApp(nb::Notebook)
@@ -44,7 +46,7 @@ function SessionsApp(nb::Notebook)
     fp = FilePanel(dir)
     ab = ActivityBar()
     SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
-        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect())
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0)
 end
 
 function SessionsApp(path::String)
@@ -123,9 +125,73 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Notebook view (main content — fills remaining space)
     Tachikoma.render(app.notebook_view, notebook_rect, buf)
 
+    # Progress bar — overlays notebook pane top border during execution
+    _update_and_render_progress!(app, notebook_rect, buf)
+
     # Cell dropdown overlay
     if app.cell_dropdown !== nothing
         _render_dropdown!(app.cell_dropdown, buf, area)
+    end
+end
+
+"""Update progress tracking state and render the progress bar on the notebook top border."""
+function _update_and_render_progress!(app::SessionsApp, notebook_rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    # Scan cell states — build current active set
+    currently_active = Set{UUID}()
+    for cell in ordered_cells(app.nb)
+        if cell.state == cell_running || cell.state == cell_queued
+            push!(currently_active, cell.id)
+            push!(app.progress_recently, cell.id)
+        end
+    end
+
+    n_active = length(currently_active)
+    n_recent = length(app.progress_recently)
+
+    if n_recent == 0
+        return  # nothing to show
+    end
+
+    if n_active == 0
+        # All done — show green completion bar briefly
+        if app.progress_done_tick == 0
+            app.progress_done_tick = Theme.tick()
+        end
+        elapsed = Theme.tick() - app.progress_done_tick
+        if elapsed > Theme.PROGRESS_HOLD
+            # Fade out — clear tracking
+            empty!(app.progress_recently)
+            app.progress_done_tick = 0
+            return
+        end
+        _render_progress_bar!(buf, notebook_rect, 1.0, true)
+    else
+        # In progress — Pluto's formula: subtract 0.3 for smooth visual
+        app.progress_done_tick = 0
+        progress = 1.0 - max(0, n_active - 0.3) / n_recent
+        _render_progress_bar!(buf, notebook_rect, progress, false)
+    end
+end
+
+"""Render a progress bar on the top border of the notebook pane."""
+function _render_progress_bar!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect, progress::Float64, complete::Bool)
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    bx = rect.x + hi
+    by = rect.y + vi  # top border row
+    bw = max(rect.width - 2 * hi, 3)
+
+    # Bar spans the top border between corners (bx+1 to bx+bw-2)
+    bar_start = bx + 1
+    bar_total = bw - 2
+    bar_total < 1 && return
+    bar_filled = round(Int, bar_total * clamp(progress, 0.0, 1.0))
+
+    fg = complete ? Theme.PROGRESS_DONE_FG : Theme.PROGRESS_FG
+    style = Tachikoma.Style(; fg=fg, bg=Theme.CANVAS_BG)
+
+    for x in bar_start:(bar_start + bar_filled - 1)
+        Tachikoma.set_char!(buf, x, by, '━', style)
     end
 end
 

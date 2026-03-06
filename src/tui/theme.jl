@@ -107,6 +107,14 @@ const S_DONE        = Style(; fg=GREEN)
 const S_DISABLED    = Style(; fg=FG_MUTED)
 
 # ╭──────────────────────────────────────────────────────────────────╮
+# │  Component: Progress Bar (top border of notebook pane)           │
+# ╰──────────────────────────────────────────────────────────────────╯
+
+const PROGRESS_FG       = ACCENT_GLOW    # blue glow while running
+const PROGRESS_DONE_FG  = GREEN_BRIGHT   # green flash on completion
+const PROGRESS_HOLD     = 30             # frames to hold green bar (~1s at 30fps)
+
+# ╭──────────────────────────────────────────────────────────────────╮
 # │  Component: Cell                                                 │
 # ╰──────────────────────────────────────────────────────────────────╯
 

@@ -1,6 +1,7 @@
 using Test
 using Sessions
 using Tachikoma
+using Markdown: @md_str
 
 @testset "tui" begin
     @testset "CellWidget" begin
@@ -881,5 +882,139 @@ using Tachikoma
         # Mouse release should not change focus
         Tachikoma.update!(app, Tachikoma.MouseEvent(40, 6, Tachikoma.mouse_left, Tachikoma.mouse_release, false, false, false))
         @test app.notebook_view.focused_idx == 1
+    end
+
+    @testset "Progress bar — no bar when idle" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # No progress bar when no cells are running
+        @test isempty(app.progress_recently)
+        # Top border should be normal thin lines, no ━
+        nv_vp = app.notebook_view.viewport
+        top_y = nv_vp.y + Sessions.Theme.CELL_V_INSET
+        row = Tachikoma.row_text(tb, top_y)
+        @test !occursin('━', row)
+    end
+
+    @testset "Progress bar — shows when cells queued" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        c3 = add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Mark all cells as queued (simulates run_all_cells_async! pre-mark)
+        c1.state = cell_queued
+        c2.state = cell_queued
+        c3.state = cell_queued
+
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # Progress recently should now contain all 3 cells
+        @test length(app.progress_recently) == 3
+        # Top border should have ━ characters (progress bar)
+        nv_vp = app.notebook_view.viewport
+        top_y = nv_vp.y + Sessions.Theme.CELL_V_INSET
+        row = Tachikoma.row_text(tb, top_y)
+        @test occursin('━', row)
+    end
+
+    @testset "Progress bar — advances as cells complete" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        # Start: both queued
+        c1.state = cell_queued
+        c2.state = cell_queued
+
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+        @test length(app.progress_recently) == 2
+
+        # Count ━ chars at initial state (2 active out of 2)
+        nv_vp = app.notebook_view.viewport
+        top_y = nv_vp.y + Sessions.Theme.CELL_V_INSET
+        row_before = Tachikoma.row_text(tb, top_y)
+        n_before = count(==('━'), row_before)
+
+        # Complete one cell
+        c1.state = cell_done
+        mark_executed!(c1)
+
+        tb2 = TestBackend(80, 24)
+        frame2 = Tachikoma.Frame(tb2.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame2)
+
+        # Should have more ━ chars (more progress)
+        row_after = Tachikoma.row_text(tb2, top_y)
+        n_after = count(==('━'), row_after)
+        @test n_after > n_before
+    end
+
+    @testset "Progress bar — green completion flash" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Simulate execution: queued → done
+        c1.state = cell_queued
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+        @test length(app.progress_recently) == 1
+
+        # Cell completes
+        c1.state = cell_done
+        mark_executed!(c1)
+        tb2 = TestBackend(80, 24)
+        frame2 = Tachikoma.Frame(tb2.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame2)
+
+        # Should show complete bar (progress_done_tick set)
+        @test app.progress_done_tick > 0
+        nv_vp = app.notebook_view.viewport
+        top_y = nv_vp.y + Sessions.Theme.CELL_V_INSET
+        row = Tachikoma.row_text(tb2, top_y)
+        @test occursin('━', row)
+    end
+
+    @testset "Progress bar — clears after hold period" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Simulate execution cycle
+        c1.state = cell_queued
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        c1.state = cell_done
+        mark_executed!(c1)
+        Tachikoma.view(app, Tachikoma.Frame(TestBackend(80,24).buf, Rect(1,1,80,24), [], []))
+
+        # Advance tick past hold period
+        for _ in 1:(Sessions.Theme.PROGRESS_HOLD + 5)
+            Sessions.Theme.advance_tick!()
+        end
+
+        tb3 = TestBackend(80, 24)
+        frame3 = Tachikoma.Frame(tb3.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame3)
+
+        # Progress tracking should be cleared
+        @test isempty(app.progress_recently)
+        @test app.progress_done_tick == 0
     end
 end
