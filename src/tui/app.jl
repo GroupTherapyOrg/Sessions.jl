@@ -47,9 +47,10 @@ Tachikoma.should_quit(app::SessionsApp) = app.quit
 Tachikoma.task_queue(app::SessionsApp) = app.tq
 
 """Enable any-event mouse tracking (1003) for true hover support.
-Tachikoma defaults to 1002 (button-event only), which only tracks move while a button is held."""
+Also loads CommonMark.jl extension for markdown rendering."""
 function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
     print(t.io, "\e[?1003h")  # upgrade to any-event tracking
+    try; Tachikoma.enable_markdown(); catch; end  # load CommonMark extension
 end
 
 function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)

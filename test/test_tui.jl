@@ -685,10 +685,11 @@ using Tachikoma
         @test Sessions.is_stale(cell)
     end
 
-    @testset "MarkdownPane — _markdown_string" begin
+    @testset "MarkdownPane — _md_to_lines" begin
         using Markdown: @md_str
-        s = Sessions._markdown_string(md"# Hello")
-        @test contains(s, "Hello")
+        lines = Sessions._md_to_lines(md"# Hello", 80)
+        texts = join([seg.text for line in lines for seg in line], "")
+        @test contains(texts, "Hello")
     end
 
     # --- PixelImage placeholder tests ---

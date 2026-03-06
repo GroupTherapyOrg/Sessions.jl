@@ -154,36 +154,185 @@ function _make_datatable(value)
     nothing
 end
 
-# --- Markdown rendering ---
+# --- Markdown rendering (custom AST walker for Pluto-like output) ---
+
+import Markdown
+
+"""A styled text segment for rendering."""
+struct MdSegment
+    text::String
+    style::Tachikoma.Style
+end
+
+"""A rendered line of styled segments."""
+const MdLine = Vector{MdSegment}
+
+# Style constructors for markdown elements
+_s_h1()    = Tachikoma.Style(; fg=Theme.FG, bold=true)
+_s_h2()    = Tachikoma.Style(; fg=Theme.FG, bold=true)
+_s_h3()    = Tachikoma.Style(; fg=Theme.FG_DIM, bold=true)
+_s_text()  = Tachikoma.Style(; fg=Theme.FG)
+_s_bold()  = Tachikoma.Style(; fg=Theme.FG, bold=true)
+_s_ital()  = Tachikoma.Style(; fg=Theme.FG, italic=true)
+_s_code()  = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SURFACE_BG)
+_s_link()  = Tachikoma.Style(; fg=Theme.ACCENT, underline=true)
+_s_quote() = Tachikoma.Style(; fg=Theme.FG_DIM, italic=true)
+_s_hr()    = Tachikoma.Style(; fg=Theme.BORDER_DIM)
+_s_dim()   = Tachikoma.Style(; fg=Theme.FG_MUTED)
+
+"""Walk a Markdown.MD AST and produce styled lines for TUI rendering."""
+function _md_to_lines(md::Markdown.MD, width::Int)
+    lines = MdLine[]
+    for block in md.content
+        _render_block!(lines, block, width, 0)
+    end
+    lines
+end
+
+"""Render a block-level markdown element into lines."""
+function _render_block!(lines::Vector{MdLine}, block, width::Int, indent::Int)
+    if block isa Markdown.Header{1}
+        push!(lines, MdLine())  # blank line before
+        segs = MdSegment[]
+        push!(segs, MdSegment(" " ^ indent, _s_text()))
+        _inline_to_segs!(segs, block.text, _s_h1())
+        push!(lines, segs)
+        # Underline
+        text_len = sum(length(s.text) for s in segs)
+        rule_len = min(max(text_len, 20), width - indent)
+        push!(lines, [MdSegment(" " ^ indent * "─" ^ rule_len, _s_dim())])
+        push!(lines, MdLine())  # blank line after
+
+    elseif block isa Markdown.Header{2}
+        push!(lines, MdLine())
+        segs = MdSegment[]
+        push!(segs, MdSegment(" " ^ indent, _s_text()))
+        _inline_to_segs!(segs, block.text, _s_h2())
+        push!(lines, segs)
+        push!(lines, MdLine())
+
+    elseif block isa Markdown.Header
+        push!(lines, MdLine())
+        segs = MdSegment[]
+        push!(segs, MdSegment(" " ^ indent, _s_text()))
+        _inline_to_segs!(segs, block.text, _s_h3())
+        push!(lines, segs)
+        push!(lines, MdLine())
+
+    elseif block isa Markdown.Paragraph
+        segs = MdSegment[]
+        push!(segs, MdSegment(" " ^ indent, _s_text()))
+        _inline_to_segs!(segs, block.content, _s_text())
+        push!(lines, segs)
+        push!(lines, MdLine())  # blank line after paragraph
+
+    elseif block isa Markdown.List
+        for (i, item) in enumerate(block.items)
+            # Bullet or number prefix
+            prefix = if block.ordered == -1
+                "  • "
+            else
+                "  $(block.ordered + i - 1). "
+            end
+            first_line = true
+            for sub in item
+                if sub isa Markdown.Paragraph
+                    segs = MdSegment[]
+                    if first_line
+                        push!(segs, MdSegment(" " ^ indent * prefix, _s_dim()))
+                        first_line = false
+                    else
+                        push!(segs, MdSegment(" " ^ (indent + length(prefix)), _s_text()))
+                    end
+                    _inline_to_segs!(segs, sub.content, _s_text())
+                    push!(lines, segs)
+                else
+                    _render_block!(lines, sub, width, indent + length(prefix))
+                end
+            end
+        end
+        push!(lines, MdLine())  # blank line after list
+
+    elseif block isa Markdown.BlockQuote
+        for sub in block.content
+            if sub isa Markdown.Paragraph
+                segs = MdSegment[]
+                push!(segs, MdSegment(" " ^ indent * "  │ ", _s_dim()))
+                _inline_to_segs!(segs, sub.content, _s_quote())
+                push!(lines, segs)
+            else
+                _render_block!(lines, sub, width, indent + 4)
+            end
+        end
+        push!(lines, MdLine())
+
+    elseif block isa Markdown.HorizontalRule
+        push!(lines, [MdSegment(" " ^ indent * "─" ^ max(width - indent - 4, 10), _s_hr())])
+        push!(lines, MdLine())
+
+    elseif block isa Markdown.Code
+        # Fenced code block
+        for code_line in split(block.code, '\n')
+            push!(lines, [MdSegment(" " ^ (indent + 2) * String(code_line), _s_code())])
+        end
+        push!(lines, MdLine())
+
+    else
+        # Fallback: show as text
+        push!(lines, [MdSegment(" " ^ indent * sprint(show, block), _s_text())])
+    end
+end
+
+"""Convert inline markdown elements to styled segments."""
+function _inline_to_segs!(segs::Vector{MdSegment}, content, default_style::Tachikoma.Style)
+    for item in content
+        if item isa AbstractString
+            push!(segs, MdSegment(item, default_style))
+        elseif item isa Markdown.Bold
+            _inline_to_segs!(segs, item.text, _s_bold())
+        elseif item isa Markdown.Italic
+            _inline_to_segs!(segs, item.text, _s_ital())
+        elseif item isa Markdown.Code
+            push!(segs, MdSegment(item.code, _s_code()))
+        elseif item isa Markdown.Link
+            _inline_to_segs!(segs, item.text, _s_link())
+        elseif item isa Markdown.Image
+            push!(segs, MdSegment("[$(item.alt)]", _s_dim()))
+        elseif item isa Markdown.LineBreak
+            # ignore, handled by line structure
+        else
+            push!(segs, MdSegment(sprint(show, "text/plain", item), default_style))
+        end
+    end
+end
 
 """Height for markdown output."""
 function _markdown_height(cell::Cell)
     result = cell.output.result
     result === nothing && return 0
-    md_str = _markdown_string(result)
-    n_lines = count(==('\n'), md_str) + 1
-    min(n_lines, 15)
+    result isa Markdown.MD || return 0
+    lines = _md_to_lines(result, 80)  # approximate width
+    length(lines)
 end
 
-"""Convert a Markdown.MD to string for rendering."""
-function _markdown_string(value)
-    try
-        sprint(show, MIME"text/markdown"(), value)
-    catch
-        sprint(show, value)
-    end
-end
-
-"""Render markdown output via MarkdownPane."""
+"""Render markdown output — Pluto-style document on canvas bg."""
 function _render_markdown(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     result = cell.output.result
     result === nothing && return
+    result isa Markdown.MD || return
 
-    md_str = _markdown_string(result)
-    mp = Tachikoma.MarkdownPane(md_str;
-        width=max(rect.width - 2, 1),
-        block=Tachikoma.Block(; title="Markdown"))
-    Tachikoma.render(mp, rect, buf)
+    lines = _md_to_lines(result, max(rect.width - 4, 20))
+    text_x = rect.x + 2  # left padding
+
+    for (i, line) in enumerate(lines)
+        row = rect.y + i - 1
+        row > rect.y + rect.height - 1 && break
+        x = text_x
+        for seg in line
+            Tachikoma.set_string!(buf, x, row, seg.text, seg.style)
+            x += length(seg.text)
+        end
+    end
 end
 
 # --- Image placeholder rendering ---
