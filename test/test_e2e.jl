@@ -1301,7 +1301,7 @@ using Markdown: @md_str
         @test c1.output.result == 10
         @test c2.output.result == 20
 
-        # Step 2: Verify .jl.session created with correct hashes
+        # Step 2: Verify .session.toml created with correct hashes
         sp = session_path(path)
         @test isfile(sp)
         session_data = Sessions.load_session(sp)
@@ -1329,7 +1329,7 @@ using Markdown: @md_str
         @test app.nb.cells[c1.id].output.result == 99
         @test !is_stale(app.nb.cells[c1.id])
 
-        # Step 6: Verify .jl.session updated with new hash
+        # Step 6: Verify .session.toml updated with new hash
         session_data2 = Sessions.load_session(sp)
         c1_hash2 = session_data2["cells"][string(c1.id)]["execution_hash"]
         @test c1_hash2 == source_hash(app.nb.cells[c1.id])

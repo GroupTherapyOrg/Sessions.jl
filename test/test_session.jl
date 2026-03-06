@@ -6,9 +6,9 @@ using TOML
 @testset "session.jl" begin
 
     @testset "session_path" begin
-        @test Sessions.session_path("foo.jl") == "foo.jl.session"
-        @test Sessions.session_path("/path/to/notebook.jl") == "/path/to/notebook.jl.session"
-        @test Sessions.session_path("relative/path.jl") == "relative/path.jl.session"
+        @test Sessions.session_path("foo.jl") == "foo.session.toml"
+        @test Sessions.session_path("/path/to/notebook.jl") == "/path/to/notebook.session.toml"
+        @test Sessions.session_path("relative/path.jl") == "relative/path.session.toml"
     end
 
     @testset "truncation" begin
@@ -228,18 +228,18 @@ using TOML
     end
 
     @testset "load_session — missing file returns nothing" begin
-        @test Sessions.load_session("/nonexistent/path.jl.session") === nothing
+        @test Sessions.load_session("/nonexistent/path.session.toml") === nothing
     end
 
     @testset "load_session — corrupt file returns nothing" begin
-        path = tempname() * ".jl.session"
+        path = tempname() * ".session.toml"
         Base.write(path, "this is not valid TOML {{{")
         @test Sessions.load_session(path) === nothing
         rm(path; force=true)
     end
 
     @testset "load_session — future version returns nothing" begin
-        path = tempname() * ".jl.session"
+        path = tempname() * ".session.toml"
         Base.open(path, "w") do io
             TOML.print(io, Dict(
                 "meta" => Dict("version" => 99),
@@ -1119,6 +1119,120 @@ using TOML
         @test c2b.output.text_representation == "25"
         @test !is_stale(c1b)
         @test !is_stale(c2b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    # --- Edge Cases (SESSIONS-6025) ---
+
+    @testset "edge — corrupt session file: TUI opens with idle cells" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "edge_a = 1")
+        save_notebook(nb)
+
+        # Write corrupt session file
+        sp = Sessions.session_path(path)
+        write(sp, "this is {{ not valid TOML")
+
+        nb2 = load_notebook_with_session(path)
+        @test nb2.cells[c1.id].state == cell_idle
+        @test nb2.cells[c1.id].output.text_representation == ""
+
+        rm(path; force=true)
+        rm(sp; force=true)
+    end
+
+    @testset "edge — empty notebook with session file: no crash" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        save_notebook(nb)
+        @test length(nb) == 0
+
+        # Create session file with some orphaned data
+        sp = Sessions.session_path(path)
+        data = Dict(
+            "meta" => Dict("version" => 1, "sessions_version" => "0.1.0",
+                           "notebook_path" => basename(path), "created_at" => "2026-01-01T00:00:00"),
+            "cells" => Dict(string(uuid4()) => Dict(
+                "execution_hash" => "abc", "output_type" => "text",
+                "text_representation" => "42", "stdout" => "",
+                "error_message" => "", "runtime_ns" => 1000,
+                "executed_at" => "2026-01-01T00:00:00"))
+        )
+        open(sp, "w") do io; TOML.print(io, data); end
+
+        nb2 = load_notebook_with_session(path)
+        @test length(nb2) == 0  # no cells, no crash
+
+        rm(path; force=true)
+        rm(sp; force=true)
+    end
+
+    @testset "edge — future version session file: cells show as never-run" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "future_x = 1")
+        save_notebook(nb)
+
+        sp = Sessions.session_path(path)
+        data = Dict(
+            "meta" => Dict("version" => 99, "sessions_version" => "99.0.0",
+                           "notebook_path" => basename(path), "created_at" => "2030-01-01T00:00:00"),
+            "cells" => Dict(string(c1.id) => Dict(
+                "execution_hash" => source_hash(c1), "output_type" => "text",
+                "text_representation" => "1", "stdout" => "",
+                "error_message" => "", "runtime_ns" => 100,
+                "executed_at" => "2030-01-01T00:00:00"))
+        )
+        open(sp, "w") do io; TOML.print(io, data); end
+
+        nb2 = load_notebook_with_session(path)
+        @test nb2.cells[c1.id].state == cell_idle
+        @test nb2.cells[c1.id].output.text_representation == ""
+
+        rm(path; force=true)
+        rm(sp; force=true)
+    end
+
+    @testset "edge — truncated output loads with marker visible" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "trunc_val = 1")
+        save_notebook(nb)
+
+        # Manually set a large text_representation to trigger truncation
+        c1.produced_by_hash = source_hash(c1)
+        c1.state = cell_done
+        c1.output.output_type = :text
+        c1.output.text_representation = repeat("y", 60000)
+        save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+        @test nb2.cells[c1.id].state == cell_done
+        @test contains(nb2.cells[c1.id].output.text_representation, "truncated")
+        @test length(nb2.cells[c1.id].output.text_representation) < 60000
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "edge — session file with only some cells: others remain idle" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "partial_a = 1")
+        c2 = add_cell!(nb, "partial_b = 2")
+        save_notebook(nb)
+
+        # Only execute c1, save session
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+        @test nb2.cells[c1.id].state == cell_done
+        @test nb2.cells[c2.id].state == cell_idle  # never executed
 
         rm(path; force=true)
         rm(Sessions.session_path(path); force=true)
