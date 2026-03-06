@@ -204,6 +204,20 @@ function entry_at_y(fp::FilePanel, screen_y::Int)
     return entry_y + 1
 end
 
+"""Check if a click hit the Open Folder button in the header row."""
+function open_folder_hit(fp::FilePanel, click_x::Int, click_y::Int)
+    vp = fp.viewport
+    vp.width == 0 && return false
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    bx = vp.x + hi
+    bw = max(vp.width - 2 * hi, 3)
+    header_y = vp.y + vi + 1
+    # Button is 3 chars wide " ⊞ " at right side of header
+    btn_x = bx + bw - 4
+    click_y == header_y && click_x >= btn_x && click_x < btn_x + 3
+end
+
 function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     fp.viewport = rect
     rect.width < 4 && return
@@ -248,13 +262,20 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     inner_w = bw - 2
     inner_w < 2 && return
 
-    # ── Header: folder icon + truncated path ──────────────────────────
+    # ── Header: folder icon + truncated path + Open Folder button ─────
     header_y = by + 1
-    path_display = _truncate_path(fp.current_dir, inner_w - 4)
+    # Reserve 4 chars on right for " ⊞ " button
+    btn_w = 3
+    path_max_w = inner_w - 4 - btn_w
+    path_display = _truncate_path(fp.current_dir, path_max_w)
     icon_style = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SIDEBAR_BG)
     path_style = Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.SIDEBAR_BG)
     Tachikoma.set_string!(buf, inner_x + 1, header_y, ICON_FOLDER_OPEN, icon_style)
-    Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, inner_w - 4), path_style)
+    Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, path_max_w), path_style)
+    # Open Folder button (right-aligned in header)
+    btn_x = bx + bw - 4
+    btn_style = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.SIDEBAR_BG)
+    Tachikoma.set_string!(buf, btn_x, header_y, " ⊞ ", btn_style)
 
     # ── Section divider ───────────────────────────────────────────────
     div_y = by + 2

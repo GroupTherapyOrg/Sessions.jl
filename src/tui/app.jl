@@ -143,8 +143,14 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Click on a file entry
+    # Click on a file entry or Open Folder button
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        # Check Open Folder button first
+        if open_folder_hit(fp, evt.x, evt.y)
+            reset_to_folder!(app, fp.current_dir)
+            return
+        end
+
         idx = entry_at_y(fp, evt.y)
         if idx !== nothing
             fp.cursor_idx = idx
@@ -170,6 +176,38 @@ function _open_file!(app::SessionsApp, path::String)
     catch e
         app.message = "Error: $(sprint(showerror, e))"
     end
+end
+
+"""Reset the entire workspace to a new folder. Creates an empty notebook and refreshes the file panel."""
+function reset_to_folder!(app::SessionsApp, dir::String)
+    dir = abspath(dir)
+    isdir(dir) || return
+
+    # Find first .jl file to auto-open, or create empty notebook
+    jl_files = filter(f -> endswith(f, ".jl"), try readdir(dir) catch; String[] end)
+    nb = if !isempty(jl_files)
+        path = joinpath(dir, first(jl_files))
+        try
+            load_notebook(path)
+        catch
+            nb = Notebook(; path=joinpath(dir, "Untitled.jl"))
+            add_cell!(nb, "")
+            nb
+        end
+    else
+        nb = Notebook(; path=joinpath(dir, "Untitled.jl"))
+        add_cell!(nb, "")
+        nb
+    end
+
+    app.nb = nb
+    app.workspace = Workspace()
+    app.notebook_view = NotebookView(nb)
+    app.file_panel = FilePanel(dir)
+    app.undo_buffer = DeletedCell[]
+    app.cell_dropdown = nothing
+    app.mode = :normal
+    app.message = "Opened workspace: $(basename(dir))"
 end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
