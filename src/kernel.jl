@@ -225,8 +225,9 @@ function execute_notebook!(nb::Notebook; workspace::Workspace=Workspace())
         )
     end
 
-    # Execute runnable cells in topological order
+    # Execute runnable cells in topological order (skip disabled)
     for cell in order.runnable
+        cell.disabled && continue
         execute_cell!(workspace, cell)
     end
 
@@ -249,6 +250,7 @@ function execute_changed!(nb::Notebook, changed_cells::Vector{Cell}; workspace::
     end
 
     for cell in order.runnable
+        cell.disabled && continue
         execute_cell!(workspace, cell)
     end
 

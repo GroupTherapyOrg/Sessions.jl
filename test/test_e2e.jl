@@ -309,6 +309,81 @@ using Markdown: @md_str
         @test Sessions.cell_height(cw) == 3  # 1 line + 2 border
     end
 
+    @testset "E2E: Disable cell with Ctrl+E" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "dis_x = 1")
+        c2 = add_cell!(nb, "dis_y = dis_x + 1")
+        app = Sessions.SessionsApp(nb)
+
+        @test !c1.disabled
+
+        # Ctrl+E in normal mode toggles disabled
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'e'))
+        @test c1.disabled
+
+        # Render shows "[disabled]"
+        tb = render_app(app)
+        @test Tachikoma.find_text(tb, "disabled") !== nothing
+
+        # Re-enable
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'e'))
+        @test !c1.disabled
+    end
+
+    @testset "E2E: Disabled cells not executed" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "dis_skip = 42")
+        c2 = add_cell!(nb, "dis_dep = 99")
+        app = Sessions.SessionsApp(nb)
+
+        c1.disabled = true
+        Sessions.run_all_cells!(app)
+
+        # c1 should NOT have been executed (still idle)
+        @test c1.state == cell_idle
+        @test c1.output.result === nothing
+
+        # c2 should have been executed
+        @test c2.state == cell_done
+        @test c2.output.result == 99
+    end
+
+    @testset "E2E: Disabled state indicator" begin
+        cell = Cell("x = 1")
+        @test Sessions.state_indicator(cell)[1] == "◌"  # never-run
+
+        cell.disabled = true
+        char, _ = Sessions.state_indicator(cell)
+        @test char == "⊘"  # disabled
+    end
+
+    @testset "E2E: Ctrl+E does nothing in insert mode" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        app.mode = :insert
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'e'))
+        @test !c1.disabled
+    end
+
+    @testset "E2E: Disabled state preserved in format roundtrip" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "enabled = 1")
+        c2 = add_cell!(nb, "disabled_cell = 2")
+        c2.disabled = true
+
+        save_notebook(nb)
+        nb2 = load_notebook(path)
+        cells = ordered_cells(nb2)
+        @test !cells[1].disabled
+        @test cells[2].disabled
+        @test cells[2].code == "disabled_cell = 2"
+
+        rm(path; force=true)
+    end
+
     @testset "E2E: Ctrl+F does nothing in insert mode" begin
         nb = Notebook()
         c1 = add_cell!(nb, "x = 1")

@@ -34,6 +34,10 @@ end
 - ✗ (red): errored (alternative when stale check isn't primary)
 """
 function state_indicator(cell::Cell)
+    # Disabled cells always show dim indicator
+    if cell.disabled
+        return "⊘", Tachikoma.Style(; fg=Tachikoma.Color256(240))  # dim gray circle-slash
+    end
     # Priority: active states first, then error, then stale/never-run, then done
     if cell.state == cell_running
         return "●", Tachikoma.Style(; fg=Tachikoma.Color256(33))  # blue
@@ -54,8 +58,8 @@ end
 
 """Height needed to render this cell widget (editor only, output separate)."""
 function cell_height(cw::CellWidget)
-    if cw.cell.folded
-        return 3  # block border (2) + 1 line of folded preview
+    if cw.cell.folded || cw.cell.disabled
+        return 3  # block border (2) + 1 line of collapsed preview
     end
     n_lines = count(==('\n'), cw.cell.code) + 1
     n_lines + 2  # +2 for block border
@@ -67,17 +71,20 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     char, style = state_indicator(cw.cell)
     border_style = cw.focused ? Tachikoma.tstyle(:accent) : Tachikoma.Style()
 
-    if cw.cell.folded
+    # Build title suffix
+    suffix = cw.cell.disabled ? " [disabled]" : cw.cell.folded ? " [folded]" : ""
+    title = "$(char) Cell$(suffix)"
+
+    if cw.cell.folded || cw.cell.disabled
         first_line = first(split(cw.cell.code, '\n'; limit=2))
         preview = isempty(first_line) ? "…" : first_line * " …"
-        title = "$(char) Cell [folded]"
-        block = Tachikoma.Block(; title, border_style)
+        dim_style = Tachikoma.Style(; fg=Tachikoma.Color256(240))
+        block = Tachikoma.Block(; title, border_style=cw.cell.disabled ? dim_style : border_style)
         Tachikoma.render(block, rect, buf)
         inner = Tachikoma.Rect(rect.x + 1, rect.y + 1, max(rect.width - 2, 1), max(rect.height - 2, 1))
-        para = Tachikoma.Paragraph([Tachikoma.Span(preview, Tachikoma.Style(; fg=Tachikoma.Color256(245)))])
+        para = Tachikoma.Paragraph([Tachikoma.Span(preview, dim_style)])
         Tachikoma.render(para, inner, buf)
     else
-        title = "$(char) Cell"
         block = Tachikoma.Block(; title, border_style)
         Tachikoma.render(block, rect, buf)
         inner = Tachikoma.Rect(rect.x + 1, rect.y + 1, max(rect.width - 2, 1), max(rect.height - 2, 1))

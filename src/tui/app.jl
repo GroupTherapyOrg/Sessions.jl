@@ -105,6 +105,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Cell disable/enable toggle (normal mode only)
+    if app.mode == :normal && evt.key == :ctrl && evt.char == 'e'
+        cell = focused_cell(app.notebook_view)
+        if cell !== nothing
+            cell.disabled = !cell.disabled
+            rebuild_widgets!(app.notebook_view)
+        end
+        return
+    end
+
     # Navigation between cells
     if app.mode == :normal
         if evt.key == :tab
