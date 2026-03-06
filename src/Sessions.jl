@@ -13,6 +13,7 @@ module Sessions
 # - OrderedCollections (ordered cell storage)
 
 using UUIDs
+import Tachikoma
 
 # Layer 1: Engine
 include("types.jl")
@@ -32,11 +33,11 @@ export Workspace, execute_cell!, execute_notebook!, execute_changed!
 include("run.jl")
 
 # Layer 2: TUI
-# include("tui/app.jl")
-# include("tui/cell_widget.jl")
-# include("tui/output_widget.jl")
-# include("tui/notebook_view.jl")
-# include("tui/status_bar.jl")
+include("tui/cell_widget.jl")
+include("tui/output_widget.jl")
+include("tui/status_bar.jl")
+include("tui/notebook_view.jl")
+include("tui/app.jl")
 
 # Layer 3: CLI
 # include("cli.jl")
