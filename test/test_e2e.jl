@@ -534,6 +534,59 @@ using Markdown: @md_str
         @test length(nb) == 2
         Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
         @test length(nb) == 1
+        # Should store in undo buffer
+        @test length(app.undo_buffer) == 1
+        @test contains(app.message, "undo")
+    end
+
+    @testset "E2E: Undo delete with Ctrl+Z" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "undo_a = 1")
+        c2 = add_cell!(nb, "undo_b = 2")
+        c3 = add_cell!(nb, "undo_c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Delete first cell
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        @test length(nb) == 2
+
+        # Undo — should restore at position 1
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        @test length(nb) == 3
+        @test ordered_cells(nb)[1] === c1
+        @test app.notebook_view.focused_idx == 1
+        @test contains(app.message, "Restored")
+    end
+
+    @testset "E2E: Multiple undo (LIFO)" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "lifo_a = 1")
+        c2 = add_cell!(nb, "lifo_b = 2")
+        c3 = add_cell!(nb, "lifo_c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Delete first cell
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        # Delete next (now first)
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        @test length(nb) == 1
+
+        # Undo twice — LIFO order
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        @test length(nb) == 2
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        @test length(nb) == 3
+    end
+
+    @testset "E2E: Undo with empty buffer is no-op" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        @test isempty(app.undo_buffer)
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        @test length(nb) == 1  # nothing changed
     end
 
     @testset "E2E: Quit with Ctrl+Q" begin

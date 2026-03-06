@@ -2,6 +2,12 @@
 
 const CONTEXT_MENU_ITEMS = ["Run Cell", "Delete Cell", "Fold/Unfold", "Disable/Enable", "Move Up", "Move Down"]
 
+"""A deleted cell with its original position for undo."""
+struct DeletedCell
+    cell::Cell
+    position::Int
+end
+
 """Sessions notebook TUI application model."""
 mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
@@ -12,12 +18,13 @@ mutable struct SessionsApp <: Tachikoma.Model
     quit::Bool
     message::String     # Status message (temporary)
     context_menu::Union{Nothing, Tachikoma.SelectableList}
+    undo_buffer::Vector{DeletedCell}
 end
 
 function SessionsApp(nb::Notebook)
     ws = Workspace()
     nv = NotebookView(nb)
-    SessionsApp(nb, ws, nv, Tachikoma.TaskQueue(), :normal, false, "", nothing)
+    SessionsApp(nb, ws, nv, Tachikoma.TaskQueue(), :normal, false, "", nothing, DeletedCell[])
 end
 
 function SessionsApp(path::String)
@@ -149,7 +156,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             focus_prev!(app.notebook_view)
             return
         elseif evt.key == :ctrl && evt.char == 'd'
-            delete_focused_cell!(app.notebook_view)
+            delete_focused_cell_with_undo!(app)
+            return
+        elseif evt.key == :ctrl && evt.char == 'z'
+            undo_delete!(app)
             return
         elseif evt.key == :enter || evt.key == :char && evt.char == 'i'
             app.mode = :insert
@@ -308,6 +318,30 @@ function new(path::String="Untitled.jl")
     open(nb)
 end
 
+"""Delete focused cell and store in undo buffer."""
+function delete_focused_cell_with_undo!(app::SessionsApp)
+    nv = app.notebook_view
+    length(nv.cell_widgets) <= 1 && return
+    cell = focused_cell(nv)
+    cell === nothing && return
+    pos = nv.focused_idx
+    push!(app.undo_buffer, DeletedCell(cell, pos))
+    delete_focused_cell!(nv)
+    app.message = "Deleted cell (Ctrl+Z to undo)"
+end
+
+"""Undo last cell deletion."""
+function undo_delete!(app::SessionsApp)
+    isempty(app.undo_buffer) && return
+    dc = pop!(app.undo_buffer)
+    pos = min(dc.position, length(app.nb) + 1)
+    insert_cell!(app.nb, pos, dc.cell)
+    rebuild_widgets!(app.notebook_view)
+    app.notebook_view.focused_idx = pos
+    update_focus!(app.notebook_view)
+    app.message = "Restored cell"
+end
+
 """Open the cell context menu."""
 function open_context_menu!(app::SessionsApp)
     block = Tachikoma.Block(; title="Cell Actions")
@@ -353,7 +387,7 @@ function execute_context_action!(app::SessionsApp, idx::Int)
     if action == "Run Cell"
         run_focused_cell!(app)
     elseif action == "Delete Cell"
-        delete_focused_cell!(app.notebook_view)
+        delete_focused_cell_with_undo!(app)
     elseif action == "Fold/Unfold"
         cell = focused_cell(app.notebook_view)
         if cell !== nothing
