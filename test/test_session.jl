@@ -204,4 +204,212 @@ using TOML
 
         rm(Sessions.session_path(path); force=true)
     end
+
+    # --- load_session tests ---
+
+    @testset "load_session — valid file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 42")
+        mark_executed!(c1)
+        c1.state = cell_done
+        c1.output.output_type = :text
+        c1.output.text_representation = "42"
+        c1.output.runtime_ns = UInt64(5000)
+
+        Sessions.save_session!(nb)
+        data = Sessions.load_session(Sessions.session_path(path))
+
+        @test data !== nothing
+        @test data["meta"]["version"] == 1
+        @test haskey(data["cells"], string(c1.id))
+
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_session — missing file returns nothing" begin
+        @test Sessions.load_session("/nonexistent/path.jl.session") === nothing
+    end
+
+    @testset "load_session — corrupt file returns nothing" begin
+        path = tempname() * ".jl.session"
+        Base.write(path, "this is not valid TOML {{{")
+        @test Sessions.load_session(path) === nothing
+        rm(path; force=true)
+    end
+
+    @testset "load_session — future version returns nothing" begin
+        path = tempname() * ".jl.session"
+        Base.open(path, "w") do io
+            TOML.print(io, Dict(
+                "meta" => Dict("version" => 99),
+                "cells" => Dict()
+            ))
+        end
+        @test Sessions.load_session(path) === nothing
+        rm(path; force=true)
+    end
+
+    # --- apply_session! tests ---
+
+    @testset "apply_session! — sets produced_by_hash and output" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "x = 42")
+
+        hash = source_hash(c1)
+        session_data = Dict(
+            "meta" => Dict("version" => 1),
+            "cells" => Dict(string(c1.id) => Dict(
+                "execution_hash" => hash,
+                "output_type" => "text",
+                "text_representation" => "42",
+                "stdout" => "",
+                "error_message" => "",
+                "runtime_ns" => 5000,
+                "executed_at" => "2026-03-06T12:00:00"
+            ))
+        )
+
+        Sessions.apply_session!(nb, session_data)
+        @test c1.produced_by_hash == hash
+        @test c1.output.output_type == :text
+        @test c1.output.text_representation == "42"
+        @test c1.output.runtime_ns == UInt64(5000)
+        @test c1.state == cell_done
+        @test !is_stale(c1)
+    end
+
+    @testset "apply_session! — detects stale cell (hash mismatch)" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "x = 99")
+
+        session_data = Dict(
+            "meta" => Dict("version" => 1),
+            "cells" => Dict(string(c1.id) => Dict(
+                "execution_hash" => "old_hash_from_different_code",
+                "output_type" => "text",
+                "text_representation" => "42",
+                "stdout" => "",
+                "error_message" => "",
+                "runtime_ns" => 5000,
+                "executed_at" => "2026-03-06T12:00:00"
+            ))
+        )
+
+        Sessions.apply_session!(nb, session_data)
+        @test c1.produced_by_hash == "old_hash_from_different_code"
+        @test is_stale(c1)
+        @test c1.output.text_representation == "42"
+    end
+
+    @testset "apply_session! — ignores cells not in notebook" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "x = 1")
+
+        orphan_id = uuid4()
+        session_data = Dict(
+            "meta" => Dict("version" => 1),
+            "cells" => Dict(
+                string(c1.id) => Dict(
+                    "execution_hash" => source_hash(c1),
+                    "output_type" => "text",
+                    "text_representation" => "1",
+                    "stdout" => "",
+                    "error_message" => "",
+                    "runtime_ns" => 100,
+                    "executed_at" => "2026-03-06T12:00:00"
+                ),
+                string(orphan_id) => Dict(
+                    "execution_hash" => "orphan",
+                    "output_type" => "text",
+                    "text_representation" => "orphan",
+                    "stdout" => "",
+                    "error_message" => "",
+                    "runtime_ns" => 100,
+                    "executed_at" => "2026-03-06T12:00:00"
+                )
+            )
+        )
+
+        Sessions.apply_session!(nb, session_data)
+        @test c1.produced_by_hash == source_hash(c1)
+        @test c1.state == cell_done
+    end
+
+    @testset "apply_session! — cells not in session stay idle" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = 2")
+
+        session_data = Dict(
+            "meta" => Dict("version" => 1),
+            "cells" => Dict(string(c1.id) => Dict(
+                "execution_hash" => source_hash(c1),
+                "output_type" => "text",
+                "text_representation" => "1",
+                "stdout" => "",
+                "error_message" => "",
+                "runtime_ns" => 100,
+                "executed_at" => "2026-03-06T12:00:00"
+            ))
+        )
+
+        Sessions.apply_session!(nb, session_data)
+        @test c1.state == cell_done
+        @test c2.state == cell_idle
+        @test c2.produced_by_hash == ""
+    end
+
+    @testset "apply_session! — error cell restoration" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "error(\"boom\")")
+
+        session_data = Dict(
+            "meta" => Dict("version" => 1),
+            "cells" => Dict(string(c1.id) => Dict(
+                "execution_hash" => source_hash(c1),
+                "output_type" => "error",
+                "text_representation" => "boom",
+                "stdout" => "",
+                "error_message" => "boom",
+                "runtime_ns" => 200,
+                "executed_at" => "2026-03-06T12:00:00"
+            ))
+        )
+
+        Sessions.apply_session!(nb, session_data)
+        @test c1.state == cell_errored
+        @test c1.output.output_type == :error
+        @test c1.output.error !== nothing
+        @test c1.output.error.ex isa ErrorException
+    end
+
+    @testset "apply_session! — nothing input is no-op" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "x = 1")
+
+        Sessions.apply_session!(nb, nothing)
+        @test c1.state == cell_idle
+    end
+
+    @testset "apply_session! — stdout preservation" begin
+        nb = Notebook(; path="test.jl")
+        c1 = add_cell!(nb, "println(\"hi\")")
+
+        session_data = Dict(
+            "meta" => Dict("version" => 1),
+            "cells" => Dict(string(c1.id) => Dict(
+                "execution_hash" => source_hash(c1),
+                "output_type" => "text",
+                "text_representation" => "nothing",
+                "stdout" => "hi\n",
+                "error_message" => "",
+                "runtime_ns" => 300,
+                "executed_at" => "2026-03-06T12:00:00"
+            ))
+        )
+
+        Sessions.apply_session!(nb, session_data)
+        @test c1.output.stdout == "hi\n"
+    end
 end

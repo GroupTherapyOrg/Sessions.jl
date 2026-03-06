@@ -64,3 +64,54 @@ function save_session!(nb::Notebook)
     mv(tmp, path; force=true)
     path
 end
+
+"""Load session data from a .jl.session file.
+Returns the parsed Dict, or nothing if the file is missing, corrupt, or unsupported version."""
+function load_session(path::String)
+    isfile(path) || return nothing
+    try
+        data = TOML.parsefile(path)
+        meta = get(data, "meta", Dict())
+        version = get(meta, "version", 0)
+        if version > SESSION_VERSION
+            @warn "Unknown session file version $version, ignoring" path
+            return nothing
+        end
+        return data
+    catch e
+        @warn "Failed to load session file" path exception=e
+        return nothing
+    end
+end
+
+"""Apply cached session data to a notebook, populating cell outputs and state.
+Matches cells by UUID. Cells not in session data are left unchanged."""
+function apply_session!(nb::Notebook, session_data)
+    session_data === nothing && return
+    cells_data = get(session_data, "cells", Dict())
+
+    for (id_str, cell_data) in cells_data
+        id = UUID(id_str)
+        cell = get(nb.cells, id, nothing)
+        cell === nothing && continue  # cell no longer in notebook
+
+        exec_hash = get(cell_data, "execution_hash", "")
+        cell.produced_by_hash = exec_hash
+
+        cell.output.output_type = Symbol(get(cell_data, "output_type", "nothing"))
+        cell.output.text_representation = get(cell_data, "text_representation", "")
+        cell.output.stdout = get(cell_data, "stdout", "")
+        cell.output.runtime_ns = UInt64(get(cell_data, "runtime_ns", 0))
+
+        # Determine cell state from hash comparison
+        if exec_hash == ""
+            cell.state = cell_idle
+        elseif cell.output.output_type == :error
+            cell.state = cell_errored
+            err_msg = get(cell_data, "error_message", "")
+            cell.output.error = CapturedException(ErrorException(err_msg), backtrace())
+        else
+            cell.state = cell_done
+        end
+    end
+end
