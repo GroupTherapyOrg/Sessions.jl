@@ -1344,4 +1344,77 @@ using Markdown: @md_str
         Sessions._start_watcher!(app)
         @test app.watcher === nothing
     end
+
+    # --- Save-during-watch guard (SESSIONS-6020) ---
+
+    @testset "last_save_time — initially zero" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+        @test app.last_save_time == 0.0
+    end
+
+    @testset "Ctrl+S sets last_save_time" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "save_guard = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        @test app.last_save_time == 0.0
+
+        before = time()
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+        after = time()
+
+        @test app.last_save_time >= before
+        @test app.last_save_time <= after
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "save guard — own save skips reload" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "guard_x = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        app.message = ""
+
+        # Simulate: we just saved (set last_save_time to now)
+        app.last_save_time = time()
+
+        # External change handler should skip (within tolerance)
+        Sessions._on_external_change!(app)
+        @test app.message == ""  # no "changed externally" message
+
+        rm(path; force=true)
+    end
+
+    @testset "save guard — agent edit after tolerance IS detected" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "agent_after = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+
+        # Set last_save_time in the past (beyond tolerance)
+        app.last_save_time = time() - 2.0
+
+        # Agent edits on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "agent_after = 999"
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+
+        @test app.nb.cells[c1.id].code == "agent_after = 999"
+        @test contains(app.message, "changed externally")
+
+        rm(path; force=true)
+    end
 end

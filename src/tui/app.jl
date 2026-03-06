@@ -39,6 +39,7 @@ mutable struct SessionsApp <: Tachikoma.Model
     progress_done_tick::Int        # tick when batch completed (0 = not done yet)
     last_disk_nb::Union{Notebook, Nothing}  # snapshot of notebook as last loaded/saved from disk
     watcher::Union{DebouncedWatcher, Nothing}  # file watcher for external changes
+    last_save_time::Float64  # time() of last save_notebook by us (for skip-reload guard)
 end
 
 function SessionsApp(nb::Notebook)
@@ -49,7 +50,7 @@ function SessionsApp(nb::Notebook)
     ab = ActivityBar()
     snapshot = deepcopy(nb)
     SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
-        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing)
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0)
 end
 
 function SessionsApp(path::String)
@@ -86,8 +87,16 @@ function _start_watcher!(app::SessionsApp)
 end
 
 """Handle external file change: smart merge + rebuild widgets."""
+const SAVE_GUARD_TOLERANCE = 1.0  # seconds — skip reload if file changed within this window after our save
+
 function _on_external_change!(app::SessionsApp)
     app.last_disk_nb === nothing && return
+
+    # Skip reload if we just saved the file ourselves
+    if app.last_save_time > 0.0 && (time() - app.last_save_time) < SAVE_GUARD_TOLERANCE
+        return
+    end
+
     try
         diff = merge_external_changes!(app.nb, app.last_disk_nb)
         app.last_disk_nb = deepcopy(app.nb)
@@ -368,6 +377,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     # Ctrl+S: save + run stale
     if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
+        app.last_save_time = time()
         app.last_disk_nb = deepcopy(app.nb)
         n_stale = run_stale_cells!(app)
         if n_stale > 0
