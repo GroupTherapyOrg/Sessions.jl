@@ -85,11 +85,36 @@ y = x * 2
     end
 end
 
-# ── Monkey-patch: add :shift_enter / :ctrl_enter to Kitty protocol ───
-# Tachikoma v1.0.3 discards shift/ctrl modifiers for Enter (keycode 13).
+# ── Monkey-patch: Kitty protocol extensions ───
+# 1. Add :shift_enter / :ctrl_enter (Tachikoma v1.0.3 discards modifiers for Enter)
+# 2. Treat super (Cmd) as ctrl so Cmd+S → Ctrl+S on macOS
 # Must live in __init__ because Julia 1.12 forbids method overwriting
 # during precompilation.
 function __init__()
+    # Patch parse_kitty_key to fold super (Cmd, bit 8) into ctrl
+    @eval function Tachikoma.parse_kitty_key(params::Vector{UInt8})
+        str = String(copy(params))
+        parts = Base.split(str, ';')
+        keycode_parts = Base.split(parts[1], ':')
+        keycode = tryparse(Int, keycode_parts[1])
+        keycode === nothing && return Tachikoma.KeyEvent(:unknown)
+        shifted_keycode = length(keycode_parts) >= 2 ? tryparse(Int, keycode_parts[2]) : nothing
+        raw_mod = 1; event_type = 1
+        if length(parts) >= 2
+            mod_parts = Base.split(parts[2], ':')
+            !isempty(mod_parts[1]) && (raw_mod = something(tryparse(Int, mod_parts[1]), 1))
+            length(mod_parts) >= 2 && (event_type = something(tryparse(Int, mod_parts[2]), 1))
+        end
+        mod_bits = raw_mod - 1
+        shift = (mod_bits & 1) != 0
+        alt   = (mod_bits & 2) != 0
+        ctrl  = (mod_bits & 4) != 0 || (mod_bits & 8) != 0  # super (Cmd) → ctrl
+        action = event_type == 2 ? Tachikoma.key_repeat : event_type == 3 ? Tachikoma.key_release : Tachikoma.key_press
+        effective_keycode = (shift && shifted_keycode !== nothing && shifted_keycode > 0) ?
+                            shifted_keycode : keycode
+        return Tachikoma._kitty_keycode_to_event(effective_keycode, shift, alt, ctrl, action)
+    end
+
     @eval function Tachikoma._kitty_keycode_to_event(
             keycode::Int, shift::Bool, alt::Bool, ctrl::Bool,
             action::Tachikoma.KeyAction)

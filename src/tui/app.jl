@@ -435,7 +435,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     # --- Essential keybindings only (everything else is mouse-driven) ---
 
     # Ctrl+Q: quit
-    if (evt.key == :ctrl || evt.key == :alt) && evt.char == 'q'
+    if evt.key == :ctrl && evt.char == 'q'
         if app.watcher !== nothing
             stop_watching!(app.watcher)
             app.watcher = nothing
@@ -444,8 +444,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Ctrl+S / Cmd+S: save + run stale (alt+s covers macOS terminals mapping Cmd→Alt)
-    if (evt.key == :ctrl || evt.key == :alt) && evt.char == 's'
+    # Ctrl+S / Cmd+S: save + run stale
+    if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
         app.last_save_time = time()
         app.last_disk_nb = _snapshot_notebook(app.nb)
@@ -459,7 +459,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     end
 
     # Run focused cell: Ctrl+R, Shift+Enter, Ctrl+Enter
-    if ((evt.key == :ctrl || evt.key == :alt) && evt.char == 'r') ||
+    if (evt.key == :ctrl && evt.char == 'r') ||
        evt.key == :shift_enter || evt.key == :ctrl_enter || evt.key == :shift_ctrl_enter
         run_focused_cell_async!(app)
         return
