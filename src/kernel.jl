@@ -1,5 +1,56 @@
 # Layer 1: Kernel — Cell execution with workspace isolation and output capture
 
+using Markdown: Markdown
+
+"""
+Classify a cell's return value into an output type for TUI rendering.
+Returns a Symbol: :nothing, :error, :markdown, :dataframe, :image_png, or :text.
+"""
+function classify_output(value)::Symbol
+    value === nothing && return :nothing
+    value isa Markdown.MD && return :markdown
+    # Check for Tables.jl-compatible tabular data (duck typing)
+    try
+        mod = parentmodule(typeof(value))
+        if isdefined(mod, :Tables) || _has_table_interface(value)
+            return :dataframe
+        end
+    catch; end
+    # Check for image/png MIME support (plots)
+    if hasmethod(show, Tuple{IO, MIME"image/png", typeof(value)})
+        return :image_png
+    end
+    return :text
+end
+
+"""Check if a value looks like tabular data (duck typing without Tables.jl dependency)."""
+function _has_table_interface(value)
+    # Common table-like types: Vector{<:NamedTuple}, Matrix, etc.
+    value isa AbstractVector{<:NamedTuple} && return true
+    # Check if Tables module is loaded and value is a table
+    tables_mod = get(Base.loaded_modules, Base.PkgId(Base.UUID("bd369af6-aec1-5ad0-b16a-f7cc5008161c"), "Tables"), nothing)
+    if tables_mod !== nothing
+        try
+            return tables_mod.istable(value)
+        catch; end
+    end
+    false
+end
+
+"""Generate a text representation of any value for fallback display."""
+function text_representation(value)::String
+    value === nothing && return ""
+    try
+        sprint(show, MIME"text/plain"(), value; context=:limit => true)
+    catch
+        try
+            sprint(show, value)
+        catch
+            repr(value)
+        end
+    end
+end
+
 """
 The Workspace holds all cell-evaluated state in a dedicated module.
 Each notebook gets its own workspace module so variables don't leak.
@@ -53,9 +104,15 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     cell.output.error = err
     cell.output.runtime_ns = t_end - t_start
 
-    cell.state = err === nothing ? cell_done : cell_errored
     if err === nothing
+        cell.output.output_type = classify_output(result)
+        cell.output.text_representation = text_representation(result)
+        cell.state = cell_done
         mark_executed!(cell)
+    else
+        cell.output.output_type = :error
+        cell.output.text_representation = sprint(showerror, err.ex)
+        cell.state = cell_errored
     end
     cell.output
 end

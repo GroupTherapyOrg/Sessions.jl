@@ -11,13 +11,15 @@ end
 
 """Captured output from a cell execution."""
 mutable struct CellOutput
-    result::Any                        # Return value of the cell
+    result::Any                        # Return value of the cell (actual Julia object)
     stdout::String                     # Captured stdout
     error::Union{Nothing, CapturedException}  # Exception + backtrace if errored
     runtime_ns::UInt64                 # Execution time in nanoseconds
+    output_type::Symbol                # :text, :nothing, :error, :markdown, :dataframe, :image_png
+    text_representation::String        # Fallback text rendering for any output type
 end
 
-CellOutput() = CellOutput(nothing, "", nothing, UInt64(0))
+CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "")
 
 """A single notebook cell."""
 mutable struct Cell

@@ -6,6 +6,7 @@ authors = ["TherapeuticJulia"]
 [deps]
 ExpressionExplorer = "21656369-7473-754a-2065-74616d696c43"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PlutoDependencyExplorer = "72656b73-756c-7461-726b-72656b6b696b"
 Tachikoma = "468859d6-42d8-48b7-8ad9-1d312e0e3b0a"
@@ -13,6 +14,7 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [compat]
 ExpressionExplorer = "1"
+Markdown = "1.11.0"
 OrderedCollections = "1"
 PlutoDependencyExplorer = "1"
 Tachikoma = "1"

@@ -30,6 +30,7 @@ export analyze_cell, cell_definitions, cell_references, build_topology, executio
 
 include("kernel.jl")
 export Workspace, execute_cell!, execute_notebook!, execute_changed!
+export classify_output, text_representation
 
 include("run.jl")
 
