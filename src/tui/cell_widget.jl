@@ -173,14 +173,19 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     end
 
     # Border is drawn INSET from the fill — horizontal padding visible on sides.
+    # IMPORTANT: never exceed the given rect (cells are clipped at viewport edges).
     hi = Theme.CELL_H_INSET
     vi = Theme.CELL_V_INSET
-    border_rect = Tachikoma.Rect(rect.x + hi, rect.y + vi,
-                      max(rect.width - 2 * hi, 3), max(rect.height - 2 * vi, 3))
+    border_w = rect.width - 2 * hi
+    border_h = rect.height - 2 * vi
+    (border_w < 2 || border_h < 2) && return
+    border_rect = Tachikoma.Rect(rect.x + hi, rect.y + vi, border_w, border_h)
 
     hp = Theme.CELL_H_PAD
-    inner = Tachikoma.Rect(border_rect.x + 1 + hp, border_rect.y + 1,
-                max(border_rect.width - 2 - 2 * hp, 1), max(border_rect.height - 2, 1))
+    inner_w = border_w - 2 - 2 * hp
+    inner_h = border_h - 2
+    (inner_w < 1 || inner_h < 1) && return
+    inner = Tachikoma.Rect(border_rect.x + 1 + hp, border_rect.y + 1, inner_w, inner_h)
 
     dirty = is_dirty(cw)
 
