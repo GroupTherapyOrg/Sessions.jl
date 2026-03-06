@@ -1930,4 +1930,69 @@ using Markdown: @md_str
 
         rm(path; force=true)
     end
+
+    # --- Dirty cell detection ---
+
+    @testset "is_dirty — clean cell" begin
+        cell = Cell("x = 1")
+        cw = Sessions.CellWidget(cell)
+        @test !Sessions.is_dirty(cw)
+    end
+
+    @testset "is_dirty — after editor edit" begin
+        cell = Cell("x = 1")
+        cw = Sessions.CellWidget(cell)
+        Tachikoma.set_text!(cw.editor, "x = 2")
+        # Editor changed but cell.code not synced
+        @test Sessions.is_dirty(cw)
+    end
+
+    @testset "is_dirty — after sync clears dirty" begin
+        cell = Cell("x = 1")
+        cw = Sessions.CellWidget(cell)
+        Tachikoma.set_text!(cw.editor, "x = 2")
+        @test Sessions.is_dirty(cw)
+        Sessions.sync_to_cell!(cw)
+        @test !Sessions.is_dirty(cw)
+    end
+
+    @testset "dirty cell — orange border renders" begin
+        cell = Cell("x = 1")
+        cw = Sessions.CellWidget(cell; focused=false)
+        Tachikoma.set_text!(cw.editor, "x = 999")
+        # Don't sync — cell is dirty
+
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, cw)
+        # Cell code should render (from editor)
+        @test Tachikoma.find_text(tb, "x = 999") !== nothing
+    end
+
+    # --- File panel auto-refresh ---
+
+    @testset "FilePanel — auto-refresh on tick interval" begin
+        dir = mktempdir()
+        fp = Sessions.FilePanel(dir)
+        initial_count = length(fp.entries)
+
+        # Create a new file
+        touch(joinpath(dir, "new_file.txt"))
+
+        # Before refresh interval — no change
+        @test length(fp.entries) == initial_count
+
+        # Advance past refresh interval and render
+        for _ in 1:(Sessions.FILE_PANEL_REFRESH_INTERVAL + 1)
+            Sessions.Theme.advance_tick!()
+        end
+
+        tb = TestBackend(30, 20)
+        Tachikoma.render_widget!(tb, fp)
+
+        # After render with tick past interval — should pick up new file
+        @test length(fp.entries) == initial_count + 1
+        @test any(e -> e.name == "new_file.txt", fp.entries)
+
+        rm(dir; recursive=true)
+    end
 end

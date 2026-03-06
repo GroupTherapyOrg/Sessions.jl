@@ -23,12 +23,13 @@ mutable struct FilePanel
     picker_entries::Vector{FileEntry}
     picker_cursor::Int
     picker_scroll::Int
+    last_refresh_tick::Int  # tick when entries were last refreshed
 end
 
 function FilePanel(dir::String=".")
     dir = abspath(dir)
     fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false,
-                   false, homedir(), FileEntry[], 1, 0)
+                   false, homedir(), FileEntry[], 1, 0, 0)
     refresh_entries!(fp)
     fp
 end
@@ -290,10 +291,19 @@ function entry_at_y(fp::FilePanel, screen_y::Int)
 end
 
 
+const FILE_PANEL_REFRESH_INTERVAL = 60  # ticks between auto-refreshes (~2s at 30fps)
+
 function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     fp.viewport = rect
     rect.width < 4 && return
     rect.height < 4 && return
+
+    # Auto-refresh entries periodically to pick up filesystem changes
+    tick = Theme.tick()
+    if tick - fp.last_refresh_tick >= FILE_PANEL_REFRESH_INTERVAL
+        fp.last_refresh_tick = tick
+        refresh_entries!(fp)
+    end
 
     if fp.picker_mode
         _render_picker!(fp, rect, buf)

@@ -127,6 +127,7 @@ cell_border_disabled(bg=CANVAS_BG) = Style(; fg=FG_MUTED, bg)
 cell_border_selected(bg=CANVAS_BG) = Style(; fg=CYAN, bg)
 cell_border_default(bg=CANVAS_BG)  = Style(; fg=BORDER_DIM, bg)
 
+const DIRTY_BORDER_FG  = ColorRGB(0x9e, 0x6e, 0x3a)   # subtle warm orange for unsaved edits
 const SHIMMER_INTENSITY = 0.25
 const CELL_H_INSET     = 1       # horizontal padding between fill edge and border (cols)
 const CELL_V_INSET     = 0       # vertical padding between fill edge and border (rows)

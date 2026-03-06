@@ -27,6 +27,9 @@ function sync_from_cell!(cw::CellWidget)
     Tachikoma.set_text!(cw.editor, cw.cell.code)
 end
 
+"""Check if editor text differs from cell code (unsaved edits)."""
+is_dirty(cw::CellWidget) = Tachikoma.text(cw.editor) != cw.cell.code
+
 """State indicator character and style for a cell."""
 function state_indicator(cell::Cell)
     if cell.disabled
@@ -179,14 +182,18 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     inner = Tachikoma.Rect(border_rect.x + 1 + hp, border_rect.y + 1,
                 max(border_rect.width - 2 - 2 * hp, 1), max(border_rect.height - 2, 1))
 
+    dirty = is_dirty(cw)
+
     if cw.focused && !cw.cell.disabled
-        _shimmer_border_with_bg!(buf, border_rect, Theme.ACCENT, surface_bg, tick;
+        border_color = dirty ? Theme.ORANGE : Theme.ACCENT
+        _shimmer_border_with_bg!(buf, border_rect, border_color, surface_bg, tick;
             box=Theme.BOX, intensity=Theme.SHIMMER_INTENSITY)
         _render_code!(cw, inner, buf, surface_bg)
         _render_ellipsis_button!(border_rect, buf)
 
     elseif cw.hovered && !cw.cell.disabled
-        _draw_rounded_border!(buf, border_rect, Theme.BORDER_BRIGHT, surface_bg)
+        border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_BRIGHT
+        _draw_rounded_border!(buf, border_rect, border_color, surface_bg)
         _render_code!(cw, inner, buf, surface_bg)
         _render_ellipsis_button!(border_rect, buf)
 
@@ -196,6 +203,10 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
 
     elseif cw.selected
         _draw_rounded_border!(buf, border_rect, Theme.CYAN, surface_bg)
+        _render_code!(cw, inner, buf, surface_bg)
+
+    elseif dirty
+        _draw_rounded_border!(buf, border_rect, Theme.DIRTY_BORDER_FG, surface_bg)
         _render_code!(cw, inner, buf, surface_bg)
 
     else
