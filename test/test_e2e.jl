@@ -26,20 +26,17 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         tb = render_app(app)
-        @test Tachikoma.find_text(tb, "e2e_test.jl") !== nothing
         @test Tachikoma.find_text(tb, "x = 1") !== nothing
         @test Tachikoma.find_text(tb, "y = x + 1") !== nothing
         @test Tachikoma.find_text(tb, "z = x * y") !== nothing
-        @test Tachikoma.find_text(tb, "0/3 cells") !== nothing
     end
 
-    @testset "E2E: Status bar shows keybindings" begin
+    @testset "E2E: App renders without errors" begin
         nb = Notebook(; path="e2e.jl")
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
-        @test find_in_render(app, "Ctrl+Q")
-        @test find_in_render(app, "Run")
+        @test find_in_render(app, "x = 1")
     end
 
     @testset "E2E: Navigate between cells" begin
@@ -100,9 +97,10 @@ using Markdown: @md_str
         @test c2.output.result == 15
         @test c3.output.result == 150
 
-        # Status bar should show all done (clear message first)
-        app.message = ""
-        @test find_in_render(app, "3/3 cells")
+        # All cells executed successfully
+        @test c1.state == cell_done
+        @test c2.state == cell_done
+        @test c3.state == cell_done
     end
 
     @testset "E2E: Stale detection after edit" begin
@@ -1252,8 +1250,8 @@ using Markdown: @md_str
         Sessions.run_all_cells!(app)
         @test c1.output.result == 10
         @test c2.output.result == 20
-        app.message = ""
-        @test find_in_render(app, "2/2 cells")
+        @test c1.state == cell_done
+        @test c2.state == cell_done
 
         # 3. Edit cell 1
         c1.code = "workflow_x = 100"

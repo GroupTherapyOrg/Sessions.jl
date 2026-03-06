@@ -73,22 +73,9 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
 
-    # Vertical: top bar | gap | content | gap | bottom bar
-    v_layout = Tachikoma.Layout(Tachikoma.Vertical,
-        [Tachikoma.Fixed(1), Tachikoma.Fixed(g), Tachikoma.Fill(),
-         Tachikoma.Fixed(g), Tachikoma.Fixed(1)])
-    v_rects = Tachikoma.split_layout(v_layout, area)
-    top_rect = v_rects[1]
-    content_rect = v_rects[3]
-    bottom_rect = v_rects[5]
-
-    # Top status bar
-    top_bar = make_top_bar(app.nb)
-    if !isempty(app.message)
-        top_bar = Tachikoma.StatusBar(; left=[Tachikoma.Span(app.message,
-            Tachikoma.Style(; fg=Theme.ORANGE, bold=true))])
-    end
-    Tachikoma.render(top_bar, top_rect, buf)
+    # Inset content by the same gap on all edges (uniform padding from terminal edge)
+    content_rect = Tachikoma.Rect(area.x + g, area.y + g,
+        max(1, area.width - 2 * g), max(1, area.height - 2 * g))
 
     # Horizontal layout: activity bar | gap | [file panel | gap] | notebook
     ab_w = Theme.ACTIVITY_BAR_W
@@ -135,10 +122,6 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
 
     # Notebook view (main content — fills remaining space)
     Tachikoma.render(app.notebook_view, notebook_rect, buf)
-
-    # Bottom keybindings bar
-    bottom_bar = make_bottom_bar(; mode=app.mode)
-    Tachikoma.render(bottom_bar, bottom_rect, buf)
 
     # Cell dropdown overlay
     if app.cell_dropdown !== nothing

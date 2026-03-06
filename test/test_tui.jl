@@ -362,11 +362,11 @@ using Tachikoma
         frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
         Tachikoma.view(app, frame)
 
-        # Check that content was rendered into the buffer
+        # Check that cell content was rendered into the buffer
         found = false
         for r in 1:24
             text = Tachikoma.row_text(tb, r)
-            if occursin("test_view.jl", text)
+            if occursin("x = 1", text)
                 found = true
                 break
             end
