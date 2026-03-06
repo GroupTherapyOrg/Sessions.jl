@@ -454,7 +454,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
                 Tachikoma.set_string!(buf, margin_x, gap_y, " + ",
                     Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
                 run_text = run_button_text(cw.cell)
-                run_style = run_button_style(cw.cell, Theme.tick())
+                run_hover = nv.hovered_control == :run && nv.hovered_control_idx == i
+                run_style = if run_hover
+                    Tachikoma.Style(; fg=Theme.GREEN_BRIGHT, bg=Theme.RUN_BG, bold=true)
+                else
+                    run_button_style(cw.cell, Theme.tick())
+                end
                 run_x = cx + cw_width - length(run_text)
                 # Clamp run button to inner area
                 if run_x >= cx && run_x + length(run_text) - 1 <= content_right

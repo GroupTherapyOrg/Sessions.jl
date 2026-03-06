@@ -24,6 +24,7 @@ mutable struct ConfirmDialog
     title::String
     message::String
     on_confirm::Function    # called if user clicks Yes
+    selected::Symbol        # :no or :yes — which button has keyboard focus
     yes_hovered::Bool
     no_hovered::Bool
 end
@@ -404,9 +405,22 @@ end
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     app.message = ""  # Clear status message on any key
 
-    # Confirm dialog mode — Escape or any key closes it (No by default)
+    # Confirm dialog mode — arrow keys navigate, Enter submits, Escape dismisses
     if app.mode == :confirm && app.confirm_dialog !== nothing
-        close_confirm!(app)
+        cd = app.confirm_dialog
+        if evt.key == :escape
+            close_confirm!(app)
+        elseif evt.key == :left || evt.key == :right
+            cd.selected = cd.selected == :no ? :yes : :no
+        elseif evt.key == :enter
+            if cd.selected == :yes
+                cd.on_confirm()
+            end
+            close_confirm!(app)
+        else
+            # Any other key = dismiss (No)
+            close_confirm!(app)
+        end
         return
     end
 
@@ -680,7 +694,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             end
 
             # Detect ellipsis button hover
-            _update_ellipsis_hover!(nv, evt.x, evt.y, cell_right)
+            _update_cell_control_hover!(nv, evt.x, evt.y, cell_right)
         else
             nv.hovered_idx = 0
             nv.hovered_control = :none
@@ -690,8 +704,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
 end
 
-"""Update ellipsis_hovered on the appropriate cell widget during mouse move."""
-function _update_ellipsis_hover!(nv::NotebookView, mx::Int, my::Int, cell_right::Int)
+"""Update ellipsis and run button hover states during mouse move."""
+function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_right::Int)
     vp = nv.viewport
     hi = Theme.CELL_H_INSET
     vi = Theme.CELL_V_INSET
@@ -709,11 +723,26 @@ function _update_ellipsis_hover!(nv::NotebookView, mx::Int, my::Int, cell_right:
             y += Theme.CELL_GAP
         end
 
+        oh = output_height(nv.output_widgets[target_idx])
+        ch = cell_height(cw; has_output=oh > 0)
+
+        # Ellipsis button hover
         ellipsis_y = y + vi + 1
         ellipsis_x_start = border_right - 4
         if my >= ellipsis_y - 1 && my <= ellipsis_y + 1 &&
            mx >= ellipsis_x_start - 2 && mx <= border_right
             cw.ellipsis_hovered = true
+            return
+        end
+
+        # Run button hover (in gap below cell+output)
+        gap_y = y + ch + oh
+        run_text = run_button_text(cw.cell)
+        run_x = cell_right - length(run_text)
+        if my >= gap_y - 1 && my <= gap_y + 1 &&
+           mx >= run_x - 2 && mx <= cell_right + 2
+            nv.hovered_control = :run
+            nv.hovered_control_idx = target_idx
             return
         end
     end
@@ -1075,7 +1104,7 @@ function _open_confirm_delete!(app::SessionsApp, cell_idx::Int)
         () -> begin
             delete_focused_cell_with_undo!(app)
         end,
-        false, false)
+        :no, false, false)
     app.mode = :confirm
 end
 
@@ -1222,15 +1251,19 @@ function _render_confirm_dialog!(cd::ConfirmDialog, buf::Tachikoma.Buffer, area:
     no_x = r.x + 2
     yes_x = r.x + r.w - length(CONFIRM_BTN_YES) - 2
 
-    # No button (highlighted as default)
-    no_bg = cd.no_hovered ? Theme.DROPDOWN_HOVER_BG : Theme.ACCENT
-    no_fg = cd.no_hovered ? Theme.DROPDOWN_HOVER_FG : bg
-    Tachikoma.set_string!(buf, no_x, btn_y, CONFIRM_BTN_NO,
-        Tachikoma.Style(; fg=no_fg, bg=no_bg, bold=true))
+    # Button states: keyboard selection OR mouse hover activates the highlight
+    no_active = cd.selected == :no || cd.no_hovered
+    yes_active = cd.selected == :yes || cd.yes_hovered
 
-    # Yes button (subdued unless hovered — turns red on hover for danger)
-    yes_bg = cd.yes_hovered ? Theme.RED : Theme.ELEVATED_BG
-    yes_fg = cd.yes_hovered ? Theme.FG : Theme.FG_DIM
+    # No button — blue when active
+    no_bg = no_active ? Theme.ACCENT : Theme.ELEVATED_BG
+    no_fg = no_active ? bg : Theme.FG_DIM
+    Tachikoma.set_string!(buf, no_x, btn_y, CONFIRM_BTN_NO,
+        Tachikoma.Style(; fg=no_fg, bg=no_bg, bold=no_active))
+
+    # Yes button — red when active (danger)
+    yes_bg = yes_active ? Theme.RED : Theme.ELEVATED_BG
+    yes_fg = yes_active ? Theme.FG : Theme.FG_DIM
     Tachikoma.set_string!(buf, yes_x, btn_y, CONFIRM_BTN_YES,
-        Tachikoma.Style(; fg=yes_fg, bg=yes_bg, bold=cd.yes_hovered))
+        Tachikoma.Style(; fg=yes_fg, bg=yes_bg, bold=yes_active))
 end
