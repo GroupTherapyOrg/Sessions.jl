@@ -1,20 +1,23 @@
 # TUI: Main application — SessionsApp Model/update!/view
 
+const CONTEXT_MENU_ITEMS = ["Run Cell", "Delete Cell", "Fold/Unfold", "Disable/Enable", "Move Up", "Move Down"]
+
 """Sessions notebook TUI application model."""
 mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
     workspace::Workspace
     notebook_view::NotebookView
     tq::Tachikoma.TaskQueue
-    mode::Symbol        # :normal or :insert
+    mode::Symbol        # :normal, :insert, or :context_menu
     quit::Bool
     message::String     # Status message (temporary)
+    context_menu::Union{Nothing, Tachikoma.SelectableList}
 end
 
 function SessionsApp(nb::Notebook)
     ws = Workspace()
     nv = NotebookView(nb)
-    SessionsApp(nb, ws, nv, Tachikoma.TaskQueue(), :normal, false, "")
+    SessionsApp(nb, ws, nv, Tachikoma.TaskQueue(), :normal, false, "", nothing)
 end
 
 function SessionsApp(path::String)
@@ -46,10 +49,26 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Bottom keybindings bar
     bottom_bar = make_bottom_bar(; mode=app.mode)
     Tachikoma.render(bottom_bar, rects[3], frame.buffer)
+
+    # Context menu overlay
+    if app.context_menu !== nothing
+        menu_w = 22
+        menu_h = length(CONTEXT_MENU_ITEMS) + 2  # +2 for border
+        menu_x = max(1, div(area.width - menu_w, 2) + area.x)
+        menu_y = max(1, div(area.height - menu_h, 2) + area.y)
+        menu_rect = Tachikoma.Rect(menu_x, menu_y, menu_w, menu_h)
+        Tachikoma.render(app.context_menu, menu_rect, frame.buffer)
+    end
 end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     app.message = ""  # Clear status message on any key
+
+    # Context menu mode — intercept all keys
+    if app.mode == :context_menu && app.context_menu !== nothing
+        handle_context_menu_key!(app, evt)
+        return
+    end
 
     # Global keybindings (always active)
     if evt.key == :ctrl && evt.char == 'q'
@@ -112,6 +131,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             cell.disabled = !cell.disabled
             rebuild_widgets!(app.notebook_view)
         end
+        return
+    end
+
+    # Context menu trigger (normal mode only)
+    if app.mode == :normal && evt.key == :char && evt.char == '.'
+        open_context_menu!(app)
         return
     end
 
@@ -281,4 +306,69 @@ function new(path::String="Untitled.jl")
     nb = Notebook(; path)
     add_cell!(nb, "")
     open(nb)
+end
+
+"""Open the cell context menu."""
+function open_context_menu!(app::SessionsApp)
+    block = Tachikoma.Block(; title="Cell Actions")
+    app.context_menu = Tachikoma.SelectableList(CONTEXT_MENU_ITEMS; block, focused=true)
+    app.mode = :context_menu
+end
+
+"""Close the context menu."""
+function close_context_menu!(app::SessionsApp)
+    app.context_menu = nothing
+    app.mode = :normal
+end
+
+"""Handle key events in context menu mode."""
+function handle_context_menu_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
+    menu = app.context_menu
+
+    if evt.key == :escape
+        close_context_menu!(app)
+        return
+    end
+
+    if evt.key == :up
+        menu.selected = max(1, menu.selected - 1)
+        return
+    end
+
+    if evt.key == :down
+        menu.selected = min(length(CONTEXT_MENU_ITEMS), menu.selected + 1)
+        return
+    end
+
+    if evt.key == :enter
+        execute_context_action!(app, menu.selected)
+        close_context_menu!(app)
+        return
+    end
+end
+
+"""Execute a context menu action by index."""
+function execute_context_action!(app::SessionsApp, idx::Int)
+    action = CONTEXT_MENU_ITEMS[idx]
+    if action == "Run Cell"
+        run_focused_cell!(app)
+    elseif action == "Delete Cell"
+        delete_focused_cell!(app.notebook_view)
+    elseif action == "Fold/Unfold"
+        cell = focused_cell(app.notebook_view)
+        if cell !== nothing
+            cell.folded = !cell.folded
+            rebuild_widgets!(app.notebook_view)
+        end
+    elseif action == "Disable/Enable"
+        cell = focused_cell(app.notebook_view)
+        if cell !== nothing
+            cell.disabled = !cell.disabled
+            rebuild_widgets!(app.notebook_view)
+        end
+    elseif action == "Move Up"
+        move_cell_up!(app.notebook_view)
+    elseif action == "Move Down"
+        move_cell_down!(app.notebook_view)
+    end
 end

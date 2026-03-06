@@ -409,6 +409,122 @@ using Markdown: @md_str
         rm(path; force=true)
     end
 
+    @testset "E2E: Context menu — open and close" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        @test app.mode == :normal
+        @test app.context_menu === nothing
+
+        # '.' opens context menu
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        @test app.mode == :context_menu
+        @test app.context_menu !== nothing
+
+        # Escape closes it
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
+        @test app.mode == :normal
+        @test app.context_menu === nothing
+    end
+
+    @testset "E2E: Context menu — navigate and render" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        @test app.context_menu.selected == 1
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
+        @test app.context_menu.selected == 2
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:up))
+        @test app.context_menu.selected == 1
+
+        # Can't go above 1
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:up))
+        @test app.context_menu.selected == 1
+
+        # Render shows menu items
+        tb = render_app(app)
+        @test Tachikoma.find_text(tb, "Run Cell") !== nothing
+        @test Tachikoma.find_text(tb, "Delete Cell") !== nothing
+        @test Tachikoma.find_text(tb, "Move Up") !== nothing
+    end
+
+    @testset "E2E: Context menu — Run Cell action" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "ctx_run = 42")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        # "Run Cell" is item 1 — select and enter
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+
+        @test app.mode == :normal
+        @test c1.state == cell_done
+        @test c1.output.result == 42
+    end
+
+    @testset "E2E: Context menu — Delete Cell action" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+        @test length(nb) == 2
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        # Navigate to "Delete Cell" (item 2)
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+
+        @test app.mode == :normal
+        @test length(nb) == 1
+    end
+
+    @testset "E2E: Context menu — Fold action" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        # Navigate to "Fold/Unfold" (item 3)
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+
+        @test c1.folded
+        @test app.mode == :normal
+    end
+
+    @testset "E2E: Context menu — Disable action" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        # Navigate to "Disable/Enable" (item 4)
+        for _ in 1:3
+            Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
+        end
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+
+        @test c1.disabled
+        @test app.mode == :normal
+    end
+
+    @testset "E2E: Context menu — does not open in insert mode" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+        app.mode = :insert
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
+        @test app.mode == :insert  # stayed in insert
+        @test app.context_menu === nothing
+    end
+
     @testset "E2E: Delete cell with Ctrl+D" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")
