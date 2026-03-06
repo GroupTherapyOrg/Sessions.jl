@@ -9,6 +9,7 @@ end
 const ACTIVITY_BUTTONS = [
     ActivityButton("⊟", :explorer),
     ActivityButton("⊞", :open_folder),
+    ActivityButton("⊳", :terminal),
 ]
 
 mutable struct ActivityBar
@@ -83,10 +84,11 @@ function Tachikoma.render(ab::ActivityBar, rect::Tachikoma.Rect, buf::Tachikoma.
         is_active = (btn.id == ab.active)
         is_hovered = (btn.id == ab.hovered)
 
-        # Active indicator — accent bar on left edge
+        # Active indicator — accent bar on left edge (green for terminal, blue for others)
         if is_active
+            indicator_fg = btn.id == :terminal ? Theme.REPL_INDICATOR : Theme.ACTIVITY_INDICATOR
             Tachikoma.set_char!(buf, bx, btn_y,
-                '▎', Tachikoma.Style(; fg=Theme.ACTIVITY_INDICATOR, bg=Theme.ACTIVITY_BG))
+                '▎', Tachikoma.Style(; fg=indicator_fg, bg=Theme.ACTIVITY_BG))
         end
 
         # Icon — glow on hover, bright when active

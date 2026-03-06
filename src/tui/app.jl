@@ -57,6 +57,10 @@ mutable struct SessionsApp <: Tachikoma.Model
     active_tab_idx::Int
     tab_rects::Vector{Tachikoma.Rect}    # cached for mouse hit testing
     close_rects::Vector{Tachikoma.Rect}  # cached for × button hit testing
+    # REPL panel
+    repl_panel::ReplPanel
+    repl_open::Bool                       # whether REPL panel is visible
+    repl_rect::Tachikoma.Rect            # cached for mouse hit testing
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -148,6 +152,44 @@ function _sync_file_panel_cursor!(app::SessionsApp)
             return
         end
     end
+end
+
+"""Toggle the REPL panel open/closed. Spawns Julia subprocess on first open."""
+function _toggle_repl!(app::SessionsApp)
+    app.repl_open = !app.repl_open
+    if app.repl_open
+        # Spawn REPL if not already running
+        if !app.repl_panel.alive
+            dir = isempty(app.nb.path) ? pwd() : dirname(abspath(app.nb.path))
+            spawn_repl!(app.repl_panel, dir)
+        end
+        # Focus the REPL
+        app.mode = :repl
+        app.repl_panel.focused = true
+        # Activity bar indicator
+        if app.activity_bar.active != :terminal
+            app.activity_bar.active = :terminal
+        end
+    else
+        # Unfocus REPL, return to normal mode
+        if app.mode == :repl
+            app.mode = :normal
+        end
+        app.repl_panel.focused = false
+    end
+end
+
+"""Quit the app, cleaning up all resources."""
+function _quit_app!(app::SessionsApp)
+    for tab in app.tabs
+        if tab.watcher !== nothing
+            stop_watching!(tab.watcher)
+            tab.watcher = nothing
+        end
+    end
+    app.watcher = nothing
+    stop_repl!(app.repl_panel)
+    app.quit = true
 end
 
 """Switch to a different tab by index."""
@@ -264,7 +306,8 @@ function SessionsApp(nb::Notebook)
     SessionsApp(nb, ws, nv, nothing, :notebook, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
         false, 0, false, 0,
-        [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[])
+        [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
+        ReplPanel(), false, Tachikoma.Rect())
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -282,7 +325,8 @@ function SessionsApp(fev::FileEditorView)
     SessionsApp(nb, ws, nv, fev, :file, fp, ab, Tachikoma.TaskQueue(), :insert, false, "", nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
         false, 0, false, 0,
-        [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[])
+        [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
+        ReplPanel(), false, Tachikoma.Rect())
 end
 
 function SessionsApp(path::String)
@@ -427,6 +471,25 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     else
         app.tab_rects = Tachikoma.Rect[]
         app.close_rects = Tachikoma.Rect[]
+    end
+
+    # ── REPL panel (bottom split of editor area) ──
+    if app.repl_open
+        repl_h = max(5, div(editor_rect.height * Theme.REPL_PCT, 100))
+        main_h = max(3, editor_rect.height - repl_h - 1)  # -1 for gap
+        main_rect = Tachikoma.Rect(editor_rect.x, editor_rect.y,
+            editor_rect.width, main_h)
+        repl_rect = Tachikoma.Rect(editor_rect.x, editor_rect.y + main_h + 1,
+            editor_rect.width, repl_h)
+        app.repl_rect = repl_rect
+
+        # Update REPL focus state
+        app.repl_panel.focused = (app.mode == :repl)
+
+        Tachikoma.render(app.repl_panel, repl_rect, buf)
+        editor_rect = main_rect
+    else
+        app.repl_rect = Tachikoma.Rect()
     end
 
     if app.editor_type == :file && app.file_editor_view !== nothing
@@ -711,6 +774,29 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # --- REPL mode: forward keys to REPL panel ---
+    if app.mode == :repl && app.repl_open
+        # Ctrl+Q still quits
+        if evt.key == :ctrl && evt.char == 'q'
+            _quit_app!(app)
+            return
+        end
+        # Escape exits REPL focus back to normal mode
+        if evt.key == :escape && app.repl_panel.repl_mode == :julia
+            app.mode = :normal
+            app.repl_panel.focused = false
+            return
+        end
+        # Ctrl+` toggles REPL off
+        if evt.key == :ctrl && evt.char == '`'
+            _toggle_repl!(app)
+            return
+        end
+        # Forward to REPL
+        handle_repl_key!(app.repl_panel, evt)
+        return
+    end
+
     # --- File editor mode: route keys to CodeEditor ---
     if app.editor_type == :file && app.file_editor_view !== nothing
         _handle_file_editor_key!(app, evt)
@@ -718,6 +804,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     end
 
     # --- Essential keybindings only (everything else is mouse-driven) ---
+
+    # Ctrl+` or backtick: toggle REPL panel
+    if evt.key == :ctrl && evt.char == '`'
+        _toggle_repl!(app)
+        return
+    end
 
     # Ctrl+W: close current tab (when multiple tabs open)
     if evt.key == :ctrl && evt.char == 'w'
@@ -729,15 +821,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # Ctrl+Q: quit (always)
     if evt.key == :ctrl && evt.char == 'q'
-        # Stop all tab watchers
-        for tab in app.tabs
-            if tab.watcher !== nothing
-                stop_watching!(tab.watcher)
-                tab.watcher = nothing
-            end
-        end
-        app.watcher = nothing
-        app.quit = true
+        _quit_app!(app)
         return
     end
 
@@ -747,14 +831,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     #   insert → copy text selection (or current line if no selection)
     if evt.key == :ctrl && evt.char == 'c'
         if app.mode == :panel
-            for tab in app.tabs
-                if tab.watcher !== nothing
-                    stop_watching!(tab.watcher)
-                    tab.watcher = nothing
-                end
-            end
-            app.watcher = nothing
-            app.quit = true
+            _quit_app!(app)
             return
         elseif app.mode == :insert
             cw = focused_widget(app.notebook_view)
@@ -926,6 +1003,25 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         end
     end
 
+    # ── REPL panel clicks ──
+    rr = app.repl_rect
+    if app.repl_open && rr.width > 0 &&
+       evt.x >= rr.x && evt.x < rr.x + rr.width &&
+       evt.y >= rr.y && evt.y < rr.y + rr.height
+        # Scroll
+        if evt.button == Tachikoma.mouse_scroll_up || evt.button == Tachikoma.mouse_scroll_down
+            handle_repl_scroll!(app.repl_panel, evt)
+            return
+        end
+        # Click to focus
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            app.mode = :repl
+            app.repl_panel.focused = true
+            return
+        end
+        return
+    end
+
     # Activity bar clicks — toggle sidebar / open folder picker
     ar = app.activity_rect
     if ar.width > 0 && evt.x >= ar.x && evt.x < ar.x + ar.width &&
@@ -949,6 +1045,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                     app.activity_bar.active = :open_folder
                     app.sidebar_open = true
                 end
+            elseif btn_id == :terminal
+                _toggle_repl!(app)
             end
         elseif evt.action == Tachikoma.mouse_move
             app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)
@@ -1113,6 +1211,11 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         evt.y >= nb_vp.y && evt.y < nb_vp.y + nb_vp.height
 
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press && in_notebook
+        # Exit REPL focus when clicking in notebook
+        if app.mode == :repl
+            app.mode = :normal
+            app.repl_panel.focused = false
+        end
         # Shift+click: range selection (enter normal mode)
         if evt.shift
             idx = cell_at_y(nv, evt.y)

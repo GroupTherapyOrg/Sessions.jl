@@ -224,4 +224,22 @@ const SIDEBAR_BORDER_FG = BORDER_DIM
 const S_SIDEBAR         = Style(; fg=FG_DIM, bg=SIDEBAR_BG)
 const S_SIDEBAR_HEADER  = Style(; fg=FG, bg=SIDEBAR_BG, bold=true)
 
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  Component: REPL Panel (integrated Julia terminal)             │
+# ╰──────────────────────────────────────────────────────────────────╯
+
+const REPL_BG           = ColorRGB(0x0e, 0x0e, 0x12)   # slightly darker than canvas
+const REPL_BORDER_FG    = BORDER_DIM
+const REPL_PROMPT_FG    = GREEN                          # julia> prompt color
+const REPL_PKG_FG       = ACCENT                         # pkg> prompt color
+const REPL_HELP_FG      = ORANGE                         # help?> prompt color
+const REPL_SHELL_FG     = RED                            # shell> prompt color
+const REPL_INPUT_FG     = FG                             # user input text
+const REPL_CURSOR_BG    = CURSOR_BG                      # cursor highlight
+const REPL_INDICATOR    = GREEN                          # activity bar indicator (green)
+const REPL_PCT          = 25                              # default % of vertical space
+
+const S_REPL            = Style(; fg=FG_DIM, bg=REPL_BG)
+const S_REPL_INPUT      = Style(; fg=FG, bg=REPL_BG)
+
 end # module Theme
