@@ -1,0 +1,14 @@
+[meta]
+sessions_version = "2.0.0-dev"
+notebook_path = "test_verbose.jl"
+created_at = "2026-03-06T04:24:08"
+version = 1
+
+[cells.f550e085-7007-422c-b106-4cff06fa2567]
+stdout = ""
+text_representation = "42"
+output_type = "text"
+runtime_ns = 228750
+execution_hash = "bed3e44685af6012"
+error_message = ""
+executed_at = "2026-03-06T04:24:08"
