@@ -226,9 +226,16 @@ function execute_notebook!(nb::Notebook; workspace::Workspace=Workspace())
         )
     end
 
+    # Mark all runnable cells as queued so TUI can show them waiting
+    for cell in order.runnable
+        cell.disabled && continue
+        cell.state = cell_queued
+    end
+
     # Execute runnable cells in topological order (skip disabled)
     for cell in order.runnable
         cell.disabled && continue
+        yield()  # let render loop draw queued/running states
         execute_cell!(workspace, cell)
     end
 
@@ -250,8 +257,15 @@ function execute_changed!(nb::Notebook, changed_cells::Vector{Cell}; workspace::
         )
     end
 
+    # Mark all runnable cells as queued so TUI can show them waiting
     for cell in order.runnable
         cell.disabled && continue
+        cell.state = cell_queued
+    end
+
+    for cell in order.runnable
+        cell.disabled && continue
+        yield()  # let render loop draw queued/running states
         execute_cell!(workspace, cell)
     end
 
