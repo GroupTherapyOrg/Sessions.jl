@@ -25,13 +25,16 @@ mutable struct SessionsApp <: Tachikoma.Model
     workspace::Workspace
     notebook_view::NotebookView
     file_panel::FilePanel
+    activity_bar::ActivityBar
     tq::Tachikoma.TaskQueue
     mode::Symbol        # :normal, :insert, or :dropdown
     quit::Bool
     message::String     # Status message (temporary)
     cell_dropdown::Union{Nothing, CellDropdown}
     undo_buffer::Vector{DeletedCell}
+    sidebar_open::Bool         # whether file panel is visible
     sidebar_rect::Tachikoma.Rect   # cached for mouse hit testing
+    activity_rect::Tachikoma.Rect  # cached for mouse hit testing
 end
 
 function SessionsApp(nb::Notebook)
@@ -39,8 +42,9 @@ function SessionsApp(nb::Notebook)
     nv = NotebookView(nb)
     dir = isempty(nb.path) ? pwd() : dirname(abspath(nb.path))
     fp = FilePanel(dir)
-    SessionsApp(nb, ws, nv, fp, Tachikoma.TaskQueue(), :normal, false, "", nothing,
-        DeletedCell[], Tachikoma.Rect())
+    ab = ActivityBar()
+    SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect())
 end
 
 function SessionsApp(path::String)
@@ -62,16 +66,21 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     Theme.advance_tick!()
     area = frame.area
     buf = frame.buffer
+    g = Theme.ISLAND_GAP
 
-    # Fill entire screen with canvas bg
+    # Fill entire screen with pure black background — islands float on top
     for fy in area.y:(area.y + area.height - 1)
-        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_CANVAS)
+        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
 
-    # Vertical: top bar | content | bottom bar
+    # Vertical: top bar | gap | content | gap | bottom bar
     v_layout = Tachikoma.Layout(Tachikoma.Vertical,
-        [Tachikoma.Fixed(1), Tachikoma.Fill(), Tachikoma.Fixed(1)])
+        [Tachikoma.Fixed(1), Tachikoma.Fixed(g), Tachikoma.Fill(),
+         Tachikoma.Fixed(g), Tachikoma.Fixed(1)])
     v_rects = Tachikoma.split_layout(v_layout, area)
+    top_rect = v_rects[1]
+    content_rect = v_rects[3]
+    bottom_rect = v_rects[5]
 
     # Top status bar
     top_bar = make_top_bar(app.nb)
@@ -79,30 +88,51 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         top_bar = Tachikoma.StatusBar(; left=[Tachikoma.Span(app.message,
             Tachikoma.Style(; fg=Theme.ORANGE, bold=true))])
     end
-    Tachikoma.render(top_bar, v_rects[1], buf)
+    Tachikoma.render(top_bar, top_rect, buf)
 
-    # Horizontal: sidebar | notebook pane
-    h_layout = Tachikoma.Layout(Tachikoma.Horizontal,
-        [Tachikoma.Percent(Theme.SIDEBAR_PCT), Tachikoma.Fill()])
-    h_rects = Tachikoma.split_layout(h_layout, v_rects[2])
-    sidebar_rect = h_rects[1]
-    notebook_rect = h_rects[2]
+    # Horizontal layout: activity bar | gap | [file panel | gap] | notebook
+    ab_w = Theme.ACTIVITY_BAR_W
+    if app.sidebar_open
+        h_layout = Tachikoma.Layout(Tachikoma.Horizontal,
+            [Tachikoma.Fixed(ab_w), Tachikoma.Fixed(g),
+             Tachikoma.Percent(Theme.SIDEBAR_PCT), Tachikoma.Fixed(g),
+             Tachikoma.Fill()])
+        h_rects = Tachikoma.split_layout(h_layout, content_rect)
+        activity_rect = h_rects[1]
+        sidebar_rect = h_rects[3]
+        notebook_rect = h_rects[5]
+    else
+        h_layout = Tachikoma.Layout(Tachikoma.Horizontal,
+            [Tachikoma.Fixed(ab_w), Tachikoma.Fixed(g), Tachikoma.Fill()])
+        h_rects = Tachikoma.split_layout(h_layout, content_rect)
+        activity_rect = h_rects[1]
+        sidebar_rect = Tachikoma.Rect()
+        notebook_rect = h_rects[3]
+    end
 
-    # File explorer sidebar
+    # Cache rects for mouse hit testing
+    app.activity_rect = activity_rect
     app.sidebar_rect = sidebar_rect
-    Tachikoma.render(app.file_panel, sidebar_rect, buf)
 
-    # Cursor always visible in the focused cell (no normal/insert mode distinction)
+    # Render activity bar (always visible)
+    Tachikoma.render(app.activity_bar, activity_rect, buf)
+
+    # Render file panel (only when open)
+    if app.sidebar_open
+        Tachikoma.render(app.file_panel, sidebar_rect, buf)
+    end
+
+    # Cursor always visible in the focused cell
     for (i, cw) in enumerate(app.notebook_view.cell_widgets)
         cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode != :dropdown)
     end
 
-    # Notebook view (main content — right pane)
+    # Notebook view (main content — fills remaining space)
     Tachikoma.render(app.notebook_view, notebook_rect, buf)
 
     # Bottom keybindings bar
     bottom_bar = make_bottom_bar(; mode=app.mode)
-    Tachikoma.render(bottom_bar, v_rects[3], buf)
+    Tachikoma.render(bottom_bar, bottom_rect, buf)
 
     # Cell dropdown overlay
     if app.cell_dropdown !== nothing
@@ -209,6 +239,22 @@ end
 """Handle mouse events — Pluto-style click zones for cell controls."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
+
+    # Activity bar clicks — toggle sidebar
+    ar = app.activity_rect
+    if ar.width > 0 && evt.x >= ar.x && evt.x < ar.x + ar.width &&
+       evt.y >= ar.y && evt.y < ar.y + ar.height
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            btn_id = button_at_y(app.activity_bar, evt.y)
+            if btn_id !== nothing
+                toggle!(app.activity_bar, btn_id)
+                app.sidebar_open = app.activity_bar.active == :explorer
+            end
+        elseif evt.action == Tachikoma.mouse_move
+            app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)
+        end
+        return
+    end
 
     # File panel clicks — if click is in sidebar area
     sr = app.sidebar_rect

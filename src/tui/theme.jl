@@ -12,8 +12,11 @@ using Tachikoma: ColorRGB, Color256, Style, NoColor, BOX_ROUNDED
 # │  Colors                                                         │
 # ╰──────────────────────────────────────────────────────────────────╯
 
-# Canvas & Surface
-const CANVAS_BG     = ColorRGB(0x12, 0x12, 0x16)   # #121216 — deep dark between islands
+# Background — pure black so every island floats
+const BG              = ColorRGB(0x00, 0x00, 0x00)   # #000000 — true black backdrop
+
+# Canvas & Surface — island backgrounds
+const CANVAS_BG     = ColorRGB(0x12, 0x12, 0x16)   # #121216 — notebook pane bg
 const SURFACE_BG    = ColorRGB(0x1a, 0x1b, 0x1e)   # #1a1b1e — cell island background
 const ELEVATED_BG   = ColorRGB(0x22, 0x23, 0x2a)   # #22232a — focused cell / hover
 
@@ -62,11 +65,16 @@ const BOX = BOX_ROUNDED
 # │  Layout constants                                                │
 # ╰──────────────────────────────────────────────────────────────────╯
 
-const SIDEBAR_PCT       = 22      # sidebar takes 22% of width
+const ISLAND_GAP        = 1       # gap between floating islands (rows & cols)
+const ACTIVITY_BAR_W    = 5       # activity bar width (icon + padding)
+const SIDEBAR_PCT       = 22      # sidebar takes 22% of remaining width
 const CELL_PAD_FRACTION = 0.06    # 6% each side — narrower pane needs less padding
 const MARGIN_CTRL_WIDTH = 3       # left margin width for +/eye controls
 const CELL_GAP          = 2       # rows between cells
 const TOP_MARGIN        = 1       # padding above first cell
+
+# Background style — pure black fills entire screen
+const S_BG = Style(; bg=BG)
 
 # ╭──────────────────────────────────────────────────────────────────╮
 # │  Prebuilt text styles                                            │
@@ -104,7 +112,7 @@ const S_DISABLED    = Style(; fg=FG_MUTED)
 
 cell_surface(focused::Bool) = focused ? ELEVATED_BG : SURFACE_BG
 
-# Border bg = CANVAS_BG so rounded corners blend with canvas (no gray leak)
+# Border bg = CANVAS_BG so rounded corners blend with notebook pane bg
 cell_border_focused(bg=CANVAS_BG)  = Style(; fg=ACCENT, bg)
 cell_border_hovered(bg=CANVAS_BG)  = Style(; fg=BORDER_BRIGHT, bg)
 cell_border_disabled(bg=CANVAS_BG) = Style(; fg=FG_MUTED, bg)
@@ -116,7 +124,7 @@ const CELL_H_INSET     = 1       # horizontal padding between fill edge and bord
 const CELL_V_INSET     = 0       # vertical padding between fill edge and border (rows)
 const CELL_H_PAD       = 1       # extra horizontal padding inside border (each side)
 
-# Canvas fill (used to clear viewport and gaps)
+# Canvas fill (used to clear notebook viewport and gaps)
 const S_CANVAS = Style(; bg=CANVAS_BG)
 
 # Folded cell accent bar
@@ -183,10 +191,20 @@ output_bar_color(errored::Bool, stale::Bool) =
     errored ? RED : stale ? ORANGE : BORDER_DIM
 
 # ╭──────────────────────────────────────────────────────────────────╮
-# │  Component: Sidebar                                             │
+# │  Component: Activity Bar (icon button strip)                    │
 # ╰──────────────────────────────────────────────────────────────────╯
 
-const SIDEBAR_BG        = ColorRGB(0x16, 0x17, 0x1a)   # slightly lighter than canvas
+const ACTIVITY_BG         = ColorRGB(0x0c, 0x0c, 0x0e)  # very dark, close to black
+const ACTIVITY_ICON_FG    = FG_MUTED
+const ACTIVITY_ICON_ACTIVE_FG = FG
+const ACTIVITY_INDICATOR  = ACCENT       # left accent bar for active button
+const ACTIVITY_BORDER_FG  = BORDER_DIM
+
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  Component: File Panel (sidebar explorer)                       │
+# ╰──────────────────────────────────────────────────────────────────╯
+
+const SIDEBAR_BG        = ColorRGB(0x10, 0x10, 0x14)   # very dark, slightly above black
 const SIDEBAR_HEADER_FG = FG_DIM
 const SIDEBAR_BORDER_FG = BORDER_DIM
 const S_SIDEBAR         = Style(; fg=FG_DIM, bg=SIDEBAR_BG)

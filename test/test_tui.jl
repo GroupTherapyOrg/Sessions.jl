@@ -774,9 +774,12 @@ using Tachikoma
         frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
         Tachikoma.view(app, frame)
 
-        # Click on cell 2 — should focus it, stays in normal (always-editing)
-        # Cell 2 starts at row 8 (top_margin=1, cell1=3 rows, gap=2)
-        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        # Click on cell 2 — compute y from viewport
+        nv = app.notebook_view
+        vp = nv.viewport
+        ch1 = Sessions.cell_height(nv.cell_widgets[1])
+        cell2_y = vp.y + Sessions.Theme.TOP_MARGIN + ch1 + Sessions.Theme.CELL_GAP + 1
+        Tachikoma.update!(app, Tachikoma.MouseEvent(vp.x + 5, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 2
         @test app.mode == :normal
     end
@@ -839,8 +842,12 @@ using Tachikoma
         @test Tachikoma.find_text(tb, "m1 = 1") !== nothing
         @test Tachikoma.find_text(tb, "m2 = 2") !== nothing
 
-        # Click on cell 2 (cell 2 starts at row 8: top_margin=1 + cell1=3 + gap=2 + vp.y=2)
-        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 8, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        # Click on cell 2 — compute y from viewport
+        nv = app.notebook_view
+        vp = nv.viewport
+        ch1 = Sessions.cell_height(nv.cell_widgets[1])
+        cell2_y = vp.y + Sessions.Theme.TOP_MARGIN + ch1 + Sessions.Theme.CELL_GAP + 1
+        Tachikoma.update!(app, Tachikoma.MouseEvent(vp.x + 5, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         tb2 = TestBackend(80, 24)
         frame2 = Tachikoma.Frame(tb2.buf, Rect(1, 1, 80, 24), [], [])
         Tachikoma.view(app, frame2)
