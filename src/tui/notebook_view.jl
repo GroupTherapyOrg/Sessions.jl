@@ -183,6 +183,57 @@ function add_cell_at_gap!(nv::NotebookView, pos::Int)
     update_focus!(nv)
 end
 
+"""Split the focused cell at the cursor position. Creates two cells."""
+function split_cell_at_cursor!(nv::NotebookView)
+    isempty(nv.cell_widgets) && return
+    cw = nv.cell_widgets[nv.focused_idx]
+    sync_to_cell!(cw)
+
+    editor = cw.editor
+    row = editor.cursor_row
+    col = editor.cursor_col
+    lines = editor.lines
+
+    before_lines = String[]
+    after_lines = String[]
+    for i in eachindex(lines)
+        line_str = String(lines[i])
+        if i < row
+            push!(before_lines, line_str)
+        elseif i == row
+            push!(before_lines, line_str[1:min(col, length(line_str))])
+            push!(after_lines, line_str[min(col+1, length(line_str)+1):end])
+        else
+            push!(after_lines, line_str)
+        end
+    end
+
+    cw.cell.code = join(before_lines, '\n')
+    sync_from_cell!(cw)
+
+    new_cell = Cell(join(after_lines, '\n'))
+    pos = nv.focused_idx + 1
+    insert_cell!(nv.nb, pos, new_cell)
+    rebuild_widgets!(nv)
+    nv.focused_idx = pos
+    update_focus!(nv)
+end
+
+"""Merge the focused cell with the next cell."""
+function merge_with_next!(nv::NotebookView)
+    nv.focused_idx >= length(nv.cell_widgets) && return
+    length(nv.cell_widgets) <= 1 && return
+
+    cell = nv.cell_widgets[nv.focused_idx].cell
+    next = nv.cell_widgets[nv.focused_idx + 1].cell
+    sync_to_cell!(nv.cell_widgets[nv.focused_idx])
+    sync_to_cell!(nv.cell_widgets[nv.focused_idx + 1])
+
+    cell.code = cell.code * "\n" * next.code
+    remove_cell!(nv.nb, next.id)
+    rebuild_widgets!(nv)
+end
+
 """Focus a cell by index directly (for mouse click)."""
 function focus_cell!(nv::NotebookView, idx::Int)
     idx < 1 || idx > length(nv.cell_widgets) && return

@@ -696,6 +696,94 @@ using Markdown: @md_str
         @test c2.state == cell_idle
     end
 
+    @testset "E2E: Split cell at cursor" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "line1\nline2\nline3")
+        app = Sessions.SessionsApp(nb)
+        app.mode = :insert
+
+        # Set cursor to middle of line 2 (after "li" on line 2)
+        editor = Sessions.focused_widget(app.notebook_view).editor
+        editor.cursor_row = 2
+        editor.cursor_col = 2
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+
+        @test length(nb) == 2
+        cells = ordered_cells(nb)
+        @test cells[1].code == "line1\nli"
+        @test cells[2].code == "ne2\nline3"
+        @test app.notebook_view.focused_idx == 2
+    end
+
+    @testset "E2E: Split cell at start" begin
+        nb = Notebook()
+        add_cell!(nb, "all code here")
+        app = Sessions.SessionsApp(nb)
+        app.mode = :insert
+
+        editor = Sessions.focused_widget(app.notebook_view).editor
+        editor.cursor_row = 1
+        editor.cursor_col = 0
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+
+        @test length(nb) == 2
+        cells = ordered_cells(nb)
+        @test cells[1].code == ""
+        @test cells[2].code == "all code here"
+    end
+
+    @testset "E2E: Split cell at end" begin
+        nb = Notebook()
+        add_cell!(nb, "code")
+        app = Sessions.SessionsApp(nb)
+        app.mode = :insert
+
+        editor = Sessions.focused_widget(app.notebook_view).editor
+        editor.cursor_row = 1
+        editor.cursor_col = 4
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+
+        @test length(nb) == 2
+        cells = ordered_cells(nb)
+        @test cells[1].code == "code"
+        @test cells[2].code == ""
+    end
+
+    @testset "E2E: Merge cells" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "first")
+        c2 = add_cell!(nb, "second")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_m))
+
+        @test length(nb) == 1
+        @test ordered_cells(nb)[1].code == "first\nsecond"
+        @test app.notebook_view.focused_idx == 1
+    end
+
+    @testset "E2E: Merge — can't merge last cell" begin
+        nb = Notebook()
+        add_cell!(nb, "only")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_m))
+        @test length(nb) == 1  # no change
+    end
+
+    @testset "E2E: Split does nothing in normal mode" begin
+        nb = Notebook()
+        add_cell!(nb, "no split")
+        app = Sessions.SessionsApp(nb)
+        # mode is :normal by default
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+        @test length(nb) == 1  # no change
+    end
+
     @testset "E2E: Quit with Ctrl+Q" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")

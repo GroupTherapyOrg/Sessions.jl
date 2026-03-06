@@ -172,6 +172,19 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             app.mode = :normal
             return
         end
+        # Split cell at cursor (insert mode)
+        if evt.key == :ctrl_shift_s
+            split_cell_at_cursor!(app.notebook_view)
+            app.message = "Split cell"
+            return
+        end
+    end
+
+    # Merge cells (normal mode)
+    if app.mode == :normal && evt.key == :ctrl_shift_m
+        merge_with_next!(app.notebook_view)
+        app.message = "Merged cells"
+        return
     end
 
     # Pass to focused cell widget
