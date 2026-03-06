@@ -105,9 +105,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Alt+Enter or Ctrl+Shift+Enter: run all
-    if evt.key == :ctrl && evt.char == 'a'
-        run_all_cells_async!(app)
+    # Ctrl+A: select all cells (normal mode only)
+    if app.mode == :normal && evt.key == :ctrl && evt.char == 'a'
+        select_all!(app.notebook_view)
+        app.message = "Selected all cells"
         return
     end
 
@@ -410,10 +411,8 @@ function delete_selected_cells!(app::SessionsApp)
     isempty(selected_indices) && return
 
     # Ensure at least one cell survives
-    n_to_keep = max(1, length(nv.cell_widgets) - length(selected_indices))
-    if n_to_keep < 1
-        # Remove all but the last selected
-        selected_indices = selected_indices[1:end-1]
+    if length(selected_indices) >= length(nv.cell_widgets)
+        selected_indices = selected_indices[1:end-1]  # keep one cell
     end
     isempty(selected_indices) && return
 

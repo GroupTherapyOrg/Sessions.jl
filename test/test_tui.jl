@@ -481,16 +481,16 @@ using Tachikoma
         @test Tachikoma.find_text(tb2, "Shift+Enter") !== nothing
     end
 
-    @testset "SessionsApp — Ctrl+A triggers async run all" begin
+    @testset "SessionsApp — Ctrl+A selects all cells in normal mode" begin
         nb = Notebook()
-        c1 = add_cell!(nb, "ctrl_a_val = 88")
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        add_cell!(nb, "c = 3")
         app = Sessions.SessionsApp(nb)
 
         Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'a'))
-        @test contains(app.message, "Running all")
-
-        sleep(0.5)
-        @test c1.state == cell_done
+        @test contains(app.message, "Selected all")
+        @test all(cw -> cw.selected, app.notebook_view.cell_widgets)
     end
 
     @testset "SessionsApp — navigation during async execution" begin

@@ -850,7 +850,8 @@ using Markdown: @md_str
         cell3_y = vp.y + 3 + 1 + 3 + 1  # after cell1 (3 lines) + gap + cell2 (3 lines) + gap
 
         # Shift+click on cell 3 — should select range from focused (1) through 3
-        evt = Tachikoma.MouseEvent(10, cell3_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, true, false)
+        # MouseEvent field order: x, y, button, action, shift, alt, ctrl
+        evt = Tachikoma.MouseEvent(10, cell3_y, Tachikoma.mouse_left, Tachikoma.mouse_press, true, false, false)
         Tachikoma.update!(app, evt)
 
         @test app.notebook_view.cell_widgets[1].selected
@@ -866,10 +867,11 @@ using Markdown: @md_str
         add_cell!(nb, "c = 3")
         app = Sessions.SessionsApp(nb)
 
-        # Ctrl+A selects all (normal mode binding repurposed for selection context)
-        Sessions.select_all!(app.notebook_view)
+        # Ctrl+A in normal mode selects all cells
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'a'))
 
         @test all(cw -> cw.selected, app.notebook_view.cell_widgets)
+        @test contains(app.message, "Selected all")
     end
 
     @testset "E2E: Escape clears selection" begin
