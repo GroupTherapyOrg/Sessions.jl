@@ -968,4 +968,159 @@ using TOML
         rm(path; force=true)
         rm(session_file; force=true)
     end
+
+    # --- Execution-session roundtrip verification (SESSIONS-6016) ---
+
+    @testset "exec-roundtrip — auto-save then fresh load shows cell_done" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "rt_x = 1 + 1")
+        c2 = add_cell!(nb, "rt_y = rt_x * 3")
+        save_notebook(nb)
+
+        # Execute via TUI path (auto-saves session)
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+
+        # Fresh load from disk
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "2"
+        @test !is_stale(c1b)
+
+        @test c2b.state == cell_done
+        @test c2b.output.text_representation == "6"
+        @test !is_stale(c2b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "exec-roundtrip — modified cell shows stale, others clean" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "mod_a = 10")
+        c2 = add_cell!(nb, "mod_b = mod_a + 5")
+        c3 = add_cell!(nb, "mod_c = 100")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+
+        # Modify c2's code on disk (simulating agent edit)
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c2.id].code = "mod_b = mod_a + 99"
+        save_notebook(nb_ext, path)
+
+        # Reload with session
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+        c3b = get_cell(nb2, c3.id)
+
+        # c1 and c3 unchanged — clean
+        @test c1b.state == cell_done
+        @test !is_stale(c1b)
+        @test c3b.state == cell_done
+        @test !is_stale(c3b)
+
+        # c2 modified — stale with old cached output
+        @test c2b.code == "mod_b = mod_a + 99"
+        @test is_stale(c2b)
+        @test c2b.output.text_representation == "15"  # old value
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "exec-roundtrip — error cell survives" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "good_rt = 42")
+        c2 = add_cell!(nb, "error(\"roundtrip error\")")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+        @test c2.state == cell_errored
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "42"
+
+        @test c2b.state == cell_errored
+        @test c2b.output.output_type == :error
+        @test c2b.output.error !== nothing
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "exec-roundtrip — stdout preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "println(\"roundtrip stdout\")\n77")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+
+        @test c1b.output.stdout == "roundtrip stdout\n"
+        @test c1b.output.text_representation == "77"
+        @test c1b.state == cell_done
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "exec-roundtrip — runtime_ns preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "sleep(0.01); 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+        original_ns = c1.output.runtime_ns
+        @test original_ns > 0
+
+        nb2 = load_notebook_with_session(path)
+        @test get_cell(nb2, c1.id).output.runtime_ns == original_ns
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "exec-roundtrip — headless run then fresh load" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "hl_a = 5")
+        c2 = add_cell!(nb, "hl_b = hl_a^2")
+        save_notebook(nb)
+
+        Sessions.run(path)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "5"
+        @test c2b.state == cell_done
+        @test c2b.output.text_representation == "25"
+        @test !is_stale(c1b)
+        @test !is_stale(c2b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
 end
