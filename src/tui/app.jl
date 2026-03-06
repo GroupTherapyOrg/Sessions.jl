@@ -37,6 +37,7 @@ mutable struct SessionsApp <: Tachikoma.Model
     activity_rect::Tachikoma.Rect  # cached for mouse hit testing
     progress_recently::Set{UUID}   # cells seen running/queued this execution batch
     progress_done_tick::Int        # tick when batch completed (0 = not done yet)
+    last_disk_nb::Union{Notebook, Nothing}  # snapshot of notebook as last loaded/saved from disk
 end
 
 function SessionsApp(nb::Notebook)
@@ -45,8 +46,9 @@ function SessionsApp(nb::Notebook)
     dir = isempty(nb.path) ? pwd() : dirname(abspath(nb.path))
     fp = FilePanel(dir)
     ab = ActivityBar()
+    snapshot = deepcopy(nb)
     SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
-        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0)
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot)
 end
 
 function SessionsApp(path::String)
@@ -262,6 +264,7 @@ function _open_file!(app::SessionsApp, path::String)
         app.nb = nb
         app.workspace = Workspace()
         app.notebook_view = NotebookView(nb)
+        app.last_disk_nb = deepcopy(nb)
         app.message = "Opened: $(basename(path))"
     catch e
         app.message = "Error: $(sprint(showerror, e))"
@@ -297,6 +300,7 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     app.undo_buffer = DeletedCell[]
     app.cell_dropdown = nothing
     app.mode = :normal
+    app.last_disk_nb = deepcopy(nb)
     app.message = "Opened workspace: $(basename(dir))"
 end
 
@@ -322,6 +326,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     # Ctrl+S: save + run stale
     if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
+        app.last_disk_nb = deepcopy(app.nb)
         n_stale = run_stale_cells!(app)
         if n_stale > 0
             app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"

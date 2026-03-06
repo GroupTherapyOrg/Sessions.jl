@@ -1123,4 +1123,81 @@ using Markdown: @md_str
         rm(path; force=true)
         rm(Sessions.session_path(path); force=true)
     end
+
+    # --- Last-known-disk snapshot tracking (SESSIONS-6017) ---
+
+    @testset "SessionsApp — last_disk_nb set on construction" begin
+        nb = Notebook(; path="snap_test.jl")
+        c1 = add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        @test app.last_disk_nb !== nothing
+        @test app.last_disk_nb isa Notebook
+        @test length(app.last_disk_nb.cell_order) == length(nb.cell_order)
+        @test app.last_disk_nb.cell_order == nb.cell_order
+    end
+
+    @testset "SessionsApp — last_disk_nb is deep copy" begin
+        nb = Notebook(; path="snap_deep.jl")
+        c1 = add_cell!(nb, "y = 2")
+        app = Sessions.SessionsApp(nb)
+
+        # Modify the live notebook — snapshot should be unaffected
+        nb.cells[c1.id].code = "y = 999"
+        @test app.last_disk_nb.cells[c1.id].code == "y = 2"
+    end
+
+    @testset "SessionsApp — last_disk_nb updated after save (Ctrl+S)" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "save_snap = 1")
+        save_notebook(nb)
+        app = Sessions.SessionsApp(nb)
+
+        # Modify cell code
+        nb.cells[c1.id].code = "save_snap = 2"
+        old_snap_code = app.last_disk_nb.cells[c1.id].code
+        @test old_snap_code == "save_snap = 1"
+
+        # Trigger Ctrl+S
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+
+        # Snapshot updated to current state
+        @test app.last_disk_nb.cells[c1.id].code == "save_snap = 2"
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "SessionsApp — last_disk_nb updated after _open_file!" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "open_snap = 42")
+        save_notebook(nb)
+
+        dummy_nb = Notebook()
+        add_cell!(dummy_nb, "")
+        app = Sessions.SessionsApp(dummy_nb)
+
+        Sessions._open_file!(app, path)
+        @test app.last_disk_nb !== nothing
+        @test haskey(app.last_disk_nb.cells, c1.id)
+        @test app.last_disk_nb.cells[c1.id].code == "open_snap = 42"
+
+        rm(path; force=true)
+    end
+
+    @testset "SessionsApp(path) — last_disk_nb set from loaded file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "path_snap = 7")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(path)
+        @test app.last_disk_nb !== nothing
+        @test haskey(app.last_disk_nb.cells, c1.id)
+        @test app.last_disk_nb.cells[c1.id].code == "path_snap = 7"
+
+        rm(path; force=true)
+    end
 end
