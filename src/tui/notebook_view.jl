@@ -399,7 +399,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         cw.hovered = is_hovered && !is_focused
 
         # --- "+" add-above (in gap row above cell) ---
-        if show_controls
+        # Skip if previous cell is also showing controls (its "+" below covers the same gap)
+        prev_shows = i > 1 && (i - 1 == nv.focused_idx || i - 1 == nv.hovered_idx)
+        if show_controls && !prev_shows
             plus_above_y = y - 1
             if plus_above_y >= visible_start && plus_above_y <= visible_end
                 plus_above_hover = nv.hovered_control == :plus_above && nv.hovered_control_idx == i
