@@ -405,15 +405,13 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         end
 
         # --- Cell rendering ---
-        # Pass full virtual rect so CellWidget draws its border/code at the
-        # correct virtual position. Buffer in_bounds silently clips writes
-        # outside the terminal. The notebook border re-draw after this loop
-        # seals any overflow into the inset/border area.
-        # Clamp top to rect.y and bottom to rect.y+rect.height to prevent
-        # writes outside the notebook pane.
+        # Clamp cell rect to notebook bounds (top and bottom). Set clip_top
+        # so the CellWidget can offset its CodeEditor scroll to show the
+        # correct lines when the cell top is scrolled above the viewport.
         if y + ch > visible_start && y <= visible_end
             cr_y = max(y, rect.y)
             cr_h = min(ch - (cr_y - y), rect.y + rect.height - cr_y)
+            cw.clip_top = cr_y - y  # rows hidden above
             cr_h > 0 && Tachikoma.render(cw, Tachikoma.Rect(cx, cr_y, cw_width, cr_h), buf)
         end
 

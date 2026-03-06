@@ -8,13 +8,14 @@ mutable struct CellWidget
     hovered::Bool    # Mouse is hovering over this cell (shows controls)
     collapsed::Bool  # Whether output is collapsed
     selected::Bool   # Whether this cell is part of multi-cell selection
+    clip_top::Int    # Rows clipped from cell top by viewport scroll (set by NotebookView)
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
     editor.focused = false  # cursor hidden by default; app sets true only in insert mode
-    CellWidget(cell, editor, focused, false, false, false)
+    CellWidget(cell, editor, focused, false, false, false, 0)
 end
 
 """Sync editor text back to cell."""
@@ -257,19 +258,23 @@ end
 """Render code editor (folded cells are handled before this is called)."""
 function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
                         buf::Tachikoma.Buffer, surface_bg)
-    # Always render from line 1 — the notebook passes the full virtual rect,
-    # so inner.height == n_lines and auto-scroll won't trigger. Buffer
-    # in_bounds silently clips lines outside the visible viewport.
-    cw.editor.scroll_offset = 0
-
-    if cw.focused
-        # Suppress built-in block cursor; we draw thin bar cursor after
-        was_focused = cw.editor.focused
+    if cw.editor.focused
+        # Insert mode: let CodeEditor auto-scroll to keep cursor visible.
+        # Suppress built-in block cursor; we draw thin bar cursor after.
         cw.editor.focused = false
         Tachikoma.render(cw.editor, inner, buf)
-        cw.editor.focused = was_focused
+        cw.editor.focused = true
     else
+        # Normal mode: use clip_top to show the correct code lines.
+        # clip_top > 0 means the cell top is scrolled above the viewport —
+        # show bottom lines by setting scroll_offset = clip_top.
+        # clip_top == 0 means top is visible — show from line 1.
+        # Pin cursor_row so CodeEditor auto-scroll doesn't override.
+        cw.editor.scroll_offset = cw.clip_top
+        saved_row = cw.editor.cursor_row
+        cw.editor.cursor_row = cw.clip_top + 1
         Tachikoma.render(cw.editor, inner, buf)
+        cw.editor.cursor_row = saved_row
     end
 end
 
