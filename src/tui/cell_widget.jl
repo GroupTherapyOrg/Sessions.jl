@@ -87,6 +87,35 @@ end
 
 Tachikoma.focusable(::CellWidget) = true
 
+"""Draw a dashed rounded border — rounded corners with dashed horizontal/vertical lines."""
+function _draw_dashed_border!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect,
+                               border_fg, surface_bg)
+    (rect.width < 2 || rect.height < 2) && return
+    box = Theme.BOX
+    s = Tachikoma.Style(; fg=border_fg, bg=surface_bg)
+
+    rx = rect.x; ry = rect.y
+    rx2 = Tachikoma.right(rect); ry2 = Tachikoma.bottom(rect)
+
+    # Rounded corners
+    Tachikoma.set_char!(buf, rx, ry, box.tl, s)
+    Tachikoma.set_char!(buf, rx2, ry, box.tr, s)
+    Tachikoma.set_char!(buf, rx, ry2, box.bl, s)
+    Tachikoma.set_char!(buf, rx2, ry2, box.br, s)
+
+    # Dashed horizontal lines (┄ = U+2504)
+    for x in (rx + 1):(rx2 - 1)
+        Tachikoma.set_char!(buf, x, ry, '┄', s)
+        Tachikoma.set_char!(buf, x, ry2, '┄', s)
+    end
+
+    # Dashed vertical lines (┆ = U+2506)
+    for y in (ry + 1):(ry2 - 1)
+        Tachikoma.set_char!(buf, rx, y, '┆', s)
+        Tachikoma.set_char!(buf, rx2, y, '┆', s)
+    end
+end
+
 """Draw a rounded border. All border chars use surface_bg so they match the cell fill exactly."""
 function _draw_rounded_border!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect,
                                 border_fg, surface_bg)
@@ -200,9 +229,9 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
             _shimmer_border_with_bg!(buf, border_rect, border_color, surface_bg, tick;
                 box=Theme.BOX, intensity=Theme.SHIMMER_INTENSITY)
         else
-            # Normal mode: muted static accent border (focused but not editing)
+            # Normal mode: dim dashed accent border (focused but not editing)
             border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.ACCENT_DIM
-            _draw_rounded_border!(buf, border_rect, border_color, surface_bg)
+            _draw_dashed_border!(buf, border_rect, border_color, surface_bg)
         end
         _render_code!(cw, inner, buf, surface_bg)
         _render_ellipsis_button!(border_rect, buf; hovered=cw.ellipsis_hovered)

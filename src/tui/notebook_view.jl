@@ -449,9 +449,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             y += oh
         end
 
-        # --- Run button (in gap below cell, near the cell — row 1 of gap) ---
+        # --- Run button (immediately below cell/output, first row of gap) ---
         if show_controls
-            run_y = y + 1  # just 1 row into the gap (closer to cell than centered)
+            run_y = y  # row 0 of gap — directly adjacent to cell
             if run_y >= visible_start && run_y <= visible_end
                 run_text = run_button_text(cw.cell)
                 run_hover = nv.hovered_control == :run && nv.hovered_control_idx == i

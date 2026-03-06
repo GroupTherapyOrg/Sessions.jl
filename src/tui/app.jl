@@ -752,8 +752,8 @@ function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_ri
             return
         end
 
-        # Run button hover (row 1 of gap below cell+output, near the cell)
-        run_y = y + ch + oh + 1
+        # Run button hover (row 0 of gap, directly below cell+output)
+        run_y = y + ch + oh
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
         if my >= run_y - 1 && my <= run_y + 1 &&
@@ -874,7 +874,7 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
 
         # ▶ run button centered in gap below cell (right-aligned)
         # Hit zone: ±1 row, ±2 cols padding
-        run_gap_y = y + ch + oh + 1  # row 1 of gap (near cell)
+        run_gap_y = y + ch + oh  # row 0 of gap (directly below cell)
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
         if click_y >= run_gap_y - 1 && click_y <= run_gap_y + 1 &&
