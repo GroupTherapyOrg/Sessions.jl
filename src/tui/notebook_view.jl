@@ -128,7 +128,9 @@ function cell_at_y(nv::NotebookView, screen_y::Int)
     vp = nv.viewport
     vp.width == 0 && return nothing
 
-    content_y = screen_y - vp.y + nv.scroll_offset - Theme.TOP_MARGIN
+    # Account for border inset (inner area starts at vp.y + vi + 1)
+    vi = Theme.CELL_V_INSET
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
 
     y = 0
     for i in eachindex(nv.cell_widgets)
@@ -152,9 +154,10 @@ function gap_at_y(nv::NotebookView, screen_y::Int)
     vp = nv.viewport
     vp.width == 0 && return nothing
 
-    screen_y < vp.y && return nothing
+    vi = Theme.CELL_V_INSET
+    screen_y < vp.y + vi + 1 && return nothing
 
-    content_y = screen_y - vp.y + nv.scroll_offset - Theme.TOP_MARGIN
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
 
     y = 0
     for i in eachindex(nv.cell_widgets)
@@ -322,22 +325,59 @@ const MARGIN_CTRL_WIDTH = Theme.MARGIN_CTRL_WIDTH
 
 function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     nv.viewport = rect
+    rect.width < 4 && return
+    rect.height < 4 && return
 
-    # Fill viewport with canvas bg
+    # ── Rounded border for notebook pane (inset to match cell island style) ──
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    border_style = Tachikoma.Style(; fg=Theme.BORDER_DIM, bg=Theme.CANVAS_BG)
+
+    # Fill entire rect with canvas bg (overflow visible around border)
     for fy in rect.y:(rect.y + rect.height - 1)
         Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, Theme.S_CANVAS)
     end
 
+    # Border drawn inset from fill edges
+    bx = rect.x + hi
+    by = rect.y + vi
+    bw = max(rect.width - 2 * hi, 3)
+    bh = max(rect.height - 2 * vi, 3)
+
+    # Rounded corners
+    Tachikoma.set_char!(buf, bx, by, '╭', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by, '╮', border_style)
+    Tachikoma.set_char!(buf, bx, by + bh - 1, '╰', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by + bh - 1, '╯', border_style)
+
+    for cx in (bx + 1):(bx + bw - 2)
+        Tachikoma.set_char!(buf, cx, by, '─', border_style)
+        Tachikoma.set_char!(buf, cx, by + bh - 1, '─', border_style)
+    end
+
+    for fy in (by + 1):(by + bh - 2)
+        Tachikoma.set_char!(buf, bx, fy, '│', border_style)
+        Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
+    end
+
+    # Inner content area (inside border)
+    inner_x = bx + 1
+    inner_y = by + 1
+    inner_w = bw - 2
+    inner_h = bh - 2
+    inner_w < 2 && return
+    inner_h < 2 && return
+
     isempty(nv.cell_widgets) && return
 
-    pad = max(1, round(Int, rect.width * Theme.CELL_PAD_FRACTION))
-    pad = min(pad, max(0, div(rect.width - 10, 2)))
-    cx = rect.x + pad
-    cw_width = max(1, rect.width - 2 * pad)
+    pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
+    pad = min(pad, max(0, div(inner_w - 10, 2)))
+    cx = inner_x + pad
+    cw_width = max(1, inner_w - 2 * pad)
 
-    y = rect.y + Theme.TOP_MARGIN - nv.scroll_offset
-    visible_start = rect.y
-    visible_end = rect.y + rect.height - 1
+    y = inner_y + Theme.TOP_MARGIN - nv.scroll_offset
+    visible_start = inner_y
+    visible_end = inner_y + inner_h - 1
     margin_x = cx - Theme.MARGIN_CTRL_WIDTH
     margin_s = Theme.margin_style()
 
@@ -428,13 +468,17 @@ end
 """Clamp scroll_offset to valid range."""
 function clamp_scroll!(nv::NotebookView, rect::Tachikoma.Rect)
     isempty(nv.cell_widgets) && return
-    max_scroll = max(0, content_height(nv) - rect.height)
+    vi = Theme.CELL_V_INSET
+    inner_h = max(1, rect.height - 2 * vi - 2)  # subtract inset + border
+    max_scroll = max(0, content_height(nv) - inner_h)
     nv.scroll_offset = clamp(nv.scroll_offset, 0, max_scroll)
 end
 
 """Scroll to make the focused cell visible. Called on focus change, not every frame."""
 function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
     isempty(nv.cell_widgets) && return
+    vi = Theme.CELL_V_INSET
+    inner_h = max(1, rect.height - 2 * vi - 2)  # subtract inset + border
 
     y = Theme.TOP_MARGIN
     for i in 1:nv.focused_idx-1
@@ -449,7 +493,7 @@ function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
         nv.scroll_offset = y
     end
 
-    if y + focused_h > nv.scroll_offset + rect.height
-        nv.scroll_offset = y + focused_h - rect.height
+    if y + focused_h > nv.scroll_offset + inner_h
+        nv.scroll_offset = y + focused_h - inner_h
     end
 end

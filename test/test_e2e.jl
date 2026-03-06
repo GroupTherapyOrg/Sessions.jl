@@ -640,9 +640,9 @@ using Markdown: @md_str
         pad = max(1, round(Int, vp.width * Sessions.CELL_PAD_FRACTION))
         pad = min(pad, max(0, div(vp.width - 10, 2)))
         cell_right = vp.x + vp.width - pad
-        # Gap below cell 1: viewport.y + top_margin(1) + cell_height(3) = first gap row
+        # Gap below cell 1: viewport.y + border(1) + top_margin(1) + cell_height = first gap row
         ch1 = Sessions.cell_height(Sessions.focused_widget(app.notebook_view))
-        gap_y = vp.y + 1 + ch1
+        gap_y = vp.y + 2 + ch1
         run_x = cell_right - 1  # inside the right-aligned run text
         evt = Tachikoma.MouseEvent(run_x, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
@@ -673,7 +673,7 @@ using Markdown: @md_str
         nv = app.notebook_view
         ch1 = Sessions.cell_height(nv.cell_widgets[1])
         ch2 = Sessions.cell_height(nv.cell_widgets[2])
-        gap_y = vp.y + 1 + ch1 + 2 + ch2  # top_margin + cell1 + gap + cell2
+        gap_y = vp.y + 2 + ch1 + 2 + ch2  # border(1) + top_margin(1) + cell1 + gap + cell2
         run_x = cell_right - 1
         evt = Tachikoma.MouseEvent(run_x, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
@@ -855,7 +855,7 @@ using Markdown: @md_str
         nv = app.notebook_view
         ch1 = Sessions.cell_height(nv.cell_widgets[1])
         ch2 = Sessions.cell_height(nv.cell_widgets[2])
-        cell3_y = vp.y + 1 + ch1 + 2 + ch2 + 2  # top_margin + cell1 + gap + cell2 + gap
+        cell3_y = vp.y + 2 + ch1 + 2 + ch2 + 2  # border(1) + top_margin(1) + cell1 + gap + cell2 + gap
 
         # Shift+click on cell 3 — should select range from focused (1) through 3
         # MouseEvent field order: x, y, button, action, shift, alt, ctrl

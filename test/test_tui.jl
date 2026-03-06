@@ -750,16 +750,24 @@ using Tachikoma
         frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
         Tachikoma.view(app, frame)
 
-        # Each cell is 3 lines (1 line code + 2 border) + 2-row gap, top margin=1
-        # Top bar = row 1, notebook starts at row 2, top margin → first cell at row 3
-        # Cell 1: rows 3-5, Gap: 6-7, Cell 2: rows 8-10, Gap: 11-12, Cell 3: rows 13-15
-        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 9, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        # Compute cell positions dynamically from viewport (accounts for border)
+        vp = app.notebook_view.viewport
+        nv = app.notebook_view
+        ch1 = Sessions.cell_height(nv.cell_widgets[1])
+        ch2 = Sessions.cell_height(nv.cell_widgets[2])
+        gap = 2  # Theme.CELL_GAP
+        # Inner content starts at vp.y + 1 (border) + 1 (TOP_MARGIN)
+        cell1_y = vp.y + 2
+        cell2_y = cell1_y + ch1 + gap
+        cell3_y = cell2_y + ch2 + gap
+
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 2
 
-        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 14, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, cell3_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 3
 
-        Tachikoma.update!(app, Tachikoma.MouseEvent(40, 4, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        Tachikoma.update!(app, Tachikoma.MouseEvent(40, cell1_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 1
     end
 

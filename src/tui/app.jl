@@ -110,6 +110,12 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         notebook_rect = h_rects[3]
     end
 
+    # Shrink activity bar to just fit its buttons (border=2 + 1 row per button)
+    ab_content_h = 2 + length(ACTIVITY_BUTTONS) * 2
+    ab_h = min(ab_content_h, activity_rect.height)
+    activity_rect = Tachikoma.Rect(activity_rect.x, activity_rect.y,
+        activity_rect.width, ab_h)
+
     # Cache rects for mouse hit testing
     app.activity_rect = activity_rect
     app.sidebar_rect = sidebar_rect
@@ -323,7 +329,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
 
     if evt.button == Tachikoma.mouse_scroll_down
-        max_scroll = max(0, content_height(nv) - nv.viewport.height)
+        vi = Theme.CELL_V_INSET
+        inner_h = max(1, nv.viewport.height - 2 * vi - 2)  # subtract inset + border
+        max_scroll = max(0, content_height(nv) - inner_h)
         nv.scroll_offset = min(nv.scroll_offset + 2, max_scroll)
         nv.user_scrolling = true
         return
@@ -352,7 +360,8 @@ function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, 
     for target_idx in (nv.focused_idx, nv.hovered_idx)
         (target_idx < 1 || target_idx > length(nv.cell_widgets)) && continue
 
-        y = vp.y + Theme.TOP_MARGIN - nv.scroll_offset
+        vi = Theme.CELL_V_INSET
+        y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset  # inset + border
         for j in 1:target_idx-1
             y += cell_height(nv.cell_widgets[j])
             y += output_height(nv.output_widgets[j])
@@ -423,7 +432,8 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
         cw = nv.cell_widgets[target_idx]
 
         vp = nv.viewport
-        y = vp.y + Theme.TOP_MARGIN - nv.scroll_offset
+        vi = Theme.CELL_V_INSET
+        y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset  # inset + border
         for j in 1:target_idx-1
             y += cell_height(nv.cell_widgets[j])
             y += output_height(nv.output_widgets[j])

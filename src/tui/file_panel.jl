@@ -195,8 +195,9 @@ function entry_at_y(fp::FilePanel, screen_y::Int)
     vp = fp.viewport
     vp.width == 0 && return nothing
 
-    # Content starts after border(1) + header(1) + divider(1)
-    content_start_y = vp.y + 3
+    # Content starts after v_inset + border(1) + header(1) + divider(1)
+    vi = Theme.CELL_V_INSET
+    content_start_y = vp.y + vi + 3
     entry_y = screen_y - content_start_y + fp.scroll_offset
 
     (entry_y < 0 || entry_y >= length(fp.entries)) && return nothing
@@ -208,39 +209,47 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     rect.width < 4 && return
     rect.height < 4 && return
 
-    # ── Rounded border ────────────────────────────────────────────────
+    # ── Rounded border (inset to match cell island style) ─────────────
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
     border_style = Tachikoma.Style(; fg=Theme.SIDEBAR_BORDER_FG, bg=Theme.SIDEBAR_BG)
 
-    # Fill background
+    # Fill entire rect with sidebar bg (overflow visible around border)
     for fy in rect.y:(rect.y + rect.height - 1)
         Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width,
             Tachikoma.Style(; bg=Theme.SIDEBAR_BG))
     end
 
+    # Border drawn inset from fill edges
+    bx = rect.x + hi
+    by = rect.y + vi
+    bw = max(rect.width - 2 * hi, 3)
+    bh = max(rect.height - 2 * vi, 3)
+
     # Corners
-    Tachikoma.set_char!(buf, rect.x, rect.y, '╭', border_style)
-    Tachikoma.set_char!(buf, rect.x + rect.width - 1, rect.y, '╮', border_style)
-    Tachikoma.set_char!(buf, rect.x, rect.y + rect.height - 1, '╰', border_style)
-    Tachikoma.set_char!(buf, rect.x + rect.width - 1, rect.y + rect.height - 1, '╯', border_style)
+    Tachikoma.set_char!(buf, bx, by, '╭', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by, '╮', border_style)
+    Tachikoma.set_char!(buf, bx, by + bh - 1, '╰', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by + bh - 1, '╯', border_style)
 
     # Top/bottom edges
-    for cx in (rect.x + 1):(rect.x + rect.width - 2)
-        Tachikoma.set_char!(buf, cx, rect.y, '─', border_style)
-        Tachikoma.set_char!(buf, cx, rect.y + rect.height - 1, '─', border_style)
+    for cx in (bx + 1):(bx + bw - 2)
+        Tachikoma.set_char!(buf, cx, by, '─', border_style)
+        Tachikoma.set_char!(buf, cx, by + bh - 1, '─', border_style)
     end
 
     # Left/right edges
-    for fy in (rect.y + 1):(rect.y + rect.height - 2)
-        Tachikoma.set_char!(buf, rect.x, fy, '│', border_style)
-        Tachikoma.set_char!(buf, rect.x + rect.width - 1, fy, '│', border_style)
+    for fy in (by + 1):(by + bh - 2)
+        Tachikoma.set_char!(buf, bx, fy, '│', border_style)
+        Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
     end
 
-    inner_x = rect.x + 1
-    inner_w = rect.width - 2
+    inner_x = bx + 1
+    inner_w = bw - 2
     inner_w < 2 && return
 
     # ── Header: folder icon + truncated path ──────────────────────────
-    header_y = rect.y + 1
+    header_y = by + 1
     path_display = _truncate_path(fp.current_dir, inner_w - 4)
     icon_style = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SIDEBAR_BG)
     path_style = Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.SIDEBAR_BG)
@@ -248,16 +257,16 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, inner_w - 4), path_style)
 
     # ── Section divider ───────────────────────────────────────────────
-    div_y = rect.y + 2
-    Tachikoma.set_char!(buf, rect.x, div_y, '├', border_style)
-    Tachikoma.set_char!(buf, rect.x + rect.width - 1, div_y, '┤', border_style)
-    for cx in (rect.x + 1):(rect.x + rect.width - 2)
+    div_y = by + 2
+    Tachikoma.set_char!(buf, bx, div_y, '├', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, div_y, '┤', border_style)
+    for cx in (bx + 1):(bx + bw - 2)
         Tachikoma.set_char!(buf, cx, div_y, '─', border_style)
     end
 
     # ── File entries ──────────────────────────────────────────────────
-    entries_start_y = rect.y + 3
-    entries_height = rect.height - 4  # border(2) + header(1) + divider(1)
+    entries_start_y = by + 3
+    entries_height = bh - 4  # border(2) + header(1) + divider(1)
     entries_height < 1 && return
 
     # Ensure cursor is visible (auto-scroll)
@@ -301,12 +310,12 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     # ── Bottom border with cursor position ────────────────────────────
     if !isempty(fp.entries)
         pos_text = "$(fp.cursor_idx)/$(length(fp.entries))"
-        pos_x = rect.x + rect.width - length(pos_text) - 2
-        if pos_x > rect.x + 1
-            Tachikoma.set_char!(buf, pos_x - 1, rect.y + rect.height - 1, '┤', border_style)
-            Tachikoma.set_string!(buf, pos_x, rect.y + rect.height - 1, pos_text,
+        pos_x = bx + bw - length(pos_text) - 2
+        if pos_x > bx + 1
+            Tachikoma.set_char!(buf, pos_x - 1, by + bh - 1, '┤', border_style)
+            Tachikoma.set_string!(buf, pos_x, by + bh - 1, pos_text,
                 Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.SIDEBAR_BG))
-            Tachikoma.set_char!(buf, pos_x + length(pos_text), rect.y + rect.height - 1,
+            Tachikoma.set_char!(buf, pos_x + length(pos_text), by + bh - 1,
                 '├', border_style)
         end
     end

@@ -66,7 +66,7 @@ const BOX = BOX_ROUNDED
 # ╰──────────────────────────────────────────────────────────────────╯
 
 const ISLAND_GAP        = 1       # gap between floating islands (rows & cols)
-const ACTIVITY_BAR_W    = 5       # activity bar width (icon + padding)
+const ACTIVITY_BAR_W    = 7       # activity bar width (wider for comfort)
 const SIDEBAR_PCT       = 22      # sidebar takes 22% of remaining width
 const CELL_PAD_FRACTION = 0.06    # 6% each side — narrower pane needs less padding
 const MARGIN_CTRL_WIDTH = 3       # left margin width for +/eye controls
