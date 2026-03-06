@@ -214,9 +214,38 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
         _render_code!(cw, inner, buf, surface_bg)
     end
 
+    # Running/queued left border indicator (Pluto-style colored left edge)
+    _render_run_indicator!(cw.cell, border_rect, buf, surface_bg, tick)
+
     # Thin bar cursor — only when cell is being edited
     if cw.editor.focused && !cw.cell.disabled
         _render_bar_cursor!(cw.editor, inner, buf, tick)
+    end
+end
+
+"""Overlay the left border with a colored bar when cell is running or queued."""
+function _render_run_indicator!(cell::Cell, border_rect::Tachikoma.Rect,
+                                 buf::Tachikoma.Buffer, surface_bg, tick::Int)
+    (cell.state != cell_running && cell.state != cell_queued) && return
+    border_rect.height < 2 && return
+
+    rx = border_rect.x
+    ry = border_rect.y
+    ry2 = Tachikoma.bottom(border_rect)
+
+    if cell.state == cell_running
+        # Breathing accent blue bar
+        for y in ry:ry2
+            b = Tachikoma.breathe(tick + (y - ry) * 3; period=45)
+            fg = Tachikoma.color_lerp(Theme.ACCENT_DIM, Theme.ACCENT_GLOW, b)
+            Tachikoma.set_char!(buf, rx, y, '▎', Tachikoma.Style(; fg, bg=surface_bg))
+        end
+    else  # cell_queued
+        # Static orange bar
+        style = Tachikoma.Style(; fg=Theme.ORANGE, bg=surface_bg)
+        for y in ry:ry2
+            Tachikoma.set_char!(buf, rx, y, '▎', style)
+        end
     end
 end
 

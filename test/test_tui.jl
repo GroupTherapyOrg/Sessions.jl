@@ -1968,6 +1968,40 @@ using Markdown: @md_str
         @test Tachikoma.find_text(tb, "x = 999") !== nothing
     end
 
+    # --- Running/queued cell indicator ---
+
+    @testset "running cell — left border bar renders ▎" begin
+        cell = Cell("sleep(1)")
+        cell.state = cell_running
+        cw = Sessions.CellWidget(cell; focused=false)
+        tb = TestBackend(60, 8)
+        Sessions.Theme.TICK[] = 10
+        Tachikoma.render_widget!(tb, cw)
+        # The left border column should contain ▎ characters
+        @test Tachikoma.find_text(tb, "▎") !== nothing
+    end
+
+    @testset "queued cell — left border bar renders ▎" begin
+        cell = Cell("x = 1")
+        cell.state = cell_queued
+        cw = Sessions.CellWidget(cell; focused=false)
+        tb = TestBackend(60, 8)
+        Sessions.Theme.TICK[] = 10
+        Tachikoma.render_widget!(tb, cw)
+        @test Tachikoma.find_text(tb, "▎") !== nothing
+    end
+
+    @testset "idle cell — no left border bar" begin
+        cell = Cell("x = 1")
+        cell.state = cell_done
+        mark_executed!(cell)
+        cw = Sessions.CellWidget(cell; focused=false)
+        tb = TestBackend(60, 8)
+        Sessions.Theme.TICK[] = 10
+        Tachikoma.render_widget!(tb, cw)
+        @test Tachikoma.find_text(tb, "▎") === nothing
+    end
+
     # --- File panel auto-refresh ---
 
     @testset "FilePanel — auto-refresh on tick interval" begin
