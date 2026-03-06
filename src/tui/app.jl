@@ -544,15 +544,20 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
-        # Compute cell layout dimensions
-        pad = max(1, round(Int, nb_vp.width * Theme.CELL_PAD_FRACTION))
-        pad = min(pad, max(0, div(nb_vp.width - 10, 2)))
-        cell_left = nb_vp.x + pad
-        cell_right = nb_vp.x + nb_vp.width - pad
-        margin_x = cell_left - Theme.MARGIN_CTRL_WIDTH
+        # Compute cell layout dimensions (must match notebook_view rendering)
+        hi = Theme.CELL_H_INSET
+        vi = Theme.CELL_V_INSET
+        inner_x = nb_vp.x + hi + 1
+        inner_w = max(1, nb_vp.width - 2 * hi - 2)
+        pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
+        pad = min(pad, max(0, div(inner_w - 10, 2)))
+        cell_left = inner_x + pad
+        cell_right = inner_x + inner_w - pad
+        margin_x = max(cell_left - Theme.MARGIN_CTRL_WIDTH, inner_x)
 
         # Check if click is in the left margin area (for +, eye controls)
-        if evt.x >= margin_x && evt.x < cell_left
+        # Expand hit zone: margin area + 1 char padding on each side
+        if evt.x >= max(margin_x - 1, nb_vp.x) && evt.x <= cell_left
             hit = _hit_test_margin_control(nv, evt.x, evt.y, margin_x)
             if hit !== nothing
                 _handle_margin_click!(app, hit)
@@ -601,7 +606,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
 end
 
-"""Hit test margin controls. Returns (:plus_above, idx), (:plus_below, idx), (:eye, idx), or nothing."""
+"""Hit test margin controls. Returns (:plus_above, idx), (:plus_below, idx), (:eye, idx), or nothing.
+Hit zones are expanded ±1 row around each icon for easier clicking."""
 function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, margin_x::Int)
     isempty(nv.cell_widgets) && return nothing
     vp = nv.viewport
@@ -622,17 +628,21 @@ function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, 
         oh = output_height(nv.output_widgets[target_idx])
         ch = cell_height(nv.cell_widgets[target_idx]; has_output=oh > 0)
 
-        if click_y == y - 1
+        # "+" above: icon at y-1, hit zone y-2 to y
+        plus_above_y = y - 1
+        if click_y >= plus_above_y - 1 && click_y <= plus_above_y + 1
             return (:plus_above, target_idx)
         end
 
+        # Eye icon: vertically centered, hit zone ±1 row
         eye_y = y + div(ch, 2)
-        if click_y == eye_y
+        if click_y >= eye_y - 1 && click_y <= eye_y + 1
             return (:eye, target_idx)
         end
 
+        # "+" below: icon at y+ch+oh, hit zone ±1 row
         plus_below_y = y + ch + oh
-        if click_y == plus_below_y
+        if click_y >= plus_below_y - 1 && click_y <= plus_below_y + 1
             return (:plus_below, target_idx)
         end
     end
@@ -695,22 +705,26 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
         ch = cell_height(cw; has_output=oh > 0)
 
         # ⋯ button inside border (first inner row of border, right-aligned)
+        # Rendered at border_rect top-right. Hit zone: ±1 row, ±2 cols for easier clicking.
         hi = Theme.CELL_H_INSET
         vi = Theme.CELL_V_INSET
         border_right = cell_right - hi
         ellipsis_y = y + vi + 1  # v-inset + first row inside border
         ellipsis_x_start = border_right - 4
-        if click_y == ellipsis_y && click_x >= ellipsis_x_start && click_x <= border_right - 2
+        if click_y >= ellipsis_y - 1 && click_y <= ellipsis_y + 1 &&
+           click_x >= ellipsis_x_start - 2 && click_x <= border_right
             focus_cell!(nv, target_idx)
             open_dropdown!(app, target_idx, border_right - 1, ellipsis_y + 1)
             return true
         end
 
         # ▶ run button in gap below cell (right-aligned)
+        # Hit zone: ±1 row, ±2 cols padding
         gap_y = y + ch + oh
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
-        if click_y == gap_y && click_x >= run_x && click_x <= cell_right
+        if click_y >= gap_y - 1 && click_y <= gap_y + 1 &&
+           click_x >= run_x - 2 && click_x <= cell_right + 2
             focus_cell!(nv, target_idx)
             run_cell_at_index!(app, target_idx)
             return true
