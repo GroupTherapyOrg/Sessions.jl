@@ -406,8 +406,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         # --- Cell rendering ---
         if y + ch > visible_start && y <= visible_end
-            cell_rect = Tachikoma.Rect(cx, max(y, visible_start), cw_width,
-                            min(ch, visible_end - max(y, visible_start) + 1))
+            clipped_y = max(y, visible_start)
+            clipped_h = min(ch - (clipped_y - y), visible_end - clipped_y + 1)
+            cell_rect = Tachikoma.Rect(cx, clipped_y, cw_width, clipped_h)
             Tachikoma.render(cw, cell_rect, buf)
         end
 
@@ -427,8 +428,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- Output rendering ---
         if oh > 0
             if y + oh > visible_start && y <= visible_end
-                out_rect = Tachikoma.Rect(cx, max(y, visible_start), cw_width,
-                                min(oh, visible_end - max(y, visible_start) + 1))
+                out_clipped_y = max(y, visible_start)
+                out_clipped_h = min(oh - (out_clipped_y - y), visible_end - out_clipped_y + 1)
+                out_rect = Tachikoma.Rect(cx, out_clipped_y, cw_width, out_clipped_h)
                 Tachikoma.render(ow, out_rect, buf)
             end
             y += oh

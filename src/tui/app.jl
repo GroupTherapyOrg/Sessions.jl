@@ -42,13 +42,24 @@ mutable struct SessionsApp <: Tachikoma.Model
     last_save_time::Float64  # time() of last save_notebook by us (for skip-reload guard)
 end
 
+"""Create a safe notebook snapshot for diffing (avoids deepcopy of Module references in error stacktraces)."""
+function _snapshot_notebook(nb::Notebook)
+    snap = Notebook(; path=nb.path)
+    for id in nb.cell_order
+        cell = nb.cells[id]
+        push!(snap.cell_order, id)
+        snap.cells[id] = Cell(; id, code=cell.code, folded=cell.folded, disabled=cell.disabled)
+    end
+    snap
+end
+
 function SessionsApp(nb::Notebook)
     ws = Workspace()
     nv = NotebookView(nb)
     dir = isempty(nb.path) ? pwd() : dirname(abspath(nb.path))
     fp = FilePanel(dir)
     ab = ActivityBar()
-    snapshot = deepcopy(nb)
+    snapshot = _snapshot_notebook(nb)
     SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0)
 end
@@ -100,7 +111,7 @@ function _on_external_change!(app::SessionsApp)
     try
         old_order = copy(app.last_disk_nb.cell_order)
         diff = merge_external_changes!(app.nb, app.last_disk_nb)
-        app.last_disk_nb = deepcopy(app.nb)
+        app.last_disk_nb = _snapshot_notebook(app.nb)
 
         reordered = diff.new_order != old_order
         n_changes = length(diff.added) + length(diff.changed) + length(diff.removed)
@@ -319,7 +330,7 @@ function _open_file!(app::SessionsApp, path::String)
         app.nb = nb
         app.workspace = Workspace()
         app.notebook_view = NotebookView(nb)
-        app.last_disk_nb = deepcopy(nb)
+        app.last_disk_nb = _snapshot_notebook(nb)
         _start_watcher!(app)
         app.message = "Opened: $(basename(path))"
     catch e
@@ -356,7 +367,7 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     app.undo_buffer = DeletedCell[]
     app.cell_dropdown = nothing
     app.mode = :normal
-    app.last_disk_nb = deepcopy(nb)
+    app.last_disk_nb = _snapshot_notebook(nb)
     _start_watcher!(app)
     app.message = "Opened workspace: $(basename(dir))"
 end
@@ -388,7 +399,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
         app.last_save_time = time()
-        app.last_disk_nb = deepcopy(app.nb)
+        app.last_disk_nb = _snapshot_notebook(app.nb)
         n_stale = run_stale_cells!(app)
         if n_stale > 0
             app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
@@ -484,7 +495,13 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+    # ── All remaining events require the click to be inside the notebook pane ──
+    nb_vp = nv.viewport
+    in_notebook = nb_vp.width > 0 &&
+        evt.x >= nb_vp.x && evt.x < nb_vp.x + nb_vp.width &&
+        evt.y >= nb_vp.y && evt.y < nb_vp.y + nb_vp.height
+
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press && in_notebook
         # Shift+click: range selection
         if evt.shift
             idx = cell_at_y(nv, evt.y)
@@ -495,10 +512,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         end
 
         # Compute cell layout dimensions
-        pad = max(1, round(Int, nv.viewport.width * Theme.CELL_PAD_FRACTION))
-        pad = min(pad, max(0, div(nv.viewport.width - 10, 2)))
-        cell_left = nv.viewport.x + pad
-        cell_right = nv.viewport.x + nv.viewport.width - pad
+        pad = max(1, round(Int, nb_vp.width * Theme.CELL_PAD_FRACTION))
+        pad = min(pad, max(0, div(nb_vp.width - 10, 2)))
+        cell_left = nb_vp.x + pad
+        cell_right = nb_vp.x + nb_vp.width - pad
         margin_x = cell_left - Theme.MARGIN_CTRL_WIDTH
 
         # Check if click is in the left margin area (for +, eye controls)
@@ -524,25 +541,29 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    if evt.button == Tachikoma.mouse_scroll_down
+    if in_notebook && evt.button == Tachikoma.mouse_scroll_down
         vi = Theme.CELL_V_INSET
-        inner_h = max(1, nv.viewport.height - 2 * vi - 2)  # subtract inset + border
+        inner_h = max(1, nb_vp.height - 2 * vi - 2)  # subtract inset + border
         max_scroll = max(0, content_height(nv) - inner_h)
         nv.scroll_offset = min(nv.scroll_offset + 2, max_scroll)
         nv.user_scrolling = true
         return
     end
 
-    if evt.button == Tachikoma.mouse_scroll_up
+    if in_notebook && evt.button == Tachikoma.mouse_scroll_up
         nv.scroll_offset = max(nv.scroll_offset - 2, 0)
         nv.user_scrolling = true
         return
     end
 
-    # Mouse move: update hover state
+    # Mouse move: update hover state only within notebook
     if evt.action == Tachikoma.mouse_move
-        idx = cell_at_y(nv, evt.y)
-        nv.hovered_idx = idx !== nothing ? idx : 0
+        if in_notebook
+            idx = cell_at_y(nv, evt.y)
+            nv.hovered_idx = idx !== nothing ? idx : 0
+        else
+            nv.hovered_idx = 0
+        end
         return
     end
 end

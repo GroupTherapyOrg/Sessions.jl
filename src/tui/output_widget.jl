@@ -172,19 +172,19 @@ end
 """A rendered line of styled segments."""
 const MdLine = Vector{MdSegment}
 
-# Style constructors for markdown elements — Pluto-like visual hierarchy
-_s_h1()    = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bold=true)
-_s_h2()    = Tachikoma.Style(; fg=Theme.ACCENT, bold=true)
-_s_h3()    = Tachikoma.Style(; fg=Theme.FG, bold=true)
-_s_text()  = Tachikoma.Style(; fg=Theme.FG_DIM)
-_s_bold()  = Tachikoma.Style(; fg=Theme.FG, bold=true)
-_s_ital()  = Tachikoma.Style(; fg=Theme.FG_DIM, italic=true)
-_s_code()  = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SURFACE_BG)
-_s_link()  = Tachikoma.Style(; fg=Theme.ACCENT, underline=true)
-_s_quote() = Tachikoma.Style(; fg=Theme.FG_DIM, italic=true)
-_s_hr()    = Tachikoma.Style(; fg=Theme.BORDER_DIM)
-_s_bullet() = Tachikoma.Style(; fg=Theme.ACCENT)
-_s_dim()   = Tachikoma.Style(; fg=Theme.FG_MUTED)
+# Style constructors — match Pluto: light text on dark canvas bg, no background highlights
+_s_h1()    = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, bold=true)
+_s_h2()    = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, bold=true)
+_s_h3()    = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, bold=true)
+_s_text()  = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG)
+_s_bold()  = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, bold=true)
+_s_ital()  = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, italic=true)
+_s_code()  = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.CANVAS_BG)
+_s_link()  = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, underline=true)
+_s_quote() = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.CANVAS_BG, italic=true)
+_s_hr()    = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG)
+_s_bullet() = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG)
+_s_dim()   = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG)
 
 """Walk a Markdown.MD AST and produce styled lines for TUI rendering."""
 function _md_to_lines(md::Markdown.MD, width::Int)
@@ -198,32 +198,39 @@ end
 """Render a block-level markdown element into lines."""
 function _render_block!(lines::Vector{MdLine}, block, width::Int, indent::Int)
     if block isa Markdown.Header{1}
+        # H1: bold + double underline (═)
         push!(lines, MdLine())  # blank line before
         segs = MdSegment[]
         push!(segs, MdSegment(" " ^ indent, _s_text()))
         _inline_to_segs!(segs, block.text, _s_h1())
         push!(lines, segs)
-        # Accent-colored underline
         text_len = sum(length(s.text) for s in segs)
         rule_len = min(max(text_len, 20), width - indent)
-        push!(lines, [MdSegment(" " ^ indent * "━" ^ rule_len,
-            Tachikoma.Style(; fg=Theme.ACCENT_DIM))])
+        push!(lines, [MdSegment(" " ^ indent * "═" ^ rule_len, _s_hr())])
         push!(lines, MdLine())  # blank line after
 
     elseif block isa Markdown.Header{2}
+        # H2: bold + dashed underline (─)
         push!(lines, MdLine())
         segs = MdSegment[]
         push!(segs, MdSegment(" " ^ indent, _s_text()))
         _inline_to_segs!(segs, block.text, _s_h2())
         push!(lines, segs)
+        text_len = sum(length(s.text) for s in segs)
+        rule_len = min(max(text_len, 20), width - indent)
+        push!(lines, [MdSegment(" " ^ indent * "─" ^ rule_len, _s_hr())])
         push!(lines, MdLine())
 
     elseif block isa Markdown.Header
+        # H3+: bold + dotted underline (·)
         push!(lines, MdLine())
         segs = MdSegment[]
         push!(segs, MdSegment(" " ^ indent, _s_text()))
         _inline_to_segs!(segs, block.text, _s_h3())
         push!(lines, segs)
+        text_len = sum(length(s.text) for s in segs)
+        rule_len = min(max(text_len, 20), width - indent)
+        push!(lines, [MdSegment(" " ^ indent * "·" ^ rule_len, _s_hr())])
         push!(lines, MdLine())
 
     elseif block isa Markdown.Paragraph
@@ -235,41 +242,35 @@ function _render_block!(lines::Vector{MdLine}, block, width::Int, indent::Int)
 
     elseif block isa Markdown.List
         for (i, item) in enumerate(block.items)
+            prefix = if block.ordered == -1
+                "  • "
+            else
+                "  $(block.ordered + i - 1). "
+            end
             first_line = true
             for sub in item
                 if sub isa Markdown.Paragraph
                     segs = MdSegment[]
                     if first_line
-                        # Accent-colored bullet/number prefix
-                        prefix = if block.ordered == -1
-                            "  • "
-                        else
-                            "  $(block.ordered + i - 1). "
-                        end
-                        push!(segs, MdSegment(" " ^ indent, _s_text()))
-                        push!(segs, MdSegment(prefix, _s_bullet()))
+                        push!(segs, MdSegment(" " ^ indent * prefix, _s_text()))
                         first_line = false
                     else
-                        prefix = block.ordered == -1 ? "    " : "     "
-                        push!(segs, MdSegment(" " ^ indent * prefix, _s_text()))
+                        push!(segs, MdSegment(" " ^ (indent + length(prefix)), _s_text()))
                     end
                     _inline_to_segs!(segs, sub.content, _s_text())
                     push!(lines, segs)
                 else
-                    prefix_len = block.ordered == -1 ? 4 : 5
-                    _render_block!(lines, sub, width, indent + prefix_len)
+                    _render_block!(lines, sub, width, indent + length(prefix))
                 end
             end
         end
         push!(lines, MdLine())  # blank line after list
 
     elseif block isa Markdown.BlockQuote
-        bar_style = Tachikoma.Style(; fg=Theme.ACCENT_DIM)
         for sub in block.content
             if sub isa Markdown.Paragraph
                 segs = MdSegment[]
-                push!(segs, MdSegment(" " ^ indent * "  ", _s_text()))
-                push!(segs, MdSegment("│ ", bar_style))
+                push!(segs, MdSegment(" " ^ indent * "  │ ", _s_dim()))
                 _inline_to_segs!(segs, sub.content, _s_quote())
                 push!(lines, segs)
             else
