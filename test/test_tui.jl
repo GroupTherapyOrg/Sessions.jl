@@ -438,6 +438,49 @@ using Tachikoma
         @test c1.output.result == 77
     end
 
+    @testset "SessionsApp — Shift+Enter triggers async execution" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "shift_enter_val = 55")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:shift_enter))
+        @test contains(app.message, "Executing")
+
+        sleep(0.5)
+        @test c1.state == cell_done
+        @test c1.output.result == 55
+    end
+
+    @testset "SessionsApp — Shift+Enter works in insert mode" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "insert_shift_val = 66")
+        app = Sessions.SessionsApp(nb)
+
+        # Enter insert mode
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+        @test app.mode == :insert
+
+        # Shift+Enter should still run the cell
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:shift_enter))
+        @test contains(app.message, "Executing")
+
+        sleep(0.5)
+        @test c1.state == cell_done
+        @test c1.output.result == 66
+    end
+
+    @testset "StatusBar — bottom bar shows Shift+Enter" begin
+        bar = Sessions.make_bottom_bar(; mode=:normal)
+        tb = TestBackend(120, 1)
+        Tachikoma.render_widget!(tb, bar)
+        @test Tachikoma.find_text(tb, "Shift+Enter") !== nothing
+
+        bar_insert = Sessions.make_bottom_bar(; mode=:insert)
+        tb2 = TestBackend(120, 1)
+        Tachikoma.render_widget!(tb2, bar_insert)
+        @test Tachikoma.find_text(tb2, "Shift+Enter") !== nothing
+    end
+
     @testset "SessionsApp — Ctrl+A triggers async run all" begin
         nb = Notebook()
         c1 = add_cell!(nb, "ctrl_a_val = 88")

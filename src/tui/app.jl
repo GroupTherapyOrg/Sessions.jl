@@ -73,8 +73,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Ctrl+Enter: execute cell in background
-    if evt.key == :ctrl && evt.char == '\r'
+    # Ctrl+Enter or Shift+Enter: execute cell in background
+    if (evt.key == :ctrl && evt.char == '\r') || evt.key == :shift_enter
         run_focused_cell_async!(app)
         return
     end
@@ -220,7 +220,7 @@ end
 """Launch the TUI app for a notebook."""
 function open(nb::Notebook)
     a = SessionsApp(nb)
-    Tachikoma.app(a; fps=30)
+    Tachikoma.app(a; fps=30, default_bindings=false)
 end
 
 """Create a new empty notebook and open it."""
