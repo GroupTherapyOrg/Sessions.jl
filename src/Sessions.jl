@@ -54,6 +54,7 @@ include("tui/file_editor_view.jl")
 include("tui/status_bar.jl")
 include("tui/file_panel.jl")
 include("tui/activity_bar.jl")
+include("tui/tab_bar.jl")
 include("tui/app.jl")
 
 # Layer 3: CLI

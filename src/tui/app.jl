@@ -1,11 +1,5 @@
 # TUI: Main application — SessionsApp Model/update!/view
 
-"""A deleted cell with its original position for undo."""
-struct DeletedCell
-    cell::Cell
-    position::Int
-end
-
 """Dropdown menu anchored to a cell (Pluto-style ⋯ menu)."""
 mutable struct CellDropdown
     cell_idx::Int           # which cell this is for
@@ -58,17 +52,11 @@ mutable struct SessionsApp <: Tachikoma.Model
     drag_cell_idx::Int       # cell index where drag started
     slider_drag::Bool        # mouse drag on a slider track
     slider_drag_idx::Int     # cell index of slider being dragged
-end
-
-"""Create a safe notebook snapshot for diffing (avoids deepcopy of Module references in error stacktraces)."""
-function _snapshot_notebook(nb::Notebook)
-    snap = Notebook(; path=nb.path)
-    for id in nb.cell_order
-        cell = nb.cells[id]
-        push!(snap.cell_order, id)
-        snap.cells[id] = Cell(; id, code=cell.code, folded=cell.folded, disabled=cell.disabled)
-    end
-    snap
+    # Tab management
+    tabs::Vector{EditorTab}
+    active_tab_idx::Int
+    tab_rects::Vector{Tachikoma.Rect}    # cached for mouse hit testing
+    close_rects::Vector{Tachikoma.Rect}  # cached for × button hit testing
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -86,6 +74,167 @@ function _is_notebook_dirty(app::SessionsApp)
     false
 end
 
+# ── Tab management ──────────────────────────────────────────────────────
+
+"""Sync a field to the active tab after reassignment."""
+function _sync_to_active_tab!(app::SessionsApp)
+    isempty(app.tabs) && return
+    tab = app.tabs[app.active_tab_idx]
+    tab.last_disk_nb = app.last_disk_nb
+    tab.last_save_time = app.last_save_time
+    tab.watcher = app.watcher
+end
+
+"""Save current app state into the active tab."""
+function _save_to_tab!(app::SessionsApp)
+    isempty(app.tabs) && return
+    tab = app.tabs[app.active_tab_idx]
+    tab.nb = app.nb
+    tab.workspace = app.workspace
+    tab.notebook_view = app.notebook_view
+    tab.file_editor_view = app.file_editor_view
+    tab.last_disk_nb = app.last_disk_nb
+    tab.watcher = app.watcher
+    tab.last_save_time = app.last_save_time
+    tab.undo_buffer = app.undo_buffer
+    tab.progress_recently = app.progress_recently
+    tab.progress_done_tick = app.progress_done_tick
+    # Persist mode (collapse transient modes to :normal)
+    tab.mode = (app.mode == :dropdown || app.mode == :confirm) ? :normal : app.mode
+end
+
+"""Load state from a tab into the app fields."""
+function _load_from_tab!(app::SessionsApp, idx::Int)
+    tab = app.tabs[idx]
+    app.nb = tab.nb
+    app.workspace = tab.workspace
+    app.notebook_view = tab.notebook_view
+    app.file_editor_view = tab.file_editor_view
+    app.editor_type = tab.tab_type
+    app.last_disk_nb = tab.last_disk_nb
+    app.watcher = tab.watcher
+    app.last_save_time = tab.last_save_time
+    app.undo_buffer = tab.undo_buffer
+    app.progress_recently = tab.progress_recently
+    app.progress_done_tick = tab.progress_done_tick
+    app.active_tab_idx = idx
+    # Restore mode; dismiss any transient UI
+    app.mode = tab.mode
+    app.cell_dropdown = nothing
+    app.confirm_dialog = nothing
+
+    # Clear interaction state so stale hovers don't carry over
+    app.notebook_view.hovered_idx = 0
+    app.notebook_view.hovered_control = :none
+    app.notebook_view.hovered_control_idx = 0
+    app.notebook_view.hovered_bond_idx = 0
+    app.notebook_view.run_all_hovered = false
+    app.notebook_view.save_hovered = false
+    app.drag_active = false
+    app.slider_drag = false
+    app.file_panel.hovered_idx = 0
+end
+
+"""Switch to a different tab by index."""
+function _switch_tab!(app::SessionsApp, idx::Int)
+    (idx < 1 || idx > length(app.tabs) || idx == app.active_tab_idx) && return
+    _save_to_tab!(app)
+    _load_from_tab!(app, idx)
+end
+
+"""Open a file in a new tab (or switch to existing tab if already open)."""
+function _open_in_tab!(app::SessionsApp, path::String)
+    # Check if already open
+    apath = abspath(path)
+    for (i, tab) in enumerate(app.tabs)
+        if abspath(tab.path) == apath
+            _switch_tab!(app, i)
+            return
+        end
+    end
+
+    # Save current tab state
+    _save_to_tab!(app)
+
+    try
+        if is_notebook_file(path)
+            nb = load_notebook_with_session(path)
+            tab = EditorTab(nb)
+            push!(app.tabs, tab)
+            _load_from_tab!(app, length(app.tabs))
+            _start_watcher!(app)
+            app.message = "Opened notebook: $(basename(path))"
+        else
+            fev = FileEditorView(path)
+            tab = EditorTab(fev)
+            push!(app.tabs, tab)
+            _load_from_tab!(app, length(app.tabs))
+            app.message = "Opened file: $(basename(path))"
+        end
+    catch e
+        app.message = "Error: $(sprint(showerror, e))"
+    end
+end
+
+"""Close a tab by index. Returns true if closed, false if cancelled."""
+function _close_tab!(app::SessionsApp, idx::Int)
+    (idx < 1 || idx > length(app.tabs)) && return true
+    length(app.tabs) <= 1 && return false  # keep at least one tab
+
+    tab = app.tabs[idx]
+
+    # Stop watcher if this tab has one
+    if tab.watcher !== nothing
+        stop_watching!(tab.watcher)
+        tab.watcher = nothing
+    end
+
+    deleteat!(app.tabs, idx)
+
+    # Adjust active index
+    if app.active_tab_idx == idx
+        # Switch to nearest tab
+        new_idx = min(idx, length(app.tabs))
+        _load_from_tab!(app, new_idx)
+        _start_watcher!(app)
+    elseif app.active_tab_idx > idx
+        app.active_tab_idx -= 1
+    end
+    true
+end
+
+"""Request to close a tab — shows confirmation if notebook or unsaved file."""
+function _request_close_tab!(app::SessionsApp, idx::Int)
+    (idx < 1 || idx > length(app.tabs)) && return
+    length(app.tabs) <= 1 && return  # keep at least one tab
+
+    tab = app.tabs[idx]
+    dirty = is_tab_dirty(tab)
+
+    if tab.tab_type == :notebook
+        title = dirty ? "Close Unsaved Notebook" : "Close Notebook"
+        msg = dirty ? "\"$(tab.label)\" has unsaved changes. Close anyway?" :
+                      "Close notebook \"$(tab.label)\"?"
+        app.confirm_dialog = ConfirmDialog(title, msg,
+            () -> begin
+                _close_tab!(app, idx)
+                app.message = "Closed: $(tab.label)"
+            end, :no, false, false)
+        app.mode = :confirm
+    elseif dirty
+        app.confirm_dialog = ConfirmDialog("Close Unsaved File",
+            "\"$(tab.label)\" has unsaved changes. Close anyway?",
+            () -> begin
+                _close_tab!(app, idx)
+                app.message = "Closed: $(tab.label)"
+            end, :no, false, false)
+        app.mode = :confirm
+    else
+        _close_tab!(app, idx)
+        app.message = "Closed: $(tab.label)"
+    end
+end
+
 function SessionsApp(nb::Notebook)
     ws = Workspace()
     nv = NotebookView(nb)
@@ -93,9 +242,14 @@ function SessionsApp(nb::Notebook)
     fp = FilePanel(dir)
     ab = ActivityBar()
     snapshot = _snapshot_notebook(nb)
+    tab = EditorTab(nb)
+    tab.workspace = ws
+    tab.notebook_view = nv
+    tab.last_disk_nb = snapshot
     SessionsApp(nb, ws, nv, nothing, :notebook, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
-        false, 0, false, 0)
+        false, 0, false, 0,
+        [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[])
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -106,9 +260,14 @@ function SessionsApp(fev::FileEditorView)
     dir = dirname(abspath(fev.path))
     fp = FilePanel(dir)
     ab = ActivityBar()
+    tab = EditorTab(fev)
+    tab.nb = nb
+    tab.workspace = ws
+    tab.notebook_view = nv
     SessionsApp(nb, ws, nv, fev, :file, fp, ab, Tachikoma.TaskQueue(), :insert, false, "", nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
-        false, 0, false, 0)
+        false, 0, false, 0,
+        [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[])
 end
 
 function SessionsApp(path::String)
@@ -142,6 +301,11 @@ function _start_watcher!(app::SessionsApp)
     app.watcher = DebouncedWatcher(app.nb, _ -> _on_external_change!(app);
                                     delay=0.5, poll_interval=0.3)
     start_watching!(app.watcher)
+
+    # Sync watcher to active tab
+    if !isempty(app.tabs) && app.active_tab_idx <= length(app.tabs)
+        app.tabs[app.active_tab_idx].watcher = app.watcher
+    end
 end
 
 """Handle external file change: smart merge + rebuild widgets."""
@@ -159,6 +323,7 @@ function _on_external_change!(app::SessionsApp)
         old_order = copy(app.last_disk_nb.cell_order)
         diff = merge_external_changes!(app.nb, app.last_disk_nb)
         app.last_disk_nb = _snapshot_notebook(app.nb)
+        _sync_to_active_tab!(app)
 
         reordered = diff.new_order != old_order
         n_changes = length(diff.added) + length(diff.changed) + length(diff.removed) + length(diff.metadata_changed)
@@ -234,11 +399,26 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.render(app.file_panel, sidebar_rect, buf)
     end
 
+    # ── Tab bar (only when multiple tabs are open) ──
+    editor_rect = notebook_rect
+    if length(app.tabs) > 1
+        tab_h = TAB_BAR_HEIGHT
+        tab_bar_rect = Tachikoma.Rect(notebook_rect.x, notebook_rect.y,
+            notebook_rect.width, tab_h)
+        editor_rect = Tachikoma.Rect(notebook_rect.x, notebook_rect.y + tab_h,
+            notebook_rect.width, max(1, notebook_rect.height - tab_h))
+        app.tab_rects, app.close_rects = render_tab_bar!(app.tabs, app.active_tab_idx,
+            tab_bar_rect, buf)
+    else
+        app.tab_rects = Tachikoma.Rect[]
+        app.close_rects = Tachikoma.Rect[]
+    end
+
     if app.editor_type == :file && app.file_editor_view !== nothing
         # File editor mode: render the file editor view
         fev = app.file_editor_view
         fev.editor.focused = (app.mode == :insert)
-        Tachikoma.render(fev, notebook_rect, buf)
+        Tachikoma.render(fev, editor_rect, buf)
     else
         # Notebook mode: render cell-based notebook view
         # Editor cursor only visible in insert mode on the focused cell
@@ -253,17 +433,17 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         # Update dirty flag by comparing current cell codes to last saved snapshot
         app.notebook_view.dirty = _is_notebook_dirty(app)
 
-        Tachikoma.render(app.notebook_view, notebook_rect, buf)
+        Tachikoma.render(app.notebook_view, editor_rect, buf)
 
         # Progress bar — overlays notebook pane top border during execution
-        _update_and_render_progress!(app, notebook_rect, buf)
+        _update_and_render_progress!(app, editor_rect, buf)
     end
 
-    # Repaint areas above/below notebook to hide cell/output overflow past notebook boundary
+    # Repaint areas above/below editor to hide cell/output overflow past boundary
     for fy in area.y:(notebook_rect.y - 1)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
-    nb_bottom = notebook_rect.y + notebook_rect.height
+    nb_bottom = editor_rect.y + editor_rect.height
     screen_bottom = area.y + area.height - 1
     for fy in nb_bottom:screen_bottom
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
@@ -428,36 +608,23 @@ function _handle_picker_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
 end
 
-"""Open a .jl file as a notebook."""
+"""Open a file in a new tab (or switch to existing)."""
 function _open_file!(app::SessionsApp, path::String)
-    try
-        if is_notebook_file(path)
-            nb = load_notebook_with_session(path)
-            app.nb = nb
-            app.workspace = Workspace()
-            app.notebook_view = NotebookView(nb)
-            app.file_editor_view = nothing
-            app.editor_type = :notebook
-            app.mode = :normal
-            app.last_disk_nb = _snapshot_notebook(nb)
-            _start_watcher!(app)
-            app.message = "Opened notebook: $(basename(path))"
-        else
-            fev = FileEditorView(path)
-            app.file_editor_view = fev
-            app.editor_type = :file
-            app.mode = :insert
-            app.message = "Opened file: $(basename(path))"
-        end
-    catch e
-        app.message = "Error: $(sprint(showerror, e))"
-    end
+    _open_in_tab!(app, path)
 end
 
 """Reset the entire workspace to a new folder. Creates an empty notebook and refreshes the file panel."""
 function reset_to_folder!(app::SessionsApp, dir::String)
     dir = abspath(dir)
     isdir(dir) || return
+
+    # Stop all tab watchers
+    for tab in app.tabs
+        if tab.watcher !== nothing
+            stop_watching!(tab.watcher)
+            tab.watcher = nothing
+        end
+    end
 
     # Find first .jl file to auto-open, or create empty notebook
     jl_files = filter(f -> endswith(f, ".jl"), try readdir(dir) catch; String[] end)
@@ -476,9 +643,13 @@ function reset_to_folder!(app::SessionsApp, dir::String)
         nb
     end
 
+    tab = EditorTab(nb)
+    app.tabs = [tab]
+    app.active_tab_idx = 1
+
     app.nb = nb
-    app.workspace = Workspace()
-    app.notebook_view = NotebookView(nb)
+    app.workspace = tab.workspace
+    app.notebook_view = tab.notebook_view
     app.file_editor_view = nothing
     app.editor_type = :notebook
     app.file_panel = FilePanel(dir)
@@ -486,7 +657,11 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     app.cell_dropdown = nothing
     app.confirm_dialog = nothing
     app.mode = :normal
-    app.last_disk_nb = _snapshot_notebook(nb)
+    app.last_disk_nb = tab.last_disk_nb
+    app.watcher = nothing
+    app.last_save_time = 0.0
+    app.progress_recently = Set{UUID}()
+    app.progress_done_tick = 0
     _start_watcher!(app)
     app.message = "Opened workspace: $(basename(dir))"
 end
@@ -529,12 +704,24 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # --- Essential keybindings only (everything else is mouse-driven) ---
 
+    # Ctrl+W: close current tab (when multiple tabs open)
+    if evt.key == :ctrl && evt.char == 'w'
+        if length(app.tabs) > 1
+            _request_close_tab!(app, app.active_tab_idx)
+        end
+        return
+    end
+
     # Ctrl+Q: quit (always)
     if evt.key == :ctrl && evt.char == 'q'
-        if app.watcher !== nothing
-            stop_watching!(app.watcher)
-            app.watcher = nothing
+        # Stop all tab watchers
+        for tab in app.tabs
+            if tab.watcher !== nothing
+                stop_watching!(tab.watcher)
+                tab.watcher = nothing
+            end
         end
+        app.watcher = nothing
         app.quit = true
         return
     end
@@ -545,10 +732,13 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     #   insert → copy text selection (or current line if no selection)
     if evt.key == :ctrl && evt.char == 'c'
         if app.mode == :panel
-            if app.watcher !== nothing
-                stop_watching!(app.watcher)
-                app.watcher = nothing
+            for tab in app.tabs
+                if tab.watcher !== nothing
+                    stop_watching!(tab.watcher)
+                    tab.watcher = nothing
+                end
             end
+            app.watcher = nothing
             app.quit = true
             return
         elseif app.mode == :insert
@@ -580,6 +770,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         save_notebook(app.nb)
         app.last_save_time = time()
         app.last_disk_nb = _snapshot_notebook(app.nb)
+        _sync_to_active_tab!(app)
         n_stale = run_stale_cells!(app)
         if n_stale > 0
             app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
@@ -700,6 +891,24 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         app.file_panel.picker_hovered_idx = 0
         app.file_panel.picker_parent_hovered = false
         app.file_panel.picker_select_hovered = false
+    end
+
+    # ── Tab bar clicks ──
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        # Check × close buttons first (they overlap tab rects)
+        for (i, cr) in enumerate(app.close_rects)
+            if cr.width > 0 && evt.x >= cr.x && evt.x < cr.x + cr.width && evt.y == cr.y
+                _request_close_tab!(app, i)
+                return
+            end
+        end
+        # Check tab label clicks
+        for (i, tr) in enumerate(app.tab_rects)
+            if tr.width > 0 && evt.x >= tr.x && evt.x < tr.x + tr.width && evt.y == tr.y
+                _switch_tab!(app, i)
+                return
+            end
+        end
     end
 
     # Activity bar clicks — toggle sidebar / open folder picker
@@ -869,6 +1078,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             save_notebook(app.nb)
             app.last_save_time = time()
             app.last_disk_nb = _snapshot_notebook(app.nb)
+            _sync_to_active_tab!(app)
             n_stale = run_stale_cells!(app)
             if n_stale > 0
                 app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
