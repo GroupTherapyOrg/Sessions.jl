@@ -195,7 +195,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         else
             idx = cell_at_y(nv, evt.y)
             if idx !== nothing
-                focus_cell!(nv, idx)
+                # Click on indicator area (first 5 columns) runs cell
+                if evt.x <= nv.viewport.x + 4
+                    run_cell_at_index!(app, idx)
+                else
+                    focus_cell!(nv, idx)
+                end
             end
         end
         return
@@ -322,6 +327,19 @@ function new(path::String="Untitled.jl")
     nb = Notebook(; path)
     add_cell!(nb, "")
     open(nb)
+end
+
+"""Run a cell by its index (for indicator click)."""
+function run_cell_at_index!(app::SessionsApp, idx::Int)
+    cells = ordered_cells(app.nb)
+    idx < 1 || idx > length(cells) && return
+    cell = cells[idx]
+    # Sync editor text first
+    if idx <= length(app.notebook_view.cell_widgets)
+        sync_to_cell!(app.notebook_view.cell_widgets[idx])
+    end
+    execute_changed!(app.nb, [cell]; workspace=app.workspace)
+    app.message = "Ran cell $idx"
 end
 
 """Delete focused cell and store in undo buffer."""

@@ -643,6 +643,59 @@ using Markdown: @md_str
         @test Sessions.cell_at_y(app.notebook_view, inside_y) == 1
     end
 
+    @testset "E2E: Click indicator runs cell" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "ind_run = 42")
+        app = Sessions.SessionsApp(nb)
+
+        render_app(app)
+        @test c1.state == cell_idle
+
+        # Click on indicator area (x=1, inside cell y)
+        cell_y = app.notebook_view.viewport.y + 1  # inside cell 1
+        evt = Tachikoma.MouseEvent(1, cell_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, evt)
+
+        @test c1.state == cell_done
+        @test c1.output.result == 42
+    end
+
+    @testset "E2E: Click indicator runs non-focused cell" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "ind_a = 10")
+        c2 = add_cell!(nb, "ind_b = 20")
+        app = Sessions.SessionsApp(nb)
+
+        render_app(app)
+        @test app.notebook_view.focused_idx == 1
+
+        # Click indicator on cell 2 (y = viewport.y + cell1_height + gap)
+        cell2_y = app.notebook_view.viewport.y + 3 + 1  # after cell1 (3) + gap (1)
+        evt = Tachikoma.MouseEvent(2, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, evt)
+
+        @test c2.state == cell_done
+        @test c2.output.result == 20
+    end
+
+    @testset "E2E: Click body focuses cell (not run)" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "no_run = 1")
+        c2 = add_cell!(nb, "no_run2 = 2")
+        app = Sessions.SessionsApp(nb)
+
+        render_app(app)
+
+        # Click on cell 2 body (x=10, well past indicator area)
+        cell2_y = app.notebook_view.viewport.y + 3 + 1
+        evt = Tachikoma.MouseEvent(10, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, evt)
+
+        # Should focus but not run
+        @test app.notebook_view.focused_idx == 2
+        @test c2.state == cell_idle
+    end
+
     @testset "E2E: Quit with Ctrl+Q" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
