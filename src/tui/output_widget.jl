@@ -1,4 +1,5 @@
-# TUI: Output rendering widget — displays cell execution results
+# TUI: Output rendering widget — Pluto-style seamless output below cells
+# No border, no title — just text on canvas bg with a subtle left accent bar
 
 """Widget to display a cell's output (result, stdout, errors)."""
 mutable struct OutputWidget
@@ -30,7 +31,7 @@ function output_lines(cell::Cell)
     lines
 end
 
-"""Height needed for output display."""
+"""Height needed for output display (borderless — just the lines + 1 for top padding)."""
 function output_height(ow::OutputWidget)
     if ow.collapsed || ow.cell.state == cell_idle
         return 0
@@ -42,7 +43,7 @@ function output_height(ow::OutputWidget)
         return _markdown_height(ow.cell)
     end
     lines = output_lines(ow.cell)
-    isempty(lines) ? 0 : length(lines) + 2
+    isempty(lines) ? 0 : length(lines)
 end
 
 function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
@@ -71,37 +72,23 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         return
     end
 
-    # Default: text lines
+    # Default: Pluto-style borderless output on canvas bg
     lines = output_lines(ow.cell)
     isempty(lines) && return
 
-    border_style = if ow.cell.state == cell_errored
-        Tachikoma.Style(; fg=Tachikoma.Color256(196))
-    elseif stale
-        Tachikoma.Style(; fg=Tachikoma.Color256(240))  # dimmed border when stale
-    else
-        Tachikoma.Style(; fg=Tachikoma.Color256(245))
-    end
+    errored = ow.cell.state == cell_errored
+    bar_color = Theme.output_bar_color(errored, stale)
+    text_style = Theme.output_text_style(errored, stale)
+    bar_style = Tachikoma.Style(; fg=bar_color, bg=Theme.CANVAS_BG)
 
-    title = stale ? "Output (stale)" : "Output"
-    block = Tachikoma.Block(; title, border_style)
-    Tachikoma.render(block, rect, buf)
-
-    inner_y = rect.y + 1
-    inner_x = rect.x + 2
+    text_x = rect.x + 3  # indent: 1 for bar + 2 for padding
     max_width = max(rect.width - 4, 1)
 
     for (i, line) in enumerate(lines)
-        row = inner_y + i - 1
-        row > rect.y + rect.height - 2 && break
-        text_style = if ow.cell.state == cell_errored
-            Tachikoma.Style(; fg=Tachikoma.Color256(196))
-        elseif stale
-            Tachikoma.Style(; fg=Tachikoma.Color256(240))  # dimmed text when stale
-        else
-            Tachikoma.Style()
-        end
-        Tachikoma.set_string!(buf, inner_x, row, first(line, max_width), text_style)
+        row = rect.y + i - 1
+        row > rect.y + rect.height - 1 && break
+        Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+        Tachikoma.set_string!(buf, text_x, row, first(line, max_width), text_style)
     end
 end
 
@@ -175,7 +162,7 @@ function _markdown_height(cell::Cell)
     result === nothing && return 0
     md_str = _markdown_string(result)
     n_lines = count(==('\n'), md_str) + 1
-    min(n_lines + 2, 15)  # +2 for border, cap at 15
+    min(n_lines, 15)
 end
 
 """Convert a Markdown.MD to string for rendering."""
@@ -204,12 +191,12 @@ end
 """Render a placeholder for image output (Kitty/sixel requires Frame, not Buffer)."""
 function _render_image_placeholder(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     block = Tachikoma.Block(; title="Image",
-        border_style=Tachikoma.Style(; fg=Tachikoma.Color256(245)))
+        border_style=Tachikoma.Style(; fg=Theme.FG_MUTED))
     Tachikoma.render(block, rect, buf)
 
     inner_y = rect.y + 1
     inner_x = rect.x + 2
     Tachikoma.set_string!(buf, inner_x, inner_y,
         "[Image: use graphical terminal for pixel rendering]",
-        Tachikoma.Style(; fg=Tachikoma.Color256(245)))
+        Tachikoma.Style(; fg=Theme.FG_MUTED))
 end

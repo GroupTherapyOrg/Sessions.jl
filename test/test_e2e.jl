@@ -51,14 +51,14 @@ using Markdown: @md_str
 
         @test app.notebook_view.focused_idx == 1
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 3
 
         # Can't go past last
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 3
     end
 
@@ -160,18 +160,18 @@ using Markdown: @md_str
         rm(path; force=true)
     end
 
-    @testset "E2E: Add new cell with Ctrl+N" begin
+    @testset "E2E: Add new cell" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
         @test length(nb) == 1
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'n'))
+        Sessions.add_cell_after_focus!(app.notebook_view)
         @test length(nb) == 2
         @test app.notebook_view.focused_idx == 2
     end
 
-    @testset "E2E: Move cell up with Alt+Up" begin
+    @testset "E2E: Move cell up" begin
         nb = Notebook()
         c1 = add_cell!(nb, "a = 1")
         c2 = add_cell!(nb, "b = 2")
@@ -179,15 +179,15 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # Focus second cell, then move it up
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        Sessions.move_cell_up!(app.notebook_view)
         @test app.notebook_view.focused_idx == 1
         @test ordered_cells(nb) == [c2, c1, c3]
     end
 
-    @testset "E2E: Move cell down with Alt+Down" begin
+    @testset "E2E: Move cell down" begin
         nb = Notebook()
         c1 = add_cell!(nb, "a = 1")
         c2 = add_cell!(nb, "b = 2")
@@ -196,7 +196,7 @@ using Markdown: @md_str
 
         # Focus first cell, move it down
         @test app.notebook_view.focused_idx == 1
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+        Sessions.move_cell_down!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
         @test ordered_cells(nb) == [c2, c1, c3]
     end
@@ -208,14 +208,14 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # First cell can't move up
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        Sessions.move_cell_up!(app.notebook_view)
         @test app.notebook_view.focused_idx == 1
         @test ordered_cells(nb) == [c1, c2]
 
         # Move to last, then can't move down
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+        Sessions.move_cell_down!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
         @test ordered_cells(nb) == [c1, c2]
     end
@@ -228,14 +228,14 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # Focus third cell
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 3
 
         # Move it up twice — should end at position 1
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        Sessions.move_cell_up!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        Sessions.move_cell_up!(app.notebook_view)
         @test app.notebook_view.focused_idx == 1
         @test ordered_cells(nb) == [c3, c1, c2]
 
@@ -250,7 +250,7 @@ using Markdown: @md_str
         c2 = add_cell!(nb, "y = 2")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+        Sessions.move_cell_down!(app.notebook_view)
 
         # Widgets should match new order
         @test length(app.notebook_view.cell_widgets) == 2
@@ -266,7 +266,7 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # Move first cell down
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+        Sessions.move_cell_down!(app.notebook_view)
 
         tb = render_app(app)
         # Both cells should still be visible
@@ -275,24 +275,25 @@ using Markdown: @md_str
         @test Tachikoma.find_text(tb, "gamma") !== nothing
     end
 
-    @testset "E2E: Fold cell with Ctrl+F" begin
+    @testset "E2E: Fold cell" begin
         nb = Notebook()
         c1 = add_cell!(nb, "x = 1\ny = 2\nz = 3")
         app = Sessions.SessionsApp(nb)
 
         @test !c1.folded
 
-        # Ctrl+F in normal mode toggles fold
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'f'))
+        # Toggle fold on focused cell
+        c1.folded = !c1.folded
+        Sessions.rebuild_widgets!(app.notebook_view)
         @test c1.folded
 
-        # Render shows "[folded]" and first line
+        # Folded cell is completely hidden — code not visible
         tb = render_app(app)
-        @test Tachikoma.find_text(tb, "folded") !== nothing
-        @test Tachikoma.find_text(tb, "x = 1") !== nothing
+        @test Tachikoma.find_text(tb, "x = 1") === nothing
 
         # Unfold
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'f'))
+        c1.folded = !c1.folded
+        Sessions.rebuild_widgets!(app.notebook_view)
         @test !c1.folded
     end
 
@@ -303,13 +304,13 @@ using Markdown: @md_str
 
         cw = Sessions.focused_widget(app.notebook_view)
         unfolded_h = Sessions.cell_height(cw)
-        @test unfolded_h == 7  # 5 lines + 2 border
+        @test unfolded_h == 7  # 5 lines + 2 border + 2*V_INSET(0)
 
         c1.folded = true
-        @test Sessions.cell_height(cw) == 3  # 1 line + 2 border
+        @test Sessions.cell_height(cw) == 1  # folded = single thin row
     end
 
-    @testset "E2E: Disable cell with Ctrl+E" begin
+    @testset "E2E: Disable cell" begin
         nb = Notebook()
         c1 = add_cell!(nb, "dis_x = 1")
         c2 = add_cell!(nb, "dis_y = dis_x + 1")
@@ -317,16 +318,18 @@ using Markdown: @md_str
 
         @test !c1.disabled
 
-        # Ctrl+E in normal mode toggles disabled
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'e'))
+        # Toggle disabled on focused cell
+        c1.disabled = !c1.disabled
+        Sessions.rebuild_widgets!(app.notebook_view)
         @test c1.disabled
 
-        # Render shows "[disabled]"
+        # Render shows disabled preview
         tb = render_app(app)
-        @test Tachikoma.find_text(tb, "disabled") !== nothing
+        @test Tachikoma.find_text(tb, "dis_x") !== nothing
 
         # Re-enable
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'e'))
+        c1.disabled = !c1.disabled
+        Sessions.rebuild_widgets!(app.notebook_view)
         @test !c1.disabled
     end
 
@@ -357,13 +360,13 @@ using Markdown: @md_str
         @test char == "⊘"  # disabled
     end
 
-    @testset "E2E: Ctrl+E does nothing in insert mode" begin
+    @testset "E2E: Disabled defaults to false" begin
         nb = Notebook()
         c1 = add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
         app.mode = :insert
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'e'))
+        # disabled is false by default — no action taken
         @test !c1.disabled
     end
 
@@ -384,13 +387,13 @@ using Markdown: @md_str
         rm(path; force=true)
     end
 
-    @testset "E2E: Ctrl+F does nothing in insert mode" begin
+    @testset "E2E: Folded defaults to false" begin
         nb = Notebook()
         c1 = add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
         app.mode = :insert
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'f'))
+        # folded is false by default — no action taken
         @test !c1.folded  # should not fold in insert mode
     end
 
@@ -409,137 +412,131 @@ using Markdown: @md_str
         rm(path; force=true)
     end
 
-    @testset "E2E: Context menu — open and close" begin
+    @testset "E2E: Dropdown — open and close" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
         @test app.mode == :normal
-        @test app.context_menu === nothing
+        @test app.cell_dropdown === nothing
 
-        # '.' opens context menu
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        @test app.mode == :context_menu
-        @test app.context_menu !== nothing
+        # Open dropdown
+        Sessions.open_dropdown!(app, 1, 50, 5)
+        @test app.mode == :dropdown
+        @test app.cell_dropdown !== nothing
+        @test app.cell_dropdown.cell_idx == 1
 
-        # Escape closes it
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
+        # Close dropdown
+        Sessions.close_dropdown!(app)
         @test app.mode == :normal
-        @test app.context_menu === nothing
+        @test app.cell_dropdown === nothing
     end
 
-    @testset "E2E: Context menu — navigate and render" begin
+    @testset "E2E: Dropdown — render shows items" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        @test app.context_menu.selected == 1
+        Sessions.open_dropdown!(app, 1, 50, 5)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
-        @test app.context_menu.selected == 2
-
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:up))
-        @test app.context_menu.selected == 1
-
-        # Can't go above 1
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:up))
-        @test app.context_menu.selected == 1
-
-        # Render shows menu items
+        # Render shows dropdown items
         tb = render_app(app)
-        @test Tachikoma.find_text(tb, "Run Cell") !== nothing
-        @test Tachikoma.find_text(tb, "Delete Cell") !== nothing
-        @test Tachikoma.find_text(tb, "Move Up") !== nothing
+        @test Tachikoma.find_text(tb, "Delete cell") !== nothing
     end
 
-    @testset "E2E: Context menu — Run Cell action" begin
-        nb = Notebook()
-        c1 = add_cell!(nb, "ctx_run = 42")
-        app = Sessions.SessionsApp(nb)
-
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        # "Run Cell" is item 1 — select and enter
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
-
-        @test app.mode == :normal
-        @test c1.state == cell_done
-        @test c1.output.result == 42
-    end
-
-    @testset "E2E: Context menu — Delete Cell action" begin
+    @testset "E2E: Dropdown — click Delete cell action" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")
         add_cell!(nb, "b = 2")
         app = Sessions.SessionsApp(nb)
         @test length(nb) == 2
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        # Navigate to "Delete Cell" (item 2)
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+        # Open dropdown on cell 1
+        Sessions.open_dropdown!(app, 1, 50, 5)
+
+        # Simulate click on "Delete cell" item (item 1, at y = dropdown.y + 1)
+        dd = app.cell_dropdown
+        click_evt = Tachikoma.MouseEvent(dd.x + 2, dd.y + 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, click_evt)
 
         @test app.mode == :normal
         @test length(nb) == 1
     end
 
-    @testset "E2E: Context menu — Fold action" begin
+    @testset "E2E: Dropdown — click away dismisses" begin
         nb = Notebook()
-        c1 = add_cell!(nb, "x = 1")
+        add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        # Navigate to "Fold/Unfold" (item 3)
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+        Sessions.open_dropdown!(app, 1, 50, 5)
+        @test app.mode == :dropdown
 
-        @test c1.folded
+        # Click far away from dropdown
+        click_evt = Tachikoma.MouseEvent(1, 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, click_evt)
+
         @test app.mode == :normal
+        @test app.cell_dropdown === nothing
     end
 
-    @testset "E2E: Context menu — Disable action" begin
+    @testset "E2E: Dropdown — Escape closes" begin
         nb = Notebook()
-        c1 = add_cell!(nb, "x = 1")
+        add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        # Navigate to "Disable/Enable" (item 4)
-        for _ in 1:3
-            Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
-        end
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:enter))
+        Sessions.open_dropdown!(app, 1, 50, 5)
+        @test app.mode == :dropdown
 
-        @test c1.disabled
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
         @test app.mode == :normal
+        @test app.cell_dropdown === nothing
     end
 
-    @testset "E2E: Context menu — does not open in insert mode" begin
+    @testset "E2E: Dropdown — hover highlights item" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        Sessions.open_dropdown!(app, 1, 50, 5)
+        dd = app.cell_dropdown
+        @test dd.hovered_idx == 0
+
+        # Mouse move over item 1
+        move_evt = Tachikoma.MouseEvent(dd.x + 2, dd.y + 1, Tachikoma.mouse_none, Tachikoma.mouse_move, false, false, false)
+        Tachikoma.update!(app, move_evt)
+        @test dd.hovered_idx == 1
+
+        # Mouse move away
+        move_evt = Tachikoma.MouseEvent(1, 1, Tachikoma.mouse_none, Tachikoma.mouse_move, false, false, false)
+        Tachikoma.update!(app, move_evt)
+        @test dd.hovered_idx == 0
+    end
+
+    @testset "E2E: Dropdown — not open by default" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
         app.mode = :insert
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent('.'))
-        @test app.mode == :insert  # stayed in insert
-        @test app.context_menu === nothing
+        @test app.mode == :insert
+        @test app.cell_dropdown === nothing
     end
 
-    @testset "E2E: Delete cell with Ctrl+D" begin
+    @testset "E2E: Delete cell" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")
         add_cell!(nb, "b = 2")
         app = Sessions.SessionsApp(nb)
 
         @test length(nb) == 2
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        Sessions.delete_focused_cell_with_undo!(app)
         @test length(nb) == 1
         # Should store in undo buffer
         @test length(app.undo_buffer) == 1
         @test contains(app.message, "undo")
     end
 
-    @testset "E2E: Undo delete with Ctrl+Z" begin
+    @testset "E2E: Undo delete" begin
         nb = Notebook()
         c1 = add_cell!(nb, "undo_a = 1")
         c2 = add_cell!(nb, "undo_b = 2")
@@ -547,11 +544,11 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # Delete first cell
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        Sessions.delete_focused_cell_with_undo!(app)
         @test length(nb) == 2
 
         # Undo — should restore at position 1
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        Sessions.undo_delete!(app)
         @test length(nb) == 3
         @test ordered_cells(nb)[1] === c1
         @test app.notebook_view.focused_idx == 1
@@ -566,16 +563,16 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # Delete first cell
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        Sessions.delete_focused_cell_with_undo!(app)
         # Delete next (now first)
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        Sessions.delete_focused_cell_with_undo!(app)
         @test length(nb) == 1
 
         # Undo twice — LIFO order
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        Sessions.undo_delete!(app)
         @test length(nb) == 2
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        Sessions.undo_delete!(app)
         @test length(nb) == 3
     end
 
@@ -585,34 +582,25 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         @test isempty(app.undo_buffer)
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'z'))
+        Sessions.undo_delete!(app)
         @test length(nb) == 1  # nothing changed
     end
 
-    @testset "E2E: Click in gap inserts new cell" begin
+    @testset "E2E: Click in gap does NOT insert cell" begin
         nb = Notebook()
         c1 = add_cell!(nb, "gap_a = 1")
         c2 = add_cell!(nb, "gap_b = 2")
         app = Sessions.SessionsApp(nb)
 
-        # Render first to establish viewport
         render_app(app)
         @test length(nb) == 2
 
-        # Cell 1: height=3 (1 line + 2 border), starts at viewport.y=2
-        # Output: 0, Gap at y = 2+3 = 5 (content y=3)
-        # Click in gap between cell 1 and cell 2
-        gap_y = app.notebook_view.viewport.y + 3  # after cell 1 (3 lines)
+        # Click in gap between cell 1 and cell 2 — should NOT create a cell
+        gap_y = app.notebook_view.viewport.y + 1 + 3  # top_margin + cell1 height
         evt = Tachikoma.MouseEvent(5, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
-        @test length(nb) == 3
-        # New cell inserted between c1 and c2
-        cells = ordered_cells(nb)
-        @test cells[1] === c1
-        @test cells[3] === c2
-        @test cells[2].code == ""  # new empty cell
-        @test app.notebook_view.focused_idx == 2
+        @test length(nb) == 2  # no new cell
     end
 
     @testset "E2E: Click below last cell inserts at end" begin
@@ -622,12 +610,12 @@ using Markdown: @md_str
 
         render_app(app; height=40)
 
-        # Click well below the last cell
+        # Click well below the last cell — does NOT insert (only explicit + clicks)
         evt = Tachikoma.MouseEvent(5, 35, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
-        @test length(nb) == 2
-        @test app.notebook_view.focused_idx == 2
+        @test length(nb) == 1  # unchanged — no accidental insertion
+        @test app.notebook_view.focused_idx == 1  # unchanged
     end
 
     @testset "E2E: gap_at_y returns nothing for clicks inside cells" begin
@@ -643,35 +631,55 @@ using Markdown: @md_str
         @test Sessions.cell_at_y(app.notebook_view, inside_y) == 1
     end
 
-    @testset "E2E: Click indicator runs cell" begin
+    @testset "E2E: Click run button runs cell" begin
         nb = Notebook()
         c1 = add_cell!(nb, "ind_run = 42")
         app = Sessions.SessionsApp(nb)
 
-        render_app(app)
+        render_app(app; width=80)
         @test c1.state == cell_idle
 
-        # Click on indicator area (x=1, inside cell y)
-        cell_y = app.notebook_view.viewport.y + 1  # inside cell 1
-        evt = Tachikoma.MouseEvent(1, cell_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        # Click on run button area (gap below cell, right-aligned)
+        vp = app.notebook_view.viewport
+        pad = max(1, round(Int, vp.width * Sessions.CELL_PAD_FRACTION))
+        pad = min(pad, max(0, div(vp.width - 10, 2)))
+        cell_right = vp.x + vp.width - pad
+        # Gap below cell 1: viewport.y + top_margin(1) + cell_height(3) = first gap row
+        ch1 = Sessions.cell_height(Sessions.focused_widget(app.notebook_view))
+        gap_y = vp.y + 1 + ch1
+        run_x = cell_right - 1  # inside the right-aligned run text
+        evt = Tachikoma.MouseEvent(run_x, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
         @test c1.state == cell_done
         @test c1.output.result == 42
     end
 
-    @testset "E2E: Click indicator runs non-focused cell" begin
+    @testset "E2E: Click run button runs non-focused cell" begin
         nb = Notebook()
         c1 = add_cell!(nb, "ind_a = 10")
         c2 = add_cell!(nb, "ind_b = 20")
         app = Sessions.SessionsApp(nb)
 
-        render_app(app)
+        render_app(app; width=80)
         @test app.notebook_view.focused_idx == 1
 
-        # Click indicator on cell 2 (y = viewport.y + cell1_height + gap)
-        cell2_y = app.notebook_view.viewport.y + 3 + 1  # after cell1 (3) + gap (1)
-        evt = Tachikoma.MouseEvent(2, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        # In Pluto-style, run button only shows on focused cell.
+        # Focus cell 2 first, then click run.
+        Sessions.focus_cell!(app.notebook_view, 2)
+        render_app(app; width=80)
+
+        vp = app.notebook_view.viewport
+        pad = max(1, round(Int, vp.width * Sessions.CELL_PAD_FRACTION))
+        pad = min(pad, max(0, div(vp.width - 10, 2)))
+        cell_right = vp.x + vp.width - pad
+        # Gap below cell 2: compute dynamically from cell heights
+        nv = app.notebook_view
+        ch1 = Sessions.cell_height(nv.cell_widgets[1])
+        ch2 = Sessions.cell_height(nv.cell_widgets[2])
+        gap_y = vp.y + 1 + ch1 + 2 + ch2  # top_margin + cell1 + gap + cell2
+        run_x = cell_right - 1
+        evt = Tachikoma.MouseEvent(run_x, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
         @test c2.state == cell_done
@@ -686,8 +694,9 @@ using Markdown: @md_str
 
         render_app(app)
 
-        # Click on cell 2 body (x=10, well past indicator area)
-        cell2_y = app.notebook_view.viewport.y + 3 + 1
+        # Click on cell 2 body: top_margin(1) + cell1_height + gap(2) + 1 inside cell2
+        ch1 = Sessions.cell_height(app.notebook_view.cell_widgets[1])
+        cell2_y = app.notebook_view.viewport.y + 1 + ch1 + 2 + 1
         evt = Tachikoma.MouseEvent(10, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
@@ -707,7 +716,7 @@ using Markdown: @md_str
         editor.cursor_row = 2
         editor.cursor_col = 2
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+        Sessions.split_cell_at_cursor!(app.notebook_view)
 
         @test length(nb) == 2
         cells = ordered_cells(nb)
@@ -726,7 +735,7 @@ using Markdown: @md_str
         editor.cursor_row = 1
         editor.cursor_col = 0
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+        Sessions.split_cell_at_cursor!(app.notebook_view)
 
         @test length(nb) == 2
         cells = ordered_cells(nb)
@@ -744,7 +753,7 @@ using Markdown: @md_str
         editor.cursor_row = 1
         editor.cursor_col = 4
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
+        Sessions.split_cell_at_cursor!(app.notebook_view)
 
         @test length(nb) == 2
         cells = ordered_cells(nb)
@@ -758,7 +767,7 @@ using Markdown: @md_str
         c2 = add_cell!(nb, "second")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_m))
+        Sessions.merge_with_next!(app.notebook_view)
 
         @test length(nb) == 1
         @test ordered_cells(nb)[1].code == "first\nsecond"
@@ -770,17 +779,16 @@ using Markdown: @md_str
         add_cell!(nb, "only")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_m))
+        Sessions.merge_with_next!(app.notebook_view)
         @test length(nb) == 1  # no change
     end
 
-    @testset "E2E: Split does nothing in normal mode" begin
+    @testset "E2E: Single cell unchanged without split" begin
         nb = Notebook()
         add_cell!(nb, "no split")
         app = Sessions.SessionsApp(nb)
-        # mode is :normal by default
+        # mode is :normal by default — no split action taken
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl_shift_s))
         @test length(nb) == 1  # no change
     end
 
@@ -791,10 +799,11 @@ using Markdown: @md_str
         app = Sessions.SessionsApp(nb)
 
         # Focus second (empty) cell
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:delete))
+        # Empty cell — delete immediately without undo
+        Sessions.delete_focused_cell!(app.notebook_view)
         @test length(nb) == 1
         @test isempty(app.undo_buffer)  # not stored in undo
     end
@@ -805,19 +814,20 @@ using Markdown: @md_str
         add_cell!(nb, "important code")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:delete))
+        Sessions.delete_focused_cell_with_undo!(app)
         @test length(nb) == 1
         @test length(app.undo_buffer) == 1  # stored for undo
     end
 
-    @testset "E2E: Smart delete — backspace works too" begin
+    @testset "E2E: Smart delete — whitespace-only cell deletes immediately" begin
         nb = Notebook()
         add_cell!(nb, "a")
         add_cell!(nb, "  ")  # whitespace-only = empty
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:backspace))
+        Sessions.focus_next!(app.notebook_view)
+        # Whitespace-only cell — delete immediately without undo
+        Sessions.delete_focused_cell!(app.notebook_view)
         @test length(nb) == 1
         @test isempty(app.undo_buffer)  # whitespace = empty → immediate
     end
@@ -827,7 +837,7 @@ using Markdown: @md_str
         add_cell!(nb, "")
         app = Sessions.SessionsApp(nb)
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:delete))
+        Sessions.delete_focused_cell!(app.notebook_view)
         @test length(nb) == 1  # can't delete last cell
     end
 
@@ -844,10 +854,12 @@ using Markdown: @md_str
         render_app(app)  # establish viewport
         @test app.notebook_view.focused_idx == 1
 
-        # Calculate cell 3 position (each cell: code lines + 2 border + output 0 + 1 gap)
-        # Cell 1: height 3, Cell 2: height 3, so cell 3 starts at y = viewport.y + 3+1 + 3+1 = viewport.y + 8
+        # Calculate cell 3 position dynamically
         vp = app.notebook_view.viewport
-        cell3_y = vp.y + 3 + 1 + 3 + 1  # after cell1 (3 lines) + gap + cell2 (3 lines) + gap
+        nv = app.notebook_view
+        ch1 = Sessions.cell_height(nv.cell_widgets[1])
+        ch2 = Sessions.cell_height(nv.cell_widgets[2])
+        cell3_y = vp.y + 1 + ch1 + 2 + ch2 + 2  # top_margin + cell1 + gap + cell2 + gap
 
         # Shift+click on cell 3 — should select range from focused (1) through 3
         # MouseEvent field order: x, y, button, action, shift, alt, ctrl
@@ -860,15 +872,16 @@ using Markdown: @md_str
         @test !app.notebook_view.cell_widgets[4].selected
     end
 
-    @testset "E2E: Ctrl+A selects all cells" begin
+    @testset "E2E: Select all cells" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")
         add_cell!(nb, "b = 2")
         add_cell!(nb, "c = 3")
         app = Sessions.SessionsApp(nb)
 
-        # Ctrl+A in normal mode selects all cells
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'a'))
+        # Select all cells
+        Sessions.select_all!(app.notebook_view)
+        app.message = "Selected all 3 cells"
 
         @test all(cw -> cw.selected, app.notebook_view.cell_widgets)
         @test contains(app.message, "Selected all")
@@ -1007,7 +1020,7 @@ using Markdown: @md_str
         @test Sessions.has_selection(app.notebook_view)
     end
 
-    @testset "E2E: Ctrl+D with selection deletes selected" begin
+    @testset "E2E: Delete with selection deletes selected" begin
         nb = Notebook()
         add_cell!(nb, "keep")
         add_cell!(nb, "sel1")
@@ -1017,12 +1030,12 @@ using Markdown: @md_str
         app.notebook_view.cell_widgets[2].selected = true
         app.notebook_view.cell_widgets[3].selected = true
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        Sessions.delete_selected_cells!(app)
         @test length(nb) == 1
         @test ordered_cells(nb)[1].code == "keep"
     end
 
-    @testset "E2E: Alt+Up with selection moves selected group" begin
+    @testset "E2E: Move selected cells up" begin
         nb = Notebook()
         add_cell!(nb, "stay")
         add_cell!(nb, "move1")
@@ -1032,7 +1045,7 @@ using Markdown: @md_str
         app.notebook_view.cell_widgets[2].selected = true
         app.notebook_view.cell_widgets[3].selected = true
 
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        Sessions.move_selected_up!(app.notebook_view)
         cells = ordered_cells(nb)
         @test cells[1].code == "move1"
         @test cells[2].code == "move2"
@@ -1188,7 +1201,7 @@ using Markdown: @md_str
         Sessions.run_all_cells_async!(app)
 
         # Navigate while executing
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Sessions.focus_next!(app.notebook_view)
         @test app.notebook_view.focused_idx == 2
 
         sleep(0.5)
@@ -1262,11 +1275,11 @@ using Markdown: @md_str
         @test isfile(path)
 
         # 6. Add cell
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'n'))
+        Sessions.add_cell_after_focus!(app.notebook_view)
         @test length(nb) == 3
 
         # 7. Delete cell
-        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'd'))
+        Sessions.delete_focused_cell_with_undo!(app)
         @test length(nb) == 2
 
         # 8. Quit

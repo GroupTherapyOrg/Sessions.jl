@@ -1,12 +1,23 @@
 # TUI: Main application — SessionsApp Model/update!/view
 
-const CONTEXT_MENU_ITEMS = ["Run Cell", "Delete Cell", "Fold/Unfold", "Disable/Enable", "Move Up", "Move Down"]
-
 """A deleted cell with its original position for undo."""
 struct DeletedCell
     cell::Cell
     position::Int
 end
+
+"""Dropdown menu anchored to a cell (Pluto-style ⋯ menu)."""
+mutable struct CellDropdown
+    cell_idx::Int           # which cell this is for
+    x::Int                  # screen x of dropdown top-left
+    y::Int                  # screen y of dropdown top-left
+    items::Vector{Tuple{String, String}}  # (icon, label) pairs
+    hovered_idx::Int        # which item mouse is hovering (0 = none)
+end
+
+const DROPDOWN_ITEMS = [
+    ("⊗", "Delete cell"),
+]
 
 """Sessions notebook TUI application model."""
 mutable struct SessionsApp <: Tachikoma.Model
@@ -14,10 +25,10 @@ mutable struct SessionsApp <: Tachikoma.Model
     workspace::Workspace
     notebook_view::NotebookView
     tq::Tachikoma.TaskQueue
-    mode::Symbol        # :normal, :insert, or :context_menu
+    mode::Symbol        # :normal, :insert, or :dropdown
     quit::Bool
     message::String     # Status message (temporary)
-    context_menu::Union{Nothing, Tachikoma.SelectableList}
+    cell_dropdown::Union{Nothing, CellDropdown}
     undo_buffer::Vector{DeletedCell}
 end
 
@@ -35,8 +46,21 @@ end
 Tachikoma.should_quit(app::SessionsApp) = app.quit
 Tachikoma.task_queue(app::SessionsApp) = app.tq
 
+"""Enable any-event mouse tracking (1003) for true hover support.
+Tachikoma defaults to 1002 (button-event only), which only tracks move while a button is held."""
+function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
+    print(t.io, "\e[?1003h")  # upgrade to any-event tracking
+end
+
 function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
+    Theme.advance_tick!()
     area = frame.area
+    buf = frame.buffer
+
+    # Fill entire screen with canvas bg
+    for fy in area.y:(area.y + area.height - 1)
+        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_CANVAS)
+    end
 
     layout = Tachikoma.Layout(Tachikoma.Vertical,
         [Tachikoma.Fixed(1), Tachikoma.Fill(), Tachikoma.Fixed(1)])
@@ -46,43 +70,48 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     top_bar = make_top_bar(app.nb)
     if !isempty(app.message)
         top_bar = Tachikoma.StatusBar(; left=[Tachikoma.Span(app.message,
-            Tachikoma.Style(; fg=Tachikoma.Color256(214)))])
+            Tachikoma.Style(; fg=Theme.ORANGE, bold=true))])
     end
-    Tachikoma.render(top_bar, rects[1], frame.buffer)
+    Tachikoma.render(top_bar, rects[1], buf)
+
+    # Control cursor: only show in focused cell during insert mode
+    for (i, cw) in enumerate(app.notebook_view.cell_widgets)
+        cw.editor.focused = (app.mode == :insert && i == app.notebook_view.focused_idx)
+    end
 
     # Notebook view (main content)
-    Tachikoma.render(app.notebook_view, rects[2], frame.buffer)
+    Tachikoma.render(app.notebook_view, rects[2], buf)
 
     # Bottom keybindings bar
     bottom_bar = make_bottom_bar(; mode=app.mode)
-    Tachikoma.render(bottom_bar, rects[3], frame.buffer)
+    Tachikoma.render(bottom_bar, rects[3], buf)
 
-    # Context menu overlay
-    if app.context_menu !== nothing
-        menu_w = 22
-        menu_h = length(CONTEXT_MENU_ITEMS) + 2  # +2 for border
-        menu_x = max(1, div(area.width - menu_w, 2) + area.x)
-        menu_y = max(1, div(area.height - menu_h, 2) + area.y)
-        menu_rect = Tachikoma.Rect(menu_x, menu_y, menu_w, menu_h)
-        Tachikoma.render(app.context_menu, menu_rect, frame.buffer)
+    # Cell dropdown overlay
+    if app.cell_dropdown !== nothing
+        _render_dropdown!(app.cell_dropdown, buf, area)
     end
 end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     app.message = ""  # Clear status message on any key
 
-    # Context menu mode — intercept all keys
-    if app.mode == :context_menu && app.context_menu !== nothing
-        handle_context_menu_key!(app, evt)
+    # Dropdown mode — only Escape closes it (all interaction is mouse)
+    if app.mode == :dropdown && app.cell_dropdown !== nothing
+        if evt.key == :escape
+            close_dropdown!(app)
+        end
         return
     end
 
-    # Global keybindings (always active)
+    # --- Essential keybindings only (everything else is mouse-driven) ---
+
+    # Ctrl+Q: quit
     if evt.key == :ctrl && evt.char == 'q'
         app.quit = true
         return
     end
 
+    # Ctrl+S: save + run stale
     if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
         n_stale = run_stale_cells!(app)
@@ -94,138 +123,58 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    if evt.key == :ctrl && evt.char == 'n'
-        add_cell_after_focus!(app.notebook_view)
-        return
-    end
-
-    # Ctrl+Enter or Shift+Enter: execute cell in background
-    if (evt.key == :ctrl && evt.char == '\r') || evt.key == :shift_enter
+    # Ctrl+R / Ctrl+Enter / Shift+Enter: run focused cell
+    if (evt.key == :ctrl && evt.char == 'r') || (evt.key == :ctrl && evt.char == '\r') || evt.key == :shift_enter
         run_focused_cell_async!(app)
         return
     end
 
-    # Ctrl+A: select all cells (normal mode only)
-    if app.mode == :normal && evt.key == :ctrl && evt.char == 'a'
-        select_all!(app.notebook_view)
-        app.message = "Selected all cells"
-        return
-    end
-
-    # Cell reorder (Alt+Up/Down) — works in both modes
-    if evt.key == :alt_up
-        if has_selection(app.notebook_view)
-            move_selected_up!(app.notebook_view)
-        else
-            move_cell_up!(app.notebook_view)
-        end
-        return
-    end
-    if evt.key == :alt_down
-        if has_selection(app.notebook_view)
-            move_selected_down!(app.notebook_view)
-        else
-            move_cell_down!(app.notebook_view)
-        end
-        return
-    end
-
-    # Cell fold/unfold toggle (normal mode only)
-    if app.mode == :normal && evt.key == :ctrl && evt.char == 'f'
-        cell = focused_cell(app.notebook_view)
-        if cell !== nothing
-            cell.folded = !cell.folded
-            rebuild_widgets!(app.notebook_view)
-        end
-        return
-    end
-
-    # Cell disable/enable toggle (normal mode only)
-    if app.mode == :normal && evt.key == :ctrl && evt.char == 'e'
-        cell = focused_cell(app.notebook_view)
-        if cell !== nothing
-            cell.disabled = !cell.disabled
-            rebuild_widgets!(app.notebook_view)
-        end
-        return
-    end
-
-    # Context menu trigger (normal mode only)
-    if app.mode == :normal && evt.key == :char && evt.char == '.'
-        open_context_menu!(app)
-        return
-    end
-
-    # Navigation between cells
-    if app.mode == :normal
-        if evt.key == :escape
-            if has_selection(app.notebook_view)
-                clear_selection!(app.notebook_view)
-            end
-            return
-        elseif evt.key == :tab
-            focus_next!(app.notebook_view)
-            return
-        elseif evt.key == :shift_tab || (evt.key == :ctrl && evt.char == 'p')
-            focus_prev!(app.notebook_view)
-            return
-        elseif evt.key == :ctrl && evt.char == 'd'
-            if has_selection(app.notebook_view)
-                delete_selected_cells!(app)
-            else
-                delete_focused_cell_with_undo!(app)
-            end
-            return
-        elseif evt.key == :delete || evt.key == :backspace
-            # Smart delete: empty cells delete immediately, non-empty use undo
-            cell = focused_cell(app.notebook_view)
-            if cell !== nothing && strip(cell.code) == ""
-                delete_focused_cell!(app.notebook_view)
-            else
-                delete_focused_cell_with_undo!(app)
-            end
-            return
-        elseif evt.key == :ctrl && evt.char == 'z'
-            undo_delete!(app)
-            return
-        elseif evt.key == :enter || evt.key == :char && evt.char == 'i'
-            app.mode = :insert
-            return
-        end
-    end
-
-    if app.mode == :insert
-        if evt.key == :escape
-            app.mode = :normal
-            return
-        end
-        # Split cell at cursor (insert mode)
-        if evt.key == :ctrl_shift_s
-            split_cell_at_cursor!(app.notebook_view)
-            app.message = "Split cell"
-            return
-        end
-    end
-
-    # Merge cells (normal mode)
-    if app.mode == :normal && evt.key == :ctrl_shift_m
-        merge_with_next!(app.notebook_view)
-        app.message = "Merged cells"
-        return
-    end
-
-    # Pass to focused cell widget
-    cw = focused_widget(app.notebook_view)
-    if cw !== nothing
+    # Escape: exit insert mode or clear selection
+    if evt.key == :escape
         if app.mode == :insert
+            app.mode = :normal
+        elseif has_selection(app.notebook_view)
+            clear_selection!(app.notebook_view)
+        end
+        return
+    end
+
+    # Enter or click into cell: enter insert mode for editing
+    if app.mode == :normal && evt.key == :enter
+        app.mode = :insert
+        return
+    end
+
+    # In insert mode, pass keys to the code editor
+    if app.mode == :insert
+        cw = focused_widget(app.notebook_view)
+        if cw !== nothing
             Tachikoma.handle_key!(cw, evt)
         end
     end
 end
 
-"""Handle mouse events — click to focus cells, scroll to navigate."""
+"""Handle mouse events — Pluto-style click zones for cell controls."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
+
+    # Dropdown mode: handle clicks inside dropdown or click-away to dismiss
+    if app.mode == :dropdown && app.cell_dropdown !== nothing
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            item_idx = _dropdown_hit_test(app.cell_dropdown, evt.x, evt.y)
+            if item_idx !== nothing
+                _execute_dropdown_action!(app, item_idx)
+            end
+            close_dropdown!(app)
+            return
+        end
+        # Mouse move: update hover highlight in dropdown
+        if evt.action == Tachikoma.mouse_move
+            app.cell_dropdown.hovered_idx = something(_dropdown_hit_test(app.cell_dropdown, evt.x, evt.y), 0)
+            return
+        end
+        return
+    end
 
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
         # Shift+click: range selection
@@ -237,21 +186,32 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
-        # Check gap first (more specific hit test)
-        gap_idx = gap_at_y(nv, evt.y)
-        if gap_idx !== nothing
-            add_cell_at_gap!(nv, gap_idx)
-        else
-            idx = cell_at_y(nv, evt.y)
-            if idx !== nothing
-                # Click on indicator area (first 5 columns) runs cell
-                if evt.x <= nv.viewport.x + 4
-                    run_cell_at_index!(app, idx)
-                else
-                    clear_selection!(nv)
-                    focus_cell!(nv, idx)
-                end
+        # Compute cell layout dimensions
+        pad = max(1, round(Int, nv.viewport.width * Theme.CELL_PAD_FRACTION))
+        pad = min(pad, max(0, div(nv.viewport.width - 10, 2)))
+        cell_left = nv.viewport.x + pad
+        cell_right = nv.viewport.x + nv.viewport.width - pad
+        margin_x = cell_left - Theme.MARGIN_CTRL_WIDTH
+
+        # Check if click is in the left margin area (for +, eye controls)
+        if evt.x >= margin_x && evt.x < cell_left
+            hit = _hit_test_margin_control(nv, evt.x, evt.y, margin_x)
+            if hit !== nothing
+                _handle_margin_click!(app, hit)
+                return
             end
+        end
+
+        # Check if click is on ⋯ button or ▶ run in gap
+        if _hit_test_cell_controls(app, nv, evt.x, evt.y, cell_left, cell_right)
+            return
+        end
+
+        # Regular cell click — focus it (cell adding is only via + buttons)
+        idx = cell_at_y(nv, evt.y)
+        if idx !== nothing
+            clear_selection!(nv)
+            focus_cell!(nv, idx)
         end
         return
     end
@@ -265,6 +225,128 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         nv.scroll_offset = max(0, nv.scroll_offset - 3)
         return
     end
+
+    # Mouse move: update hover state
+    if evt.action == Tachikoma.mouse_move
+        idx = cell_at_y(nv, evt.y)
+        nv.hovered_idx = idx !== nothing ? idx : 0
+        return
+    end
+end
+
+"""Hit test margin controls. Returns (:plus_above, idx), (:plus_below, idx), (:eye, idx), or nothing."""
+function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, margin_x::Int)
+    isempty(nv.cell_widgets) && return nothing
+    vp = nv.viewport
+
+    # Controls appear on focused OR hovered cell
+    for target_idx in (nv.focused_idx, nv.hovered_idx)
+        (target_idx < 1 || target_idx > length(nv.cell_widgets)) && continue
+
+        y = vp.y + Theme.TOP_MARGIN - nv.scroll_offset
+        for j in 1:target_idx-1
+            y += cell_height(nv.cell_widgets[j])
+            y += output_height(nv.output_widgets[j])
+            y += Theme.CELL_GAP
+        end
+
+        ch = cell_height(nv.cell_widgets[target_idx])
+        oh = output_height(nv.output_widgets[target_idx])
+
+        if click_y == y - 1
+            return (:plus_above, target_idx)
+        end
+
+        eye_y = y + div(ch, 2)
+        if click_y == eye_y
+            return (:eye, target_idx)
+        end
+
+        plus_below_y = y + ch + oh
+        if click_y == plus_below_y
+            return (:plus_below, target_idx)
+        end
+    end
+
+    nothing
+end
+
+"""Handle margin control clicks."""
+function _handle_margin_click!(app::SessionsApp, hit::Tuple{Symbol, Int})
+    action, idx = hit
+    nv = app.notebook_view
+
+    if action == :plus_above
+        # Insert cell above the target cell
+        cell = Cell()
+        insert_cell!(nv.nb, idx, cell)
+        rebuild_widgets!(nv)
+        nv.focused_idx = idx
+        update_focus!(nv)
+    elseif action == :plus_below
+        # Insert cell below the target cell
+        pos = idx + 1
+        cell = Cell()
+        insert_cell!(nv.nb, pos, cell)
+        rebuild_widgets!(nv)
+        nv.focused_idx = pos
+        update_focus!(nv)
+    elseif action == :eye
+        cells = ordered_cells(nv.nb)
+        if idx >= 1 && idx <= length(cells)
+            cells[idx].folded = !cells[idx].folded
+            rebuild_widgets!(nv)
+        end
+    end
+end
+
+"""Hit test ⋯ button (inside cell, top-right) and ▶ run (gap below). Returns true if handled."""
+function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
+                                  click_x::Int, click_y::Int,
+                                  cell_left::Int, cell_right::Int)
+    isempty(nv.cell_widgets) && return false
+
+    checked = Set{Int}()
+    for target_idx in (nv.focused_idx, nv.hovered_idx)
+        (target_idx < 1 || target_idx > length(nv.cell_widgets)) && continue
+        target_idx in checked && continue
+        push!(checked, target_idx)
+        cw = nv.cell_widgets[target_idx]
+
+        vp = nv.viewport
+        y = vp.y + Theme.TOP_MARGIN - nv.scroll_offset
+        for j in 1:target_idx-1
+            y += cell_height(nv.cell_widgets[j])
+            y += output_height(nv.output_widgets[j])
+            y += Theme.CELL_GAP
+        end
+        ch = cell_height(cw)
+        oh = output_height(nv.output_widgets[target_idx])
+
+        # ⋯ button inside border (first inner row of border, right-aligned)
+        hi = Theme.CELL_H_INSET
+        vi = Theme.CELL_V_INSET
+        border_right = cell_right - hi
+        ellipsis_y = y + vi + 1  # v-inset + first row inside border
+        ellipsis_x_start = border_right - 4
+        if click_y == ellipsis_y && click_x >= ellipsis_x_start && click_x <= border_right - 2
+            focus_cell!(nv, target_idx)
+            open_dropdown!(app, target_idx, border_right - 1, ellipsis_y + 1)
+            return true
+        end
+
+        # ▶ run button in gap below cell (right-aligned)
+        gap_y = y + ch + oh
+        run_text = run_button_text(cw.cell)
+        run_x = cell_right - length(run_text)
+        if click_y == gap_y && click_x >= run_x && click_x <= cell_right
+            focus_cell!(nv, target_idx)
+            run_cell_at_index!(app, target_idx)
+            return true
+        end
+    end
+
+    false
 end
 
 """Handle task completion events from background execution."""
@@ -382,7 +464,7 @@ end
 """Run a cell by its index (for indicator click)."""
 function run_cell_at_index!(app::SessionsApp, idx::Int)
     cells = ordered_cells(app.nb)
-    idx < 1 || idx > length(cells) && return
+    (idx < 1 || idx > length(cells)) && return
     cell = cells[idx]
     # Sync editor text first
     if idx <= length(app.notebook_view.cell_widgets)
@@ -440,67 +522,90 @@ function undo_delete!(app::SessionsApp)
     app.message = "Restored cell"
 end
 
-"""Open the cell context menu."""
-function open_context_menu!(app::SessionsApp)
-    block = Tachikoma.Block(; title="Cell Actions")
-    app.context_menu = Tachikoma.SelectableList(CONTEXT_MENU_ITEMS; block, focused=true)
-    app.mode = :context_menu
+"""Open the cell dropdown menu anchored next to the ⋯ button."""
+function open_dropdown!(app::SessionsApp, cell_idx::Int, x::Int, y::Int)
+    app.cell_dropdown = CellDropdown(cell_idx, x, y, collect(DROPDOWN_ITEMS), 0)
+    app.mode = :dropdown
 end
 
-"""Close the context menu."""
-function close_context_menu!(app::SessionsApp)
-    app.context_menu = nothing
+"""Close the cell dropdown."""
+function close_dropdown!(app::SessionsApp)
+    app.cell_dropdown = nothing
     app.mode = :normal
 end
 
-"""Handle key events in context menu mode."""
-function handle_context_menu_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
-    menu = app.context_menu
+"""Hit test a click against dropdown items. Returns item index or nothing."""
+function _dropdown_hit_test(dd::CellDropdown, click_x::Int, click_y::Int)
+    # Dropdown layout: border row, then one row per item, then border row
+    # Width = max item width + icon + padding + borders
+    w = _dropdown_width(dd)
+    # Check bounds
+    click_x < dd.x && return nothing
+    click_x >= dd.x + w && return nothing
+    click_y <= dd.y && return nothing  # top border
+    click_y > dd.y + length(dd.items) && return nothing  # past bottom border
+    item_idx = click_y - dd.y
+    (item_idx >= 1 && item_idx <= length(dd.items)) ? item_idx : nothing
+end
 
-    if evt.key == :escape
-        close_context_menu!(app)
-        return
-    end
+"""Execute a dropdown action by item index."""
+function _execute_dropdown_action!(app::SessionsApp, item_idx::Int)
+    dd = app.cell_dropdown
+    dd === nothing && return
+    item_idx < 1 || item_idx > length(dd.items) && return
 
-    if evt.key == :up
-        menu.selected = max(1, menu.selected - 1)
-        return
-    end
-
-    if evt.key == :down
-        menu.selected = min(length(CONTEXT_MENU_ITEMS), menu.selected + 1)
-        return
-    end
-
-    if evt.key == :enter
-        execute_context_action!(app, menu.selected)
-        close_context_menu!(app)
-        return
+    _, label = dd.items[item_idx]
+    if label == "Delete cell"
+        # Focus the target cell, then delete it
+        focus_cell!(app.notebook_view, dd.cell_idx)
+        delete_focused_cell_with_undo!(app)
     end
 end
 
-"""Execute a context menu action by index."""
-function execute_context_action!(app::SessionsApp, idx::Int)
-    action = CONTEXT_MENU_ITEMS[idx]
-    if action == "Run Cell"
-        run_focused_cell!(app)
-    elseif action == "Delete Cell"
-        delete_focused_cell_with_undo!(app)
-    elseif action == "Fold/Unfold"
-        cell = focused_cell(app.notebook_view)
-        if cell !== nothing
-            cell.folded = !cell.folded
-            rebuild_widgets!(app.notebook_view)
-        end
-    elseif action == "Disable/Enable"
-        cell = focused_cell(app.notebook_view)
-        if cell !== nothing
-            cell.disabled = !cell.disabled
-            rebuild_widgets!(app.notebook_view)
-        end
-    elseif action == "Move Up"
-        move_cell_up!(app.notebook_view)
-    elseif action == "Move Down"
-        move_cell_down!(app.notebook_view)
+"""Compute dropdown width from items."""
+function _dropdown_width(dd::CellDropdown)
+    max_label = maximum(length(label) for (_, label) in dd.items)
+    max_label + 6  # icon(1) + spaces(3) + border(2)
+end
+
+"""Render the dropdown overlay."""
+function _render_dropdown!(dd::CellDropdown, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    w = _dropdown_width(dd)
+    h = length(dd.items) + 2  # +2 for top/bottom border
+
+    # Clamp position to stay on screen
+    x = min(dd.x, area.x + area.width - w)
+    x = max(x, area.x)
+    y = min(dd.y, area.y + area.height - h)
+    y = max(y, area.y)
+
+    box = Theme.BOX
+    bg = Theme.DROPDOWN_BG
+    border_style = Tachikoma.Style(; fg=Theme.DROPDOWN_BORDER_FG, bg)
+
+    # Top border (rounded)
+    top = string(box.tl) * repeat(string(box.h), w - 2) * string(box.tr)
+    Tachikoma.set_string!(buf, x, y, top, border_style)
+
+    # Items
+    for (i, (icon, label)) in enumerate(dd.items)
+        iy = y + i
+        is_hovered = (i == dd.hovered_idx)
+        item_bg = is_hovered ? Theme.DROPDOWN_HOVER_BG : bg
+        item_fg = is_hovered ? Theme.DROPDOWN_HOVER_FG : Theme.DROPDOWN_ITEM_FG
+        icon_fg = is_hovered ? Theme.DROPDOWN_HOVER_ICON : Theme.DROPDOWN_ICON_FG
+
+        Tachikoma.set_char!(buf, x, iy, box.v, border_style)
+        content = " $icon $label"
+        pad_n = w - length(content) - 2
+        Tachikoma.set_string!(buf, x + 1, iy, " ", Tachikoma.Style(; fg=item_fg, bg=item_bg))
+        Tachikoma.set_string!(buf, x + 2, iy, icon, Tachikoma.Style(; fg=icon_fg, bg=item_bg))
+        rest = " $label" * " " ^ max(0, pad_n)
+        Tachikoma.set_string!(buf, x + 3, iy, rest, Tachikoma.Style(; fg=item_fg, bg=item_bg))
+        Tachikoma.set_char!(buf, x + w - 1, iy, box.v, border_style)
     end
+
+    # Bottom border (rounded)
+    bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
+    Tachikoma.set_string!(buf, x, y + length(dd.items) + 1, bot, border_style)
 end

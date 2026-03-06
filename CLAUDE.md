@@ -35,5 +35,10 @@ julia +1.12 --project=. test/runtests.jl    # Run tests
 julia +1.12 --project=. -e 'using Sessions'  # Load package
 ```
 
+## CRITICAL: Keybinding Requirements
+- **Ctrl+R** MUST always be a "run cell" binding. Most macOS terminals (Terminal.app, iTerm2) do NOT send distinct keycodes for Shift+Enter or Ctrl+Enter. Ctrl+R (0x12) is the universal fallback that works everywhere.
+- Keep Shift+Enter and Ctrl+Enter as secondary bindings for terminals with Kitty keyboard protocol support.
+- NEVER remove Ctrl+R as a run binding.
+
 ## Commit Style
 SESSIONS-5XXX: Description

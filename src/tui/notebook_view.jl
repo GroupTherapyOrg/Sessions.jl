@@ -9,6 +9,7 @@ mutable struct NotebookView
     cell_widgets::Vector{CellWidget}
     output_widgets::Vector{OutputWidget}
     focused_idx::Int
+    hovered_idx::Int   # which cell the mouse is hovering over (0 = none)
     scroll_offset::Int
     viewport::Tachikoma.Rect   # stored during render for mouse hit testing
 end
@@ -17,7 +18,7 @@ function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, Tachikoma.Rect())
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect())
 end
 
 """Rebuild widgets when cells change."""
@@ -88,16 +89,26 @@ function add_cell_after_focus!(nv::NotebookView)
     update_focus!(nv)
 end
 
+"""Add a new cell before the focused cell."""
+function add_cell_before_focus!(nv::NotebookView)
+    idx = nv.focused_idx
+    cell = Cell()
+    insert_cell!(nv.nb, idx, cell)
+    rebuild_widgets!(nv)
+    nv.focused_idx = idx
+    update_focus!(nv)
+end
+
 """Move the focused cell up (swap with previous). Focus follows the cell."""
 function move_cell_up!(nv::NotebookView)
     swap_cell_up!(nv.nb, nv.focused_idx) || return
-    rebuild_widgets!(nv)  # rebuild_widgets! tracks focused cell by ID
+    rebuild_widgets!(nv)
 end
 
 """Move the focused cell down (swap with next). Focus follows the cell."""
 function move_cell_down!(nv::NotebookView)
     swap_cell_down!(nv.nb, nv.focused_idx) || return
-    rebuild_widgets!(nv)  # rebuild_widgets! tracks focused cell by ID
+    rebuild_widgets!(nv)
 end
 
 """Delete the focused cell (if more than one cell exists)."""
@@ -114,16 +125,15 @@ end
 function cell_at_y(nv::NotebookView, screen_y::Int)
     isempty(nv.cell_widgets) && return nothing
     vp = nv.viewport
-    vp.width == 0 && return nothing  # viewport not yet established
+    vp.width == 0 && return nothing
 
-    # Convert screen y to content-space y
-    content_y = screen_y - vp.y + nv.scroll_offset
+    content_y = screen_y - vp.y + nv.scroll_offset - Theme.TOP_MARGIN
 
     y = 0
     for i in eachindex(nv.cell_widgets)
         ch = cell_height(nv.cell_widgets[i])
         oh = output_height(nv.output_widgets[i])
-        slot_h = ch + oh + 1  # cell + output + gap
+        slot_h = ch + oh + Theme.CELL_GAP
 
         if content_y < y + slot_h
             return i
@@ -131,47 +141,42 @@ function cell_at_y(nv::NotebookView, screen_y::Int)
         y += slot_h
     end
 
-    nothing  # clicked below all cells
+    nothing
 end
 
 """Map a screen y-coordinate to a gap insertion index, or nothing if inside a cell.
 Returns the 1-based index where a new cell should be inserted."""
 function gap_at_y(nv::NotebookView, screen_y::Int)
-    isempty(nv.cell_widgets) && return 1  # empty notebook → insert at 1
+    isempty(nv.cell_widgets) && return nothing
     vp = nv.viewport
     vp.width == 0 && return nothing
 
-    # Clicks outside viewport are not gaps
     screen_y < vp.y && return nothing
 
-    content_y = screen_y - vp.y + nv.scroll_offset
+    content_y = screen_y - vp.y + nv.scroll_offset - Theme.TOP_MARGIN
 
     y = 0
     for i in eachindex(nv.cell_widgets)
         ch = cell_height(nv.cell_widgets[i])
         oh = output_height(nv.output_widgets[i])
 
-        # Cell body
         if content_y < y + ch
-            return nothing  # inside cell, not gap
+            return nothing
         end
         y += ch
 
-        # Output body
         if oh > 0 && content_y < y + oh
-            return nothing  # inside output, not gap
+            return nothing
         end
         y += oh
 
-        # Gap (1 pixel)
-        if content_y < y + 1
-            return i + 1  # gap after cell i → insert at i+1
+        if content_y < y + Theme.CELL_GAP
+            return nothing  # in the gap — not a clickable zone
         end
-        y += 1
+        y += Theme.CELL_GAP
     end
 
-    # Below all cells
-    return length(nv.cell_widgets) + 1
+    return nothing
 end
 
 """Insert a new cell at a gap position and focus it."""
@@ -266,18 +271,14 @@ function move_selected_up!(nv::NotebookView)
     isempty(nv.cell_widgets) && return
     selected_indices = [i for (i, cw) in enumerate(nv.cell_widgets) if cw.selected]
     isempty(selected_indices) && return
-    # Can't move up if first selected is already at position 1
     first(selected_indices) <= 1 && return
 
-    # Swap each selected cell with the one above it, in order
     for i in selected_indices
         nb = nv.nb
         nb.cell_order[i], nb.cell_order[i-1] = nb.cell_order[i-1], nb.cell_order[i]
     end
-    # Track which IDs were selected
     selected_ids = Set(nv.cell_widgets[i].cell.id for i in selected_indices)
     rebuild_widgets!(nv)
-    # Restore selection on the moved cells
     for (i, cw) in enumerate(nv.cell_widgets)
         cw.selected = cw.cell.id in selected_ids
     end
@@ -288,10 +289,8 @@ function move_selected_down!(nv::NotebookView)
     isempty(nv.cell_widgets) && return
     selected_indices = [i for (i, cw) in enumerate(nv.cell_widgets) if cw.selected]
     isempty(selected_indices) && return
-    # Can't move down if last selected is already at end
     last(selected_indices) >= length(nv.cell_widgets) && return
 
-    # Swap each selected cell with the one below it, in reverse order
     for i in reverse(selected_indices)
         nb = nv.nb
         nb.cell_order[i], nb.cell_order[i+1] = nb.cell_order[i+1], nb.cell_order[i]
@@ -305,18 +304,36 @@ end
 
 """Focus a cell by index directly (for mouse click)."""
 function focus_cell!(nv::NotebookView, idx::Int)
-    idx < 1 || idx > length(nv.cell_widgets) && return
+    (idx < 1 || idx > length(nv.cell_widgets)) && return
     nv.focused_idx = idx
     update_focus!(nv)
 end
 
+# Layout constants are in Theme — referenced as Theme.CELL_PAD_FRACTION etc.
+# Re-export for backward compatibility with tests that use Sessions.CELL_PAD_FRACTION
+const CELL_PAD_FRACTION = Theme.CELL_PAD_FRACTION
+const MARGIN_CTRL_WIDTH = Theme.MARGIN_CTRL_WIDTH
+
 function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
-    nv.viewport = rect  # store for mouse hit testing
+    nv.viewport = rect
+
+    # Fill viewport with canvas bg
+    for fy in rect.y:(rect.y + rect.height - 1)
+        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, Theme.S_CANVAS)
+    end
+
     isempty(nv.cell_widgets) && return
 
-    y = rect.y - nv.scroll_offset
+    pad = max(1, round(Int, rect.width * Theme.CELL_PAD_FRACTION))
+    pad = min(pad, max(0, div(rect.width - 10, 2)))
+    cx = rect.x + pad
+    cw_width = max(1, rect.width - 2 * pad)
+
+    y = rect.y + Theme.TOP_MARGIN - nv.scroll_offset
     visible_start = rect.y
     visible_end = rect.y + rect.height - 1
+    margin_x = cx - Theme.MARGIN_CTRL_WIDTH
+    margin_s = Theme.margin_style()
 
     for i in eachindex(nv.cell_widgets)
         cw = nv.cell_widgets[i]
@@ -324,24 +341,67 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         ch = cell_height(cw)
         oh = output_height(ow)
+        is_focused = (i == nv.focused_idx)
+        is_hovered = (i == nv.hovered_idx)
+        show_controls = is_focused || is_hovered
 
+        cw.hovered = is_hovered && !is_focused
+
+        # --- "+" add-above (in gap row above cell) ---
+        if show_controls
+            plus_above_y = y - 1
+            if plus_above_y >= visible_start && plus_above_y <= visible_end && margin_x >= rect.x
+                Tachikoma.set_string!(buf, margin_x, plus_above_y, " + ", margin_s)
+            end
+        end
+
+        # --- Cell rendering ---
         if y + ch > visible_start && y <= visible_end
-            cell_rect = Tachikoma.Rect(rect.x, max(y, visible_start), rect.width,
+            cell_rect = Tachikoma.Rect(cx, max(y, visible_start), cw_width,
                             min(ch, visible_end - max(y, visible_start) + 1))
             Tachikoma.render(cw, cell_rect, buf)
         end
+
+        # --- Eye button (left margin, vertically centered) ---
+        if show_controls
+            eye_y = y + div(ch, 2)
+            if eye_y >= visible_start && eye_y <= visible_end && margin_x >= rect.x
+                echar = Theme.eye_char(cw.cell.folded)
+                efg = Theme.eye_fg(cw.cell.folded)
+                Tachikoma.set_string!(buf, margin_x, eye_y, " $echar ",
+                    Tachikoma.Style(; fg=efg, bg=Theme.MARGIN_BG))
+            end
+        end
+
         y += ch
 
+        # --- Output rendering ---
         if oh > 0
             if y + oh > visible_start && y <= visible_end
-                out_rect = Tachikoma.Rect(rect.x, max(y, visible_start), rect.width,
+                out_rect = Tachikoma.Rect(cx, max(y, visible_start), cw_width,
                                 min(oh, visible_end - max(y, visible_start) + 1))
                 Tachikoma.render(ow, out_rect, buf)
             end
             y += oh
         end
 
-        y += 1  # gap between cells
+        # --- "+" add-below and "▶ Xms" run button (in gap below cell) ---
+        if show_controls
+            gap_y = y
+            if gap_y >= visible_start && gap_y <= visible_end
+                if margin_x >= rect.x
+                    Tachikoma.set_string!(buf, margin_x, gap_y, " + ", margin_s)
+                end
+                run_text = run_button_text(cw.cell)
+                run_style = run_button_style(cw.cell, Theme.tick())
+                run_x = cx + cw_width - length(run_text)
+                if run_x >= cx
+                    Tachikoma.set_string!(buf, run_x, gap_y, run_text, run_style)
+                end
+            end
+        end
+
+        y += Theme.CELL_GAP
     end
 
     ensure_visible!(nv, rect)
@@ -351,11 +411,11 @@ end
 function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
     isempty(nv.cell_widgets) && return
 
-    y = 0
+    y = Theme.TOP_MARGIN
     for i in 1:nv.focused_idx-1
         y += cell_height(nv.cell_widgets[i])
         y += output_height(nv.output_widgets[i])
-        y += 1
+        y += Theme.CELL_GAP
     end
 
     focused_h = cell_height(nv.cell_widgets[nv.focused_idx])

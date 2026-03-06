@@ -36,6 +36,7 @@ export format_error, format_cell_error
 include("run.jl")
 
 # Layer 2: TUI
+include("tui/theme.jl")
 include("tui/cell_widget.jl")
 include("tui/output_widget.jl")
 include("tui/status_bar.jl")
