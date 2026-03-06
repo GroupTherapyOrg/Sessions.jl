@@ -26,6 +26,11 @@ function output_lines(cell::Cell)
 
     if out.error === nothing && out.result !== nothing
         push!(lines, sprint(show, out.result))
+    elseif out.error === nothing && out.result === nothing && !isempty(out.text_representation)
+        # Cached output from .jl.session — result not available, use text_representation
+        for line in split(out.text_representation, '\n')
+            push!(lines, String(line))
+        end
     end
 
     lines

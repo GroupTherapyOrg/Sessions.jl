@@ -50,7 +50,7 @@ function SessionsApp(nb::Notebook)
 end
 
 function SessionsApp(path::String)
-    nb = load_notebook(path)
+    nb = load_notebook_with_session(path)
     SessionsApp(nb)
 end
 
@@ -258,7 +258,7 @@ end
 """Open a .jl file as a notebook."""
 function _open_file!(app::SessionsApp, path::String)
     try
-        nb = load_notebook(path)
+        nb = load_notebook_with_session(path)
         app.nb = nb
         app.workspace = Workspace()
         app.notebook_view = NotebookView(nb)
@@ -278,7 +278,7 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     nb = if !isempty(jl_files)
         path = joinpath(dir, first(jl_files))
         try
-            load_notebook(path)
+            load_notebook_with_session(path)
         catch
             nb = Notebook(; path=joinpath(dir, "Untitled.jl"))
             add_cell!(nb, "")
@@ -692,7 +692,7 @@ is_busy(app::SessionsApp) = app.tq.active[] > 0
 
 """Launch the TUI app for a notebook file."""
 function open(path::String)
-    nb = load_notebook(path)
+    nb = load_notebook_with_session(path)
     open(nb)
 end
 

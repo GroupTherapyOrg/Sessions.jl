@@ -1017,4 +1017,110 @@ using Markdown: @md_str
         @test isempty(app.progress_recently)
         @test app.progress_done_tick == 0
     end
+
+    # --- Cached session output tests (SESSIONS-6014) ---
+
+    @testset "OutputWidget — cached text_representation shows when result is nothing" begin
+        cell = Cell("x = 42")
+        cell.state = cell_done
+        cell.output.output_type = :text
+        cell.output.text_representation = "42"
+        # result is nothing (loaded from session cache, not live execution)
+
+        lines = Sessions.output_lines(cell)
+        @test any(l -> occursin("42", l), lines)
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "42") !== nothing
+    end
+
+    @testset "OutputWidget — cached stdout shows" begin
+        cell = Cell("println(\"cached\")")
+        cell.state = cell_done
+        cell.output.output_type = :text
+        cell.output.stdout = "cached\n"
+        cell.output.text_representation = "nothing"
+
+        lines = Sessions.output_lines(cell)
+        @test any(l -> occursin("cached", l), lines)
+    end
+
+    @testset "SessionsApp — open notebook with session file shows cached output" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1 + 1")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        # Open via SessionsApp(path) which now uses load_notebook_with_session
+        app = Sessions.SessionsApp(path)
+
+        c1b = get_cell(app.nb, c1.id)
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "2"
+        @test !is_stale(c1b)
+
+        # Render and verify cached output is visible
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+        @test Tachikoma.find_text(tb, "2") !== nothing
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "SessionsApp — open notebook without session file shows never-run" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "y = 99")
+        save_notebook(nb)
+        # No session file
+
+        app = Sessions.SessionsApp(path)
+
+        c1b = get_cell(app.nb, c1.id)
+        @test c1b.state == cell_idle
+        @test is_never_run(c1b)
+
+        # Render — should not show any output value
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # Cell code should be visible, but no output "99"
+        @test Tachikoma.find_text(tb, "y = 99") !== nothing
+
+        rm(path; force=true)
+    end
+
+    @testset "_open_file! uses load_notebook_with_session" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "z = 7 * 6")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        # Create an app with a dummy notebook, then open the real one
+        dummy_nb = Notebook()
+        add_cell!(dummy_nb, "")
+        app = Sessions.SessionsApp(dummy_nb)
+        Sessions._open_file!(app, path)
+
+        c1b = get_cell(app.nb, c1.id)
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "42"
+        @test !is_stale(c1b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
 end
