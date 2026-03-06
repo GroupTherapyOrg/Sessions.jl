@@ -645,6 +645,11 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
 
     # Mouse move: update hover state only within notebook
     if evt.action == Tachikoma.mouse_move
+        # Clear ellipsis hover on all cells
+        for cw in nv.cell_widgets
+            cw.ellipsis_hovered = false
+        end
+
         if in_notebook
             idx = cell_at_y(nv, evt.y)
             nv.hovered_idx = idx !== nothing ? idx : 0
@@ -657,6 +662,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
             pad = min(pad, max(0, div(inner_w - 10, 2)))
             cell_left = inner_x + pad
+            cell_right = inner_x + inner_w - pad
             margin_x = max(cell_left - Theme.MARGIN_CTRL_WIDTH, inner_x)
 
             if evt.x >= max(margin_x - 1, nb_vp.x) && evt.x <= cell_left
@@ -672,12 +678,44 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 nv.hovered_control = :none
                 nv.hovered_control_idx = 0
             end
+
+            # Detect ellipsis button hover
+            _update_ellipsis_hover!(nv, evt.x, evt.y, cell_right)
         else
             nv.hovered_idx = 0
             nv.hovered_control = :none
             nv.hovered_control_idx = 0
         end
         return
+    end
+end
+
+"""Update ellipsis_hovered on the appropriate cell widget during mouse move."""
+function _update_ellipsis_hover!(nv::NotebookView, mx::Int, my::Int, cell_right::Int)
+    vp = nv.viewport
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    border_right = cell_right - hi
+
+    for target_idx in (nv.focused_idx, nv.hovered_idx)
+        (target_idx < 1 || target_idx > length(nv.cell_widgets)) && continue
+        cw = nv.cell_widgets[target_idx]
+
+        y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset
+        for j in 1:target_idx-1
+            j_oh = output_height(nv.output_widgets[j])
+            y += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
+            y += j_oh
+            y += Theme.CELL_GAP
+        end
+
+        ellipsis_y = y + vi + 1
+        ellipsis_x_start = border_right - 4
+        if my >= ellipsis_y - 1 && my <= ellipsis_y + 1 &&
+           mx >= ellipsis_x_start - 2 && mx <= border_right
+            cw.ellipsis_hovered = true
+            return
+        end
     end
 end
 

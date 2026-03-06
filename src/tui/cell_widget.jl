@@ -8,13 +8,14 @@ mutable struct CellWidget
     hovered::Bool    # Mouse is hovering over this cell (shows controls)
     collapsed::Bool  # Whether output is collapsed
     selected::Bool   # Whether this cell is part of multi-cell selection
+    ellipsis_hovered::Bool  # Mouse hovering over ⋯ button
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
     editor.focused = false  # cursor hidden by default; app sets true only in insert mode
-    CellWidget(cell, editor, focused, false, false, false)
+    CellWidget(cell, editor, focused, false, false, false, false)
 end
 
 """Sync editor text back to cell."""
@@ -197,13 +198,13 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
         _shimmer_border_with_bg!(buf, border_rect, border_color, surface_bg, tick;
             box=Theme.BOX, intensity=Theme.SHIMMER_INTENSITY)
         _render_code!(cw, inner, buf, surface_bg)
-        _render_ellipsis_button!(border_rect, buf)
+        _render_ellipsis_button!(border_rect, buf; hovered=cw.ellipsis_hovered)
 
     elseif cw.hovered && !cw.cell.disabled
         border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_BRIGHT
         _draw_rounded_border!(buf, border_rect, border_color, surface_bg)
         _render_code!(cw, inner, buf, surface_bg)
-        _render_ellipsis_button!(border_rect, buf)
+        _render_ellipsis_button!(border_rect, buf; hovered=cw.ellipsis_hovered)
 
     elseif cw.cell.disabled
         _draw_rounded_border!(buf, border_rect, Theme.FG_MUTED, surface_bg)
@@ -277,13 +278,18 @@ function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
 end
 
 """Render ⋯ pill button inside cell, top-right corner."""
-function _render_ellipsis_button!(rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+function _render_ellipsis_button!(rect::Tachikoma.Rect, buf::Tachikoma.Buffer; hovered::Bool=false)
     rect.height < 3 && return
     ey = rect.y + 1
     ex = rect.x + rect.width - 4  # 3 chars + border
     ex < rect.x + 2 && return
-    bracket = Tachikoma.Style(; fg=Theme.BTN_BRACKET, bg=Theme.BTN_BG)
-    center  = Tachikoma.Style(; fg=Theme.BTN_FG, bg=Theme.BTN_BG)
+    if hovered
+        bracket = Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.BTN_BG)
+        center  = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.BTN_BG)
+    else
+        bracket = Tachikoma.Style(; fg=Theme.BTN_BRACKET, bg=Theme.BTN_BG)
+        center  = Tachikoma.Style(; fg=Theme.BTN_FG, bg=Theme.BTN_BG)
+    end
     Tachikoma.set_char!(buf, ex, ey, '(', bracket)
     Tachikoma.set_char!(buf, ex + 1, ey, Theme.BTN_CHAR, center)
     Tachikoma.set_char!(buf, ex + 2, ey, ')', bracket)
