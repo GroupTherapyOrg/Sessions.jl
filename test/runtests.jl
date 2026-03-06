@@ -16,4 +16,5 @@ using Sessions
     include("test_cli.jl")
     include("test_watcher.jl")
     include("test_e2e.jl")
+    include("test_pluto_compat.jl")
 end
