@@ -229,9 +229,15 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
             _shimmer_border_with_bg!(buf, border_rect, border_color, surface_bg, tick;
                 box=Theme.BOX, intensity=Theme.SHIMMER_INTENSITY)
         else
-            # Normal mode: dim dashed accent border (focused but not editing)
-            border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.ACCENT_DIM
-            _draw_dashed_border!(buf, border_rect, border_color, surface_bg)
+            # Normal mode: gray border + solid accent left bar (focused but not editing)
+            border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_BRIGHT
+            _draw_rounded_border!(buf, border_rect, border_color, surface_bg)
+            # Accent left bar — clear "this cell is selected" indicator
+            bar_color = dirty ? Theme.ORANGE : Theme.ACCENT_DIM
+            bar_style = Tachikoma.Style(; fg=bar_color, bg=surface_bg)
+            for by in (border_rect.y):(Tachikoma.bottom(border_rect))
+                Tachikoma.set_char!(buf, border_rect.x, by, '▎', bar_style)
+            end
         end
         _render_code!(cw, inner, buf, surface_bg)
         _render_ellipsis_button!(border_rect, buf; hovered=cw.ellipsis_hovered)
