@@ -35,6 +35,12 @@ function output_height(ow::OutputWidget)
     if ow.collapsed || ow.cell.state == cell_idle
         return 0
     end
+    otype = ow.cell.output.output_type
+    if otype == :dataframe
+        return _datatable_height(ow.cell)
+    elseif otype == :markdown
+        return _markdown_height(ow.cell)
+    end
     lines = output_lines(ow.cell)
     isempty(lines) ? 0 : length(lines) + 2
 end
@@ -44,10 +50,30 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         return
     end
 
+    stale = is_stale(ow.cell)
+    otype = ow.cell.output.output_type
+
+    # Rich output: DataTable for tabular data
+    if otype == :dataframe && ow.cell.output.result !== nothing && !stale
+        _render_datatable(ow.cell, rect, buf)
+        return
+    end
+
+    # Rich output: MarkdownPane for markdown
+    if otype == :markdown && ow.cell.output.result !== nothing && !stale
+        _render_markdown(ow.cell, rect, buf)
+        return
+    end
+
+    # Rich output: PixelImage placeholder for images
+    if otype == :image_png && !stale
+        _render_image_placeholder(ow.cell, rect, buf)
+        return
+    end
+
+    # Default: text lines
     lines = output_lines(ow.cell)
     isempty(lines) && return
-
-    stale = is_stale(ow.cell)
 
     border_style = if ow.cell.state == cell_errored
         Tachikoma.Style(; fg=Tachikoma.Color256(196))
@@ -77,4 +103,113 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         end
         Tachikoma.set_string!(buf, inner_x, row, first(line, max_width), text_style)
     end
+end
+
+# --- DataTable rendering ---
+
+"""Height for DataTable output: header + rows + border."""
+function _datatable_height(cell::Cell)
+    result = cell.output.result
+    result === nothing && return 0
+    nrows = _table_nrows(result)
+    min(nrows + 3, 20)  # header + rows + 2 for border, cap at 20
+end
+
+"""Get row count from a table-like object."""
+function _table_nrows(value)
+    if value isa AbstractVector
+        return length(value)
+    end
+    try
+        return length(collect(value))
+    catch
+        return 0
+    end
+end
+
+"""Render a DataTable for tabular output."""
+function _render_datatable(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    result = cell.output.result
+    result === nothing && return
+
+    # Build DataTable from data
+    dt = _make_datatable(result)
+    dt === nothing && return
+
+    Tachikoma.render(dt, rect, buf)
+end
+
+"""Create a Tachikoma DataTable from a table-like value."""
+function _make_datatable(value)
+    # Handle Vector{<:NamedTuple} directly
+    if value isa AbstractVector{<:NamedTuple} && !isempty(value)
+        headers = String[string(k) for k in keys(first(value))]
+        data = [Any[row[k] for row in value] for k in keys(first(value))]
+        return Tachikoma.DataTable(headers, data;
+            block=Tachikoma.Block(; title="Table"))
+    end
+
+    # Try Tables.jl interface via loaded modules
+    tables_mod = get(Base.loaded_modules,
+        Base.PkgId(Base.UUID("bd369af6-aec1-5ad0-b16a-f7cc5008161c"), "Tables"), nothing)
+    if tables_mod !== nothing
+        try
+            cols = tables_mod.columns(value)
+            names = tables_mod.columnnames(cols)
+            headers = String[string(n) for n in names]
+            data = [Any[v for v in tables_mod.getcolumn(cols, n)] for n in names]
+            return Tachikoma.DataTable(headers, data;
+                block=Tachikoma.Block(; title="Table"))
+        catch
+        end
+    end
+
+    nothing
+end
+
+# --- Markdown rendering ---
+
+"""Height for markdown output."""
+function _markdown_height(cell::Cell)
+    result = cell.output.result
+    result === nothing && return 0
+    md_str = _markdown_string(result)
+    n_lines = count(==('\n'), md_str) + 1
+    min(n_lines + 2, 15)  # +2 for border, cap at 15
+end
+
+"""Convert a Markdown.MD to string for rendering."""
+function _markdown_string(value)
+    try
+        sprint(show, MIME"text/markdown"(), value)
+    catch
+        sprint(show, value)
+    end
+end
+
+"""Render markdown output via MarkdownPane."""
+function _render_markdown(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    result = cell.output.result
+    result === nothing && return
+
+    md_str = _markdown_string(result)
+    mp = Tachikoma.MarkdownPane(md_str;
+        width=max(rect.width - 2, 1),
+        block=Tachikoma.Block(; title="Markdown"))
+    Tachikoma.render(mp, rect, buf)
+end
+
+# --- Image placeholder rendering ---
+
+"""Render a placeholder for image output (Kitty/sixel requires Frame, not Buffer)."""
+function _render_image_placeholder(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    block = Tachikoma.Block(; title="Image",
+        border_style=Tachikoma.Style(; fg=Tachikoma.Color256(245)))
+    Tachikoma.render(block, rect, buf)
+
+    inner_y = rect.y + 1
+    inner_x = rect.x + 2
+    Tachikoma.set_string!(buf, inner_x, inner_y,
+        "[Image: use graphical terminal for pixel rendering]",
+        Tachikoma.Style(; fg=Tachikoma.Color256(245)))
 end

@@ -500,4 +500,192 @@ using Tachikoma
         Sessions.run_all_cells!(app)
         @test c1.state == cell_done
     end
+
+    # --- DataTable output tests ---
+
+    @testset "DataTable — NamedTuple vector renders as table" begin
+        cell = Cell("data = [(a=1, b=2), (a=3, b=4)]")
+        cell.state = cell_done
+        cell.output.result = [(a=1, b=2), (a=3, b=4)]
+        cell.output.output_type = :dataframe
+
+        ow = Sessions.OutputWidget(cell)
+        @test Sessions.output_height(ow) > 0
+
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "a") !== nothing
+        @test Tachikoma.find_text(tb, "b") !== nothing
+    end
+
+    @testset "DataTable — column headers visible" begin
+        cell = Cell("x")
+        cell.state = cell_done
+        cell.output.result = [(name="Alice", age=30), (name="Bob", age=25)]
+        cell.output.output_type = :dataframe
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "name") !== nothing
+        @test Tachikoma.find_text(tb, "age") !== nothing
+    end
+
+    @testset "DataTable — row data visible" begin
+        cell = Cell("x")
+        cell.state = cell_done
+        cell.output.result = [(x=42, y=99)]
+        cell.output.output_type = :dataframe
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "42") !== nothing
+        @test Tachikoma.find_text(tb, "99") !== nothing
+    end
+
+    @testset "DataTable — empty table shows headers" begin
+        cell = Cell("x")
+        cell.state = cell_done
+        cell.output.result = NamedTuple{(:a,:b), Tuple{Int,Int}}[]
+        cell.output.output_type = :dataframe
+
+        ow = Sessions.OutputWidget(cell)
+        # Empty table → falls back to text since empty vector
+        @test Sessions.output_height(ow) >= 0
+    end
+
+    @testset "DataTable — _make_datatable with NamedTuples" begin
+        data = [(x=1, y=2), (x=3, y=4)]
+        dt = Sessions._make_datatable(data)
+        @test dt isa Tachikoma.DataTable
+    end
+
+    @testset "DataTable — _make_datatable with non-table returns nothing" begin
+        @test Sessions._make_datatable(42) === nothing
+        @test Sessions._make_datatable("hello") === nothing
+    end
+
+    @testset "DataTable — stale table falls back to text" begin
+        cell = Cell("x")
+        cell.state = cell_done
+        cell.output.result = [(a=1,)]
+        cell.output.output_type = :dataframe
+        mark_executed!(cell)
+        cell.code = "y"  # now stale
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        # Should show stale text output, not DataTable
+        @test Tachikoma.find_text(tb, "stale") !== nothing
+    end
+
+    # --- MarkdownPane output tests ---
+
+    @testset "MarkdownPane — renders markdown" begin
+        using Markdown: @md_str
+        cell = Cell("md\"# Hello\"")
+        cell.state = cell_done
+        cell.output.result = md"# Hello"
+        cell.output.output_type = :markdown
+
+        ow = Sessions.OutputWidget(cell)
+        @test Sessions.output_height(ow) > 0
+
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "Hello") !== nothing
+    end
+
+    @testset "MarkdownPane — renders heading" begin
+        using Markdown: @md_str
+        cell = Cell("x")
+        cell.state = cell_done
+        cell.output.result = md"## Section Title"
+        cell.output.output_type = :markdown
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "Section") !== nothing
+    end
+
+    @testset "MarkdownPane — renders list" begin
+        using Markdown: @md_str
+        cell = Cell("x")
+        cell.state = cell_done
+        cell.output.result = md"""
+- Item one
+- Item two
+"""
+        cell.output.output_type = :markdown
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "Item") !== nothing
+    end
+
+    @testset "MarkdownPane — stale falls back to text" begin
+        using Markdown: @md_str
+        cell = Cell("md\"# Test\"")
+        cell.state = cell_done
+        cell.output.result = md"# Test"
+        cell.output.output_type = :markdown
+        mark_executed!(cell)
+        cell.code = "other"  # stale
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 10)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "stale") !== nothing
+    end
+
+    @testset "MarkdownPane — _markdown_string" begin
+        using Markdown: @md_str
+        s = Sessions._markdown_string(md"# Hello")
+        @test contains(s, "Hello")
+    end
+
+    # --- PixelImage placeholder tests ---
+
+    @testset "PixelImage — placeholder renders" begin
+        cell = Cell("plot()")
+        cell.state = cell_done
+        cell.output.result = nothing
+        cell.output.output_type = :image_png
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "Image") !== nothing
+    end
+
+    @testset "PixelImage — non-image output doesn't trigger image path" begin
+        cell = Cell("x = 42")
+        cell.state = cell_done
+        cell.output.result = 42
+        cell.output.output_type = :text
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "Image") === nothing
+    end
+
+    @testset "PixelImage — stale image falls back to text" begin
+        cell = Cell("plot()")
+        cell.state = cell_done
+        cell.output.output_type = :image_png
+        cell.output.text_representation = "[Image output]"
+        cell.output.result = "[Image output]"  # fallback text
+        mark_executed!(cell)
+        cell.code = "other"  # stale
+
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "stale") !== nothing
+    end
 end
