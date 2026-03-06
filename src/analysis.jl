@@ -83,3 +83,13 @@ function execution_order(nb::Notebook, changed_cells::Vector{Cell})
 
     (runnable=runnable, errable=errable)
 end
+
+"""
+Find all downstream dependents of a set of cells.
+Returns cells that would need to re-execute if the given cells change.
+"""
+function downstream_dependents(nb::Notebook, changed_cells::Vector{Cell})
+    order = execution_order(nb, changed_cells)
+    changed_ids = Set(c.id for c in changed_cells)
+    filter(c -> !(c.id in changed_ids), order.runnable)
+end

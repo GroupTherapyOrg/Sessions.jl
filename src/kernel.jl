@@ -54,6 +54,9 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     cell.output.runtime_ns = t_end - t_start
 
     cell.state = err === nothing ? cell_done : cell_errored
+    if err === nothing
+        mark_executed!(cell)
+    end
     cell.output
 end
 

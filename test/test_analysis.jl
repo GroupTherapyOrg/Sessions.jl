@@ -147,4 +147,184 @@ using UUIDs
         @test findfirst(==(cells[1].id), ids) < findfirst(==(cells[2].id), ids)
         @test findfirst(==(cells[2].id), ids) < findfirst(==(cells[3].id), ids)
     end
+
+    @testset "downstream_dependents" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = add_cell!(nb, "z = 100")  # independent
+
+        deps = Sessions.downstream_dependents(nb, [c1])
+        dep_ids = Set(c.id for c in deps)
+        @test c2.id in dep_ids    # y depends on x
+        @test !(c3.id in dep_ids) # z is independent
+        @test !(c1.id in dep_ids) # changed cell itself is excluded
+    end
+
+    @testset "source_hash — determinism" begin
+        c1 = Cell("x = 1")
+        c2 = Cell("x = 1")
+        c3 = Cell("x = 2")
+
+        @test source_hash(c1) == source_hash(c2)  # same source → same hash
+        @test source_hash(c1) != source_hash(c3)   # different source → different hash
+    end
+
+    @testset "source_hash — whitespace normalization" begin
+        c1 = Cell("x = 1")
+        c2 = Cell("  x = 1  ")  # leading/trailing whitespace stripped
+
+        @test source_hash(c1) == source_hash(c2)
+    end
+
+    @testset "source_hash — empty cell" begin
+        c = Cell("")
+        h = source_hash(c)
+        @test !isempty(h)
+        @test h isa String
+    end
+
+    @testset "is_never_run" begin
+        c = Cell("x = 1")
+        @test is_never_run(c)  # freshly created cell
+
+        mark_executed!(c)
+        @test !is_never_run(c)  # after execution
+    end
+
+    @testset "is_stale — basic" begin
+        c = Cell("x = 1")
+        @test !is_stale(c)  # never-run is NOT stale (separate state)
+
+        mark_executed!(c)
+        @test !is_stale(c)  # just executed → not stale
+
+        c.code = "x = 2"   # edit the cell
+        @test is_stale(c)   # source changed → stale
+    end
+
+    @testset "is_stale — re-execution clears stale" begin
+        c = Cell("x = 1")
+        mark_executed!(c)
+        c.code = "x = 2"
+        @test is_stale(c)
+
+        mark_executed!(c)   # re-execute with new code
+        @test !is_stale(c)  # no longer stale
+    end
+
+    @testset "stale_cells — notebook level" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = add_cell!(nb, "z = 100")
+
+        # All never-run → none are stale (is_stale returns false for never-run)
+        @test isempty(stale_cells(nb))
+
+        # Execute all cells
+        mark_executed!(c1)
+        mark_executed!(c2)
+        mark_executed!(c3)
+        @test isempty(stale_cells(nb))
+
+        # Edit c1
+        c1.code = "x = 999"
+        sc = stale_cells(nb)
+        @test length(sc) == 1
+        @test sc[1].id == c1.id
+    end
+
+    @testset "never_run_cells" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = 2")
+
+        @test length(never_run_cells(nb)) == 2
+
+        mark_executed!(c1)
+        nrc = never_run_cells(nb)
+        @test length(nrc) == 1
+        @test nrc[1].id == c2.id
+    end
+
+    @testset "mark_executed! — updates produced_by_hash" begin
+        c = Cell("x = 1")
+        @test c.produced_by_hash == ""
+
+        mark_executed!(c)
+        @test c.produced_by_hash == source_hash(c)
+        @test c.produced_by_hash != ""
+    end
+
+    @testset "stale propagation via downstream_dependents" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = a + 1")
+        c3 = add_cell!(nb, "c = b + 1")
+        c4 = add_cell!(nb, "d = 100")  # independent
+
+        # Execute all
+        mark_executed!(c1)
+        mark_executed!(c2)
+        mark_executed!(c3)
+        mark_executed!(c4)
+
+        # Edit c1 → c2 and c3 are downstream dependents
+        c1.code = "a = 999"
+        deps = Sessions.downstream_dependents(nb, [c1])
+        dep_ids = Set(c.id for c in deps)
+        @test c2.id in dep_ids
+        @test c3.id in dep_ids
+        @test !(c4.id in dep_ids)
+    end
+
+    @testset "stale detection — diamond dependency" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "a = x + 1")
+        c3 = add_cell!(nb, "b = x + 2")
+        c4 = add_cell!(nb, "c = a + b")
+
+        # Execute all
+        for c in ordered_cells(nb)
+            mark_executed!(c)
+        end
+
+        # Edit root
+        c1.code = "x = 999"
+        @test is_stale(c1)
+        deps = Sessions.downstream_dependents(nb, [c1])
+        dep_ids = Set(c.id for c in deps)
+        @test c2.id in dep_ids  # a depends on x
+        @test c3.id in dep_ids  # b depends on x
+        @test c4.id in dep_ids  # c depends on a,b which depend on x
+    end
+
+    @testset "kernel integration — execute_cell! marks executed" begin
+        ws = Workspace()
+        c = Cell("x_test_stale = 42")
+        @test is_never_run(c)
+
+        execute_cell!(ws, c)
+        @test !is_never_run(c)
+        @test !is_stale(c)
+        @test c.produced_by_hash == source_hash(c)
+
+        # Edit cell → becomes stale
+        c.code = "x_test_stale = 99"
+        @test is_stale(c)
+
+        # Re-execute → clears stale
+        execute_cell!(ws, c)
+        @test !is_stale(c)
+    end
+
+    @testset "kernel integration — errored cell does not mark executed" begin
+        ws = Workspace()
+        c = Cell("error(\"boom\")")
+        execute_cell!(ws, c)
+        @test c.state == cell_errored
+        @test is_never_run(c)  # produced_by_hash not set on error
+    end
 end

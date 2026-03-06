@@ -25,11 +25,12 @@ mutable struct Cell
     code::String
     output::CellOutput
     state::CellState
-    folded::Bool    # Hidden/folded in UI (╟─ vs ╠═ in Pluto format)
+    folded::Bool              # Hidden/folded in UI (╟─ vs ╠═ in Pluto format)
+    produced_by_hash::String  # Hash of source code that produced the current output ("" = never executed)
 end
 
 function Cell(; id::UUID=uuid4(), code::String="", folded::Bool=false)
-    Cell(id, code, CellOutput(), cell_idle, folded)
+    Cell(id, code, CellOutput(), cell_idle, folded, "")
 end
 
 Cell(code::String) = Cell(; code)
@@ -85,3 +86,33 @@ end
 
 """Number of cells in the notebook."""
 Base.length(nb::Notebook) = length(nb.cell_order)
+
+# --- Stale detection ---
+
+"""Deterministic hash of a cell's source code."""
+source_hash(cell::Cell) = string(hash(strip(cell.code)), base=16)
+
+"""Check if a cell has never been executed."""
+is_never_run(cell::Cell) = cell.produced_by_hash == ""
+
+"""Check if a cell is stale (source changed since last execution)."""
+function is_stale(cell::Cell)
+    is_never_run(cell) && return false  # never-run is a separate state
+    source_hash(cell) != cell.produced_by_hash
+end
+
+"""Get all stale cells in the notebook (source changed since last execution)."""
+function stale_cells(nb::Notebook)
+    [nb.cells[id] for id in nb.cell_order if haskey(nb.cells, id) && is_stale(nb.cells[id])]
+end
+
+"""Get all never-run cells in the notebook."""
+function never_run_cells(nb::Notebook)
+    [nb.cells[id] for id in nb.cell_order if haskey(nb.cells, id) && is_never_run(nb.cells[id])]
+end
+
+"""Mark a cell as executed (update produced_by_hash to match current source)."""
+function mark_executed!(cell::Cell)
+    cell.produced_by_hash = source_hash(cell)
+    cell
+end

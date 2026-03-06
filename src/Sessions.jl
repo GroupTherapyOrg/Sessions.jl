@@ -22,10 +22,11 @@ include("format.jl")
 export CellState, cell_idle, cell_queued, cell_running, cell_done, cell_errored
 export CellOutput, Cell, Notebook
 export add_cell!, insert_cell!, remove_cell!, get_cell, ordered_cells
+export source_hash, is_stale, is_never_run, stale_cells, never_run_cells, mark_executed!
 export load_notebook, save_notebook, parse_notebook, serialize_notebook
 
 include("analysis.jl")
-export analyze_cell, cell_definitions, cell_references, build_topology, execution_order
+export analyze_cell, cell_definitions, cell_references, build_topology, execution_order, downstream_dependents
 
 include("kernel.jl")
 export Workspace, execute_cell!, execute_notebook!, execute_changed!
