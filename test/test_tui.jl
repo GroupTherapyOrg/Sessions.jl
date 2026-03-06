@@ -1589,4 +1589,186 @@ using Markdown: @md_str
 
         rm(path; force=true)
     end
+
+    # --- External Modification Visual Tests (SESSIONS-6023) ---
+
+    @testset "ext visual — changed cell renders stale indicator + new code" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "vis_a = 10")
+        c2 = add_cell!(nb, "vis_b = 20")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+        execute_cell!(app.workspace, c2)
+        @test c1.state == cell_done
+        @test c2.state == cell_done
+
+        # Agent changes c1 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "vis_a = 777"
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        # c1 is stale, c2 is clean
+        @test is_stale(app.nb.cells[c1.id])
+        @test !is_stale(app.nb.cells[c2.id])
+
+        # Render and verify
+        tb = TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+
+        # Changed code visible
+        @test Tachikoma.find_text(tb, "vis_a = 777") !== nothing
+        # Stale indicator verified via model
+        ind, _ = Sessions.state_indicator(app.nb.cells[c1.id])
+        @test ind == "○"
+        # Clean cell still visible
+        @test Tachikoma.find_text(tb, "vis_b = 20") !== nothing
+
+        rm(path; force=true)
+    end
+
+    @testset "ext visual — added cell renders never-run indicator" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "vis_exist = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+
+        # Agent adds new cell on disk
+        nb_ext = load_notebook(path)
+        c_new = add_cell!(nb_ext, "vis_new_cell = 42")
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        @test haskey(app.nb.cells, c_new.id)
+        @test app.nb.cells[c_new.id].state == cell_idle
+
+        # Render
+        tb = TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+
+        # New cell code visible
+        @test Tachikoma.find_text(tb, "vis_new_cell = 42") !== nothing
+        # Never-run indicator verified via model
+        ind, _ = Sessions.state_indicator(app.nb.cells[c_new.id])
+        @test ind == "◌"
+
+        rm(path; force=true)
+    end
+
+    @testset "ext visual — removed cell no longer visible" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "vis_keep = 1")
+        c2 = add_cell!(nb, "vis_gone = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        # Render before removal — both visible
+        tb = TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+        @test Tachikoma.find_text(tb, "vis_keep = 1") !== nothing
+        @test Tachikoma.find_text(tb, "vis_gone = 2") !== nothing
+
+        # Agent removes c2 on disk
+        nb_ext = load_notebook(path)
+        remove_cell!(nb_ext, c2.id)
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        # Render after removal
+        tb2 = TestBackend(120, 40)
+        frame2 = Tachikoma.Frame(tb2.buf, Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame2)
+
+        @test Tachikoma.find_text(tb2, "vis_keep = 1") !== nothing
+        @test Tachikoma.find_text(tb2, "vis_gone = 2") === nothing
+        @test !haskey(app.nb.cells, c2.id)
+
+        rm(path; force=true)
+    end
+
+    @testset "ext visual — reordered cells render in new order" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "vis_first = 1")
+        c2 = add_cell!(nb, "vis_second = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        # Agent reorders: c2 before c1
+        nb_ext = load_notebook(path)
+        nb_ext.cell_order = [c2.id, c1.id]
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        @test app.nb.cell_order == [c2.id, c1.id]
+        @test contains(app.message, "changed externally")
+
+        # Verify widget order matches new cell_order
+        @test app.notebook_view.cell_widgets[1].cell.id == c2.id
+        @test app.notebook_view.cell_widgets[2].cell.id == c1.id
+
+        # Render and verify both visible
+        tb = TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+
+        @test Tachikoma.find_text(tb, "vis_first = 1") !== nothing
+        @test Tachikoma.find_text(tb, "vis_second = 2") !== nothing
+
+        rm(path; force=true)
+    end
+
+    @testset "ext visual — multiple changes (add+change+remove) render correctly" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "multi_keep = 1")
+        c2 = add_cell!(nb, "multi_change = 2")
+        c3 = add_cell!(nb, "multi_remove = 3")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+        execute_cell!(app.workspace, c2)
+        execute_cell!(app.workspace, c3)
+
+        # Agent: change c2, remove c3, add c4
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c2.id].code = "multi_change = 999"
+        remove_cell!(nb_ext, c3.id)
+        c4 = add_cell!(nb_ext, "multi_added = 4")
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        # Verify model state
+        @test app.nb.cells[c1.id].code == "multi_keep = 1"
+        @test app.nb.cells[c2.id].code == "multi_change = 999"
+        @test !haskey(app.nb.cells, c3.id)
+        @test haskey(app.nb.cells, c4.id)
+        @test is_stale(app.nb.cells[c2.id])
+        @test contains(app.message, "changed externally")
+
+        # Render and verify
+        tb = TestBackend(120, 50)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 120, 50), [], [])
+        Tachikoma.view(app, frame)
+
+        @test Tachikoma.find_text(tb, "multi_keep = 1") !== nothing
+        @test Tachikoma.find_text(tb, "multi_change = 999") !== nothing
+        @test Tachikoma.find_text(tb, "multi_remove = 3") === nothing
+        @test Tachikoma.find_text(tb, "multi_added = 4") !== nothing
+
+        rm(path; force=true)
+    end
 end

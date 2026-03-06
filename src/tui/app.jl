@@ -98,11 +98,13 @@ function _on_external_change!(app::SessionsApp)
     end
 
     try
+        old_order = copy(app.last_disk_nb.cell_order)
         diff = merge_external_changes!(app.nb, app.last_disk_nb)
         app.last_disk_nb = deepcopy(app.nb)
 
+        reordered = diff.new_order != old_order
         n_changes = length(diff.added) + length(diff.changed) + length(diff.removed)
-        n_changes == 0 && return
+        n_changes == 0 && !reordered && return
 
         rebuild_widgets!(app.notebook_view)
         app.cell_dropdown = nothing
@@ -110,7 +112,10 @@ function _on_external_change!(app::SessionsApp)
         for cw in app.notebook_view.cell_widgets
             cw.selected = false
         end
-        app.message = "$n_changes cell(s) changed externally"
+        msg_parts = String[]
+        n_changes > 0 && push!(msg_parts, "$n_changes cell(s)")
+        reordered && push!(msg_parts, "reordered")
+        app.message = join(msg_parts, " + ") * " changed externally"
     catch e
         app.message = "Reload error: $(sprint(showerror, e))"
     end
