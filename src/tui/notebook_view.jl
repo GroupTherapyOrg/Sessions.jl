@@ -12,13 +12,14 @@ mutable struct NotebookView
     hovered_idx::Int   # which cell the mouse is hovering over (0 = none)
     scroll_offset::Int
     viewport::Tachikoma.Rect   # stored during render for mouse hit testing
+    user_scrolling::Bool       # true when user is manually scrolling (suppress auto-scroll)
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect())
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false)
 end
 
 """Rebuild widgets when cells change."""
@@ -306,7 +307,12 @@ end
 function focus_cell!(nv::NotebookView, idx::Int)
     (idx < 1 || idx > length(nv.cell_widgets)) && return
     nv.focused_idx = idx
+    nv.user_scrolling = false  # auto-scroll to show newly focused cell
     update_focus!(nv)
+    # Scroll to show focused cell if viewport is known
+    if nv.viewport.width > 0
+        ensure_visible!(nv, nv.viewport)
+    end
 end
 
 # Layout constants are in Theme — referenced as Theme.CELL_PAD_FRACTION etc.
@@ -404,10 +410,29 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         y += Theme.CELL_GAP
     end
 
-    ensure_visible!(nv, rect)
+    clamp_scroll!(nv, rect)
 end
 
-"""Adjust scroll_offset so the focused cell is visible."""
+"""Total content height including all cells, outputs, gaps, and margins."""
+function content_height(nv::NotebookView)
+    isempty(nv.cell_widgets) && return 0
+    h = Theme.TOP_MARGIN
+    for i in eachindex(nv.cell_widgets)
+        h += cell_height(nv.cell_widgets[i])
+        h += output_height(nv.output_widgets[i])
+        h += Theme.CELL_GAP
+    end
+    h
+end
+
+"""Clamp scroll_offset to valid range."""
+function clamp_scroll!(nv::NotebookView, rect::Tachikoma.Rect)
+    isempty(nv.cell_widgets) && return
+    max_scroll = max(0, content_height(nv) - rect.height)
+    nv.scroll_offset = clamp(nv.scroll_offset, 0, max_scroll)
+end
+
+"""Scroll to make the focused cell visible. Called on focus change, not every frame."""
 function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
     isempty(nv.cell_widgets) && return
 

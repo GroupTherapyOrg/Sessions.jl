@@ -207,12 +207,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     end
 
     if evt.button == Tachikoma.mouse_scroll_down
-        nv.scroll_offset = max(0, nv.scroll_offset + 3)
+        max_scroll = max(0, content_height(nv) - nv.viewport.height)
+        nv.scroll_offset = min(nv.scroll_offset + 2, max_scroll)
+        nv.user_scrolling = true
         return
     end
 
     if evt.button == Tachikoma.mouse_scroll_up
-        nv.scroll_offset = max(0, nv.scroll_offset - 3)
+        nv.scroll_offset = max(nv.scroll_offset - 2, 0)
+        nv.user_scrolling = true
         return
     end
 

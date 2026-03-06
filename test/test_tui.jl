@@ -798,7 +798,7 @@ using Tachikoma
         Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_scroll_down, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.scroll_offset >= initial_offset
 
-        # Scroll up — should not go below 0
+        # Scroll up — clamped at 0
         for _ in 1:20
             Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_scroll_up, Tachikoma.mouse_press, false, false, false))
         end
