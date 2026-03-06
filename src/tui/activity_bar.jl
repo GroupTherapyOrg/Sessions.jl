@@ -13,17 +13,24 @@ const ACTIVITY_BUTTONS = [
 ]
 
 mutable struct ActivityBar
-    active::Symbol          # which button is active (:explorer, :none)
+    active::Set{Symbol}     # which buttons are active (multiple can be active)
     hovered::Symbol         # which button mouse is hovering
     viewport::Tachikoma.Rect
 end
 
-ActivityBar() = ActivityBar(:explorer, :none, Tachikoma.Rect())
+ActivityBar() = ActivityBar(Set{Symbol}([:explorer]), :none, Tachikoma.Rect())
 
-"""Toggle a button — if already active, deactivate it."""
+"""Toggle a button — add or remove from active set."""
 function toggle!(ab::ActivityBar, id::Symbol)
-    ab.active = ab.active == id ? :none : id
+    if id in ab.active
+        delete!(ab.active, id)
+    else
+        push!(ab.active, id)
+    end
 end
+
+"""Check if a button is active."""
+is_active(ab::ActivityBar, id::Symbol) = id in ab.active
 
 """Map screen y to a button id, or nothing."""
 function button_at_y(ab::ActivityBar, y::Int)
@@ -81,7 +88,7 @@ function Tachikoma.render(ab::ActivityBar, rect::Tachikoma.Rect, buf::Tachikoma.
         btn_y = by + 1 + (i - 1) * 2
         btn_y > by + bh - 2 && break
 
-        is_active = (btn.id == ab.active)
+        is_active = btn.id in ab.active
         is_hovered = (btn.id == ab.hovered)
 
         # Active indicator — accent bar on left edge (green for terminal, blue for others)

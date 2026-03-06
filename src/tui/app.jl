@@ -167,15 +167,14 @@ function _toggle_repl!(app::SessionsApp)
         app.mode = :repl
         app.repl_panel.focused = true
         # Activity bar indicator
-        if app.activity_bar.active != :terminal
-            app.activity_bar.active = :terminal
-        end
+        push!(app.activity_bar.active, :terminal)
     else
         # Unfocus REPL, return to normal mode
         if app.mode == :repl
             app.mode = :normal
         end
         app.repl_panel.focused = false
+        delete!(app.activity_bar.active, :terminal)
     end
 end
 
@@ -677,7 +676,8 @@ function _handle_picker_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             # Select current picker_dir as workspace
             reset_to_folder!(app, fp.picker_dir)
             exit_picker_mode!(fp)
-            app.activity_bar.active = :explorer
+            push!(app.activity_bar.active, :explorer)
+            delete!(app.activity_bar.active, :open_folder)
         elseif hit isa Integer && hit >= 1 && hit <= length(fp.picker_entries)
             fp.picker_cursor = hit
             # Double-purpose: click enters the directory to browse deeper
@@ -1034,15 +1034,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                     exit_picker_mode!(app.file_panel)
                 end
                 toggle!(app.activity_bar, btn_id)
-                app.sidebar_open = app.activity_bar.active == :explorer
+                app.sidebar_open = is_active(app.activity_bar, :explorer)
             elseif btn_id == :open_folder
                 # Toggle folder picker mode
                 if app.file_panel.picker_mode
                     exit_picker_mode!(app.file_panel)
-                    app.activity_bar.active = :explorer
+                    push!(app.activity_bar.active, :explorer)
+                    delete!(app.activity_bar.active, :open_folder)
                 else
                     enter_picker_mode!(app.file_panel)
-                    app.activity_bar.active = :open_folder
+                    push!(app.activity_bar.active, :open_folder)
                     app.sidebar_open = true
                 end
             elseif btn_id == :terminal
