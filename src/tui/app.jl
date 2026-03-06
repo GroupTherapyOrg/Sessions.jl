@@ -193,7 +193,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Notebook view (main content — fills remaining space)
     Tachikoma.render(app.notebook_view, notebook_rect, buf)
 
-    # Repaint area below notebook to hide cell overflow past notebook boundary
+    # Repaint areas above/below notebook to hide cell/output overflow past notebook boundary
+    for fy in area.y:(notebook_rect.y - 1)
+        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
+    end
     nb_bottom = notebook_rect.y + notebook_rect.height
     screen_bottom = area.y + area.height - 1
     for fy in nb_bottom:screen_bottom
