@@ -13,13 +13,15 @@ mutable struct NotebookView
     scroll_offset::Int
     viewport::Tachikoma.Rect   # stored during render for mouse hit testing
     user_scrolling::Bool       # true when user is manually scrolling (suppress auto-scroll)
+    hovered_control::Symbol    # :none, :plus_above, :plus_below, :eye, :ellipsis, :run
+    hovered_control_idx::Int   # which cell index the hovered control belongs to
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0)
 end
 
 """Rebuild widgets when cells change."""
@@ -400,7 +402,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         if show_controls
             plus_above_y = y - 1
             if plus_above_y >= visible_start && plus_above_y <= visible_end
-                Tachikoma.set_string!(buf, margin_x, plus_above_y, " + ", margin_s)
+                plus_above_hover = nv.hovered_control == :plus_above && nv.hovered_control_idx == i
+                plus_fg = plus_above_hover ? Theme.GREEN : Theme.FG_MUTED
+                Tachikoma.set_string!(buf, margin_x, plus_above_y, " + ",
+                    Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
             end
         end
 
@@ -419,8 +424,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         if show_controls
             eye_y = y + div(ch, 2)
             if eye_y >= visible_start && eye_y <= visible_end
+                eye_hover = nv.hovered_control == :eye && nv.hovered_control_idx == i
                 echar = Theme.eye_char(cw.cell.folded)
-                efg = Theme.eye_fg(cw.cell.folded)
+                efg = eye_hover ? Theme.ACCENT : Theme.eye_fg(cw.cell.folded)
                 Tachikoma.set_string!(buf, margin_x, eye_y, " $echar ",
                     Tachikoma.Style(; fg=efg, bg=Theme.MARGIN_BG))
             end
@@ -443,7 +449,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         if show_controls
             gap_y = y
             if gap_y >= visible_start && gap_y <= visible_end
-                Tachikoma.set_string!(buf, margin_x, gap_y, " + ", margin_s)
+                plus_below_hover = nv.hovered_control == :plus_below && nv.hovered_control_idx == i
+                plus_fg = plus_below_hover ? Theme.GREEN : Theme.FG_MUTED
+                Tachikoma.set_string!(buf, margin_x, gap_y, " + ",
+                    Tachikoma.Style(; fg=plus_fg, bg=Theme.MARGIN_BG))
                 run_text = run_button_text(cw.cell)
                 run_style = run_button_style(cw.cell, Theme.tick())
                 run_x = cx + cw_width - length(run_text)

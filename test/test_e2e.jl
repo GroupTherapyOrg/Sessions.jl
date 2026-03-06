@@ -439,11 +439,12 @@ using Markdown: @md_str
         @test Tachikoma.find_text(tb, "Delete cell") !== nothing
     end
 
-    @testset "E2E: Dropdown — click Delete cell action" begin
+    @testset "E2E: Dropdown — click Delete cell opens confirm dialog" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")
         add_cell!(nb, "b = 2")
         app = Sessions.SessionsApp(nb)
+        app.screen_area = Tachikoma.Rect(1, 1, 120, 40)
         @test length(nb) == 2
 
         # Open dropdown on cell 1
@@ -454,8 +455,42 @@ using Markdown: @md_str
         click_evt = Tachikoma.MouseEvent(dd.x + 2, dd.y + 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, click_evt)
 
+        # Should now be in confirm mode, not deleted yet
+        @test app.mode == :confirm
+        @test app.confirm_dialog !== nothing
+        @test length(nb) == 2
+
+        # Click Yes to confirm deletion
+        r = Sessions._confirm_rect(app.screen_area)
+        yes_x = r.x + r.w - length(Sessions.CONFIRM_BTN_YES) - 2
+        yes_y = r.y + 5
+        yes_evt = Tachikoma.MouseEvent(yes_x + 1, yes_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, yes_evt)
+
         @test app.mode == :normal
         @test length(nb) == 1
+    end
+
+    @testset "E2E: Confirm dialog — click away dismisses (No)" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+        app.screen_area = Tachikoma.Rect(1, 1, 120, 40)
+
+        # Open dropdown and click Delete
+        Sessions.open_dropdown!(app, 1, 50, 5)
+        dd = app.cell_dropdown
+        click_evt = Tachikoma.MouseEvent(dd.x + 2, dd.y + 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, click_evt)
+        @test app.mode == :confirm
+
+        # Click away (far from buttons) — should dismiss without deleting
+        away_evt = Tachikoma.MouseEvent(1, 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, away_evt)
+
+        @test app.mode == :normal
+        @test length(nb) == 2  # not deleted
     end
 
     @testset "E2E: Dropdown — click away dismisses" begin

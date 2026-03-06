@@ -19,6 +19,15 @@ const DROPDOWN_ITEMS = [
     ("⊗", "Delete cell"),
 ]
 
+"""Centered confirmation dialog (e.g. delete cell confirmation)."""
+mutable struct ConfirmDialog
+    title::String
+    message::String
+    on_confirm::Function    # called if user clicks Yes
+    yes_hovered::Bool
+    no_hovered::Bool
+end
+
 """Sessions notebook TUI application model."""
 mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
@@ -27,14 +36,16 @@ mutable struct SessionsApp <: Tachikoma.Model
     file_panel::FilePanel
     activity_bar::ActivityBar
     tq::Tachikoma.TaskQueue
-    mode::Symbol        # :normal, :insert, or :dropdown
+    mode::Symbol        # :normal, :insert, :dropdown, or :confirm
     quit::Bool
     message::String     # Status message (temporary)
     cell_dropdown::Union{Nothing, CellDropdown}
+    confirm_dialog::Union{Nothing, ConfirmDialog}
     undo_buffer::Vector{DeletedCell}
     sidebar_open::Bool         # whether file panel is visible
     sidebar_rect::Tachikoma.Rect   # cached for mouse hit testing
     activity_rect::Tachikoma.Rect  # cached for mouse hit testing
+    screen_area::Tachikoma.Rect    # full screen area, cached for confirm dialog
     progress_recently::Set{UUID}   # cells seen running/queued this execution batch
     progress_done_tick::Int        # tick when batch completed (0 = not done yet)
     last_disk_nb::Union{Notebook, Nothing}  # snapshot of notebook as last loaded/saved from disk
@@ -60,8 +71,8 @@ function SessionsApp(nb::Notebook)
     fp = FilePanel(dir)
     ab = ActivityBar()
     snapshot = _snapshot_notebook(nb)
-    SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing,
-        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0)
+    SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0)
 end
 
 function SessionsApp(path::String)
@@ -119,6 +130,7 @@ function _on_external_change!(app::SessionsApp)
 
         rebuild_widgets!(app.notebook_view)
         app.cell_dropdown = nothing
+        app.confirm_dialog = nothing
         app.mode = :normal
         for cw in app.notebook_view.cell_widgets
             cw.selected = false
@@ -135,6 +147,7 @@ end
 function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     Theme.advance_tick!()
     area = frame.area
+    app.screen_area = area
     buf = frame.buffer
     g = Theme.ISLAND_GAP
 
@@ -209,6 +222,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Cell dropdown overlay
     if app.cell_dropdown !== nothing
         _render_dropdown!(app.cell_dropdown, buf, area)
+    end
+
+    # Confirm dialog overlay (centered, with dimmed backdrop)
+    if app.confirm_dialog !== nothing
+        _render_confirm_dialog!(app.confirm_dialog, buf, area)
     end
 end
 
@@ -376,6 +394,7 @@ function reset_to_folder!(app::SessionsApp, dir::String)
     app.file_panel = FilePanel(dir)
     app.undo_buffer = DeletedCell[]
     app.cell_dropdown = nothing
+    app.confirm_dialog = nothing
     app.mode = :normal
     app.last_disk_nb = _snapshot_notebook(nb)
     _start_watcher!(app)
@@ -384,6 +403,12 @@ end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     app.message = ""  # Clear status message on any key
+
+    # Confirm dialog mode — Escape or any key closes it (No by default)
+    if app.mode == :confirm && app.confirm_dialog !== nothing
+        close_confirm!(app)
+        return
+    end
 
     # Dropdown mode — only Escape closes it (all interaction is mouse)
     if app.mode == :dropdown && app.cell_dropdown !== nothing
@@ -510,6 +535,27 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
+    # Confirm dialog mode: Yes button confirms, anything else dismisses
+    if app.mode == :confirm && app.confirm_dialog !== nothing
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            hit = _confirm_hit_test(app.confirm_dialog, app.screen_area, evt.x, evt.y)
+            if hit == :yes
+                app.confirm_dialog.on_confirm()
+                close_confirm!(app)
+            else
+                close_confirm!(app)
+            end
+            return
+        end
+        if evt.action == Tachikoma.mouse_move
+            hit = _confirm_hit_test(app.confirm_dialog, app.screen_area, evt.x, evt.y)
+            app.confirm_dialog.yes_hovered = (hit == :yes)
+            app.confirm_dialog.no_hovered = (hit == :no)
+            return
+        end
+        return
+    end
+
     # Dropdown mode: handle clicks inside dropdown or click-away to dismiss
     if app.mode == :dropdown && app.cell_dropdown !== nothing
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
@@ -517,7 +563,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             if item_idx !== nothing
                 _execute_dropdown_action!(app, item_idx)
             end
-            close_dropdown!(app)
+            # Don't close dropdown if action transitioned to confirm dialog
+            if app.mode == :dropdown
+                close_dropdown!(app)
+            end
             return
         end
         # Mouse move: update hover highlight in dropdown
@@ -599,8 +648,34 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         if in_notebook
             idx = cell_at_y(nv, evt.y)
             nv.hovered_idx = idx !== nothing ? idx : 0
+
+            # Detect margin control hover for color feedback
+            hi = Theme.CELL_H_INSET
+            vi = Theme.CELL_V_INSET
+            inner_x = nb_vp.x + hi + 1
+            inner_w = max(1, nb_vp.width - 2 * hi - 2)
+            pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
+            pad = min(pad, max(0, div(inner_w - 10, 2)))
+            cell_left = inner_x + pad
+            margin_x = max(cell_left - Theme.MARGIN_CTRL_WIDTH, inner_x)
+
+            if evt.x >= max(margin_x - 1, nb_vp.x) && evt.x <= cell_left
+                hit = _hit_test_margin_control(nv, evt.x, evt.y, margin_x)
+                if hit !== nothing
+                    nv.hovered_control = hit[1]
+                    nv.hovered_control_idx = hit[2]
+                else
+                    nv.hovered_control = :none
+                    nv.hovered_control_idx = 0
+                end
+            else
+                nv.hovered_control = :none
+                nv.hovered_control_idx = 0
+            end
         else
             nv.hovered_idx = 0
+            nv.hovered_control = :none
+            nv.hovered_control_idx = 0
         end
         return
     end
@@ -628,16 +703,16 @@ function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, 
         oh = output_height(nv.output_widgets[target_idx])
         ch = cell_height(nv.cell_widgets[target_idx]; has_output=oh > 0)
 
+        # Eye icon first (highest priority — prevents overshadow by ± when folded)
+        eye_y = y + div(ch, 2)
+        if click_y >= eye_y - 1 && click_y <= eye_y + 1
+            return (:eye, target_idx)
+        end
+
         # "+" above: icon at y-1, hit zone y-2 to y
         plus_above_y = y - 1
         if click_y >= plus_above_y - 1 && click_y <= plus_above_y + 1
             return (:plus_above, target_idx)
-        end
-
-        # Eye icon: vertically centered, hit zone ±1 row
-        eye_y = y + div(ch, 2)
-        if click_y >= eye_y - 1 && click_y <= eye_y + 1
-            return (:eye, target_idx)
         end
 
         # "+" below: icon at y+ch+oh, hit zone ±1 row
@@ -947,10 +1022,29 @@ function _execute_dropdown_action!(app::SessionsApp, item_idx::Int)
 
     _, label = dd.items[item_idx]
     if label == "Delete cell"
-        # Focus the target cell, then delete it
-        focus_cell!(app.notebook_view, dd.cell_idx)
-        delete_focused_cell_with_undo!(app)
+        target_idx = dd.cell_idx
+        close_dropdown!(app)
+        focus_cell!(app.notebook_view, target_idx)
+        _open_confirm_delete!(app, target_idx)
     end
+end
+
+"""Open a centered confirm dialog for cell deletion."""
+function _open_confirm_delete!(app::SessionsApp, cell_idx::Int)
+    app.confirm_dialog = ConfirmDialog(
+        "Delete Cell",
+        "Are you sure you want to delete this cell?",
+        () -> begin
+            delete_focused_cell_with_undo!(app)
+        end,
+        false, false)
+    app.mode = :confirm
+end
+
+"""Close the confirm dialog (cancel)."""
+function close_confirm!(app::SessionsApp)
+    app.confirm_dialog = nothing
+    app.mode = :normal
 end
 
 """Compute dropdown width from items."""
@@ -999,4 +1093,106 @@ function _render_dropdown!(dd::CellDropdown, buf::Tachikoma.Buffer, area::Tachik
     # Bottom border (rounded)
     bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
     Tachikoma.set_string!(buf, x, y + length(dd.items) + 1, bot, border_style)
+end
+
+# --- Confirm dialog (centered modal) ---
+
+# Layout constants for confirm dialog
+const CONFIRM_W = 38
+const CONFIRM_H = 7  # border(1) + title(1) + blank(1) + message(1) + blank(1) + buttons(1) + border(1)
+const CONFIRM_BTN_YES = " Yes "
+const CONFIRM_BTN_NO = "  No  "
+
+"""Compute the screen rect for the centered confirm dialog."""
+function _confirm_rect(area::Tachikoma.Rect)
+    cx = area.x + div(area.width - CONFIRM_W, 2)
+    cy = area.y + div(area.height - CONFIRM_H, 2)
+    (x=cx, y=cy, w=CONFIRM_W, h=CONFIRM_H)
+end
+
+"""Hit test confirm dialog buttons. Returns :yes, :no, or nothing."""
+function _confirm_hit_test(cd::ConfirmDialog, area::Tachikoma.Rect, click_x::Int, click_y::Int)
+    r = _confirm_rect(area)
+    btn_y = r.y + 5  # buttons row
+
+    # No button (left-aligned inside border)
+    no_x = r.x + 2
+    no_end = no_x + length(CONFIRM_BTN_NO) - 1
+    # Yes button (right-aligned inside border)
+    yes_x = r.x + r.w - length(CONFIRM_BTN_YES) - 2
+    yes_end = yes_x + length(CONFIRM_BTN_YES) - 1
+
+    # Expand hit zones ±1 row
+    if click_y >= btn_y - 1 && click_y <= btn_y + 1
+        if click_x >= yes_x - 1 && click_x <= yes_end + 1
+            return :yes
+        end
+        if click_x >= no_x - 1 && click_x <= no_end + 1
+            return :no
+        end
+    end
+
+    nothing
+end
+
+"""Render the confirm dialog centered on screen with dimmed backdrop."""
+function _render_confirm_dialog!(cd::ConfirmDialog, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    # Dim backdrop
+    dim_style = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Tachikoma.ColorRGB(0x08, 0x08, 0x0a))
+    for fy in area.y:(area.y + area.height - 1)
+        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, dim_style)
+    end
+
+    r = _confirm_rect(area)
+    box = Theme.BOX
+    bg = Theme.DROPDOWN_BG
+    border_s = Tachikoma.Style(; fg=Theme.ACCENT, bg)
+    fill_s = Tachikoma.Style(; fg=Theme.FG, bg)
+    title_s = Tachikoma.Style(; fg=Theme.FG, bg, bold=true)
+
+    # Fill interior
+    for fy in r.y:(r.y + r.h - 1)
+        Tachikoma.set_string!(buf, r.x, fy, " " ^ r.w, Tachikoma.Style(; bg))
+    end
+
+    # Border
+    Tachikoma.set_char!(buf, r.x, r.y, box.tl, border_s)
+    Tachikoma.set_char!(buf, r.x + r.w - 1, r.y, box.tr, border_s)
+    Tachikoma.set_char!(buf, r.x, r.y + r.h - 1, box.bl, border_s)
+    Tachikoma.set_char!(buf, r.x + r.w - 1, r.y + r.h - 1, box.br, border_s)
+    for cx in (r.x + 1):(r.x + r.w - 2)
+        Tachikoma.set_char!(buf, cx, r.y, box.h, border_s)
+        Tachikoma.set_char!(buf, cx, r.y + r.h - 1, box.h, border_s)
+    end
+    for fy in (r.y + 1):(r.y + r.h - 2)
+        Tachikoma.set_char!(buf, r.x, fy, box.v, border_s)
+        Tachikoma.set_char!(buf, r.x + r.w - 1, fy, box.v, border_s)
+    end
+
+    # Title (row 1)
+    title_text = " " * cd.title * " "
+    tx = r.x + div(r.w - length(title_text), 2)
+    Tachikoma.set_string!(buf, tx, r.y + 1, title_text, title_s)
+
+    # Message (row 3)
+    msg_text = cd.message
+    mx = r.x + div(r.w - length(msg_text), 2)
+    Tachikoma.set_string!(buf, mx, r.y + 3, msg_text, fill_s)
+
+    # Buttons (row 5) — No on left (default), Yes on right
+    btn_y = r.y + 5
+    no_x = r.x + 2
+    yes_x = r.x + r.w - length(CONFIRM_BTN_YES) - 2
+
+    # No button (highlighted as default)
+    no_bg = cd.no_hovered ? Theme.DROPDOWN_HOVER_BG : Theme.ACCENT
+    no_fg = cd.no_hovered ? Theme.DROPDOWN_HOVER_FG : bg
+    Tachikoma.set_string!(buf, no_x, btn_y, CONFIRM_BTN_NO,
+        Tachikoma.Style(; fg=no_fg, bg=no_bg, bold=true))
+
+    # Yes button (subdued unless hovered — turns red on hover for danger)
+    yes_bg = cd.yes_hovered ? Theme.RED : Theme.ELEVATED_BG
+    yes_fg = cd.yes_hovered ? Theme.FG : Theme.FG_DIM
+    Tachikoma.set_string!(buf, yes_x, btn_y, CONFIRM_BTN_YES,
+        Tachikoma.Style(; fg=yes_fg, bg=yes_bg, bold=cd.yes_hovered))
 end
