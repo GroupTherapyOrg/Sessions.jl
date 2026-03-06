@@ -784,6 +784,53 @@ using Markdown: @md_str
         @test length(nb) == 1  # no change
     end
 
+    @testset "E2E: Smart delete — empty cell deletes immediately" begin
+        nb = Notebook()
+        add_cell!(nb, "keep this")
+        add_cell!(nb, "")  # empty cell
+        app = Sessions.SessionsApp(nb)
+
+        # Focus second (empty) cell
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        @test app.notebook_view.focused_idx == 2
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:delete))
+        @test length(nb) == 1
+        @test isempty(app.undo_buffer)  # not stored in undo
+    end
+
+    @testset "E2E: Smart delete — non-empty cell goes to undo" begin
+        nb = Notebook()
+        add_cell!(nb, "keep")
+        add_cell!(nb, "important code")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:delete))
+        @test length(nb) == 1
+        @test length(app.undo_buffer) == 1  # stored for undo
+    end
+
+    @testset "E2E: Smart delete — backspace works too" begin
+        nb = Notebook()
+        add_cell!(nb, "a")
+        add_cell!(nb, "  ")  # whitespace-only = empty
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:backspace))
+        @test length(nb) == 1
+        @test isempty(app.undo_buffer)  # whitespace = empty → immediate
+    end
+
+    @testset "E2E: Smart delete — can't delete last cell" begin
+        nb = Notebook()
+        add_cell!(nb, "")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:delete))
+        @test length(nb) == 1  # can't delete last cell
+    end
+
     @testset "E2E: Quit with Ctrl+Q" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")

@@ -158,6 +158,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         elseif evt.key == :ctrl && evt.char == 'd'
             delete_focused_cell_with_undo!(app)
             return
+        elseif evt.key == :delete || evt.key == :backspace
+            # Smart delete: empty cells delete immediately, non-empty use undo
+            cell = focused_cell(app.notebook_view)
+            if cell !== nothing && strip(cell.code) == ""
+                delete_focused_cell!(app.notebook_view)
+            else
+                delete_focused_cell_with_undo!(app)
+            end
+            return
         elseif evt.key == :ctrl && evt.char == 'z'
             undo_delete!(app)
             return
