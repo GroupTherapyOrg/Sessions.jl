@@ -199,9 +199,9 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.render(app.file_panel, sidebar_rect, buf)
     end
 
-    # Cursor always visible in the focused cell
+    # Editor cursor only visible in insert mode on the focused cell
     for (i, cw) in enumerate(app.notebook_view.cell_widgets)
-        cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode != :dropdown)
+        cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
     end
 
     # Notebook view (main content — fills remaining space)
