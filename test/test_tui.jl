@@ -34,15 +34,31 @@ using Tachikoma
     @testset "state_indicator" begin
         cell = Cell("x = 1")
 
-        cell.state = cell_idle
+        # Never-run cell → dotted circle (dim)
+        @test is_never_run(cell)
         char, _ = Sessions.state_indicator(cell)
-        @test char == "○"
+        @test char == "◌"
 
+        # After execution → solid green
+        mark_executed!(cell)
         cell.state = cell_done
         char, _ = Sessions.state_indicator(cell)
         @test char == "●"
 
+        # Stale cell → hollow yellow
+        cell.code = "x = 2"
+        @test is_stale(cell)
+        char, style = Sessions.state_indicator(cell)
+        @test char == "○"
+
+        # Errored cell → x mark red
         cell.state = cell_errored
+        cell.produced_by_hash = ""  # reset so it's not stale
+        char, _ = Sessions.state_indicator(cell)
+        @test char == "✗"
+
+        # Running cell → solid blue
+        cell.state = cell_running
         char, _ = Sessions.state_indicator(cell)
         @test char == "●"
     end
@@ -88,6 +104,28 @@ using Tachikoma
 
         lines = Sessions.output_lines(cell)
         @test any(l -> occursin("hello", l), lines)
+    end
+
+    @testset "OutputWidget — stale dimming" begin
+        cell = Cell("x = 42")
+        cell.state = cell_done
+        cell.output.result = 42
+        mark_executed!(cell)
+
+        # Not stale → normal output title
+        ow = Sessions.OutputWidget(cell)
+        tb = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "42") !== nothing
+        # Should show "Output", not "Output (stale)"
+        @test Tachikoma.find_text(tb, "stale") === nothing
+
+        # Make stale → dimmed output
+        cell.code = "x = 99"
+        tb2 = TestBackend(60, 5)
+        Tachikoma.render_widget!(tb2, ow)
+        @test Tachikoma.find_text(tb2, "42") !== nothing
+        @test Tachikoma.find_text(tb2, "stale") !== nothing
     end
 
     @testset "OutputWidget — collapsed" begin

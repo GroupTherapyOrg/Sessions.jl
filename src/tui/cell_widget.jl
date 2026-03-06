@@ -24,18 +24,31 @@ function sync_from_cell!(cw::CellWidget)
     Tachikoma.set_text!(cw.editor, cw.cell.code)
 end
 
-"""State indicator character and style for a cell."""
+"""State indicator character and style for a cell.
+- ◌ (dotted): never executed
+- ○ (hollow, yellow): stale (source changed since last execution)
+- ● (solid, green): executed and clean
+- ● (solid, red): errored
+- ● (solid, blue): currently running
+- ◌ (orange): queued
+- ✗ (red): errored (alternative when stale check isn't primary)
+"""
 function state_indicator(cell::Cell)
-    if cell.state == cell_idle
-        return "○", Tachikoma.Style(; fg=Tachikoma.Color256(245))
+    # Priority: active states first, then error, then stale/never-run, then done
+    if cell.state == cell_running
+        return "●", Tachikoma.Style(; fg=Tachikoma.Color256(33))  # blue
     elseif cell.state == cell_queued
-        return "◌", Tachikoma.Style(; fg=Tachikoma.Color256(214))
-    elseif cell.state == cell_running
-        return "●", Tachikoma.Style(; fg=Tachikoma.Color256(33))
-    elseif cell.state == cell_done
-        return "●", Tachikoma.Style(; fg=Tachikoma.Color256(34))
+        return "◌", Tachikoma.Style(; fg=Tachikoma.Color256(214))  # orange
     elseif cell.state == cell_errored
-        return "●", Tachikoma.Style(; fg=Tachikoma.Color256(196))
+        return "✗", Tachikoma.Style(; fg=Tachikoma.Color256(196))  # red
+    elseif is_stale(cell)
+        return "○", Tachikoma.Style(; fg=Tachikoma.Color256(214))  # yellow/warning
+    elseif is_never_run(cell)
+        return "◌", Tachikoma.Style(; fg=Tachikoma.Color256(245))  # dim gray
+    elseif cell.state == cell_done
+        return "●", Tachikoma.Style(; fg=Tachikoma.Color256(34))   # green
+    else
+        return "○", Tachikoma.Style(; fg=Tachikoma.Color256(245))  # default dim
     end
 end
 
