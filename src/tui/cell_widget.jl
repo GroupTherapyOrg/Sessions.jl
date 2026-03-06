@@ -257,21 +257,21 @@ end
 """Render code editor (folded cells are handled before this is called)."""
 function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
                         buf::Tachikoma.Buffer, surface_bg)
-    # Reset scroll when all lines fit — prevents stale scroll_offset from
-    # hiding top lines after a cell was partially clipped at viewport edge.
-    n_lines = length(cw.editor.lines)
-    if n_lines <= inner.height
-        cw.editor.scroll_offset = 0
-    end
+    cw.editor.scroll_offset = 0
 
-    if cw.focused
-        # Suppress built-in block cursor; we draw thin bar cursor after
-        was_focused = cw.editor.focused
+    if cw.editor.focused
+        # Insert mode: let CodeEditor auto-scroll to keep cursor visible.
+        # Suppress built-in block cursor; we draw thin bar cursor after.
         cw.editor.focused = false
         Tachikoma.render(cw.editor, inner, buf)
-        cw.editor.focused = was_focused
+        cw.editor.focused = true
     else
+        # Normal mode: pin cursor to row 1 so CodeEditor auto-scroll
+        # never shifts the view. Always show code from line 1.
+        saved_row = cw.editor.cursor_row
+        cw.editor.cursor_row = 1
         Tachikoma.render(cw.editor, inner, buf)
+        cw.editor.cursor_row = saved_row
     end
 end
 
