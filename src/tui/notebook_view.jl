@@ -10,13 +10,14 @@ mutable struct NotebookView
     output_widgets::Vector{OutputWidget}
     focused_idx::Int
     scroll_offset::Int
+    viewport::Tachikoma.Rect   # stored during render for mouse hit testing
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, Tachikoma.Rect())
 end
 
 """Rebuild widgets when cells change."""
@@ -97,7 +98,39 @@ function delete_focused_cell!(nv::NotebookView)
     rebuild_widgets!(nv)
 end
 
+"""Map a screen y-coordinate to a cell index, or nothing if outside cells."""
+function cell_at_y(nv::NotebookView, screen_y::Int)
+    isempty(nv.cell_widgets) && return nothing
+    vp = nv.viewport
+    vp.width == 0 && return nothing  # viewport not yet established
+
+    # Convert screen y to content-space y
+    content_y = screen_y - vp.y + nv.scroll_offset
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ch = cell_height(nv.cell_widgets[i])
+        oh = output_height(nv.output_widgets[i])
+        slot_h = ch + oh + 1  # cell + output + gap
+
+        if content_y < y + slot_h
+            return i
+        end
+        y += slot_h
+    end
+
+    nothing  # clicked below all cells
+end
+
+"""Focus a cell by index directly (for mouse click)."""
+function focus_cell!(nv::NotebookView, idx::Int)
+    idx < 1 || idx > length(nv.cell_widgets) && return
+    nv.focused_idx = idx
+    update_focus!(nv)
+end
+
 function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    nv.viewport = rect  # store for mouse hit testing
     isempty(nv.cell_widgets) && return
 
     y = rect.y - nv.scroll_offset

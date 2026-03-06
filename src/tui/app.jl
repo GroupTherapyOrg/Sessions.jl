@@ -118,6 +118,29 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     end
 end
 
+"""Handle mouse events — click to focus cells, scroll to navigate."""
+function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
+    nv = app.notebook_view
+
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        idx = cell_at_y(nv, evt.y)
+        if idx !== nothing
+            focus_cell!(nv, idx)
+        end
+        return
+    end
+
+    if evt.button == Tachikoma.mouse_scroll_down
+        nv.scroll_offset = max(0, nv.scroll_offset + 3)
+        return
+    end
+
+    if evt.button == Tachikoma.mouse_scroll_up
+        nv.scroll_offset = max(0, nv.scroll_offset - 3)
+        return
+    end
+end
+
 """Handle task completion events from background execution."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.TaskEvent)
     if evt.id == :execute_cell

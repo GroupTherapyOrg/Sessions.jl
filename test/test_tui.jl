@@ -731,4 +731,140 @@ using Tachikoma
         Tachikoma.render_widget!(tb, ow)
         @test Tachikoma.find_text(tb, "stale") !== nothing
     end
+
+    # --- Mouse interaction tests ---
+
+    @testset "Mouse click — focuses cell" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        @test app.notebook_view.focused_idx == 1
+
+        # Render to establish viewport
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # Each cell is 3 lines (1 line code + 2 border) + 1 gap = 4 lines per slot
+        # Top bar = row 1, notebook starts at row 2
+        # Cell 1: rows 2-4, Cell 2: rows 5-7 (gap at 5), Cell 3: rows 9-11
+        # Click on cell 2 area (y ~ row 6)
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 6, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.focused_idx == 2
+
+        # Click on cell 3 area (y ~ row 10)
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.focused_idx == 3
+
+        # Click back on cell 1 (y ~ row 3)
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 3, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.focused_idx == 1
+    end
+
+    @testset "Mouse click — works in insert mode" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+        app.mode = :insert
+
+        # Render to establish viewport
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # Click on cell 2 — should focus it, stay in insert mode
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 6, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.focused_idx == 2
+        @test app.mode == :insert
+    end
+
+    @testset "Mouse scroll — adjusts scroll offset" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Render to establish viewport
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        initial_offset = app.notebook_view.scroll_offset
+
+        # Scroll down
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_scroll_down, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.scroll_offset >= initial_offset
+
+        # Scroll up — should not go below 0
+        for _ in 1:20
+            Tachikoma.update!(app, Tachikoma.MouseEvent(10, 10, Tachikoma.mouse_scroll_up, Tachikoma.mouse_press, false, false, false))
+        end
+        @test app.notebook_view.scroll_offset >= 0
+    end
+
+    @testset "Mouse click — outside cells doesn't crash" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Render to establish viewport
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # Click on top bar area (row 1) — should not crash
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.focused_idx == 1  # unchanged
+
+        # Click way below content
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 23, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        @test app.notebook_view.focused_idx == 1  # unchanged or last cell
+    end
+
+    @testset "Mouse click — renders focus change" begin
+        nb = Notebook()
+        add_cell!(nb, "m1 = 1")
+        add_cell!(nb, "m2 = 2")
+        app = Sessions.SessionsApp(nb)
+
+        # Initial render — first cell focused
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+        @test Tachikoma.find_text(tb, "m1 = 1") !== nothing
+        @test Tachikoma.find_text(tb, "m2 = 2") !== nothing
+
+        # Click on cell 2, re-render
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 6, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
+        tb2 = TestBackend(80, 24)
+        frame2 = Tachikoma.Frame(tb2.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame2)
+
+        # Both cells still render, focus changed
+        @test Tachikoma.find_text(tb2, "m1 = 1") !== nothing
+        @test Tachikoma.find_text(tb2, "m2 = 2") !== nothing
+        @test app.notebook_view.focused_idx == 2
+        @test app.notebook_view.cell_widgets[2].focused == true
+        @test app.notebook_view.cell_widgets[1].focused == false
+    end
+
+    @testset "Mouse release — ignored (no focus change)" begin
+        nb = Notebook()
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        tb = TestBackend(80, 24)
+        frame = Tachikoma.Frame(tb.buf, Rect(1, 1, 80, 24), [], [])
+        Tachikoma.view(app, frame)
+
+        # Mouse release should not change focus
+        Tachikoma.update!(app, Tachikoma.MouseEvent(10, 6, Tachikoma.mouse_left, Tachikoma.mouse_release, false, false, false))
+        @test app.notebook_view.focused_idx == 1
+    end
 end
