@@ -25,8 +25,11 @@ export load_notebook, save_notebook, parse_notebook, serialize_notebook
 
 include("analysis.jl")
 export analyze_cell, cell_definitions, cell_references, build_topology, execution_order
-# include("kernel.jl")
-# include("run.jl")
+
+include("kernel.jl")
+export Workspace, execute_cell!, execute_notebook!, execute_changed!
+
+include("run.jl")
 
 # Layer 2: TUI
 # include("tui/app.jl")

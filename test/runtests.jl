@@ -9,4 +9,6 @@ using Sessions
     include("test_types.jl")
     include("test_format.jl")
     include("test_analysis.jl")
+    include("test_kernel.jl")
+    include("test_run.jl")
 end
