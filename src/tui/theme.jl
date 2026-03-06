@@ -62,7 +62,8 @@ const BOX = BOX_ROUNDED
 # │  Layout constants                                                │
 # ╰──────────────────────────────────────────────────────────────────╯
 
-const CELL_PAD_FRACTION = 0.125   # 12.5% each side → cells at 75% width
+const SIDEBAR_PCT       = 22      # sidebar takes 22% of width
+const CELL_PAD_FRACTION = 0.06    # 6% each side — narrower pane needs less padding
 const MARGIN_CTRL_WIDTH = 3       # left margin width for +/eye controls
 const CELL_GAP          = 2       # rows between cells
 const TOP_MARGIN        = 1       # padding above first cell
@@ -180,5 +181,15 @@ output_text_style(errored::Bool, stale::Bool) =
 # Output left accent bar color
 output_bar_color(errored::Bool, stale::Bool) =
     errored ? RED : stale ? ORANGE : BORDER_DIM
+
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  Component: Sidebar                                             │
+# ╰──────────────────────────────────────────────────────────────────╯
+
+const SIDEBAR_BG        = ColorRGB(0x16, 0x17, 0x1a)   # slightly lighter than canvas
+const SIDEBAR_HEADER_FG = FG_DIM
+const SIDEBAR_BORDER_FG = BORDER_DIM
+const S_SIDEBAR         = Style(; fg=FG_DIM, bg=SIDEBAR_BG)
+const S_SIDEBAR_HEADER  = Style(; fg=FG, bg=SIDEBAR_BG, bold=true)
 
 end # module Theme

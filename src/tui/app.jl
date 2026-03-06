@@ -63,9 +63,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_CANVAS)
     end
 
-    layout = Tachikoma.Layout(Tachikoma.Vertical,
+    # Vertical: top bar | content | bottom bar
+    v_layout = Tachikoma.Layout(Tachikoma.Vertical,
         [Tachikoma.Fixed(1), Tachikoma.Fill(), Tachikoma.Fixed(1)])
-    rects = Tachikoma.split_layout(layout, area)
+    v_rects = Tachikoma.split_layout(v_layout, area)
 
     # Top status bar
     top_bar = make_top_bar(app.nb)
@@ -73,23 +74,59 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         top_bar = Tachikoma.StatusBar(; left=[Tachikoma.Span(app.message,
             Tachikoma.Style(; fg=Theme.ORANGE, bold=true))])
     end
-    Tachikoma.render(top_bar, rects[1], buf)
+    Tachikoma.render(top_bar, v_rects[1], buf)
+
+    # Horizontal: sidebar | notebook pane
+    h_layout = Tachikoma.Layout(Tachikoma.Horizontal,
+        [Tachikoma.Percent(Theme.SIDEBAR_PCT), Tachikoma.Fill()])
+    h_rects = Tachikoma.split_layout(h_layout, v_rects[2])
+    sidebar_rect = h_rects[1]
+    notebook_rect = h_rects[2]
+
+    # Sidebar placeholder
+    _render_sidebar(app, sidebar_rect, buf)
 
     # Cursor always visible in the focused cell (no normal/insert mode distinction)
     for (i, cw) in enumerate(app.notebook_view.cell_widgets)
         cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode != :dropdown)
     end
 
-    # Notebook view (main content)
-    Tachikoma.render(app.notebook_view, rects[2], buf)
+    # Notebook view (main content — right pane)
+    Tachikoma.render(app.notebook_view, notebook_rect, buf)
 
     # Bottom keybindings bar
     bottom_bar = make_bottom_bar(; mode=app.mode)
-    Tachikoma.render(bottom_bar, rects[3], buf)
+    Tachikoma.render(bottom_bar, v_rects[3], buf)
 
     # Cell dropdown overlay
     if app.cell_dropdown !== nothing
         _render_dropdown!(app.cell_dropdown, buf, area)
+    end
+end
+
+"""Render the sidebar placeholder — file explorer will go here later."""
+function _render_sidebar(app::SessionsApp, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    # Fill sidebar with sidebar bg
+    for fy in rect.y:(rect.y + rect.height - 1)
+        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, Theme.S_SIDEBAR)
+    end
+
+    # Header
+    Tachikoma.set_string!(buf, rect.x + 1, rect.y, " EXPLORER", Theme.S_SIDEBAR_HEADER)
+
+    # Right border (separator line)
+    border_x = rect.x + rect.width - 1
+    border_style = Tachikoma.Style(; fg=Theme.SIDEBAR_BORDER_FG, bg=Theme.SIDEBAR_BG)
+    for fy in rect.y:(rect.y + rect.height - 1)
+        Tachikoma.set_char!(buf, border_x, fy, '│', border_style)
+    end
+
+    # Show notebook filename
+    nb_name = basename(app.nb.path)
+    if !isempty(nb_name)
+        max_w = max(rect.width - 4, 1)
+        Tachikoma.set_string!(buf, rect.x + 2, rect.y + 2,
+            first(nb_name, max_w), Theme.S_SIDEBAR)
     end
 end
 
