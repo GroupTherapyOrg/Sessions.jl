@@ -25,8 +25,12 @@ end
 function make_bottom_bar(; mode::Symbol=:normal)
     keys = if mode == :dropdown
         "Click action  Esc: Close"
-    else
-        "Click ▶ to run  Click + to add  Ctrl+R: Run  Ctrl+S: Save  Ctrl+Q: Quit"
+    elseif mode == :panel
+        "Ctrl+C: Quit  Arrow: Navigate  Enter: Edit"
+    elseif mode == :insert
+        "Esc: Normal mode  Ctrl+R: Run  Ctrl+S: Save  Ctrl+C: Copy"
+    else  # :normal
+        "Esc: Panel  Enter: Edit  Ctrl+R: Run  Ctrl+S: Save  Ctrl+C: Copy cell"
     end
 
     Tachikoma.StatusBar(; left=[Tachikoma.Span(" " * keys, Theme.S_DIM)])

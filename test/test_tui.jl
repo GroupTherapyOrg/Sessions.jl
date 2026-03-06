@@ -153,7 +153,7 @@ using Markdown: @md_str
         bar = Sessions.make_bottom_bar(; mode=:normal)
         tb = TestBackend(120, 1)
         Tachikoma.render_widget!(tb, bar)
-        @test Tachikoma.find_text(tb, "Ctrl+Q") !== nothing
+        @test Tachikoma.find_text(tb, "Ctrl+R") !== nothing
         @test Tachikoma.find_text(tb, "Ctrl+S") !== nothing
     end
 
@@ -229,7 +229,7 @@ using Markdown: @md_str
         @test app.quit == true
     end
 
-    @testset "SessionsApp — always-editing (no mode switch)" begin
+    @testset "SessionsApp — mode transitions (normal → panel → normal)" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         app = Sessions.SessionsApp(nb)
@@ -240,9 +240,21 @@ using Markdown: @md_str
         Tachikoma.update!(app, Tachikoma.KeyEvent(:char, 'y'))
         @test app.mode == :normal  # stays normal (always editing)
 
-        # Escape doesn't change mode
+        # Escape from normal → panel mode
         Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
+        @test app.mode == :panel
+
+        # Arrow key from panel → back to normal
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:down))
         @test app.mode == :normal
+
+        # Escape again → panel
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:escape))
+        @test app.mode == :panel
+
+        # Ctrl+C in panel → quit
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'c'))
+        @test app.quit == true
     end
 
     @testset "SessionsApp — cell focus via mouse click" begin
@@ -477,8 +489,11 @@ using Markdown: @md_str
         Tachikoma.render_widget!(tb2, bar_insert)
         @test Tachikoma.find_text(tb2, "Ctrl+R") !== nothing
 
-        # Normal mode shows click instructions
-        @test Tachikoma.find_text(tb, "Click") !== nothing
+        # Panel mode shows quit instructions
+        bar_panel = Sessions.make_bottom_bar(; mode=:panel)
+        tb3 = TestBackend(120, 1)
+        Tachikoma.render_widget!(tb3, bar_panel)
+        @test Tachikoma.find_text(tb3, "Ctrl+C") !== nothing
     end
 
     @testset "SessionsApp — select_all! selects all cells" begin

@@ -37,7 +37,7 @@ mutable struct SessionsApp <: Tachikoma.Model
     file_panel::FilePanel
     activity_bar::ActivityBar
     tq::Tachikoma.TaskQueue
-    mode::Symbol        # :normal, :insert, :dropdown, or :confirm
+    mode::Symbol        # :panel, :normal, :insert, :dropdown, or :confirm
     quit::Bool
     message::String     # Status message (temporary)
     cell_dropdown::Union{Nothing, CellDropdown}
@@ -52,6 +52,10 @@ mutable struct SessionsApp <: Tachikoma.Model
     last_disk_nb::Union{Notebook, Nothing}  # snapshot of notebook as last loaded/saved from disk
     watcher::Union{DebouncedWatcher, Nothing}  # file watcher for external changes
     last_save_time::Float64  # time() of last save_notebook by us (for skip-reload guard)
+    drag_active::Bool        # mouse drag in progress (for text selection)
+    drag_cell_idx::Int       # cell index where drag started
+    slider_drag::Bool        # mouse drag on a slider track
+    slider_drag_idx::Int     # cell index of slider being dragged
 end
 
 """Create a safe notebook snapshot for diffing (avoids deepcopy of Module references in error stacktraces)."""
@@ -73,7 +77,8 @@ function SessionsApp(nb::Notebook)
     ab = ActivityBar()
     snapshot = _snapshot_notebook(nb)
     SessionsApp(nb, ws, nv, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
-        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0)
+        DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
+        false, 0, false, 0)
 end
 
 function SessionsApp(path::String)
@@ -200,8 +205,12 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     end
 
     # Editor cursor only visible in insert mode on the focused cell
+    # In panel mode, no cell is focused (all unfocused appearance)
     for (i, cw) in enumerate(app.notebook_view.cell_widgets)
         cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
+        if app.mode == :panel
+            cw.focused = false
+        end
     end
 
     # Notebook view (main content — fills remaining space)
@@ -228,6 +237,19 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Confirm dialog overlay (centered, with dimmed backdrop)
     if app.confirm_dialog !== nothing
         _render_confirm_dialog!(app.confirm_dialog, buf, area)
+    end
+
+    # Message bar at bottom of screen (temporary feedback)
+    if !isempty(app.message)
+        msg_y = area.y + area.height - 1
+        # Dim the bottom row, then overlay the message
+        msg_style = Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.BG)
+        Tachikoma.set_string!(buf, area.x, msg_y, " " ^ area.width, msg_style)
+        display_msg = " " * app.message
+        if length(display_msg) > area.width
+            display_msg = display_msg[1:area.width]
+        end
+        Tachikoma.set_string!(buf, area.x, msg_y, display_msg, msg_style)
     end
 end
 
@@ -434,7 +456,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # --- Essential keybindings only (everything else is mouse-driven) ---
 
-    # Ctrl+Q: quit
+    # Ctrl+Q: quit (always)
     if evt.key == :ctrl && evt.char == 'q'
         if app.watcher !== nothing
             stop_watching!(app.watcher)
@@ -442,6 +464,42 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         end
         app.quit = true
         return
+    end
+
+    # Ctrl+C: behavior depends on mode
+    #   panel  → quit (like Ctrl+C in a normal terminal)
+    #   normal → copy entire focused cell code
+    #   insert → copy text selection (or current line if no selection)
+    if evt.key == :ctrl && evt.char == 'c'
+        if app.mode == :panel
+            if app.watcher !== nothing
+                stop_watching!(app.watcher)
+                app.watcher = nothing
+            end
+            app.quit = true
+            return
+        elseif app.mode == :insert
+            cw = focused_widget(app.notebook_view)
+            if cw !== nothing && cw.selection.active
+                text = _selected_text(cw.editor.lines, cw.selection,
+                    cw.editor.cursor_row, cw.editor.cursor_col)
+                _clipboard_copy!(text)
+                app.message = "Copied $(length(text)) chars"
+            elseif cw !== nothing
+                # No selection — copy current line (VS Code behavior)
+                line = String(cw.editor.lines[cw.editor.cursor_row])
+                _clipboard_copy!(line)
+                app.message = "Copied line"
+            end
+            return
+        else  # :normal
+            cw = focused_widget(app.notebook_view)
+            if cw !== nothing
+                _clipboard_copy!(cw.cell.code)
+                app.message = "Copied cell"
+            end
+            return
+        end
     end
 
     # Ctrl+S / Cmd+S: save + run stale
@@ -465,12 +523,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Escape: exit insert mode → normal mode, or clear selection
+    # Escape: insert → normal → panel (progressive de-focus)
     if evt.key == :escape
         if app.mode == :insert
             _exit_insert_mode!(app)
-        elseif has_selection(app.notebook_view)
-            clear_selection!(app.notebook_view)
+        elseif app.mode == :normal
+            if has_selection(app.notebook_view)
+                clear_selection!(app.notebook_view)
+            else
+                _enter_panel_mode!(app)
+            end
         end
         return
     end
@@ -484,7 +546,29 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # --- Panel mode: arrow keys re-enter normal, Enter goes to insert ---
+    if app.mode == :panel
+        if evt.key == :up || evt.key == :down
+            _exit_panel_mode!(app)
+            if evt.key == :down
+                focus_next!(app.notebook_view)
+            end
+        elseif evt.key == :enter
+            _exit_panel_mode!(app)
+            _enter_insert_mode!(app)
+        end
+        # All other keys are ignored in panel mode (except Ctrl+C/Q/S/R handled above)
+        return
+    end
+
     # --- Normal mode keybindings ---
+
+    # Left/Right: adjust bond slider if focused cell has one
+    if evt.key in (:left, :right)
+        if _try_adjust_bond!(app, evt.key == :right ? 1 : -1)
+            return
+        end
+    end
 
     # Arrow keys: navigate cells
     if evt.key == :up
@@ -524,6 +608,11 @@ end
 """Handle mouse events — Pluto-style click zones for cell controls."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
+
+    # Clear status message on any click
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        app.message = ""
+    end
 
     # Activity bar clicks — toggle sidebar / open folder picker
     ar = app.activity_rect
@@ -646,6 +735,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         pad = min(pad, max(0, div(inner_w - 10, 2)))
         cell_left = inner_x + pad
         cell_right = inner_x + inner_w - pad
+        cw_width = max(1, inner_w - 2 * pad)
         margin_x = max(cell_left - Theme.MARGIN_CTRL_WIDTH, inner_x)
 
         # Check if click is in the left margin area (for ▲, +, ▼, eye controls)
@@ -663,6 +753,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
+        # Check if click is on a slider output area (bond widget)
+        slider_handled = _try_slider_click(app, nv, evt.x, evt.y, cell_left, cw_width)
+        if slider_handled
+            return
+        end
+
         # Cell click — only enter insert mode if click is inside the cell body
         idx = cell_at_y(nv, evt.y)
         if idx !== nothing
@@ -670,14 +766,93 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             focus_cell!(nv, idx)
             if evt.x >= cell_left && evt.x < cell_right
                 _enter_insert_mode!(app)
+                # Position cursor at click location
+                cw = nv.cell_widgets[idx]
+                code_area = _cell_code_area(nv, idx, cell_left, cw_width)
+                row, col = click_to_editor_pos(cw.editor, code_area, evt.x, evt.y)
+                cw.editor.cursor_row = row
+                cw.editor.cursor_col = col
+                cw.selection.active = false
+                # Start drag tracking for text selection
+                app.drag_active = true
+                app.drag_cell_idx = idx
             else
                 # Click in margin/padding area — focus cell in normal mode
                 _exit_insert_mode!(app)
             end
         else
-            # Click in empty gap area — exit insert mode
-            _exit_insert_mode!(app)
+            # Click in empty gap area — enter panel mode (no cell focused)
+            _enter_panel_mode!(app)
         end
+        return
+    end
+
+    # Mouse drag: slider dragging
+    if evt.action == Tachikoma.mouse_drag && app.slider_drag && in_notebook
+        nv = app.notebook_view
+        idx = app.slider_drag_idx
+        if idx >= 1 && idx <= length(nv.cell_widgets)
+            cw = nv.cell_widgets[idx]
+            cell = cw.cell
+            cell.output.output_type == :bond || @goto end_slider_drag
+            bond = cell.output.result
+            bond isa Bond || @goto end_slider_drag
+            bond.element isa Slider || @goto end_slider_drag
+
+            hi = Theme.CELL_H_INSET
+            inner_x = nb_vp.x + hi + 1
+            inner_w = max(1, nb_vp.width - 2 * hi - 2)
+            pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
+            pad = min(pad, max(0, div(inner_w - 10, 2)))
+            cell_left = inner_x + pad
+            cw_width = max(1, inner_w - 2 * pad)
+
+            new_val, hit = _slider_x_to_value(bond, evt.x, cell_left, cw_width)
+            if hit
+                _apply_slider_value!(app, cell, bond, new_val)
+            end
+        end
+        @label end_slider_drag
+        return
+    end
+
+    # Mouse drag: extend text selection within a cell
+    if evt.action == Tachikoma.mouse_drag && app.drag_active && app.mode == :insert && in_notebook
+        idx = app.drag_cell_idx
+        if idx >= 1 && idx <= length(nv.cell_widgets)
+            cw = nv.cell_widgets[idx]
+            hi = Theme.CELL_H_INSET
+            vi = Theme.CELL_V_INSET
+            inner_x = nb_vp.x + hi + 1
+            inner_w = max(1, nb_vp.width - 2 * hi - 2)
+            pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
+            pad = min(pad, max(0, div(inner_w - 10, 2)))
+            cell_left = inner_x + pad
+            cw_width = max(1, inner_w - 2 * pad)
+            code_area = _cell_code_area(nv, idx, cell_left, cw_width)
+            row, col = click_to_editor_pos(cw.editor, code_area, evt.x, evt.y)
+            # Start selection from original click position if not already selecting
+            if !cw.selection.active
+                cw.selection.active = true
+                cw.selection.anchor_row = cw.editor.cursor_row
+                cw.selection.anchor_col = cw.editor.cursor_col
+            end
+            cw.editor.cursor_row = row
+            cw.editor.cursor_col = col
+        end
+        return
+    end
+
+    # Mouse release: stop drag tracking, auto-copy selection to clipboard
+    if evt.action == Tachikoma.mouse_release
+        if app.drag_active && app.drag_cell_idx >= 1
+            idx = app.drag_cell_idx
+            if idx <= length(nv.cell_widgets)
+                _auto_copy_selection!(nv.cell_widgets[idx])
+            end
+        end
+        app.drag_active = false
+        app.slider_drag = false
         return
     end
 
@@ -734,11 +909,26 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
 
             # Detect ellipsis button hover
             _update_cell_control_hover!(nv, evt.x, evt.y, cell_right)
+
+            # Detect bond widget hover (slider, checkbox, button, select)
+            bond_idx, _ = _slider_cell_at_y(nv, evt.y)
+            if bond_idx == 0
+                # Check all bond types, not just slider
+                bond_idx = _bond_cell_at_y(nv, evt.y)
+            end
+            nv.hovered_bond_idx = bond_idx
         else
             nv.hovered_idx = 0
             nv.hovered_control = :none
             nv.hovered_control_idx = 0
+            nv.hovered_bond_idx = 0
         end
+        return
+    end
+
+    # Click outside all panels (background) → enter panel mode
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press && !in_notebook
+        _enter_panel_mode!(app)
         return
     end
 end
@@ -785,6 +975,39 @@ function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_ri
             return
         end
     end
+end
+
+"""Compute the code area rect for a cell (where the CodeEditor renders).
+Used for mapping mouse clicks to editor coordinates."""
+function _cell_code_area(nv::NotebookView, idx::Int, cell_x::Int, cw_width::Int)
+    vp = nv.viewport
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    hp = Theme.CELL_H_PAD
+
+    cell_y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset
+    for j in 1:idx-1
+        j_oh = output_height(nv.output_widgets[j])
+        cell_y += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
+        cell_y += j_oh
+        cell_y += Theme.CELL_GAP
+    end
+
+    cw = nv.cell_widgets[idx]
+    oh = output_height(nv.output_widgets[idx])
+    ch = cell_height(cw; has_output=oh > 0)
+
+    border_w = cw_width - 2 * hi
+    border_h = ch - 2 * vi
+    border_x = cell_x + hi
+    border_y = cell_y + vi
+
+    inner_w = max(1, border_w - 2 - 2 * hp)
+    inner_h = max(1, border_h - 2)
+    inner_x = border_x + 1 + hp
+    inner_y = border_y + 1
+
+    return Tachikoma.Rect(inner_x, inner_y, inner_w, inner_h)
 end
 
 """Hit test margin controls. Returns (:plus_gap, pos), (:eye, idx), (:move_up, idx), (:move_down, idx), or nothing.
@@ -949,7 +1172,171 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.TaskEvent)
     end
 end
 
-"""Execute the currently focused cell and dependents in the background."""
+"""Map an x-coordinate to a slider value. Returns (new_value, hit) or (nothing, false)."""
+function _slider_x_to_value(bond::Bond, click_x::Int, cell_left::Int, cw_width::Int)
+    bond.element isa Slider || return (nothing, false)
+    slider = bond.element::Slider
+    name = bond.defines
+    total = length(slider.values)
+
+    # Compute slider track position (must match _render_slider_widget layout)
+    label = "$(name) "
+    label_width = length(label)
+    val_str = slider.show_value ? " $(_bond_current_value(bond))" : ""
+    val_width = length(val_str)
+    avail = cw_width - 4 - label_width - val_width
+    track_width = clamp(avail, 5, 50)
+
+    track_start_x = cell_left + 2 + label_width + 1  # left pad + label + ◄
+    track_end_x = track_start_x + track_width - 1
+
+    # Clamp x into track range (allows dragging past edges)
+    clamped_x = clamp(click_x, track_start_x, track_end_x)
+    frac = (clamped_x - track_start_x) / max(track_width - 1, 1)
+    new_idx = clamp(round(Int, frac * (total - 1)) + 1, 1, total)
+    (slider.values[new_idx], true)
+end
+
+"""Find which cell index has a slider bond at the given screen y. Returns (cell_index, Bond) or (0, nothing)."""
+function _slider_cell_at_y(nv::NotebookView, screen_y::Int)
+    isempty(nv.cell_widgets) && return (0, nothing)
+    vp = nv.viewport
+    vi = Theme.CELL_V_INSET
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ow = nv.output_widgets[i]
+        oh = output_height(ow)
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        y += ch
+        if oh > 0 && content_y >= y && content_y < y + oh
+            cell = nv.cell_widgets[i].cell
+            cell.output.output_type == :bond || return (0, nothing)
+            bond = cell.output.result
+            bond isa Bond || return (0, nothing)
+            bond.element isa Slider || return (0, nothing)
+            return (i, bond)
+        end
+        y += oh
+        y += Theme.CELL_GAP
+    end
+    (0, nothing)
+end
+
+"""Find which cell index has any bond at the given screen y. Returns cell_index or 0."""
+function _bond_cell_at_y(nv::NotebookView, screen_y::Int)::Int
+    isempty(nv.cell_widgets) && return 0
+    vp = nv.viewport
+    vi = Theme.CELL_V_INSET
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ow = nv.output_widgets[i]
+        oh = output_height(ow)
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        y += ch
+        if oh > 0 && content_y >= y && content_y < y + oh
+            cell = nv.cell_widgets[i].cell
+            cell.output.output_type == :bond || return 0
+            cell.output.result isa Bond || return 0
+            return i
+        end
+        y += oh
+        y += Theme.CELL_GAP
+    end
+    0
+end
+
+"""Apply a slider value: update registry, workspace variable, re-execute dependents."""
+function _apply_slider_value!(app::SessionsApp, cell::Cell, bond::Bond, new_val)
+    name = bond.defines
+    old_val = _bond_current_value(bond)
+    new_val == old_val && return  # no change
+
+    set_bond_value!(name, new_val)
+    try
+        Core.eval(app.workspace.mod, :($(name) = $(new_val)))
+    catch; end
+    _rerun_bond_dependents!(app, name, cell)
+end
+
+"""Try to handle a mouse click on a slider widget. Returns true if handled."""
+function _try_slider_click(app::SessionsApp, nv::NotebookView, click_x::Int, click_y::Int,
+                           cell_left::Int, cw_width::Int)
+    idx, bond = _slider_cell_at_y(nv, click_y)
+    idx == 0 && return false
+
+    new_val, hit = _slider_x_to_value(bond, click_x, cell_left, cw_width)
+    !hit && return false
+
+    cell = nv.cell_widgets[idx].cell
+    focus_cell!(nv, idx)
+    _exit_insert_mode!(app)
+    _apply_slider_value!(app, cell, bond, new_val)
+
+    # Start slider drag tracking
+    app.slider_drag = true
+    app.slider_drag_idx = idx
+    return true
+end
+
+"""Try to adjust a bond slider on the focused cell. Returns true if handled."""
+function _try_adjust_bond!(app::SessionsApp, delta::Int)
+    cw = focused_widget(app.notebook_view)
+    cw === nothing && return false
+
+    cell = cw.cell
+    cell.output.output_type == :bond || return false
+    bond = cell.output.result
+    bond isa Bond || return false
+    bond.element isa Slider || return false
+
+    slider = bond.element::Slider
+    name = bond.defines
+    haskey(_BOND_REGISTRY, name) || return false
+
+    _, current_val, _ = _BOND_REGISTRY[name]
+    idx = _slider_index(slider, current_val)
+    new_idx = clamp(idx + delta, 1, length(slider.values))
+    new_idx == idx && return true  # at boundary, still handled
+
+    new_val = slider.values[new_idx]
+    set_bond_value!(name, new_val)
+
+    # Assign new value to workspace variable
+    try
+        Core.eval(app.workspace.mod, :($(name) = $(new_val)))
+    catch; end
+
+    # Find and re-execute dependent cells (not the bond cell itself)
+    _rerun_bond_dependents!(app, name, cell)
+    return true
+end
+
+"""Re-execute cells that depend on a bond variable."""
+function _rerun_bond_dependents!(app::SessionsApp, name::Symbol, bond_cell::Cell)
+    # Find cells that reference this variable (downstream dependents)
+    deps = downstream_dependents(app.nb, [bond_cell])
+    isempty(deps) && return
+
+    # Mark as queued
+    for cell in deps
+        cell.disabled && continue
+        cell.state = cell_queued
+    end
+
+    # Execute in background
+    Tachikoma.spawn_task!(app.tq, :bond_update) do
+        order = execution_order(app.nb, deps)
+        for cell in order.runnable
+            cell.disabled && continue
+            execute_cell!(app.workspace, cell)
+        end
+    end
+end
+
 function run_focused_cell_async!(app::SessionsApp)
     cell = focused_cell(app.notebook_view)
     cell === nothing && return
@@ -1202,6 +1589,23 @@ function _exit_insert_mode!(app::SessionsApp)
     for cw in app.notebook_view.cell_widgets
         cw.editor.focused = false
     end
+end
+
+"""Enter panel mode — no cell focused, Ctrl+C quits, click canvas to stay here."""
+function _enter_panel_mode!(app::SessionsApp)
+    app.mode = :panel
+    for cw in app.notebook_view.cell_widgets
+        cw.editor.focused = false
+        cw.focused = false
+    end
+    app.message = "Panel mode — Ctrl+C to quit, arrow keys to navigate"
+end
+
+"""Exit panel mode — return to normal mode, restore cell focus."""
+function _exit_panel_mode!(app::SessionsApp)
+    app.mode = :normal
+    app.message = ""
+    update_focus!(app.notebook_view)
 end
 
 """Compute dropdown width from items."""

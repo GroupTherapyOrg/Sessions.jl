@@ -2,49 +2,115 @@
 
 using Markdown: Markdown
 
+# --- MIME-based output classification (Pluto parity) ---
+# Follows Pluto's `allmimes` priority list, adapted for TUI rendering.
+# Pluto order: table > divelement > text/html > images > tree > text/latex > text/plain
+# TUI adaptation: text/plain is PROMOTED above images, because terminal-native
+# libraries (UnicodePlots, etc.) produce their richest output via text/plain.
+# Images are only useful in browsers (Pluto/Jupyter) or with Kitty/sixel protocol.
+# We use invokelatest for all showable checks (world age safety).
+
+"""Image MIME types in preference order (matches Pluto's imagemimes)."""
+const _IMAGE_MIMES = MIME[
+    MIME"image/svg+xml"(),
+    MIME"image/png"(),
+    MIME"image/jpg"(),
+    MIME"image/jpeg"(),
+    MIME"image/bmp"(),
+    MIME"image/gif"(),
+]
+
 """
-Classify a cell's return value into an output type for TUI rendering.
-Returns a Symbol: :nothing, :error, :markdown, :dataframe, :image_png, or :text.
+    _tui_showable(mime, value) -> Bool
+
+World-age-safe check for whether `value` can be shown as `mime`.
+Equivalent to Pluto's `pluto_showable` — uses `invokelatest` to avoid
+MethodError from packages loaded in newer world ages.
+"""
+function _tui_showable(m::MIME, @nospecialize(value))::Bool
+    try
+        Base.invokelatest(showable, m, value)::Bool
+    catch
+        false
+    end
+end
+
+"""
+    classify_output(value) -> Symbol
+
+Classify a cell's return value using MIME dispatch (Pluto parity, adapted for TUI).
+Tries MIME types in priority order and returns a Symbol for TUI rendering:
+:nothing, :bond, :dataframe, :markdown, :text, or :image_png.
+
+TUI priority (Pluto's `allmimes` reordered for terminal):
+1. Bond — Sessions-specific interactive widgets
+2. Table — Tables.jl row-accessible data
+3. Markdown — Markdown.MD objects
+4. text/plain — terminal-native output (UnicodePlots, etc.)
+5. Images — SVG/PNG/etc. (placeholder only, until Kitty/sixel support)
 """
 function classify_output(value)::Symbol
     value === nothing && return :nothing
-    value isa Markdown.MD && return :markdown
-    # Check for Tables.jl-compatible tabular data (duck typing)
-    try
-        mod = parentmodule(typeof(value))
-        if isdefined(mod, :Tables) || _has_table_interface(value)
-            return :dataframe
-        end
-    catch; end
-    # Check for image/png MIME support (plots)
-    if hasmethod(show, Tuple{IO, MIME"image/png", typeof(value)})
-        return :image_png
+
+    # 1. Bond (Sessions-specific, like Pluto's divelement)
+    value isa Bond && return :bond
+
+    # 2. Table (Pluto: application/vnd.pluto.table+object)
+    if _is_table_value(value)
+        return :dataframe
     end
+
+    # 3. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
+    value isa Markdown.MD && return :markdown
+
+    # 4. text/plain — preferred for TUI because terminal-native libraries
+    # (UnicodePlots, etc.) produce their richest output here.
+    # In Pluto's browser, images beat text/plain. In TUI, text/plain wins.
+    if _tui_showable(MIME"text/plain"(), value)
+        return :text
+    end
+
+    # 5. Images — fallback for values with only image output (no text/plain)
+    for m in _IMAGE_MIMES
+        if _tui_showable(m, value)
+            return :image_png
+        end
+    end
+
     return :text
 end
 
-"""Check if a value looks like tabular data (duck typing without Tables.jl dependency)."""
-function _has_table_interface(value)
-    # Common table-like types: Vector{<:NamedTuple}, Matrix, etc.
+"""Check if a value is Tables.jl-compatible tabular data (Pluto parity)."""
+function _is_table_value(@nospecialize(value))::Bool
+    # Direct duck typing for common types (fast path)
     value isa AbstractVector{<:NamedTuple} && return true
-    # Check if Tables module is loaded and value is a table
-    tables_mod = get(Base.loaded_modules, Base.PkgId(Base.UUID("bd369af6-aec1-5ad0-b16a-f7cc5008161c"), "Tables"), nothing)
+    # Check Tables.jl via loaded modules (like Pluto's integration)
+    tables_mod = get(Base.loaded_modules,
+        Base.PkgId(Base.UUID("bd369af6-aec1-5ad0-b16a-f7cc5008161c"), "Tables"), nothing)
     if tables_mod !== nothing
         try
-            return tables_mod.istable(value)
+            return Base.invokelatest(tables_mod.istable, value)::Bool
         catch; end
     end
     false
 end
 
-"""Generate a text representation of any value for fallback display."""
+"""Generate a text representation of any value for fallback display.
+
+Uses Pluto's IOContext pattern: color disabled, display size limited, :limit => true.
+This ensures clean text for session caching and TUI rendering.
+"""
 function text_representation(value)::String
     value === nothing && return ""
     try
-        sprint(show, MIME"text/plain"(), value; context=:limit => true)
+        sprint(; context=IOContext(devnull, :color => false, :limit => true, :displaysize => (40, 80))) do io
+            Base.invokelatest(show, io, MIME"text/plain"(), value)
+        end
     catch
         try
-            sprint(show, value)
+            sprint(; context=IOContext(devnull, :color => false, :limit => true)) do io
+                Base.invokelatest(show, io, value)
+            end
         catch
             repr(value)
         end
@@ -158,6 +224,8 @@ let workspace_counter = Ref(0)
         mod = Module(ns)
         # Pre-populate the workspace with Base
         Core.eval(mod, :(using Base))
+        # Inject @bind and widget types so cells can use them directly
+        Core.eval(mod, :(import Sessions: @bind, Slider, TextField, CheckBox, Select, NumberField, Button, CounterButton))
         Workspace(mod, ns)
     end
 end
@@ -166,6 +234,9 @@ end
 function execute_cell!(workspace::Workspace, cell::Cell)
     cell.state = cell_running
     cell.output = CellOutput()
+
+    # Set current cell ID so @bind knows which cell it's in
+    _EXECUTING_CELL_ID[] = cell.id
 
     result = nothing
     err = nothing

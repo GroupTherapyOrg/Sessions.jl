@@ -15,13 +15,14 @@ mutable struct NotebookView
     user_scrolling::Bool       # true when user is manually scrolling (suppress auto-scroll)
     hovered_control::Symbol    # :none, :plus_gap, :eye, :ellipsis, :run
     hovered_control_idx::Int   # which cell index the hovered control belongs to
+    hovered_bond_idx::Int      # cell index where mouse hovers over a bond widget (0 = none)
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0)
 end
 
 """Rebuild widgets when cells change."""
@@ -450,6 +451,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         # --- Output rendering ---
         if oh > 0
+            ow.hovered = (i == nv.hovered_bond_idx)
             if y + oh > visible_start && y <= visible_end
                 out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
                 Tachikoma.render(ow, out_rect, buf)

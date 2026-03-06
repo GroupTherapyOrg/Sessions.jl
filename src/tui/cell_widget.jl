@@ -1,5 +1,56 @@
 # TUI: Cell editor widget — Pluto-style cell with hover controls
 
+# ── Selection state ──────────────────────────────────────────────────
+
+"""Tracks text selection within a cell's code editor."""
+mutable struct SelectionState
+    active::Bool
+    anchor_row::Int   # row where selection started (1-based)
+    anchor_col::Int   # col where selection started (0-based, like cursor_col)
+end
+SelectionState() = SelectionState(false, 1, 0)
+
+# ── Clipboard ────────────────────────────────────────────────────────
+
+const _CLIPBOARD = Ref("")
+const _CLIPBOARD_DIRTY = Ref(false)  # true after internal copy (pbcopy may have failed)
+
+function _clipboard_copy!(text::String)
+    _CLIPBOARD[] = text
+    _CLIPBOARD_DIRTY[] = true
+    # Try pbcopy (may fail silently inside TUI — that's OK, we have _CLIPBOARD)
+    try
+        if Sys.isapple()
+            open(`pbcopy`, "w") do io
+                write(io, text)
+            end
+        end
+    catch; end
+end
+
+function _clipboard_paste()::String
+    if _CLIPBOARD_DIRTY[]
+        # Last copy was internal — use our buffer (pbcopy may have failed)
+        _CLIPBOARD_DIRTY[] = false
+        return _CLIPBOARD[]
+    end
+    # No pending internal copy — try system clipboard (for external copies)
+    try
+        if Sys.isapple()
+            sys = read(`pbpaste`, String)
+            !isempty(sys) && return sys
+        end
+    catch; end
+    return _CLIPBOARD[]
+end
+
+# ── Word boundary (matching Julia REPL.LineEdit is_non_word_char) ────
+
+const _NON_WORD_CHARS = Set(collect(" \t\n\"\\'\`@\$><=:;|&{}()[].,+-*/?%^~"))
+_is_non_word_char(c::Char) = c in _NON_WORD_CHARS
+
+# ── CellWidget ───────────────────────────────────────────────────────
+
 """A cell widget combining a CodeEditor with state/output display."""
 mutable struct CellWidget
     cell::Cell
@@ -9,13 +60,14 @@ mutable struct CellWidget
     collapsed::Bool  # Whether output is collapsed
     selected::Bool   # Whether this cell is part of multi-cell selection
     ellipsis_hovered::Bool  # Mouse hovering over ⋯ button
+    selection::SelectionState
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
     editor.focused = false  # cursor hidden by default; app sets true only in insert mode
-    CellWidget(cell, editor, focused, false, false, false, false)
+    CellWidget(cell, editor, focused, false, false, false, false, SelectionState())
 end
 
 """Sync editor text back to cell."""
@@ -87,6 +139,543 @@ end
 
 Tachikoma.focusable(::CellWidget) = true
 
+# ── Selection helpers ────────────────────────────────────────────────
+
+"""Return normalized (start_row, start_col, end_row, end_col) for the selection."""
+function _selection_range(sel::SelectionState, cursor_row::Int, cursor_col::Int)
+    ar, ac = sel.anchor_row, sel.anchor_col
+    cr, cc = cursor_row, cursor_col
+    if ar < cr || (ar == cr && ac <= cc)
+        return (ar, ac, cr, cc)
+    else
+        return (cr, cc, ar, ac)
+    end
+end
+
+"""Extract the selected text as a String."""
+function _selected_text(lines, sel::SelectionState, cursor_row::Int, cursor_col::Int)
+    !sel.active && return ""
+    sr, sc, er, ec = _selection_range(sel, cursor_row, cursor_col)
+    if sr == er
+        line = lines[sr]
+        from = sc + 1  # 1-based
+        to = min(ec, length(line))
+        from > to && return ""
+        return String(line[from:to])
+    else
+        parts = String[]
+        push!(parts, String(lines[sr][sc+1:end]))
+        for r in sr+1:er-1
+            push!(parts, String(lines[r]))
+        end
+        push!(parts, String(lines[er][1:min(ec, length(lines[er]))]))
+        return join(parts, '\n')
+    end
+end
+
+"""Copy current selection to system clipboard if active."""
+function _auto_copy_selection!(cw::CellWidget)
+    sel = cw.selection
+    !sel.active && return
+    text = _selected_text(cw.editor.lines, sel, cw.editor.cursor_row, cw.editor.cursor_col)
+    !isempty(text) && _clipboard_copy!(text)
+end
+
+"""Delete the selected text and position cursor at selection start."""
+function _delete_selection!(cw::CellWidget)
+    sel = cw.selection
+    !sel.active && return
+    editor = cw.editor
+    Tachikoma._push_undo!(editor; force=true)
+    sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
+
+    if sr == er
+        line = editor.lines[sr]
+        to_del = min(ec, length(line))
+        from_del = sc + 1
+        if from_del <= to_del
+            deleteat!(line, from_del:to_del)
+        end
+    else
+        first_part = editor.lines[sr][1:sc]
+        last_line = editor.lines[er]
+        last_part = ec < length(last_line) ? last_line[ec+1:end] : Char[]
+        editor.lines[sr] = vcat(first_part, last_part)
+        if er > sr
+            deleteat!(editor.lines, sr+1:er)
+        end
+    end
+
+    editor.cursor_row = sr
+    editor.cursor_col = sc
+    sel.active = false
+    editor.token_cache = [Tachikoma.tokenize_line(l) for l in editor.lines]
+    empty!(editor.dirty_lines)
+end
+
+# ── Word motion (matching REPL.LineEdit char_move_word_left/right) ───
+
+"""Move cursor left to previous word boundary (REPL two-phase algorithm)."""
+function _word_left!(editor)
+    row = editor.cursor_row
+    col = editor.cursor_col
+    lines = editor.lines
+
+    # Phase 1: Skip non-word chars backward
+    while true
+        if col > 0
+            c = lines[row][col]  # char to the left of cursor
+            if !_is_non_word_char(c)
+                break
+            end
+            col -= 1
+        elseif row > 1
+            row -= 1
+            col = length(lines[row])
+        else
+            break
+        end
+    end
+
+    # Phase 2: Skip word chars backward
+    while col > 0
+        c = lines[row][col]
+        if _is_non_word_char(c)
+            break
+        end
+        col -= 1
+    end
+
+    editor.cursor_row = row
+    editor.cursor_col = col
+end
+
+"""Move cursor right to next word boundary (REPL two-phase algorithm)."""
+function _word_right!(editor)
+    row = editor.cursor_row
+    col = editor.cursor_col
+    lines = editor.lines
+    n = length(lines[row])
+
+    # Phase 1: Skip non-word chars forward
+    while true
+        if col < n
+            c = lines[row][col + 1]  # char to the right of cursor
+            if !_is_non_word_char(c)
+                break
+            end
+            col += 1
+        elseif row < length(lines)
+            row += 1
+            col = 0
+            n = length(lines[row])
+        else
+            break
+        end
+    end
+
+    # Phase 2: Skip word chars forward
+    n = length(lines[row])
+    while col < n
+        c = lines[row][col + 1]
+        if _is_non_word_char(c)
+            break
+        end
+        col += 1
+    end
+
+    editor.cursor_row = row
+    editor.cursor_col = col
+end
+
+"""Delete previous word (REPL edit_delete_prev_word / Meta+Backspace)."""
+function _delete_prev_word!(cw::CellWidget)
+    editor = cw.editor
+    Tachikoma._push_undo!(editor; force=true)
+    start_row = editor.cursor_row
+    start_col = editor.cursor_col
+    _word_left!(editor)
+    end_row = editor.cursor_row
+    end_col = editor.cursor_col
+    # Temporarily set up selection to delete the range
+    cw.selection.active = true
+    cw.selection.anchor_row = start_row
+    cw.selection.anchor_col = start_col
+    # cursor is already at the word boundary (start of deleted range)
+    _delete_selection_no_undo!(cw)  # we already pushed undo
+end
+
+"""Delete next word (REPL edit_delete_next_word / Meta+D)."""
+function _delete_next_word!(cw::CellWidget)
+    editor = cw.editor
+    Tachikoma._push_undo!(editor; force=true)
+    start_row = editor.cursor_row
+    start_col = editor.cursor_col
+    _word_right!(editor)
+    end_row = editor.cursor_row
+    end_col = editor.cursor_col
+    # Set up selection to delete
+    cw.selection.active = true
+    cw.selection.anchor_row = start_row
+    cw.selection.anchor_col = start_col
+    _delete_selection_no_undo!(cw)
+end
+
+"""Delete selection without pushing undo (caller already did)."""
+function _delete_selection_no_undo!(cw::CellWidget)
+    sel = cw.selection
+    !sel.active && return
+    editor = cw.editor
+    sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
+    if sr == er
+        line = editor.lines[sr]
+        to_del = min(ec, length(line))
+        from_del = sc + 1
+        if from_del <= to_del
+            deleteat!(line, from_del:to_del)
+        end
+    else
+        first_part = editor.lines[sr][1:sc]
+        last_line = editor.lines[er]
+        last_part = ec < length(last_line) ? last_line[ec+1:end] : Char[]
+        editor.lines[sr] = vcat(first_part, last_part)
+        if er > sr
+            deleteat!(editor.lines, sr+1:er)
+        end
+    end
+    editor.cursor_row = sr
+    editor.cursor_col = sc
+    sel.active = false
+    editor.token_cache = [Tachikoma.tokenize_line(l) for l in editor.lines]
+    empty!(editor.dirty_lines)
+end
+
+# ── Cursor movement for Shift+Arrow ──────────────────────────────────
+
+function _move_cursor_for_shift!(editor, key::Symbol)
+    if key == :shift_left
+        if editor.cursor_col > 0
+            editor.cursor_col -= 1
+        elseif editor.cursor_row > 1
+            editor.cursor_row -= 1
+            editor.cursor_col = length(editor.lines[editor.cursor_row])
+        end
+    elseif key == :shift_right
+        line = editor.lines[editor.cursor_row]
+        if editor.cursor_col < length(line)
+            editor.cursor_col += 1
+        elseif editor.cursor_row < length(editor.lines)
+            editor.cursor_row += 1
+            editor.cursor_col = 0
+        end
+    elseif key == :shift_up
+        if editor.cursor_row > 1
+            editor.cursor_row -= 1
+            editor.cursor_col = min(editor.cursor_col, length(editor.lines[editor.cursor_row]))
+        end
+    elseif key == :shift_down
+        if editor.cursor_row < length(editor.lines)
+            editor.cursor_row += 1
+            editor.cursor_col = min(editor.cursor_col, length(editor.lines[editor.cursor_row]))
+        end
+    elseif key == :shift_home
+        editor.cursor_col = 0
+    elseif key == :shift_end
+        editor.cursor_col = length(editor.lines[editor.cursor_row])
+    end
+end
+
+# ── Text insertion helper ────────────────────────────────────────────
+
+"""Insert a multi-line text string at the current cursor position."""
+function _insert_text!(editor, text::String)
+    Tachikoma._push_undo!(editor; force=true)
+    parts = split(text, '\n'; keepempty=true)
+    if length(parts) == 1
+        chars = collect(parts[1])
+        line = editor.lines[editor.cursor_row]
+        for (i, c) in enumerate(chars)
+            insert!(line, editor.cursor_col + i, c)
+        end
+        editor.cursor_col += length(chars)
+    else
+        line = editor.lines[editor.cursor_row]
+        left = line[1:editor.cursor_col]
+        right = line[editor.cursor_col+1:end]
+
+        editor.lines[editor.cursor_row] = vcat(left, collect(parts[1]))
+        for i in 2:length(parts)-1
+            insert!(editor.lines, editor.cursor_row + i - 1, collect(parts[i]))
+        end
+        last_line = vcat(collect(parts[end]), right)
+        insert!(editor.lines, editor.cursor_row + length(parts) - 1, last_line)
+
+        editor.cursor_row += length(parts) - 1
+        editor.cursor_col = length(collect(parts[end]))
+    end
+    editor.token_cache = [Tachikoma.tokenize_line(l) for l in editor.lines]
+    empty!(editor.dirty_lines)
+end
+
+# ── Click-to-position helper ─────────────────────────────────────────
+
+"""Map screen coordinates to editor (row, col) given the code area rect."""
+function click_to_editor_pos(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
+                              click_x::Int, click_y::Int)
+    line_count = length(editor.lines)
+    gw = editor.show_line_numbers ? ndigits(max(line_count, 1)) + 1 : 0
+    code_x = area.x + gw
+
+    row = (click_y - area.y) + 1 + editor.scroll_offset
+    row = clamp(row, 1, max(1, line_count))
+
+    col = (click_x - code_x) + editor.h_scroll
+    col = clamp(col, 0, length(editor.lines[row]))
+
+    return (row, col)
+end
+
+# ── Key handling (selection-aware, REPL-matching keybindings) ────────
+
+function Tachikoma.handle_key!(cw::CellWidget, evt)
+    sel = cw.selection
+    editor = cw.editor
+
+    # ── Ctrl+A: move to line start (REPL ^A) ──
+    if evt.key == :ctrl && evt.char == 'a'
+        sel.active = false
+        editor.cursor_col = 0
+        return true
+    end
+
+    # ── Ctrl+E: move to line end (REPL ^E) ──
+    if evt.key == :ctrl && evt.char == 'e'
+        sel.active = false
+        editor.cursor_col = length(editor.lines[editor.cursor_row])
+        return true
+    end
+
+    # ── Ctrl+K: kill line forward (REPL ^K) ──
+    if evt.key == :ctrl && evt.char == 'k'
+        Tachikoma._push_undo!(editor; force=true)
+        line = editor.lines[editor.cursor_row]
+        if editor.cursor_col < length(line)
+            killed = String(line[editor.cursor_col+1:end])
+            deleteat!(line, editor.cursor_col+1:length(line))
+            _clipboard_copy!(killed)
+            Tachikoma._mark_dirty!(editor, editor.cursor_row)
+        elseif editor.cursor_row < length(editor.lines)
+            append!(editor.lines[editor.cursor_row], editor.lines[editor.cursor_row + 1])
+            deleteat!(editor.lines, editor.cursor_row + 1)
+            Tachikoma._mark_dirty!(editor, editor.cursor_row)
+        end
+        Tachikoma._ensure_tokens!(editor)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Ctrl+U: kill line backward (REPL ^U) ──
+    if evt.key == :ctrl && evt.char == 'u'
+        Tachikoma._push_undo!(editor; force=true)
+        line = editor.lines[editor.cursor_row]
+        if editor.cursor_col > 0
+            killed = String(line[1:editor.cursor_col])
+            deleteat!(line, 1:editor.cursor_col)
+            editor.cursor_col = 0
+            _clipboard_copy!(killed)
+            Tachikoma._mark_dirty!(editor, editor.cursor_row)
+        end
+        Tachikoma._ensure_tokens!(editor)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Ctrl+W: delete word backward (whitespace-delimited, REPL ^W) ──
+    if evt.key == :ctrl && evt.char == 'w'
+        _delete_prev_word!(cw)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Ctrl+Y: yank/paste (REPL ^Y) ──
+    if evt.key == :ctrl && evt.char == 'y'
+        clip = _clipboard_paste()
+        isempty(clip) && return true
+        if sel.active
+            _delete_selection!(cw)
+        end
+        _insert_text!(editor, clip)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Ctrl+C / Cmd+C: copy selection ──
+    # On Kitty-protocol terminals: Cmd+C produces :ctrl + 'c' (bypasses Tachikoma quit)
+    # On legacy terminals: Ctrl+C produces :ctrl_c (intercepted by Tachikoma for quit)
+    # So this handler works on Kitty terminals with Cmd+C; legacy terminals use auto-copy
+    if evt.key == :ctrl && evt.char == 'c' && sel.active
+        text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
+        _clipboard_copy!(text)
+        return true
+    end
+
+    # ── Ctrl+X / Cmd+X: cut selection ──
+    if evt.key == :ctrl && evt.char == 'x' && sel.active
+        text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
+        _clipboard_copy!(text)
+        _delete_selection!(cw)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Ctrl+V / Cmd+V: paste ──
+    if evt.key == :ctrl && evt.char == 'v'
+        clip = _clipboard_paste()
+        isempty(clip) && return true
+        if sel.active
+            _delete_selection!(cw)
+        end
+        _insert_text!(editor, clip)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Shift+Arrow: extend selection ──
+    if evt.key in (:shift_left, :shift_right, :shift_up, :shift_down, :shift_home, :shift_end)
+        if !sel.active
+            sel.active = true
+            sel.anchor_row = editor.cursor_row
+            sel.anchor_col = editor.cursor_col
+        end
+        _move_cursor_for_shift!(editor, evt.key)
+        _auto_copy_selection!(cw)
+        return true
+    end
+
+    # ── Ctrl+Shift+Arrow: word selection ──
+    if evt.key in (:ctrl_shift_left, :ctrl_shift_right)
+        if !sel.active
+            sel.active = true
+            sel.anchor_row = editor.cursor_row
+            sel.anchor_col = editor.cursor_col
+        end
+        if evt.key == :ctrl_shift_left
+            _word_left!(editor)
+        else
+            _word_right!(editor)
+        end
+        _auto_copy_selection!(cw)
+        return true
+    end
+
+    # ── Alt+Shift+Arrow (Option+Shift+Arrow): word selection (macOS standard) ──
+    if evt.key in (:alt_shift_left, :alt_shift_right)
+        if !sel.active
+            sel.active = true
+            sel.anchor_row = editor.cursor_row
+            sel.anchor_col = editor.cursor_col
+        end
+        if evt.key == :alt_shift_left
+            _word_left!(editor)
+        else
+            _word_right!(editor)
+        end
+        _auto_copy_selection!(cw)
+        return true
+    end
+
+    # ── Ctrl+Arrow: word jump (clear selection) ──
+    if evt.key == :ctrl_left
+        sel.active = false
+        _word_left!(editor)
+        return true
+    end
+    if evt.key == :ctrl_right
+        sel.active = false
+        _word_right!(editor)
+        return true
+    end
+
+    # ── Alt+Arrow (Option+Arrow): word jump (macOS standard) ──
+    if evt.key == :alt_left
+        sel.active = false
+        _word_left!(editor)
+        return true
+    end
+    if evt.key == :alt_right
+        sel.active = false
+        _word_right!(editor)
+        return true
+    end
+
+    # ── Alt+Backspace (Option+Backspace): delete word backward (macOS standard) ──
+    if evt.key == :alt_backspace
+        if sel.active
+            _delete_selection!(cw)
+        else
+            _delete_prev_word!(cw)
+        end
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Alt+Delete (Option+D): delete word forward (macOS standard) ──
+    if evt.key == :alt_delete
+        if sel.active
+            _delete_selection!(cw)
+        else
+            _delete_next_word!(cw)
+        end
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Arrow keys with active selection: collapse to edge ──
+    if sel.active && evt.key in (:left, :right, :up, :down, :home, :end_key)
+        sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
+        sel.active = false
+        if evt.key in (:left, :up, :home)
+            editor.cursor_row = sr
+            editor.cursor_col = sc
+        else
+            editor.cursor_row = er
+            editor.cursor_col = ec
+        end
+        return true
+    end
+
+    # ── Backspace/Delete with active selection: delete selection ──
+    if sel.active && (evt.key == :backspace || evt.key == :delete)
+        _delete_selection!(cw)
+        sync_to_cell!(cw)
+        return true
+    end
+
+    # ── Typing with active selection: replace selection ──
+    if sel.active && (evt.key == :char || evt.key == :enter || evt.key == :tab)
+        _delete_selection!(cw)
+        sync_to_cell!(cw)
+        # Fall through to editor for the actual character insertion
+    end
+
+    # ── Plain movement clears selection ──
+    if !sel.active
+        # nothing to clear
+    elseif evt.key == :escape
+        sel.active = false
+        # let escape propagate
+    end
+
+    # Pass to editor
+    handled = Tachikoma.handle_key!(cw.editor, evt)
+    if handled
+        sync_to_cell!(cw)
+    end
+    handled
+end
+
+# ── Border rendering ─────────────────────────────────────────────────
+
 """Draw a dashed rounded border — rounded corners with dashed horizontal/vertical lines."""
 function _draw_dashed_border!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect,
                                border_fg, surface_bg)
@@ -97,19 +686,16 @@ function _draw_dashed_border!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect,
     rx = rect.x; ry = rect.y
     rx2 = Tachikoma.right(rect); ry2 = Tachikoma.bottom(rect)
 
-    # Rounded corners
     Tachikoma.set_char!(buf, rx, ry, box.tl, s)
     Tachikoma.set_char!(buf, rx2, ry, box.tr, s)
     Tachikoma.set_char!(buf, rx, ry2, box.bl, s)
     Tachikoma.set_char!(buf, rx2, ry2, box.br, s)
 
-    # Dashed horizontal lines (┄ = U+2504)
     for x in (rx + 1):(rx2 - 1)
         Tachikoma.set_char!(buf, x, ry, '┄', s)
         Tachikoma.set_char!(buf, x, ry2, '┄', s)
     end
 
-    # Dashed vertical lines (┆ = U+2506)
     for y in (ry + 1):(ry2 - 1)
         Tachikoma.set_char!(buf, rx, y, '┆', s)
         Tachikoma.set_char!(buf, rx2, y, '┆', s)
@@ -183,6 +769,8 @@ function _shimmer_border_with_bg!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect,
     end
 end
 
+# ── Main render ──────────────────────────────────────────────────────
+
 function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     tick = Theme.tick()
 
@@ -206,7 +794,6 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     end
 
     # Border is drawn INSET from the fill — horizontal padding visible on sides.
-    # IMPORTANT: never exceed the given rect (cells are clipped at viewport edges).
     hi = Theme.CELL_H_INSET
     vi = Theme.CELL_V_INSET
     border_w = rect.width - 2 * hi
@@ -283,9 +870,10 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     # Running/queued left border indicator (Pluto-style colored left edge)
     _render_run_indicator!(cw.cell, border_rect, buf, surface_bg, tick)
 
-    # Thin bar cursor — only when cell is being edited
+    # Selection highlight + cursor — only when cell is being edited
     if cw.editor.focused && !cw.cell.disabled
-        _render_bar_cursor!(cw.editor, inner, buf, tick)
+        _render_selection!(cw, inner, buf)
+        _render_cursor!(cw.editor, inner, buf, tick)
     end
 end
 
@@ -300,14 +888,12 @@ function _render_run_indicator!(cell::Cell, border_rect::Tachikoma.Rect,
     ry2 = Tachikoma.bottom(border_rect)
 
     if cell.state == cell_running
-        # Breathing accent blue bar
         for y in ry:ry2
             b = Tachikoma.breathe(tick + (y - ry) * 3; period=45)
             fg = Tachikoma.color_lerp(Theme.ACCENT_DIM, Theme.ACCENT_GLOW, b)
             Tachikoma.set_char!(buf, rx, y, '▎', Tachikoma.Style(; fg, bg=surface_bg))
         end
     else  # cell_queued
-        # Static orange bar
         style = Tachikoma.Style(; fg=Theme.ORANGE, bg=surface_bg)
         for y in ry:ry2
             Tachikoma.set_char!(buf, rx, y, '▎', style)
@@ -318,13 +904,10 @@ end
 """Render code editor (folded cells are handled before this is called)."""
 function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
                         buf::Tachikoma.Buffer, surface_bg)
-    # Always render from line 1 — the notebook passes the full virtual rect,
-    # so inner.height == n_lines and auto-scroll won't trigger. Buffer
-    # in_bounds silently clips lines outside the visible viewport.
     cw.editor.scroll_offset = 0
 
     if cw.focused
-        # Suppress built-in block cursor; we draw thin bar cursor after
+        # Suppress built-in block cursor; we draw our own cursor after
         was_focused = cw.editor.focused
         cw.editor.focused = false
         Tachikoma.render(cw.editor, inner, buf)
@@ -375,9 +958,69 @@ function run_button_text(cell::Cell)
     cell.state == cell_running ? "▶ ..." : "▶" * rt_display
 end
 
-"""Draw a thin vertical bar cursor (▏) at the editor's cursor position."""
-function _render_bar_cursor!(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
-                              buf::Tachikoma.Buffer, tick::Int)
+# ── Selection highlight rendering ────────────────────────────────────
+
+"""Overlay selection highlighting on the code area."""
+function _render_selection!(cw::CellWidget, area::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    sel = cw.selection
+    !sel.active && return
+
+    editor = cw.editor
+    sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
+
+    line_count = length(editor.lines)
+    gw = editor.show_line_numbers ? ndigits(max(line_count, 1)) + 1 : 0
+    code_x = area.x + gw
+    code_width = area.width - gw
+    code_width < 1 && return
+
+    Tachikoma._ensure_tokens!(editor)
+
+    for vi in 1:area.height
+        li = editor.scroll_offset + vi
+        li > line_count && break
+        (li < sr || li > er) && continue
+
+        y = area.y + vi - 1
+        line = editor.lines[li]
+        tokens = li <= length(editor.token_cache) ? editor.token_cache[li] : Tachikoma.Token[]
+
+        # Selection range on this line (1-based char indices)
+        line_sel_start = li == sr ? sc + 1 : 1
+        line_sel_end = li == er ? ec : length(line)
+
+        for ci in 1:code_width
+            char_idx = editor.h_scroll + ci
+            x = code_x + ci - 1
+            x > Tachikoma.right(area) && break
+
+            (char_idx < line_sel_start || char_idx > line_sel_end) && continue
+
+            if char_idx >= 1 && char_idx <= length(line)
+                ch = line[char_idx]
+                # Get syntax fg for this character
+                tok = nothing
+                for t in tokens
+                    if char_idx >= t.start && char_idx <= t.stop
+                        tok = t
+                        break
+                    end
+                end
+                fg = tok !== nothing ? Tachikoma._token_style(tok.kind).fg : editor.style.fg
+                Tachikoma.set_char!(buf, x, y, ch, Tachikoma.Style(; fg=fg, bg=Theme.SELECTION_BG))
+            else
+                Tachikoma.set_char!(buf, x, y, ' ', Tachikoma.Style(; bg=Theme.SELECTION_BG))
+            end
+        end
+    end
+end
+
+# ── Cursor rendering (character-preserving) ──────────────────────────
+
+"""Draw cursor by highlighting the character at cursor position with accent background.
+The character remains visible (unlike the old bar cursor that replaced it with ▏)."""
+function _render_cursor!(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
+                          buf::Tachikoma.Buffer, tick::Int)
     line_count = length(editor.lines)
     gw = editor.show_line_numbers ? ndigits(max(line_count, 1)) + 1 : 0
 
@@ -391,11 +1034,17 @@ function _render_bar_cursor!(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
     cx < area.x + gw && return
     cx > area.x + area.width - 1 && return
 
-    b = Tachikoma.breathe(tick; period=60)
-    fg = Tachikoma.color_lerp(Theme.ACCENT, Theme.ACCENT_GLOW, b)
-    bar_style = Tachikoma.Style(; fg, bg=Theme.ELEVATED_BG)
+    # Get the character at cursor position (to the right of the insert point)
+    line = editor.lines[editor.cursor_row]
+    char_idx = editor.cursor_col + 1  # 1-based
+    ch = char_idx >= 1 && char_idx <= length(line) ? line[char_idx] : ' '
 
-    Tachikoma.set_char!(buf, cx, cy, '▏', bar_style)
+    # Breathing accent background — character stays fully visible
+    b = Tachikoma.breathe(tick; period=60)
+    bg = Tachikoma.color_lerp(Theme.CURSOR_BG, Theme.CURSOR_BG_GLOW, b)
+    cursor_style = Tachikoma.Style(; fg=Theme.FG, bg=bg)
+
+    Tachikoma.set_char!(buf, cx, cy, ch, cursor_style)
 end
 
 """Render folded/disabled preview text."""
@@ -406,12 +1055,4 @@ function _render_folded_preview(cw::CellWidget, inner::Tachikoma.Rect,
     para = Tachikoma.Paragraph([Tachikoma.Span(preview,
         Tachikoma.Style(; fg=Theme.FG_DIM, bg=surface_bg))])
     Tachikoma.render(para, inner, buf)
-end
-
-function Tachikoma.handle_key!(cw::CellWidget, evt)
-    handled = Tachikoma.handle_key!(cw.editor, evt)
-    if handled
-        sync_to_cell!(cw)
-    end
-    handled
 end

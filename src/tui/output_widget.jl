@@ -5,11 +5,17 @@
 mutable struct OutputWidget
     cell::Cell
     collapsed::Bool
+    hovered::Bool      # mouse is hovering over this bond widget
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false)
 
-"""Format cell output as displayable lines."""
+"""Format cell output as displayable lines.
+
+Uses MIME\"text/plain\" with color disabled and controlled display size,
+matching Pluto's `format_output_default` approach but adapted for TUI.
+ANSI escape codes are stripped since Tachikoma uses its own styled buffer.
+"""
 function output_lines(cell::Cell)
     out = cell.output
     lines = String[]
@@ -25,15 +31,38 @@ function output_lines(cell::Cell)
     end
 
     if out.error === nothing && out.result !== nothing
-        push!(lines, sprint(show, out.result))
+        # Render via text/plain with color disabled (Pluto parity: IOContext with displaysize)
+        # :color => false prevents ANSI codes that corrupt Tachikoma's character buffer
+        text = try
+            sprint(; context=IOContext(devnull, :color => false, :limit => true, :displaysize => (40, 80))) do io
+                Base.invokelatest(show, io, MIME"text/plain"(), out.result)
+            end
+        catch
+            try
+                sprint(; context=IOContext(devnull, :color => false, :limit => true)) do io
+                    Base.invokelatest(show, io, out.result)
+                end
+            catch
+                repr(out.result)
+            end
+        end
+        # Split into individual lines (UnicodePlots, matrices, etc. produce multi-line output)
+        for line in split(_strip_ansi(text), '\n')
+            push!(lines, String(line))
+        end
     elseif out.error === nothing && out.result === nothing && !isempty(out.text_representation)
         # Cached output from .session.toml — result not available, use text_representation
-        for line in split(out.text_representation, '\n')
+        for line in split(_strip_ansi(out.text_representation), '\n')
             push!(lines, String(line))
         end
     end
 
     lines
+end
+
+"""Strip ANSI escape codes from a string (safety net for color leaks)."""
+function _strip_ansi(s::AbstractString)::String
+    replace(s, r"\e\[[0-9;]*[A-Za-z]" => "")
 end
 
 """Height needed for output display (borderless — just the lines + 1 for top padding)."""
@@ -42,7 +71,9 @@ function output_height(ow::OutputWidget)
         return 0
     end
     otype = ow.cell.output.output_type
-    if otype == :dataframe
+    if otype == :bond
+        return _bond_height(ow.cell)
+    elseif otype == :dataframe
         return _datatable_height(ow.cell)
     elseif otype == :markdown
         return _markdown_height(ow.cell)
@@ -58,6 +89,12 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
 
     stale = is_stale(ow.cell)
     otype = ow.cell.output.output_type
+
+    # Interactive output: Bond widget (Slider, etc.)
+    if otype == :bond && ow.cell.output.result isa Bond && !stale
+        _render_bond(ow.cell, rect, buf, ow.hovered)
+        return
+    end
 
     # Rich output: DataTable for tabular data
     if otype == :dataframe && ow.cell.output.result !== nothing && !stale
@@ -365,4 +402,187 @@ function _render_image_placeholder(cell::Cell, rect::Tachikoma.Rect, buf::Tachik
     Tachikoma.set_string!(buf, inner_x, inner_y,
         "[Image: use graphical terminal for pixel rendering]",
         Tachikoma.Style(; fg=Theme.FG_MUTED))
+end
+
+# --- Bond / interactive widget rendering ---
+
+"""Height for bond output (widget + optional value display)."""
+function _bond_height(cell::Cell)
+    result = cell.output.result
+    result isa Bond || return 0
+    el = result.element
+    if el isa Slider
+        return 1  # single-line slider track
+    elseif el isa CheckBox
+        return 1  # [✓] or [  ]
+    elseif el isa Button || el isa CounterButton
+        return 1  # [ Button Label ]
+    elseif el isa Select
+        return 1  # dropdown: ▸ selected_value
+    elseif el isa NumberField
+        return 1  # number: [  value  ]
+    elseif el isa TextField
+        return 1  # text: [  value  ]
+    end
+    1  # fallback: single line
+end
+
+"""Render a Bond widget in the output area."""
+function _render_bond(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer, hovered::Bool=false)
+    bond = cell.output.result
+    bond isa Bond || return
+
+    el = bond.element
+    if el isa Slider
+        _render_slider_widget(bond, rect, buf, hovered)
+    elseif el isa CheckBox
+        _render_checkbox_widget(bond, rect, buf, hovered)
+    elseif el isa Button || el isa CounterButton
+        _render_button_widget(bond, rect, buf, hovered)
+    elseif el isa Select
+        _render_select_widget(bond, rect, buf, hovered)
+    else
+        # Fallback: show bond info as text
+        text = "$(bond.defines) = $(_bond_current_value(bond))"
+        Tachikoma.set_string!(buf, rect.x + 2, rect.y, text,
+            Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG))
+    end
+end
+
+"""Get current value of a bond from the registry."""
+function _bond_current_value(bond::Bond)
+    haskey(_BOND_REGISTRY, bond.defines) || return initial_value(bond.element)
+    _BOND_REGISTRY[bond.defines][2]
+end
+
+"""Render a TUI slider: ◄═══●═══► value"""
+function _render_slider_widget(bond::Bond, rect::Tachikoma.Rect, buf::Tachikoma.Buffer, hovered::Bool=false)
+    slider = bond.element::Slider
+    current_val = _bond_current_value(bond)
+    idx = _slider_index(slider, current_val)
+    total = length(slider.values)
+
+    # Format value string
+    val_str = slider.show_value ? " $(current_val)" : ""
+    label = "$(bond.defines) "
+
+    # Track dimensions
+    label_width = length(label)
+    val_width = length(val_str)
+    avail = rect.width - 4 - label_width - val_width  # 4 = left pad + ◄ + ► + space
+    track_width = clamp(avail, 5, 50)
+
+    # Compute knob position
+    frac = total <= 1 ? 0.0 : (idx - 1) / (total - 1)
+    knob_pos = round(Int, frac * (track_width - 1))
+
+    x = rect.x + 2  # left padding
+    y = rect.y
+
+    # Style — hover brightens the interactive elements
+    label_s = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.CANVAS_BG)
+    track_s = Tachikoma.Style(; fg=hovered ? Theme.ACCENT_DIM : Theme.FG_MUTED, bg=Theme.CANVAS_BG)
+    knob_s = Tachikoma.Style(; fg=hovered ? Theme.ACCENT_GLOW : Theme.ACCENT, bg=Theme.CANVAS_BG, bold=true)
+    filled_s = Tachikoma.Style(; fg=hovered ? Theme.ACCENT : Theme.ACCENT_DIM, bg=Theme.CANVAS_BG)
+    val_s = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, bold=true)
+
+    # Draw label
+    Tachikoma.set_string!(buf, x, y, label, label_s)
+    x += label_width
+
+    # Draw left endpoint
+    Tachikoma.set_char!(buf, x, y, '◄', track_s)
+    x += 1
+
+    # Draw track with knob
+    for i in 0:track_width-1
+        if i == knob_pos
+            Tachikoma.set_char!(buf, x + i, y, '●', knob_s)
+        elseif i < knob_pos
+            Tachikoma.set_char!(buf, x + i, y, '━', filled_s)
+        else
+            Tachikoma.set_char!(buf, x + i, y, '─', track_s)
+        end
+    end
+    x += track_width
+
+    # Draw right endpoint
+    Tachikoma.set_char!(buf, x, y, '►', track_s)
+    x += 1
+
+    # Draw value
+    if slider.show_value
+        Tachikoma.set_string!(buf, x, y, val_str, val_s)
+    end
+end
+
+"""Render a TUI checkbox: [✓] label  or  [ ] label"""
+function _render_checkbox_widget(bond::Bond, rect::Tachikoma.Rect, buf::Tachikoma.Buffer, hovered::Bool=false)
+    val = _bond_current_value(bond)
+    checked = val === true
+
+    x = rect.x + 2
+    y = rect.y
+    label = "$(bond.defines) "
+
+    label_s = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.CANVAS_BG)
+    box_s = Tachikoma.Style(; fg=hovered ? Theme.ACCENT_GLOW : Theme.ACCENT, bg=Theme.CANVAS_BG, bold=true)
+
+    Tachikoma.set_string!(buf, x, y, label, label_s)
+    x += length(label)
+
+    box_text = checked ? "[✓]" : "[ ]"
+    Tachikoma.set_string!(buf, x, y, box_text, box_s)
+end
+
+"""Render a TUI button: [ Label ]"""
+function _render_button_widget(bond::Bond, rect::Tachikoma.Rect, buf::Tachikoma.Buffer, hovered::Bool=false)
+    el = bond.element
+    label = el isa Button ? el.label : (el isa CounterButton ? el.label : "Click")
+    val = _bond_current_value(bond)
+
+    x = rect.x + 2
+    y = rect.y
+
+    name_s = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.CANVAS_BG)
+    btn_s = Tachikoma.Style(; fg=hovered ? Theme.ACCENT_GLOW : Theme.ACCENT, bg=Theme.CANVAS_BG, bold=true)
+    val_s = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG)
+
+    Tachikoma.set_string!(buf, x, y, "$(bond.defines) ", name_s)
+    x += length("$(bond.defines) ")
+
+    Tachikoma.set_string!(buf, x, y, "[ $(label) ]", btn_s)
+    x += length("[ $(label) ]")
+
+    if el isa CounterButton
+        Tachikoma.set_string!(buf, x, y, " = $(val)", val_s)
+    end
+end
+
+"""Render a TUI select: label ▸ selected_value"""
+function _render_select_widget(bond::Bond, rect::Tachikoma.Rect, buf::Tachikoma.Buffer, hovered::Bool=false)
+    sel = bond.element::Select
+    val = _bond_current_value(bond)
+
+    # Find display label for current value
+    display_label = string(val)
+    for opt in sel.options
+        if opt.first == val
+            display_label = string(opt.second)
+            break
+        end
+    end
+
+    x = rect.x + 2
+    y = rect.y
+
+    name_s = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.CANVAS_BG)
+    arrow_s = Tachikoma.Style(; fg=hovered ? Theme.ACCENT_GLOW : Theme.ACCENT, bg=Theme.CANVAS_BG)
+    val_s = Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG, bold=true)
+
+    Tachikoma.set_string!(buf, x, y, "$(bond.defines) ", name_s)
+    x += length("$(bond.defines) ")
+    Tachikoma.set_string!(buf, x, y, "▸ ", arrow_s)
+    x += 2
+    Tachikoma.set_string!(buf, x, y, display_label, val_s)
 end

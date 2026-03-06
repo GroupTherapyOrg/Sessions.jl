@@ -45,7 +45,11 @@ const BORDER_DIM    = ColorRGB(0x2b, 0x2d, 0x30)   # glass shadow
 const BORDER_FOCUS  = ACCENT                         # focused cell border
 
 # Selection
-const SELECTION_BG  = ColorRGB(0x37, 0x3b, 0x39)   # #373b39
+const SELECTION_BG  = ColorRGB(0x26, 0x3e, 0x6a)   # blue-tinted selection highlight
+
+# Cursor — character shown with accent bg (not hidden behind bar)
+const CURSOR_BG      = ColorRGB(0x26, 0x3e, 0x6a)   # visible blue cursor bg
+const CURSOR_BG_GLOW = ColorRGB(0x35, 0x55, 0x90)   # brighter blue for breathing
 
 # ╭──────────────────────────────────────────────────────────────────╮
 # │  Animation                                                      │
