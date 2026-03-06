@@ -194,9 +194,16 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     dirty = is_dirty(cw)
 
     if cw.focused && !cw.cell.disabled
-        border_color = dirty ? Theme.ORANGE : Theme.ACCENT
-        _shimmer_border_with_bg!(buf, border_rect, border_color, surface_bg, tick;
-            box=Theme.BOX, intensity=Theme.SHIMMER_INTENSITY)
+        if cw.editor.focused
+            # Insert mode: bright shimmer border (actively editing)
+            border_color = dirty ? Theme.ORANGE : Theme.ACCENT
+            _shimmer_border_with_bg!(buf, border_rect, border_color, surface_bg, tick;
+                box=Theme.BOX, intensity=Theme.SHIMMER_INTENSITY)
+        else
+            # Normal mode: muted static accent border (focused but not editing)
+            border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.ACCENT_DIM
+            _draw_rounded_border!(buf, border_rect, border_color, surface_bg)
+        end
         _render_code!(cw, inner, buf, surface_bg)
         _render_ellipsis_button!(border_rect, buf; hovered=cw.ellipsis_hovered)
 

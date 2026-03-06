@@ -465,33 +465,49 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Escape: clear selection
+    # Escape: exit insert mode → normal mode, or clear selection
     if evt.key == :escape
-        if has_selection(app.notebook_view)
+        if app.mode == :insert
+            _exit_insert_mode!(app)
+        elseif has_selection(app.notebook_view)
             clear_selection!(app.notebook_view)
         end
         return
     end
 
-    # Delete/Backspace: open delete cell dropdown
+    # --- Insert mode: all keys (including Delete/Backspace) go to the editor ---
+    if app.mode == :insert
+        cw = focused_widget(app.notebook_view)
+        if cw !== nothing
+            Tachikoma.handle_key!(cw, evt)
+        end
+        return
+    end
+
+    # --- Normal mode keybindings ---
+
+    # Arrow keys: navigate cells
+    if evt.key == :up
+        focus_prev!(app.notebook_view)
+        return
+    end
+    if evt.key == :down
+        focus_next!(app.notebook_view)
+        return
+    end
+
+    # Enter: enter insert mode on focused cell
+    if evt.key == :enter
+        _enter_insert_mode!(app)
+        return
+    end
+
+    # Delete/Backspace: open delete cell confirm dialog
     if evt.key == :delete || evt.key == :backspace
         nv = app.notebook_view
         idx = nv.focused_idx
         if !isempty(nv.cell_widgets) && length(nv.cell_widgets) > 1
-            # Position dropdown near focused cell's ⋯ button area
-            vp = nv.viewport
-            vi = Theme.CELL_V_INSET
-            hi = Theme.CELL_H_INSET
-            pad = max(1, round(Int, max(1, vp.width - 2 * vi - 2) * Theme.CELL_PAD_FRACTION))
-            cell_right = vp.x + vp.width - vi - 1 - pad - hi
-            y_pos = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset
-            for j in 1:idx-1
-                j_oh = output_height(nv.output_widgets[j])
-                y_pos += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
-                y_pos += j_oh
-                y_pos += Theme.CELL_GAP
-            end
-            open_dropdown!(app, idx, cell_right, y_pos + 1)
+            _open_confirm_delete!(app, idx)
         end
         return
     end
@@ -633,11 +649,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
-        # Regular cell click — focus it (cell adding is only via + buttons)
+        # Regular cell click — focus it and enter insert mode (code editing)
         idx = cell_at_y(nv, evt.y)
         if idx !== nothing
             clear_selection!(nv)
             focus_cell!(nv, idx)
+            _enter_insert_mode!(app)
         end
         return
     end
@@ -735,9 +752,8 @@ function _update_cell_control_hover!(nv::NotebookView, mx::Int, my::Int, cell_ri
             return
         end
 
-        # Run button hover (centered in gap below cell+output)
-        gap_mid = div(Theme.CELL_GAP, 2)
-        run_y = y + ch + oh + gap_mid
+        # Run button hover (row 1 of gap below cell+output, near the cell)
+        run_y = y + ch + oh + 1
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
         if my >= run_y - 1 && my <= run_y + 1 &&
@@ -801,12 +817,13 @@ function _handle_margin_click!(app::SessionsApp, hit::Tuple{Symbol, Int})
     nv = app.notebook_view
 
     if action == :plus_gap
-        # Insert cell at the gap position (idx = insert position)
+        # Insert cell at the gap position and enter insert mode to start editing
         cell = Cell()
         insert_cell!(nv.nb, idx, cell)
         rebuild_widgets!(nv)
         nv.focused_idx = idx
         update_focus!(nv)
+        _enter_insert_mode!(app)
     elseif action == :eye
         cells = ordered_cells(nv.nb)
         if idx >= 1 && idx <= length(cells)
@@ -857,7 +874,7 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
 
         # ▶ run button centered in gap below cell (right-aligned)
         # Hit zone: ±1 row, ±2 cols padding
-        run_gap_y = y + ch + oh + div(Theme.CELL_GAP, 2)
+        run_gap_y = y + ch + oh + 1  # row 1 of gap (near cell)
         run_text = run_button_text(cw.cell)
         run_x = cell_right - length(run_text)
         if click_y >= run_gap_y - 1 && click_y <= run_gap_y + 1 &&
@@ -1107,6 +1124,27 @@ end
 function close_confirm!(app::SessionsApp)
     app.confirm_dialog = nothing
     app.mode = :normal
+end
+
+"""Enter insert mode — focused cell's editor receives all keys including Delete/Backspace."""
+function _enter_insert_mode!(app::SessionsApp)
+    app.mode = :insert
+    # Clear all editor cursors, then show only the focused one
+    for cw in app.notebook_view.cell_widgets
+        cw.editor.focused = false
+    end
+    cw = focused_widget(app.notebook_view)
+    if cw !== nothing
+        cw.editor.focused = true  # show cursor
+    end
+end
+
+"""Exit insert mode — return to normal mode, hide all editor cursors."""
+function _exit_insert_mode!(app::SessionsApp)
+    app.mode = :normal
+    for cw in app.notebook_view.cell_widgets
+        cw.editor.focused = false
+    end
 end
 
 """Compute dropdown width from items."""

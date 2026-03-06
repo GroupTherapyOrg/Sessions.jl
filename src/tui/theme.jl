@@ -70,7 +70,7 @@ const ACTIVITY_BAR_W    = 7       # activity bar width (wider for comfort)
 const SIDEBAR_PCT       = 22      # sidebar takes 22% of remaining width
 const CELL_PAD_FRACTION = 0.06    # 6% each side — narrower pane needs less padding
 const MARGIN_CTRL_WIDTH = 3       # left margin width for +/eye controls
-const CELL_GAP          = 2       # rows between cells
+const CELL_GAP          = 3       # rows between cells (gives + button visual room)
 const TOP_MARGIN        = 1       # padding above first cell
 
 # Background style — pure black fills entire screen

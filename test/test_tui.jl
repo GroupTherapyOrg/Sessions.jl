@@ -756,7 +756,7 @@ using Markdown: @md_str
         nv = app.notebook_view
         ch1 = Sessions.cell_height(nv.cell_widgets[1])
         ch2 = Sessions.cell_height(nv.cell_widgets[2])
-        gap = 2  # Theme.CELL_GAP
+        gap = Sessions.Theme.CELL_GAP
         # Inner content starts at vp.y + 1 (border) + 1 (TOP_MARGIN)
         cell1_y = vp.y + 2
         cell2_y = cell1_y + ch1 + gap
@@ -790,7 +790,7 @@ using Markdown: @md_str
         cell2_y = vp.y + Sessions.Theme.TOP_MARGIN + ch1 + Sessions.Theme.CELL_GAP + 1
         Tachikoma.update!(app, Tachikoma.MouseEvent(vp.x + 5, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 2
-        @test app.mode == :normal
+        @test app.mode == :insert  # clicking a cell enters insert mode
     end
 
     @testset "Mouse scroll — adjusts scroll offset" begin

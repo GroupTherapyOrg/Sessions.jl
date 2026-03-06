@@ -706,7 +706,8 @@ using Markdown: @md_str
         nv = app.notebook_view
         ch1 = Sessions.cell_height(nv.cell_widgets[1])
         ch2 = Sessions.cell_height(nv.cell_widgets[2])
-        gap_y = vp.y + 2 + ch1 + 2 + ch2  # border(1) + top_margin(1) + cell1 + gap + cell2
+        gap = Sessions.Theme.CELL_GAP
+        gap_y = vp.y + 2 + ch1 + gap + ch2  # border(1) + top_margin(1) + cell1 + gap + cell2
         run_x = cell_right - 1
         evt = Tachikoma.MouseEvent(run_x, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
@@ -723,9 +724,10 @@ using Markdown: @md_str
 
         render_app(app)
 
-        # Click on cell 2 body: top_margin(1) + cell1_height + gap(2) + 1 inside cell2
+        # Click on cell 2 body: top_margin(1) + cell1_height + gap + 1 inside cell2
         ch1 = Sessions.cell_height(app.notebook_view.cell_widgets[1])
-        cell2_y = app.notebook_view.viewport.y + 1 + ch1 + 2 + 1
+        gap = Sessions.Theme.CELL_GAP
+        cell2_y = app.notebook_view.viewport.y + 1 + ch1 + gap + 1
         evt = Tachikoma.MouseEvent(40, cell2_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
         Tachikoma.update!(app, evt)
 
@@ -888,7 +890,8 @@ using Markdown: @md_str
         nv = app.notebook_view
         ch1 = Sessions.cell_height(nv.cell_widgets[1])
         ch2 = Sessions.cell_height(nv.cell_widgets[2])
-        cell3_y = vp.y + 2 + ch1 + 2 + ch2 + 2  # border(1) + top_margin(1) + cell1 + gap + cell2 + gap
+        gap = Sessions.Theme.CELL_GAP
+        cell3_y = vp.y + 2 + ch1 + gap + ch2 + gap  # border(1) + top_margin(1) + cell1 + gap + cell2 + gap
 
         # Shift+click on cell 3 — should select range from focused (1) through 3
         # MouseEvent field order: x, y, button, action, shift, alt, ctrl
