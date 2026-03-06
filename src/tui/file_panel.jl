@@ -17,11 +17,18 @@ mutable struct FilePanel
     scroll_offset::Int
     viewport::Tachikoma.Rect
     show_hidden::Bool
+    # Folder picker mode (for "Open Folder" workflow)
+    picker_mode::Bool
+    picker_dir::String
+    picker_entries::Vector{FileEntry}
+    picker_cursor::Int
+    picker_scroll::Int
 end
 
 function FilePanel(dir::String=".")
     dir = abspath(dir)
-    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false)
+    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false,
+                   false, homedir(), FileEntry[], 1, 0)
     refresh_entries!(fp)
     fp
 end
@@ -109,6 +116,84 @@ end
 function toggle_hidden!(fp::FilePanel)
     fp.show_hidden = !fp.show_hidden
     refresh_entries!(fp)
+end
+
+# ── Folder picker mode ───────────────────────────────────────────────
+
+"""Enter picker mode — browse directories starting from home."""
+function enter_picker_mode!(fp::FilePanel)
+    fp.picker_mode = true
+    fp.picker_dir = homedir()
+    fp.picker_cursor = 1
+    fp.picker_scroll = 0
+    refresh_picker!(fp)
+end
+
+"""Exit picker mode."""
+function exit_picker_mode!(fp::FilePanel)
+    fp.picker_mode = false
+end
+
+"""Refresh picker directory listing (dirs only + parent)."""
+function refresh_picker!(fp::FilePanel)
+    fp.picker_entries = FileEntry[]
+    isdir(fp.picker_dir) || return
+
+    names = try readdir(fp.picker_dir) catch; String[] end
+    for name in sort(names)
+        startswith(name, '.') && continue
+        full = joinpath(fp.picker_dir, name)
+        isdir(full) || continue
+        push!(fp.picker_entries, FileEntry(name, full, true, false, 0))
+    end
+    fp.picker_cursor = clamp(fp.picker_cursor, 1, max(length(fp.picker_entries), 1))
+    fp.picker_scroll = 0
+end
+
+"""Navigate picker into a subdirectory."""
+function picker_enter!(fp::FilePanel, path::String)
+    isdir(path) || return
+    fp.picker_dir = abspath(path)
+    fp.picker_cursor = 1
+    refresh_picker!(fp)
+end
+
+"""Navigate picker to parent directory."""
+function picker_go_up!(fp::FilePanel)
+    parent = dirname(fp.picker_dir)
+    parent == fp.picker_dir && return  # already at root
+    old_name = basename(fp.picker_dir)
+    fp.picker_dir = parent
+    fp.picker_cursor = 1
+    refresh_picker!(fp)
+    for (i, e) in enumerate(fp.picker_entries)
+        if e.name == old_name
+            fp.picker_cursor = i
+            break
+        end
+    end
+end
+
+"""Map screen y to a picker entry index, or :parent, or :select, or nothing."""
+function picker_hit_at_y(fp::FilePanel, screen_y::Int)
+    vp = fp.viewport
+    vp.width == 0 && return nothing
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    by = vp.y + vi
+
+    # Row layout inside border: header(1) | parent_row(1) | divider(1) | entries...
+    parent_y = by + 2
+    screen_y == parent_y && return :parent
+
+    # Select button at bottom border
+    select_y = by + max(vp.height - 2 * vi, 3) - 1  # bottom border row
+    screen_y == select_y && return :select
+
+    entries_start = by + 4
+    entry_idx = screen_y - entries_start + fp.picker_scroll
+    (entry_idx < 0 || entry_idx >= length(fp.picker_entries)) && return nothing
+    return entry_idx + 1
 end
 
 # ── Icons & colors per file type ──────────────────────────────────────
@@ -204,24 +289,16 @@ function entry_at_y(fp::FilePanel, screen_y::Int)
     return entry_y + 1
 end
 
-"""Check if a click hit the Open Folder button in the header row."""
-function open_folder_hit(fp::FilePanel, click_x::Int, click_y::Int)
-    vp = fp.viewport
-    vp.width == 0 && return false
-    hi = Theme.CELL_H_INSET
-    vi = Theme.CELL_V_INSET
-    bx = vp.x + hi
-    bw = max(vp.width - 2 * hi, 3)
-    header_y = vp.y + vi + 1
-    # Button is 3 chars wide " ⊞ " at right side of header
-    btn_x = bx + bw - 4
-    click_y == header_y && click_x >= btn_x && click_x < btn_x + 3
-end
 
 function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     fp.viewport = rect
     rect.width < 4 && return
     rect.height < 4 && return
+
+    if fp.picker_mode
+        _render_picker!(fp, rect, buf)
+        return
+    end
 
     # ── Rounded border (inset to match cell island style) ─────────────
     hi = Theme.CELL_H_INSET
@@ -262,20 +339,13 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     inner_w = bw - 2
     inner_w < 2 && return
 
-    # ── Header: folder icon + truncated path + Open Folder button ─────
+    # ── Header: folder icon + truncated path ──────────────────────────
     header_y = by + 1
-    # Reserve 4 chars on right for " ⊞ " button
-    btn_w = 3
-    path_max_w = inner_w - 4 - btn_w
-    path_display = _truncate_path(fp.current_dir, path_max_w)
+    path_display = _truncate_path(fp.current_dir, inner_w - 4)
     icon_style = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SIDEBAR_BG)
     path_style = Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.SIDEBAR_BG)
     Tachikoma.set_string!(buf, inner_x + 1, header_y, ICON_FOLDER_OPEN, icon_style)
-    Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, path_max_w), path_style)
-    # Open Folder button (right-aligned in header)
-    btn_x = bx + bw - 4
-    btn_style = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.SIDEBAR_BG)
-    Tachikoma.set_string!(buf, btn_x, header_y, " ⊞ ", btn_style)
+    Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, inner_w - 4), path_style)
 
     # ── Section divider ───────────────────────────────────────────────
     div_y = by + 2
@@ -339,6 +409,116 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
             Tachikoma.set_char!(buf, pos_x + length(pos_text), by + bh - 1,
                 '├', border_style)
         end
+    end
+end
+
+"""Render the folder picker overlay (directory-only browser with select button)."""
+function _render_picker!(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    border_style = Tachikoma.Style(; fg=Theme.ACCENT_DIM, bg=Theme.SIDEBAR_BG)
+    bg = Tachikoma.Style(; bg=Theme.SIDEBAR_BG)
+
+    # Fill
+    for fy in rect.y:(rect.y + rect.height - 1)
+        Tachikoma.set_string!(buf, rect.x, fy, " " ^ rect.width, bg)
+    end
+
+    # Border inset
+    bx = rect.x + hi
+    by = rect.y + vi
+    bw = max(rect.width - 2 * hi, 3)
+    bh = max(rect.height - 2 * vi, 3)
+
+    Tachikoma.set_char!(buf, bx, by, '╭', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by, '╮', border_style)
+    Tachikoma.set_char!(buf, bx, by + bh - 1, '╰', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by + bh - 1, '╯', border_style)
+    for cx in (bx + 1):(bx + bw - 2)
+        Tachikoma.set_char!(buf, cx, by, '─', border_style)
+        Tachikoma.set_char!(buf, cx, by + bh - 1, '─', border_style)
+    end
+    for fy in (by + 1):(by + bh - 2)
+        Tachikoma.set_char!(buf, bx, fy, '│', border_style)
+        Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
+    end
+
+    inner_x = bx + 1
+    inner_w = bw - 2
+    inner_w < 2 && return
+
+    # Header: "Open Folder"
+    header_y = by + 1
+    title = "Open Folder"
+    title_style = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.SIDEBAR_BG, bold=true)
+    Tachikoma.set_string!(buf, inner_x + 1, header_y, first(title, inner_w - 2), title_style)
+
+    # Parent row: "⊖ .." to go up
+    parent_y = by + 2
+    parent_style = Tachikoma.Style(; fg=Theme.FG_DIM, bg=Theme.SIDEBAR_BG)
+    Tachikoma.set_string!(buf, inner_x + 1, parent_y, "⊖ ..", parent_style)
+    # Show current dir on right
+    dir_name = basename(fp.picker_dir)
+    if isempty(dir_name); dir_name = fp.picker_dir; end
+    dir_max = inner_w - 7
+    if dir_max > 0
+        dir_text = first(dir_name, dir_max)
+        Tachikoma.set_string!(buf, inner_x + 6, parent_y, dir_text,
+            Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.SIDEBAR_BG))
+    end
+
+    # Divider
+    div_y = by + 3
+    Tachikoma.set_char!(buf, bx, div_y, '├', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, div_y, '┤', border_style)
+    for cx in (bx + 1):(bx + bw - 2)
+        Tachikoma.set_char!(buf, cx, div_y, '─', border_style)
+    end
+
+    # Directory entries
+    entries_start = by + 4
+    # Reserve 1 row for select button on bottom border
+    entries_height = bh - 5  # border(2) + header(1) + parent(1) + divider(1)
+    entries_height < 1 && return
+
+    # Auto-scroll
+    if fp.picker_cursor - 1 < fp.picker_scroll
+        fp.picker_scroll = fp.picker_cursor - 1
+    end
+    if fp.picker_cursor - 1 >= fp.picker_scroll + entries_height
+        fp.picker_scroll = fp.picker_cursor - entries_height
+    end
+    fp.picker_scroll = clamp(fp.picker_scroll, 0, max(0, length(fp.picker_entries) - entries_height))
+
+    max_name_w = inner_w - 5
+
+    for vi_idx in 0:(entries_height - 1)
+        ei = fp.picker_scroll + vi_idx + 1
+        ei > length(fp.picker_entries) && break
+        entry = fp.picker_entries[ei]
+        row = entries_start + vi_idx
+        is_cursor = (ei == fp.picker_cursor)
+
+        cursor_char = is_cursor ? "›" : " "
+        cursor_fg = is_cursor ? Theme.ACCENT_GLOW : Theme.FG_MUTED
+        Tachikoma.set_string!(buf, inner_x, row, cursor_char,
+            Tachikoma.Style(; fg=cursor_fg, bg=Theme.SIDEBAR_BG))
+        Tachikoma.set_string!(buf, inner_x + 2, row, ICON_FOLDER,
+            Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.SIDEBAR_BG))
+        name = first(entry.name, max_name_w)
+        name_fg = is_cursor ? Theme.FG : Theme.FG_DIM
+        Tachikoma.set_string!(buf, inner_x + 4, row, name,
+            Tachikoma.Style(; fg=name_fg, bg=Theme.SIDEBAR_BG))
+    end
+
+    # Select button on bottom border — "┤ Select ├"
+    sel_text = " Select "
+    sel_x = bx + div(bw - length(sel_text) - 2, 2)
+    if sel_x > bx
+        Tachikoma.set_char!(buf, sel_x, by + bh - 1, '┤', border_style)
+        Tachikoma.set_string!(buf, sel_x + 1, by + bh - 1, sel_text,
+            Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bg=Theme.SIDEBAR_BG, bold=true))
+        Tachikoma.set_char!(buf, sel_x + 1 + length(sel_text), by + bh - 1, '├', border_style)
     end
 end
 

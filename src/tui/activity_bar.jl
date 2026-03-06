@@ -8,6 +8,7 @@ end
 
 const ACTIVITY_BUTTONS = [
     ActivityButton("⊟", :explorer),
+    ActivityButton("⊞", :open_folder),
 ]
 
 mutable struct ActivityBar

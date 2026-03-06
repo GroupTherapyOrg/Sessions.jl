@@ -143,14 +143,8 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Click on a file entry or Open Folder button
+    # Click on a file entry
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
-        # Check Open Folder button first
-        if open_folder_hit(fp, evt.x, evt.y)
-            reset_to_folder!(app, fp.current_dir)
-            return
-        end
-
         idx = entry_at_y(fp, evt.y)
         if idx !== nothing
             fp.cursor_idx = idx
@@ -161,6 +155,36 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                     _open_file!(app, result)
                 end
             end
+        end
+    end
+end
+
+"""Handle mouse events in the folder picker."""
+function _handle_picker_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
+    fp = app.file_panel
+
+    if evt.button == Tachikoma.mouse_scroll_down
+        fp.picker_cursor = min(length(fp.picker_entries), fp.picker_cursor + 1)
+        return
+    end
+    if evt.button == Tachikoma.mouse_scroll_up
+        fp.picker_cursor = max(1, fp.picker_cursor - 1)
+        return
+    end
+
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        hit = picker_hit_at_y(fp, evt.y)
+        if hit == :parent
+            picker_go_up!(fp)
+        elseif hit == :select
+            # Select current picker_dir as workspace
+            reset_to_folder!(app, fp.picker_dir)
+            exit_picker_mode!(fp)
+            app.activity_bar.active = :explorer
+        elseif hit isa Integer && hit >= 1 && hit <= length(fp.picker_entries)
+            fp.picker_cursor = hit
+            # Double-purpose: click enters the directory to browse deeper
+            picker_enter!(fp, fp.picker_entries[hit].path)
         end
     end
 end
@@ -267,15 +291,29 @@ end
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
 
-    # Activity bar clicks — toggle sidebar
+    # Activity bar clicks — toggle sidebar / open folder picker
     ar = app.activity_rect
     if ar.width > 0 && evt.x >= ar.x && evt.x < ar.x + ar.width &&
        evt.y >= ar.y && evt.y < ar.y + ar.height
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
             btn_id = button_at_y(app.activity_bar, evt.y)
-            if btn_id !== nothing
+            if btn_id == :explorer
+                # If in picker mode, exit it first
+                if app.file_panel.picker_mode
+                    exit_picker_mode!(app.file_panel)
+                end
                 toggle!(app.activity_bar, btn_id)
                 app.sidebar_open = app.activity_bar.active == :explorer
+            elseif btn_id == :open_folder
+                # Toggle folder picker mode
+                if app.file_panel.picker_mode
+                    exit_picker_mode!(app.file_panel)
+                    app.activity_bar.active = :explorer
+                else
+                    enter_picker_mode!(app.file_panel)
+                    app.activity_bar.active = :open_folder
+                    app.sidebar_open = true
+                end
             end
         elseif evt.action == Tachikoma.mouse_move
             app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)
@@ -287,7 +325,11 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     sr = app.sidebar_rect
     if sr.width > 0 && evt.x >= sr.x && evt.x < sr.x + sr.width &&
        evt.y >= sr.y && evt.y < sr.y + sr.height
-        _handle_file_panel_mouse!(app, evt)
+        if app.file_panel.picker_mode
+            _handle_picker_mouse!(app, evt)
+        else
+            _handle_file_panel_mouse!(app, evt)
+        end
         return
     end
 
