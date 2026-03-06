@@ -472,7 +472,7 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.close_rects = Tachikoma.Rect[]
     end
 
-    # ── REPL panel (bottom split of editor area) ──
+    # ── REPL panel layout (calculate rects, but render AFTER notebook) ──
     if app.repl_open
         repl_h = max(5, div(editor_rect.height * Theme.REPL_PCT, 100))
         main_h = max(3, editor_rect.height - repl_h - 1)  # -1 for gap
@@ -481,51 +481,44 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         repl_rect = Tachikoma.Rect(editor_rect.x, editor_rect.y + main_h + 1,
             editor_rect.width, repl_h)
         app.repl_rect = repl_rect
-
-        # Update REPL focus state
         app.repl_panel.focused = (app.mode == :repl)
-
-        Tachikoma.render(app.repl_panel, repl_rect, buf)
         editor_rect = main_rect
     else
         app.repl_rect = Tachikoma.Rect()
     end
 
+    # ── Render editor (notebook or file) ──
     if app.editor_type == :file && app.file_editor_view !== nothing
-        # File editor mode: render the file editor view
         fev = app.file_editor_view
         fev.editor.focused = (app.mode == :insert)
         Tachikoma.render(fev, editor_rect, buf)
     else
-        # Notebook mode: render cell-based notebook view
-        # Editor cursor only visible in insert mode on the focused cell
-        # In panel mode, no cell is focused (all unfocused appearance)
         for (i, cw) in enumerate(app.notebook_view.cell_widgets)
             cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
             if app.mode == :panel
                 cw.focused = false
             end
         end
-
-        # Update dirty flag by comparing current cell codes to last saved snapshot
         app.notebook_view.dirty = _is_notebook_dirty(app)
-
         Tachikoma.render(app.notebook_view, editor_rect, buf)
-
-        # Progress bar — overlays notebook pane top border during execution
         _update_and_render_progress!(app, editor_rect, buf)
     end
 
-    # Repaint areas above/below editor to hide cell/output overflow past boundary
+    # Repaint overflow areas — scoped to editor column only (don't overwrite sidebar)
+    ox = notebook_rect.x
+    ow = notebook_rect.width
     for fy in area.y:(notebook_rect.y - 1)
-        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
+        Tachikoma.set_string!(buf, ox, fy, " " ^ ow, Theme.S_BG)
     end
     nb_bottom = editor_rect.y + editor_rect.height
-    # Stop before the REPL panel area (don't overwrite it)
-    repl_top = app.repl_open ? app.repl_rect.y : (area.y + area.height)
     screen_bottom = area.y + area.height - 1
-    for fy in nb_bottom:(repl_top - 1)
-        Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
+    for fy in nb_bottom:screen_bottom
+        Tachikoma.set_string!(buf, ox, fy, " " ^ ow, Theme.S_BG)
+    end
+
+    # ── Render REPL panel AFTER overflow cleanup (so it's never overwritten) ──
+    if app.repl_open
+        Tachikoma.render(app.repl_panel, app.repl_rect, buf)
     end
 
     # Cell dropdown overlay
