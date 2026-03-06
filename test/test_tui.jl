@@ -821,9 +821,10 @@ using Tachikoma
         Tachikoma.update!(app, Tachikoma.MouseEvent(10, 1, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
         @test app.notebook_view.focused_idx == 1  # unchanged
 
-        # Click way below content
+        # Click way below content — inserts new cell at end (gap click behavior)
         Tachikoma.update!(app, Tachikoma.MouseEvent(10, 23, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false))
-        @test app.notebook_view.focused_idx == 1  # unchanged or last cell
+        @test length(nb) == 2  # new cell inserted
+        @test app.notebook_view.focused_idx == 2  # focuses new cell
     end
 
     @testset "Mouse click — renders focus change" begin

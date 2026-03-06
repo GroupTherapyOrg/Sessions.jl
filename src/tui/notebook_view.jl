@@ -134,6 +134,55 @@ function cell_at_y(nv::NotebookView, screen_y::Int)
     nothing  # clicked below all cells
 end
 
+"""Map a screen y-coordinate to a gap insertion index, or nothing if inside a cell.
+Returns the 1-based index where a new cell should be inserted."""
+function gap_at_y(nv::NotebookView, screen_y::Int)
+    isempty(nv.cell_widgets) && return 1  # empty notebook → insert at 1
+    vp = nv.viewport
+    vp.width == 0 && return nothing
+
+    # Clicks outside viewport are not gaps
+    screen_y < vp.y && return nothing
+
+    content_y = screen_y - vp.y + nv.scroll_offset
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ch = cell_height(nv.cell_widgets[i])
+        oh = output_height(nv.output_widgets[i])
+
+        # Cell body
+        if content_y < y + ch
+            return nothing  # inside cell, not gap
+        end
+        y += ch
+
+        # Output body
+        if oh > 0 && content_y < y + oh
+            return nothing  # inside output, not gap
+        end
+        y += oh
+
+        # Gap (1 pixel)
+        if content_y < y + 1
+            return i + 1  # gap after cell i → insert at i+1
+        end
+        y += 1
+    end
+
+    # Below all cells
+    return length(nv.cell_widgets) + 1
+end
+
+"""Insert a new cell at a gap position and focus it."""
+function add_cell_at_gap!(nv::NotebookView, pos::Int)
+    cell = Cell()
+    insert_cell!(nv.nb, pos, cell)
+    rebuild_widgets!(nv)
+    nv.focused_idx = pos
+    update_focus!(nv)
+end
+
 """Focus a cell by index directly (for mouse click)."""
 function focus_cell!(nv::NotebookView, idx::Int)
     idx < 1 || idx > length(nv.cell_widgets) && return

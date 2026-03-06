@@ -188,9 +188,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     nv = app.notebook_view
 
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
-        idx = cell_at_y(nv, evt.y)
-        if idx !== nothing
-            focus_cell!(nv, idx)
+        # Check gap first (more specific hit test)
+        gap_idx = gap_at_y(nv, evt.y)
+        if gap_idx !== nothing
+            add_cell_at_gap!(nv, gap_idx)
+        else
+            idx = cell_at_y(nv, evt.y)
+            if idx !== nothing
+                focus_cell!(nv, idx)
+            end
         end
         return
     end

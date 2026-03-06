@@ -589,6 +589,60 @@ using Markdown: @md_str
         @test length(nb) == 1  # nothing changed
     end
 
+    @testset "E2E: Click in gap inserts new cell" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "gap_a = 1")
+        c2 = add_cell!(nb, "gap_b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        # Render first to establish viewport
+        render_app(app)
+        @test length(nb) == 2
+
+        # Cell 1: height=3 (1 line + 2 border), starts at viewport.y=2
+        # Output: 0, Gap at y = 2+3 = 5 (content y=3)
+        # Click in gap between cell 1 and cell 2
+        gap_y = app.notebook_view.viewport.y + 3  # after cell 1 (3 lines)
+        evt = Tachikoma.MouseEvent(5, gap_y, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, evt)
+
+        @test length(nb) == 3
+        # New cell inserted between c1 and c2
+        cells = ordered_cells(nb)
+        @test cells[1] === c1
+        @test cells[3] === c2
+        @test cells[2].code == ""  # new empty cell
+        @test app.notebook_view.focused_idx == 2
+    end
+
+    @testset "E2E: Click below last cell inserts at end" begin
+        nb = Notebook()
+        add_cell!(nb, "last = 1")
+        app = Sessions.SessionsApp(nb)
+
+        render_app(app; height=40)
+
+        # Click well below the last cell
+        evt = Tachikoma.MouseEvent(5, 35, Tachikoma.mouse_left, Tachikoma.mouse_press, false, false, false)
+        Tachikoma.update!(app, evt)
+
+        @test length(nb) == 2
+        @test app.notebook_view.focused_idx == 2
+    end
+
+    @testset "E2E: gap_at_y returns nothing for clicks inside cells" begin
+        nb = Notebook()
+        add_cell!(nb, "inside = 1")
+        app = Sessions.SessionsApp(nb)
+
+        render_app(app)
+
+        # Click inside cell body (y = viewport.y + 1, which is inside the cell)
+        inside_y = app.notebook_view.viewport.y + 1
+        @test Sessions.gap_at_y(app.notebook_view, inside_y) === nothing
+        @test Sessions.cell_at_y(app.notebook_view, inside_y) == 1
+    end
+
     @testset "E2E: Quit with Ctrl+Q" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
