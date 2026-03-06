@@ -373,4 +373,131 @@ using Tachikoma
         end
         @test found
     end
+
+    # --- Async execution tests ---
+
+    @testset "SessionsApp — has TaskQueue" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        @test app.tq isa Tachikoma.TaskQueue
+        @test Tachikoma.task_queue(app) === app.tq
+    end
+
+    @testset "SessionsApp — is_busy initially false" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        @test !Sessions.is_busy(app)
+    end
+
+    @testset "SessionsApp — run_focused_cell_async! marks queued" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "async_x = 42")
+        app = Sessions.SessionsApp(nb)
+
+        Sessions.run_focused_cell_async!(app)
+        # Cell should be queued initially (task spawned)
+        # Note: may already complete in fast case
+        @test c1.state in (cell_queued, cell_running, cell_done)
+
+        # Wait for task completion
+        sleep(0.5)
+        @test c1.state == cell_done
+        @test c1.output.result == 42
+    end
+
+    @testset "SessionsApp — run_all_cells_async! executes all" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "async_a = 10")
+        c2 = add_cell!(nb, "async_b = async_a + 5")
+        app = Sessions.SessionsApp(nb)
+
+        Sessions.run_all_cells_async!(app)
+
+        # Wait for completion
+        sleep(1.0)
+        @test c1.state == cell_done
+        @test c1.output.result == 10
+        @test c2.state == cell_done
+        @test c2.output.result == 15
+    end
+
+    @testset "SessionsApp — Ctrl+Enter triggers async execution" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "ctrl_enter_val = 77")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '\r'))
+        @test contains(app.message, "Executing")
+
+        sleep(0.5)
+        @test c1.state == cell_done
+        @test c1.output.result == 77
+    end
+
+    @testset "SessionsApp — Ctrl+A triggers async run all" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "ctrl_a_val = 88")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 'a'))
+        @test contains(app.message, "Running all")
+
+        sleep(0.5)
+        @test c1.state == cell_done
+    end
+
+    @testset "SessionsApp — navigation during async execution" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "nav_a = 1")
+        c2 = add_cell!(nb, "nav_b = 2")
+        c3 = add_cell!(nb, "nav_c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Start async execution
+        Sessions.run_all_cells_async!(app)
+
+        # Navigate while executing — should still work
+        @test app.notebook_view.focused_idx == 1
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        @test app.notebook_view.focused_idx == 2
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        @test app.notebook_view.focused_idx == 3
+
+        sleep(0.5)
+    end
+
+    @testset "SessionsApp — TaskEvent handler" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+
+        # Simulate a task completion event
+        Tachikoma.update!(app, Tachikoma.TaskEvent(:execute_cell, nothing))
+        @test app.message == "Execution complete"
+
+        # Simulate a task error event
+        Tachikoma.update!(app, Tachikoma.TaskEvent(:execute_cell, ErrorException("test")))
+        @test contains(app.message, "error")
+
+        # Run all completion
+        Tachikoma.update!(app, Tachikoma.TaskEvent(:execute_all, nothing))
+        @test app.message == "Ran all cells"
+    end
+
+    @testset "SessionsApp — synchronous fallbacks still work" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "sync_val = 42")
+        app = Sessions.SessionsApp(nb)
+
+        Sessions.run_focused_cell!(app)
+        @test c1.state == cell_done
+        @test c1.output.result == 42
+
+        Sessions.run_all_cells!(app)
+        @test c1.state == cell_done
+    end
 end
