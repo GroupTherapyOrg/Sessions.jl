@@ -412,4 +412,192 @@ using TOML
         Sessions.apply_session!(nb, session_data)
         @test c1.output.stdout == "hi\n"
     end
+
+    # --- Roundtrip tests (execute -> save -> load -> apply -> verify) ---
+
+    @testset "roundtrip — execute, save, load, apply" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1 + 1")
+        c2 = add_cell!(nb, "y = 10")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        execute_cell!(ws, c2)
+        Sessions.save_session!(nb)
+
+        # Load fresh notebook from disk + session
+        nb2 = load_notebook(path)
+        session_data = Sessions.load_session(Sessions.session_path(path))
+        Sessions.apply_session!(nb2, session_data)
+
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "2"
+        @test !is_stale(c1b)
+
+        @test c2b.state == cell_done
+        @test c2b.output.text_representation == "10"
+        @test !is_stale(c2b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — error cell survives" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "error(\"test error\")")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        @test c1.state == cell_errored
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        c1b = get_cell(nb2, c1.id)
+        @test c1b.state == cell_errored
+        @test c1b.output.output_type == :error
+        @test c1b.output.error !== nothing
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — stdout preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "println(\"hello world\")\n42")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        c1b = get_cell(nb2, c1.id)
+        @test c1b.output.stdout == "hello world\n"
+        @test c1b.output.text_representation == "42"
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — runtime_ns preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "sleep(0.01); 99")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        original_ns = c1.output.runtime_ns
+        @test original_ns > 0
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        @test get_cell(nb2, c1.id).output.runtime_ns == original_ns
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — modified code shows stale" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        # Modify the .jl file (change cell code)
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "x = 999"
+        save_notebook(nb_ext, path)
+
+        # Reload with session — cell should be stale
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        c1b = get_cell(nb2, c1.id)
+        @test c1b.code == "x = 999"
+        @test is_stale(c1b)  # hash mismatch
+        @test c1b.output.text_representation == "1"  # old cached output
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — never-executed cells stay idle" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = 2")  # never executed
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)  # only execute c1
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        @test get_cell(nb2, c1.id).state == cell_done
+        @test get_cell(nb2, c2.id).state == cell_idle
+        @test is_never_run(get_cell(nb2, c2.id))
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — truncated output loads with marker" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        mark_executed!(c1)
+        c1.state = cell_done
+        c1.output.output_type = :text
+        c1.output.text_representation = "z" ^ 100_000
+        save_notebook(nb)
+
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        c1b = get_cell(nb2, c1.id)
+        @test contains(c1b.output.text_representation, "truncated")
+        @test length(c1b.output.text_representation) < 100_000
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "roundtrip — missing session file works like v2" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        # Load without session file
+        nb2 = load_notebook(path)
+        Sessions.apply_session!(nb2, Sessions.load_session(Sessions.session_path(path)))
+
+        @test get_cell(nb2, c1.id).state == cell_idle
+        @test is_never_run(get_cell(nb2, c1.id))
+
+        rm(path; force=true)
+    end
 end

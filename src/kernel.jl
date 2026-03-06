@@ -204,6 +204,7 @@ function execute_cell!(workspace::Workspace, cell::Cell)
         cell.output.output_type = :error
         cell.output.text_representation = sprint(showerror, err.ex)
         cell.state = cell_errored
+        mark_executed!(cell)  # errors are also execution results — needed for session caching
     end
     cell.output
 end

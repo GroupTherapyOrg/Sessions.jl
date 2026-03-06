@@ -320,11 +320,12 @@ using UUIDs
         @test !is_stale(c)
     end
 
-    @testset "kernel integration — errored cell does not mark executed" begin
+    @testset "kernel integration — errored cell is marked executed" begin
         ws = Workspace()
         c = Cell("error(\"boom\")")
         execute_cell!(ws, c)
         @test c.state == cell_errored
-        @test is_never_run(c)  # produced_by_hash not set on error
+        @test !is_never_run(c)  # produced_by_hash set — errors are execution results
+        @test c.produced_by_hash == source_hash(c)
     end
 end
