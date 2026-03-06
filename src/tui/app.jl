@@ -114,7 +114,7 @@ function _on_external_change!(app::SessionsApp)
         app.last_disk_nb = _snapshot_notebook(app.nb)
 
         reordered = diff.new_order != old_order
-        n_changes = length(diff.added) + length(diff.changed) + length(diff.removed)
+        n_changes = length(diff.added) + length(diff.changed) + length(diff.removed) + length(diff.metadata_changed)
         n_changes == 0 && !reordered && return
 
         rebuild_widgets!(app.notebook_view)

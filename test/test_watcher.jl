@@ -62,6 +62,7 @@ using UUIDs
         @test isempty(diff.added)
         @test isempty(diff.removed)
         @test isempty(diff.changed)
+        @test isempty(diff.metadata_changed)
         @test length(diff.unchanged) == 2
         @test c1.id in diff.unchanged
         @test c2.id in diff.unchanged
@@ -128,6 +129,24 @@ using UUIDs
         @test isempty(diff.removed)
         @test isempty(diff.changed)
         @test diff.new_order == [c2.id, c1.id]
+    end
+
+    @testset "diff_notebooks — folded state changed" begin
+        nb1 = Notebook()
+        c1 = add_cell!(nb1, "x = 1")
+        c2 = add_cell!(nb1, "y = 2")
+
+        nb2 = parse_notebook(serialize_notebook(nb1))
+        nb2.cells[c1.id].folded = true  # fold cell on disk
+
+        diff = Sessions.diff_notebooks(nb1, nb2)
+        @test isempty(diff.added)
+        @test isempty(diff.removed)
+        @test isempty(diff.changed)
+        @test length(diff.metadata_changed) == 1
+        @test diff.metadata_changed[1] == (c1.id, true, false)
+        @test length(diff.unchanged) == 1
+        @test c2.id in diff.unchanged
     end
 
     @testset "apply_diff! — changed cell marked stale" begin

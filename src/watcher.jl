@@ -9,6 +9,7 @@ struct NotebookDiff
     added::Vector{Cell}          # New cells (in order they appear in new notebook)
     removed::Vector{UUID}        # UUIDs of removed cells
     changed::Vector{Tuple{UUID, String}}  # (cell_id, new_code) for cells with changed source
+    metadata_changed::Vector{Tuple{UUID, Bool, Bool}}  # (cell_id, new_folded, new_disabled) — code same, metadata differs
     unchanged::Vector{UUID}      # UUIDs of cells unchanged
     new_order::Vector{UUID}      # Full cell order from the new notebook
 end
@@ -27,19 +28,22 @@ function diff_notebooks(old::Notebook, new::Notebook)
 
     # Changed & unchanged: cells present in both
     changed = Tuple{UUID, String}[]
+    metadata_changed = Tuple{UUID, Bool, Bool}[]
     unchanged = UUID[]
     for id in new.cell_order
         id in old_ids || continue
-        old_code = old.cells[id].code
-        new_code = new.cells[id].code
-        if old_code != new_code
-            push!(changed, (id, new_code))
+        old_cell = old.cells[id]
+        new_cell = new.cells[id]
+        if old_cell.code != new_cell.code
+            push!(changed, (id, new_cell.code))
+        elseif old_cell.folded != new_cell.folded || old_cell.disabled != new_cell.disabled
+            push!(metadata_changed, (id, new_cell.folded, new_cell.disabled))
         else
             push!(unchanged, id)
         end
     end
 
-    NotebookDiff(added, removed, changed, unchanged, new.cell_order)
+    NotebookDiff(added, removed, changed, metadata_changed, unchanged, new.cell_order)
 end
 
 """Apply a diff to update a notebook in place. Returns the diff for inspection."""
@@ -59,6 +63,13 @@ function apply_diff!(nb::Notebook, diff::NotebookDiff)
         cell = nb.cells[id]
         cell.code = new_code
         # Cell is now stale if it was previously executed
+    end
+
+    # Update metadata-only changes (folded/disabled)
+    for (id, new_folded, new_disabled) in diff.metadata_changed
+        cell = nb.cells[id]
+        cell.folded = new_folded
+        cell.disabled = new_disabled
     end
 
     # Update cell order to match new notebook
@@ -102,6 +113,13 @@ function merge_external_changes!(nb::Notebook, last_disk_nb::Notebook)
     for (id, new_code) in diff.changed
         haskey(nb.cells, id) || continue
         nb.cells[id].code = new_code
+    end
+
+    # 3b. Update metadata-only changes (folded/disabled)
+    for (id, new_folded, new_disabled) in diff.metadata_changed
+        haskey(nb.cells, id) || continue
+        nb.cells[id].folded = new_folded
+        nb.cells[id].disabled = new_disabled
     end
 
     # 4. Update cell order to match disk
