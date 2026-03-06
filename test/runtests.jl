@@ -5,4 +5,8 @@ using Sessions
     @testset "Module loads" begin
         @test true  # Sessions loaded successfully
     end
+
+    include("test_types.jl")
+    include("test_format.jl")
+    include("test_analysis.jl")
 end

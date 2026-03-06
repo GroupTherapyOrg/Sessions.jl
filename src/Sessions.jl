@@ -14,11 +14,17 @@ module Sessions
 
 using UUIDs
 
-# Placeholder — files will be added by ralph loop stories
 # Layer 1: Engine
-# include("types.jl")
-# include("format.jl")
-# include("analysis.jl")
+include("types.jl")
+include("format.jl")
+
+export CellState, cell_idle, cell_queued, cell_running, cell_done, cell_errored
+export CellOutput, Cell, Notebook
+export add_cell!, insert_cell!, remove_cell!, get_cell, ordered_cells
+export load_notebook, save_notebook, parse_notebook, serialize_notebook
+
+include("analysis.jl")
+export analyze_cell, cell_definitions, cell_references, build_topology, execution_order
 # include("kernel.jl")
 # include("run.jl")
 
