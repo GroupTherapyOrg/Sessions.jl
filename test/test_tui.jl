@@ -1771,4 +1771,163 @@ using Markdown: @md_str
 
         rm(path; force=true)
     end
+
+    # --- Concurrent Edit Tests (SESSIONS-6026) ---
+
+    @testset "concurrent — user local edit preserved when agent changes different cell" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "conc_user = 1")
+        c2 = add_cell!(nb, "conc_agent = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+        execute_cell!(app.workspace, c2)
+        @test c1.state == cell_done
+        @test c2.state == cell_done
+
+        # User edits c1 locally (in-memory only, not saved to disk)
+        app.nb.cells[c1.id].code = "conc_user = 100"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+
+        # Agent edits c2 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c2.id].code = "conc_agent = 200"
+        save_notebook(nb_ext, path)
+
+        # Trigger external change
+        Sessions._on_external_change!(app)
+
+        # User's local edit to c1 preserved
+        @test app.nb.cells[c1.id].code == "conc_user = 100"
+        # Agent's disk edit to c2 applied
+        @test app.nb.cells[c2.id].code == "conc_agent = 200"
+        @test is_stale(app.nb.cells[c2.id])
+        # No auto-execution
+        @test app.nb.cells[c2.id].output.result == 2  # old value
+
+        rm(path; force=true)
+    end
+
+    @testset "concurrent — agent edit wins when both edit same cell (disk is truth)" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "same_cell = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+        @test c1.state == cell_done
+
+        # User edits c1 locally
+        app.nb.cells[c1.id].code = "same_cell = 100"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+
+        # Agent also edits c1 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "same_cell = 999"
+        save_notebook(nb_ext, path)
+
+        # External change: disk version wins for cells changed on disk
+        Sessions._on_external_change!(app)
+
+        @test app.nb.cells[c1.id].code == "same_cell = 999"
+        @test is_stale(app.nb.cells[c1.id])
+        # No auto-execution
+        @test app.nb.cells[c1.id].output.result == 1
+
+        rm(path; force=true)
+    end
+
+    @testset "concurrent — rapid writes coalesce to single reload (debounce)" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "rapid = 1")
+        save_notebook(nb)
+
+        fired = Ref(0)
+        dw = Sessions.DebouncedWatcher(nb, _ -> (fired[] += 1);
+                                       delay=0.3, poll_interval=0.05)
+        Sessions.start_watching!(dw)
+
+        # Simulate rapid agent writes (5 writes within debounce window)
+        sleep(0.1)
+        for i in 1:5
+            open(path, "a") do io
+                println(io, "# rapid write $i")
+            end
+            sleep(0.06)
+        end
+        sleep(0.6)  # wait for debounce to fire
+
+        Sessions.stop_watching!(dw)
+        @test fired[] <= 2  # coalesced — at most 2 fires (not 5)
+
+        rm(path; force=true)
+    end
+
+    @testset "concurrent — own save does not trigger external change notification" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "own_save = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        # Simulate Ctrl+S save (sets last_save_time)
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+        @test app.last_save_time > 0.0
+
+        # Clear the "Saved: ..." message so we can check save guard behavior
+        app.message = ""
+
+        # Watcher would detect mtime change — but save guard should skip it
+        Sessions._on_external_change!(app)
+        @test app.message == ""  # no "changed externally" message
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "concurrent — no auto-execution in any concurrent scenario" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "noexec_a = 1")
+        c2 = add_cell!(nb, "noexec_b = 2")
+        c3 = add_cell!(nb, "noexec_c = 3")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        execute_cell!(app.workspace, c1)
+        execute_cell!(app.workspace, c2)
+        execute_cell!(app.workspace, c3)
+        @test all(c -> c.state == cell_done, values(app.nb.cells))
+
+        # User edits c1 locally
+        app.nb.cells[c1.id].code = "noexec_a = 100"
+
+        # Agent: change c2, add c4, remove c3 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c2.id].code = "noexec_b = 200"
+        remove_cell!(nb_ext, c3.id)
+        c4 = add_cell!(nb_ext, "noexec_d = 4")
+        save_notebook(nb_ext, path)
+
+        Sessions._on_external_change!(app)
+
+        # Verify NO cell is running or was re-executed
+        for (id, cell) in app.nb.cells
+            @test cell.state != cell_running
+        end
+        # Stale cells have old outputs, not new
+        @test is_stale(app.nb.cells[c2.id])
+        @test app.nb.cells[c2.id].output.result == 2  # old value, not 200
+        # New cell is idle (never run)
+        @test app.nb.cells[c4.id].state == cell_idle
+        # Removed cell is gone
+        @test !haskey(app.nb.cells, c3.id)
+
+        rm(path; force=true)
+    end
 end
