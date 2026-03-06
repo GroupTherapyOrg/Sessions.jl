@@ -125,3 +125,65 @@ function stop_watcher(handle::WatcherHandle)
         sleep(0.05)
     end
 end
+
+# --- Debounced watcher ---
+
+"""Watcher with debounce: waits for `delay` seconds of quiet before firing callback."""
+mutable struct DebouncedWatcher
+    handle::Union{WatcherHandle, Nothing}
+    nb::Notebook
+    on_change::Function
+    delay::Float64          # seconds (default 0.2)
+    poll_interval::Float64  # seconds (default 0.5)
+    timer::Union{Timer, Nothing}
+    pending::Threads.Atomic{Bool}
+end
+
+function DebouncedWatcher(nb::Notebook, on_change::Function;
+                          delay::Float64=0.2, poll_interval::Float64=0.5)
+    DebouncedWatcher(nothing, nb, on_change, delay, poll_interval, nothing,
+                     Threads.Atomic{Bool}(false))
+end
+
+"""Start the debounced watcher."""
+function start_watching!(dw::DebouncedWatcher)
+    dw.handle !== nothing && return dw  # already running
+
+    dw.handle = watch_notebook(dw.nb, _ -> _debounce_trigger!(dw);
+                               poll_interval=dw.poll_interval)
+    dw
+end
+
+"""Stop the debounced watcher and cancel any pending timer."""
+function stop_watching!(dw::DebouncedWatcher)
+    if dw.timer !== nothing
+        close(dw.timer)
+        dw.timer = nothing
+    end
+    dw.pending[] = false
+    if dw.handle !== nothing
+        stop_watcher(dw.handle)
+        dw.handle = nothing
+    end
+end
+
+"""Internal: called when file change detected. Resets debounce timer."""
+function _debounce_trigger!(dw::DebouncedWatcher)
+    dw.pending[] = true
+    # Cancel existing timer
+    if dw.timer !== nothing
+        close(dw.timer)
+        dw.timer = nothing
+    end
+    # Start new timer
+    dw.timer = Timer(dw.delay) do _
+        if dw.pending[]
+            dw.pending[] = false
+            try
+                dw.on_change(dw.nb.path)
+            catch e
+                @warn "DebouncedWatcher callback error" exception=e
+            end
+        end
+    end
+end

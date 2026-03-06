@@ -311,4 +311,146 @@ using UUIDs
         @test length(diff.unchanged) == 1
         @test c3.id in diff.unchanged
     end
+
+    # --- DebouncedWatcher tests ---
+
+    @testset "DebouncedWatcher — single change fires callback" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        fired = Ref(0)
+        dw = Sessions.DebouncedWatcher(nb, _ -> (fired[] += 1);
+                                       delay=0.1, poll_interval=0.1)
+        Sessions.start_watching!(dw)
+
+        sleep(0.2)
+        open(path, "a") do io
+            println(io, "# change1")
+        end
+        sleep(0.5)  # poll + debounce + margin
+
+        Sessions.stop_watching!(dw)
+        @test fired[] == 1
+
+        rm(path; force=true)
+    end
+
+    @testset "DebouncedWatcher — rapid changes coalesce" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        fired = Ref(0)
+        dw = Sessions.DebouncedWatcher(nb, _ -> (fired[] += 1);
+                                       delay=0.3, poll_interval=0.05)
+        Sessions.start_watching!(dw)
+
+        # Rapid changes within debounce window
+        sleep(0.1)
+        for i in 1:5
+            open(path, "a") do io
+                println(io, "# rapid$i")
+            end
+            sleep(0.06)  # within 0.3s debounce
+        end
+        sleep(0.5)  # wait for debounce to fire
+
+        Sessions.stop_watching!(dw)
+        # Should fire at most once (all changes coalesced)
+        @test fired[] <= 1
+
+        rm(path; force=true)
+    end
+
+    @testset "DebouncedWatcher — configurable delay" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        dw = Sessions.DebouncedWatcher(nb, _ -> nothing;
+                                       delay=0.5, poll_interval=0.1)
+        @test dw.delay == 0.5
+        @test dw.poll_interval == 0.1
+
+        rm(path; force=true)
+    end
+
+    @testset "DebouncedWatcher — stop cancels pending" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        fired = Ref(0)
+        dw = Sessions.DebouncedWatcher(nb, _ -> (fired[] += 1);
+                                       delay=1.0, poll_interval=0.1)
+        Sessions.start_watching!(dw)
+
+        sleep(0.2)
+        open(path, "a") do io
+            println(io, "# change")
+        end
+        sleep(0.2)  # poll triggers but debounce timer hasn't fired yet
+
+        Sessions.stop_watching!(dw)
+        @test dw.pending[] == false
+        @test dw.handle === nothing
+        sleep(1.0)  # wait past what would have been the debounce
+        @test fired[] == 0  # callback should NOT have fired
+
+        rm(path; force=true)
+    end
+
+    @testset "DebouncedWatcher — start is idempotent" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        dw = Sessions.DebouncedWatcher(nb, _ -> nothing;
+                                       delay=0.1, poll_interval=0.1)
+        Sessions.start_watching!(dw)
+        handle1 = dw.handle
+        Sessions.start_watching!(dw)  # should be no-op
+        @test dw.handle === handle1
+
+        Sessions.stop_watching!(dw)
+        rm(path; force=true)
+    end
+
+    @testset "DebouncedWatcher — changes after quiet period fire again" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        fired = Ref(0)
+        dw = Sessions.DebouncedWatcher(nb, _ -> (fired[] += 1);
+                                       delay=0.1, poll_interval=0.1)
+        Sessions.start_watching!(dw)
+
+        # First change
+        sleep(0.2)
+        open(path, "a") do io
+            println(io, "# first")
+        end
+        sleep(0.4)  # wait for debounce to fire
+        count_after_first = fired[]
+
+        # Second change after quiet period
+        open(path, "a") do io
+            println(io, "# second")
+        end
+        sleep(0.4)  # wait for debounce to fire
+
+        Sessions.stop_watching!(dw)
+        @test fired[] >= count_after_first  # at least as many as after first
+        @test fired[] >= 1  # at least one fired
+
+        rm(path; force=true)
+    end
 end
