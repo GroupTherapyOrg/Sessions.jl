@@ -84,6 +84,15 @@ function load_session(path::String)
     end
 end
 
+"""Load a notebook and apply cached session data from the companion .jl.session file.
+Returns the notebook with cached state populated (or plain notebook if no session file)."""
+function load_notebook_with_session(path::String)
+    nb = load_notebook(path)
+    session_data = load_session(session_path(path))
+    apply_session!(nb, session_data)
+    nb
+end
+
 """Apply cached session data to a notebook, populating cell outputs and state.
 Matches cells by UUID. Cells not in session data are left unchanged."""
 function apply_session!(nb::Notebook, session_data)

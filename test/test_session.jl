@@ -600,4 +600,243 @@ using TOML
 
         rm(path; force=true)
     end
+
+    # --- load_notebook_with_session tests ---
+
+    @testset "load_notebook_with_session — exported" begin
+        @test isdefined(Sessions, :load_notebook_with_session)
+        @test load_notebook_with_session isa Function
+    end
+
+    @testset "load_notebook_with_session — reads both files" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1 + 1")
+        c2 = add_cell!(nb, "y = 10")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        execute_cell!(ws, c2)
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+
+        @test c1b.state == cell_done
+        @test c1b.output.text_representation == "2"
+        @test c1b.output.output_type == :text
+        @test !is_stale(c1b)
+
+        @test c2b.state == cell_done
+        @test c2b.output.text_representation == "10"
+        @test !is_stale(c2b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — matching hashes show cell_done" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "42")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+
+        @test c1b.state == cell_done
+        @test c1b.produced_by_hash == source_hash(c1b)
+        @test !is_stale(c1b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — mismatching hashes show stale" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        # Modify the cell code on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "x = 999"
+        save_notebook(nb_ext, path)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+
+        @test c1b.code == "x = 999"
+        @test is_stale(c1b)
+        @test c1b.output.text_representation == "1"  # cached old output
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — missing session file returns idle cells" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = 2")
+        save_notebook(nb)
+        # No session file saved
+
+        nb2 = load_notebook_with_session(path)
+
+        @test get_cell(nb2, c1.id).state == cell_idle
+        @test get_cell(nb2, c2.id).state == cell_idle
+        @test is_never_run(get_cell(nb2, c1.id))
+        @test is_never_run(get_cell(nb2, c2.id))
+
+        rm(path; force=true)
+    end
+
+    @testset "load_notebook_with_session — new cells not in session stay idle" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        # Add a new cell on disk (agent adds code)
+        nb_ext = load_notebook(path)
+        c2 = add_cell!(nb_ext, "z = 99")
+        save_notebook(nb_ext, path)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+        c2b = get_cell(nb2, c2.id)
+
+        @test c1b.state == cell_done
+        @test !is_stale(c1b)
+        @test c2b.state == cell_idle
+        @test is_never_run(c2b)
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — deleted cells in session silently ignored" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = 2")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        execute_cell!(ws, c2)
+        Sessions.save_session!(nb)
+
+        # Remove c2 from the notebook on disk
+        nb_ext = load_notebook(path)
+        remove_cell!(nb_ext, c2.id)
+        save_notebook(nb_ext, path)
+
+        nb2 = load_notebook_with_session(path)
+
+        @test haskey(nb2.cells, c1.id)
+        @test !haskey(nb2.cells, c2.id)
+        @test get_cell(nb2, c1.id).state == cell_done
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — error cell restored" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "error(\"kaboom\")")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        @test c1.state == cell_errored
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+
+        @test c1b.state == cell_errored
+        @test c1b.output.output_type == :error
+        @test c1b.output.error !== nothing
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — stdout preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "println(\"hello\")\n42")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+        c1b = get_cell(nb2, c1.id)
+
+        @test c1b.output.stdout == "hello\n"
+        @test c1b.output.text_representation == "42"
+        @test c1b.state == cell_done
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — runtime_ns preserved" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "sleep(0.01); 1")
+        save_notebook(nb)
+
+        ws = Workspace()
+        execute_cell!(ws, c1)
+        original_ns = c1.output.runtime_ns
+        @test original_ns > 0
+        Sessions.save_session!(nb)
+
+        nb2 = load_notebook_with_session(path)
+        @test get_cell(nb2, c1.id).output.runtime_ns == original_ns
+
+        rm(path; force=true)
+        rm(Sessions.session_path(path); force=true)
+    end
+
+    @testset "load_notebook_with_session — identical to load_notebook when no session" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        save_notebook(nb)
+
+        nb_plain = load_notebook(path)
+        nb_with = load_notebook_with_session(path)
+
+        # Both should have identical cell states
+        for id in nb_plain.cell_order
+            @test nb_plain.cells[id].state == nb_with.cells[id].state
+            @test nb_plain.cells[id].code == nb_with.cells[id].code
+            @test nb_plain.cells[id].produced_by_hash == nb_with.cells[id].produced_by_hash
+        end
+
+        rm(path; force=true)
+    end
 end
