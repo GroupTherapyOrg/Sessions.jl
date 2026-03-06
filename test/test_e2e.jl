@@ -1282,4 +1282,185 @@ using Markdown: @md_str
 
         rm(path; force=true)
     end
+
+    # --- E2E Agent Workflow (SESSIONS-6024) ---
+
+    @testset "E2E: Agent workflow — execute, external edit, stale, re-execute" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "agent_x = 10")
+        c2 = add_cell!(nb, "agent_y = agent_x * 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        # Step 1: Execute all cells — both green
+        Sessions.run_all_cells!(app)
+        @test c1.state == cell_done
+        @test c2.state == cell_done
+        @test c1.output.result == 10
+        @test c2.output.result == 20
+
+        # Step 2: Verify .jl.session created with correct hashes
+        sp = session_path(path)
+        @test isfile(sp)
+        session_data = Sessions.load_session(sp)
+        @test session_data !== nothing
+        c1_hash = session_data["cells"][string(c1.id)]["execution_hash"]
+        @test c1_hash == source_hash(c1)
+
+        # Step 3: Agent externally modifies c1 on disk
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "agent_x = 99"
+        save_notebook(nb_ext, path)
+
+        # Step 4: Trigger reload — c1 becomes stale with OLD cached output
+        Sessions._on_external_change!(app)
+        @test app.nb.cells[c1.id].code == "agent_x = 99"
+        @test is_stale(app.nb.cells[c1.id])
+        @test app.nb.cells[c1.id].output.result == 10  # old cached value
+        # c2 unchanged
+        @test !is_stale(app.nb.cells[c2.id])
+        @test app.nb.cells[c2.id].output.result == 20
+
+        # Step 5: Re-execute stale cell
+        Sessions.run_cell_at_index!(app, 1)
+        @test app.nb.cells[c1.id].state == cell_done
+        @test app.nb.cells[c1.id].output.result == 99
+        @test !is_stale(app.nb.cells[c1.id])
+
+        # Step 6: Verify .jl.session updated with new hash
+        session_data2 = Sessions.load_session(sp)
+        c1_hash2 = session_data2["cells"][string(c1.id)]["execution_hash"]
+        @test c1_hash2 == source_hash(app.nb.cells[c1.id])
+        @test c1_hash2 != c1_hash  # hash changed
+
+        rm(path; force=true)
+        rm(sp; force=true)
+    end
+
+    @testset "E2E: Agent workflow — downstream stale after upstream change" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "up_val = 5")
+        c2 = add_cell!(nb, "down_val = up_val + 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+        @test c2.output.result == 6
+
+        # Agent changes upstream cell
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "up_val = 50"
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        # c1 stale (code changed), c2 still has old output
+        @test is_stale(app.nb.cells[c1.id])
+        @test app.nb.cells[c1.id].output.result == 5  # old
+
+        # Re-execute all stale
+        Sessions.run_all_cells!(app)
+        @test app.nb.cells[c1.id].output.result == 50
+        @test app.nb.cells[c2.id].output.result == 51
+
+        rm(path; force=true)
+        rm(session_path(path); force=true)
+    end
+
+    @testset "E2E: Agent workflow — add new cell, execute, verify session" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "base_val = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+        @test c1.output.result == 1
+
+        # Agent adds a cell on disk
+        nb_ext = load_notebook(path)
+        c_new = add_cell!(nb_ext, "new_val = base_val + 100")
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        @test haskey(app.nb.cells, c_new.id)
+        @test app.nb.cells[c_new.id].state == cell_idle
+
+        # Execute the new cell
+        new_idx = findfirst(id -> id == c_new.id, app.nb.cell_order)
+        Sessions.run_cell_at_index!(app, new_idx)
+        @test app.nb.cells[c_new.id].state == cell_done
+        @test app.nb.cells[c_new.id].output.result == 101
+
+        # Session file has the new cell
+        sp = session_path(path)
+        session_data = Sessions.load_session(sp)
+        @test haskey(session_data["cells"], string(c_new.id))
+
+        rm(path; force=true)
+        rm(sp; force=true)
+    end
+
+    @testset "E2E: Agent workflow — remove cell, verify cleanup" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "keep_val = 1")
+        c2 = add_cell!(nb, "remove_val = 2")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+        @test c2.output.result == 2
+
+        c2_id = c2.id
+
+        # Agent removes c2 on disk
+        nb_ext = load_notebook(path)
+        remove_cell!(nb_ext, c2_id)
+        save_notebook(nb_ext, path)
+        Sessions._on_external_change!(app)
+
+        @test !haskey(app.nb.cells, c2_id)
+        @test length(app.nb.cell_order) == 1
+        @test length(app.notebook_view.cell_widgets) == 1
+
+        rm(path; force=true)
+        rm(session_path(path); force=true)
+    end
+
+    @testset "E2E: Agent workflow — full session roundtrip via fresh load" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "rt_a = 42")
+        c2 = add_cell!(nb, "rt_b = rt_a * 2")
+        save_notebook(nb)
+
+        # Execute and save session
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+        @test c1.output.result == 42
+        @test c2.output.result == 84
+
+        # Fresh load with session — should show cached outputs
+        nb2 = load_notebook_with_session(path)
+        @test nb2.cells[c1.id].state == cell_done
+        @test nb2.cells[c1.id].output.text_representation != ""
+        @test nb2.cells[c2.id].state == cell_done
+        @test !is_stale(nb2.cells[c1.id])
+        @test !is_stale(nb2.cells[c2.id])
+
+        # Modify c1 on disk — fresh load shows stale
+        nb_ext = load_notebook(path)
+        nb_ext.cells[c1.id].code = "rt_a = 999"
+        save_notebook(nb_ext, path)
+
+        nb3 = load_notebook_with_session(path)
+        @test is_stale(nb3.cells[c1.id])  # code changed, hash mismatch
+        @test nb3.cells[c1.id].output.text_representation != ""  # still has cached output
+
+        rm(path; force=true)
+        rm(session_path(path); force=true)
+    end
 end
