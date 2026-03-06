@@ -72,7 +72,9 @@ end
 """Height needed to render this cell widget."""
 function cell_height(cw::CellWidget)
     if cw.cell.folded
-        return 1
+        # Folded cell with output: completely hidden (output takes its place)
+        # Folded cell without output: thin 1-row bar
+        return cw.cell.state == cell_idle ? 1 : 0
     end
     vi = Theme.CELL_V_INSET
     if cw.cell.disabled
@@ -154,8 +156,11 @@ end
 function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     tick = Theme.tick()
 
-    # Folded cell: completely hidden code — just a thin canvas-bg row
+    # Folded cell: hidden code
     if cw.cell.folded
+        # If cell has output, height is 0 — nothing to render
+        cw.cell.state != cell_idle && return
+        # No output: thin canvas-bg row with optional bar
         Tachikoma.set_string!(buf, rect.x, rect.y, " " ^ rect.width, Theme.S_CANVAS)
         if cw.focused || cw.hovered
             bar_style = Tachikoma.Style(; fg=Theme.FOLD_BAR_FG, bg=Theme.CANVAS_BG)
