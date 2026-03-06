@@ -521,8 +521,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
     nb_bottom = editor_rect.y + editor_rect.height
+    # Stop before the REPL panel area (don't overwrite it)
+    repl_top = app.repl_open ? app.repl_rect.y : (area.y + area.height)
     screen_bottom = area.y + area.height - 1
-    for fy in nb_bottom:screen_bottom
+    for fy in nb_bottom:(repl_top - 1)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
 
