@@ -87,7 +87,7 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
     bar_style = Tachikoma.Style(; fg=bar_color, bg=Theme.CANVAS_BG)
 
     text_x = rect.x + 3  # indent: 1 for bar + 2 for padding
-    max_width = max(rect.width - 4, 1)
+    max_width = max(rect.width - 3, 1)  # clamp to rect right edge
 
     for (i, line) in enumerate(lines)
         row = rect.y + i - 1
@@ -172,17 +172,18 @@ end
 """A rendered line of styled segments."""
 const MdLine = Vector{MdSegment}
 
-# Style constructors for markdown elements
-_s_h1()    = Tachikoma.Style(; fg=Theme.FG, bold=true)
-_s_h2()    = Tachikoma.Style(; fg=Theme.FG, bold=true)
-_s_h3()    = Tachikoma.Style(; fg=Theme.FG_DIM, bold=true)
-_s_text()  = Tachikoma.Style(; fg=Theme.FG)
+# Style constructors for markdown elements — Pluto-like visual hierarchy
+_s_h1()    = Tachikoma.Style(; fg=Theme.ACCENT_GLOW, bold=true)
+_s_h2()    = Tachikoma.Style(; fg=Theme.ACCENT, bold=true)
+_s_h3()    = Tachikoma.Style(; fg=Theme.FG, bold=true)
+_s_text()  = Tachikoma.Style(; fg=Theme.FG_DIM)
 _s_bold()  = Tachikoma.Style(; fg=Theme.FG, bold=true)
-_s_ital()  = Tachikoma.Style(; fg=Theme.FG, italic=true)
+_s_ital()  = Tachikoma.Style(; fg=Theme.FG_DIM, italic=true)
 _s_code()  = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SURFACE_BG)
 _s_link()  = Tachikoma.Style(; fg=Theme.ACCENT, underline=true)
 _s_quote() = Tachikoma.Style(; fg=Theme.FG_DIM, italic=true)
 _s_hr()    = Tachikoma.Style(; fg=Theme.BORDER_DIM)
+_s_bullet() = Tachikoma.Style(; fg=Theme.ACCENT)
 _s_dim()   = Tachikoma.Style(; fg=Theme.FG_MUTED)
 
 """Walk a Markdown.MD AST and produce styled lines for TUI rendering."""
@@ -202,10 +203,11 @@ function _render_block!(lines::Vector{MdLine}, block, width::Int, indent::Int)
         push!(segs, MdSegment(" " ^ indent, _s_text()))
         _inline_to_segs!(segs, block.text, _s_h1())
         push!(lines, segs)
-        # Underline
+        # Accent-colored underline
         text_len = sum(length(s.text) for s in segs)
         rule_len = min(max(text_len, 20), width - indent)
-        push!(lines, [MdSegment(" " ^ indent * "─" ^ rule_len, _s_dim())])
+        push!(lines, [MdSegment(" " ^ indent * "━" ^ rule_len,
+            Tachikoma.Style(; fg=Theme.ACCENT_DIM))])
         push!(lines, MdLine())  # blank line after
 
     elseif block isa Markdown.Header{2}
@@ -233,36 +235,41 @@ function _render_block!(lines::Vector{MdLine}, block, width::Int, indent::Int)
 
     elseif block isa Markdown.List
         for (i, item) in enumerate(block.items)
-            # Bullet or number prefix
-            prefix = if block.ordered == -1
-                "  • "
-            else
-                "  $(block.ordered + i - 1). "
-            end
             first_line = true
             for sub in item
                 if sub isa Markdown.Paragraph
                     segs = MdSegment[]
                     if first_line
-                        push!(segs, MdSegment(" " ^ indent * prefix, _s_dim()))
+                        # Accent-colored bullet/number prefix
+                        prefix = if block.ordered == -1
+                            "  • "
+                        else
+                            "  $(block.ordered + i - 1). "
+                        end
+                        push!(segs, MdSegment(" " ^ indent, _s_text()))
+                        push!(segs, MdSegment(prefix, _s_bullet()))
                         first_line = false
                     else
-                        push!(segs, MdSegment(" " ^ (indent + length(prefix)), _s_text()))
+                        prefix = block.ordered == -1 ? "    " : "     "
+                        push!(segs, MdSegment(" " ^ indent * prefix, _s_text()))
                     end
                     _inline_to_segs!(segs, sub.content, _s_text())
                     push!(lines, segs)
                 else
-                    _render_block!(lines, sub, width, indent + length(prefix))
+                    prefix_len = block.ordered == -1 ? 4 : 5
+                    _render_block!(lines, sub, width, indent + prefix_len)
                 end
             end
         end
         push!(lines, MdLine())  # blank line after list
 
     elseif block isa Markdown.BlockQuote
+        bar_style = Tachikoma.Style(; fg=Theme.ACCENT_DIM)
         for sub in block.content
             if sub isa Markdown.Paragraph
                 segs = MdSegment[]
-                push!(segs, MdSegment(" " ^ indent * "  │ ", _s_dim()))
+                push!(segs, MdSegment(" " ^ indent * "  ", _s_text()))
+                push!(segs, MdSegment("│ ", bar_style))
                 _inline_to_segs!(segs, sub.content, _s_quote())
                 push!(lines, segs)
             else
@@ -328,13 +335,17 @@ function _render_markdown(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffe
 
     lines = _md_to_lines(result, max(rect.width - 4, 20))
     text_x = rect.x + 2  # left padding
+    max_x = rect.x + rect.width - 1  # right boundary
 
     for (i, line) in enumerate(lines)
         row = rect.y + i - 1
         row > rect.y + rect.height - 1 && break
         x = text_x
         for seg in line
-            Tachikoma.set_string!(buf, x, row, seg.text, seg.style)
+            remaining = max_x - x + 1
+            remaining <= 0 && break
+            text = first(seg.text, remaining)
+            Tachikoma.set_string!(buf, x, row, text, seg.style)
             x += length(seg.text)
         end
     end

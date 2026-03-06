@@ -378,8 +378,11 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     y = inner_y + Theme.TOP_MARGIN - nv.scroll_offset
     visible_start = inner_y
     visible_end = inner_y + inner_h - 1
-    margin_x = cx - Theme.MARGIN_CTRL_WIDTH
+    # Clamp margin_x to stay inside the notebook inner area
+    margin_x = max(cx - Theme.MARGIN_CTRL_WIDTH, inner_x)
     margin_s = Theme.margin_style()
+    # Right boundary for any content (inside right border)
+    content_right = inner_x + inner_w - 1
 
     for i in eachindex(nv.cell_widgets)
         cw = nv.cell_widgets[i]
@@ -396,7 +399,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- "+" add-above (in gap row above cell) ---
         if show_controls
             plus_above_y = y - 1
-            if plus_above_y >= visible_start && plus_above_y <= visible_end && margin_x >= rect.x
+            if plus_above_y >= visible_start && plus_above_y <= visible_end
                 Tachikoma.set_string!(buf, margin_x, plus_above_y, " + ", margin_s)
             end
         end
@@ -411,7 +414,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- Eye button (left margin, vertically centered) ---
         if show_controls
             eye_y = y + div(ch, 2)
-            if eye_y >= visible_start && eye_y <= visible_end && margin_x >= rect.x
+            if eye_y >= visible_start && eye_y <= visible_end
                 echar = Theme.eye_char(cw.cell.folded)
                 efg = Theme.eye_fg(cw.cell.folded)
                 Tachikoma.set_string!(buf, margin_x, eye_y, " $echar ",
@@ -435,13 +438,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         if show_controls
             gap_y = y
             if gap_y >= visible_start && gap_y <= visible_end
-                if margin_x >= rect.x
-                    Tachikoma.set_string!(buf, margin_x, gap_y, " + ", margin_s)
-                end
+                Tachikoma.set_string!(buf, margin_x, gap_y, " + ", margin_s)
                 run_text = run_button_text(cw.cell)
                 run_style = run_button_style(cw.cell, Theme.tick())
                 run_x = cx + cw_width - length(run_text)
-                if run_x >= cx
+                # Clamp run button to inner area
+                if run_x >= cx && run_x + length(run_text) - 1 <= content_right
                     Tachikoma.set_string!(buf, run_x, gap_y, run_text, run_style)
                 end
             end
@@ -451,6 +453,21 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     end
 
     clamp_scroll!(nv, rect)
+
+    # ── Re-draw border AFTER content to seal any overflow ──
+    # This ensures cells/outputs that overflow don't overwrite the notebook frame.
+    Tachikoma.set_char!(buf, bx, by, '╭', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by, '╮', border_style)
+    Tachikoma.set_char!(buf, bx, by + bh - 1, '╰', border_style)
+    Tachikoma.set_char!(buf, bx + bw - 1, by + bh - 1, '╯', border_style)
+    for cx_b in (bx + 1):(bx + bw - 2)
+        Tachikoma.set_char!(buf, cx_b, by, '─', border_style)
+        Tachikoma.set_char!(buf, cx_b, by + bh - 1, '─', border_style)
+    end
+    for fy in (by + 1):(by + bh - 2)
+        Tachikoma.set_char!(buf, bx, fy, '│', border_style)
+        Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
+    end
 end
 
 """Total content height including all cells, outputs, gaps, and margins."""
