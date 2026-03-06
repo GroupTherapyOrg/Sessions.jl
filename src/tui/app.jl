@@ -649,12 +649,20 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
-        # Regular cell click — focus it and enter insert mode (code editing)
+        # Cell click — only enter insert mode if click is inside the cell body
         idx = cell_at_y(nv, evt.y)
         if idx !== nothing
             clear_selection!(nv)
             focus_cell!(nv, idx)
-            _enter_insert_mode!(app)
+            if evt.x >= cell_left && evt.x < cell_right
+                _enter_insert_mode!(app)
+            else
+                # Click in margin/padding area — focus cell in normal mode
+                _exit_insert_mode!(app)
+            end
+        else
+            # Click in empty gap area — exit insert mode
+            _exit_insert_mode!(app)
         end
         return
     end
