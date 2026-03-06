@@ -61,5 +61,6 @@ function run(nb::Notebook; verbose::Bool=false)
         println("  Done: $n_done ok, $n_err errors")
     end
 
+    save_session!(nb)
     nb
 end

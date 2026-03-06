@@ -839,4 +839,133 @@ using TOML
 
         rm(path; force=true)
     end
+
+    # --- Auto-save session after execution (SESSIONS-6015) ---
+
+    @testset "auto-save — run_focused_cell! creates session file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "x = 42")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_focused_cell!(app)
+
+        session_file = Sessions.session_path(path)
+        @test isfile(session_file)
+
+        data = TOML.parsefile(session_file)
+        @test haskey(data["cells"], string(c1.id))
+        @test data["cells"][string(c1.id)]["execution_hash"] == source_hash(c1)
+
+        rm(path; force=true)
+        rm(session_file; force=true)
+    end
+
+    @testset "auto-save — run_all_cells! creates session file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "a = 10")
+        c2 = add_cell!(nb, "b = a + 5")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_all_cells!(app)
+
+        session_file = Sessions.session_path(path)
+        @test isfile(session_file)
+
+        data = TOML.parsefile(session_file)
+        @test length(data["cells"]) == 2
+        @test haskey(data["cells"], string(c1.id))
+        @test haskey(data["cells"], string(c2.id))
+
+        rm(path; force=true)
+        rm(session_file; force=true)
+    end
+
+    @testset "auto-save — run_stale_cells! creates session file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "stale_auto = 1")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+
+        # Execute first, then make stale
+        execute_cell!(app.workspace, c1)
+        c1.code = "stale_auto = 2"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+        @test is_stale(c1)
+
+        Sessions.run_stale_cells!(app)
+
+        session_file = Sessions.session_path(path)
+        @test isfile(session_file)
+
+        data = TOML.parsefile(session_file)
+        @test haskey(data["cells"], string(c1.id))
+
+        rm(path; force=true)
+        rm(session_file; force=true)
+    end
+
+    @testset "auto-save — Sessions.run() headless creates session file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "headless_x = 7 * 6")
+        save_notebook(nb)
+
+        Sessions.run(path)
+
+        session_file = Sessions.session_path(path)
+        @test isfile(session_file)
+
+        data = TOML.parsefile(session_file)
+        @test haskey(data["cells"], string(c1.id))
+        @test data["cells"][string(c1.id)]["text_representation"] == "42"
+
+        rm(path; force=true)
+        rm(session_file; force=true)
+    end
+
+    @testset "auto-save — run_cell_at_index! creates session file" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "idx_val = 99")
+        save_notebook(nb)
+
+        app = Sessions.SessionsApp(nb)
+        Sessions.run_cell_at_index!(app, 1)
+
+        session_file = Sessions.session_path(path)
+        @test isfile(session_file)
+
+        data = TOML.parsefile(session_file)
+        @test haskey(data["cells"], string(c1.id))
+
+        rm(path; force=true)
+        rm(session_file; force=true)
+    end
+
+    @testset "auto-save — headless run with multiple cells" begin
+        path = tempname() * ".jl"
+        nb = Notebook(; path)
+        c1 = add_cell!(nb, "multi_a = 1")
+        c2 = add_cell!(nb, "multi_b = multi_a + 1")
+        c3 = add_cell!(nb, "multi_c = multi_b * 3")
+        save_notebook(nb)
+
+        Sessions.run(path)
+
+        session_file = Sessions.session_path(path)
+        data = TOML.parsefile(session_file)
+        @test length(data["cells"]) == 3
+        @test data["cells"][string(c1.id)]["text_representation"] == "1"
+        @test data["cells"][string(c2.id)]["text_representation"] == "2"
+        @test data["cells"][string(c3.id)]["text_representation"] == "6"
+
+        rm(path; force=true)
+        rm(session_file; force=true)
+    end
 end

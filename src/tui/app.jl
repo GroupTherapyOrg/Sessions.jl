@@ -629,6 +629,7 @@ function run_focused_cell_async!(app::SessionsApp)
 
     Tachikoma.spawn_task!(app.tq, :execute_cell) do
         execute_changed!(app.nb, [cell]; workspace=app.workspace)
+        save_session!(app.nb)
     end
 end
 
@@ -641,6 +642,7 @@ function run_focused_cell!(app::SessionsApp)
     cw !== nothing && sync_to_cell!(cw)
 
     execute_changed!(app.nb, [cell]; workspace=app.workspace)
+    save_session!(app.nb)
     app.message = "Ran cell + dependents"
 end
 
@@ -657,6 +659,7 @@ function run_stale_cells!(app::SessionsApp)
     # Use execute_changed! which computes the right topological order
     # and includes downstream dependents
     execute_changed!(app.nb, sc; workspace=app.workspace)
+    save_session!(app.nb)
     length(sc)
 end
 
@@ -674,6 +677,7 @@ function run_all_cells_async!(app::SessionsApp)
 
     Tachikoma.spawn_task!(app.tq, :execute_all) do
         execute_notebook!(app.nb; workspace=app.workspace)
+        save_session!(app.nb)
     end
 end
 
@@ -684,6 +688,7 @@ function run_all_cells!(app::SessionsApp)
     end
 
     execute_notebook!(app.nb; workspace=app.workspace)
+    save_session!(app.nb)
     app.message = "Ran all cells"
 end
 
@@ -719,6 +724,7 @@ function run_cell_at_index!(app::SessionsApp, idx::Int)
         sync_to_cell!(app.notebook_view.cell_widgets[idx])
     end
     execute_changed!(app.nb, [cell]; workspace=app.workspace)
+    save_session!(app.nb)
     app.message = "Ran cell $idx"
 end
 
