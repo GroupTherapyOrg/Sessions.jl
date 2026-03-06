@@ -587,13 +587,14 @@ function _hit_test_margin_control(nv::NotebookView, click_x::Int, click_y::Int, 
         vi = Theme.CELL_V_INSET
         y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset  # inset + border
         for j in 1:target_idx-1
-            y += cell_height(nv.cell_widgets[j])
-            y += output_height(nv.output_widgets[j])
+            j_oh = output_height(nv.output_widgets[j])
+            y += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
+            y += j_oh
             y += Theme.CELL_GAP
         end
 
-        ch = cell_height(nv.cell_widgets[target_idx])
         oh = output_height(nv.output_widgets[target_idx])
+        ch = cell_height(nv.cell_widgets[target_idx]; has_output=oh > 0)
 
         if click_y == y - 1
             return (:plus_above, target_idx)
@@ -659,12 +660,13 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
         vi = Theme.CELL_V_INSET
         y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset  # inset + border
         for j in 1:target_idx-1
-            y += cell_height(nv.cell_widgets[j])
-            y += output_height(nv.output_widgets[j])
+            j_oh = output_height(nv.output_widgets[j])
+            y += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
+            y += j_oh
             y += Theme.CELL_GAP
         end
-        ch = cell_height(cw)
         oh = output_height(nv.output_widgets[target_idx])
+        ch = cell_height(cw; has_output=oh > 0)
 
         # ⋯ button inside border (first inner row of border, right-aligned)
         hi = Theme.CELL_H_INSET

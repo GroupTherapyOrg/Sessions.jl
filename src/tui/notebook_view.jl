@@ -134,8 +134,8 @@ function cell_at_y(nv::NotebookView, screen_y::Int)
 
     y = 0
     for i in eachindex(nv.cell_widgets)
-        ch = cell_height(nv.cell_widgets[i])
         oh = output_height(nv.output_widgets[i])
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
         slot_h = ch + oh + Theme.CELL_GAP
 
         if content_y < y + slot_h
@@ -161,8 +161,8 @@ function gap_at_y(nv::NotebookView, screen_y::Int)
 
     y = 0
     for i in eachindex(nv.cell_widgets)
-        ch = cell_height(nv.cell_widgets[i])
         oh = output_height(nv.output_widgets[i])
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
 
         if content_y < y + ch
             return nothing
@@ -388,8 +388,8 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         cw = nv.cell_widgets[i]
         ow = nv.output_widgets[i]
 
-        ch = cell_height(cw)
         oh = output_height(ow)
+        ch = cell_height(cw; has_output=oh > 0)
         is_focused = (i == nv.focused_idx)
         is_hovered = (i == nv.hovered_idx)
         show_controls = is_focused || is_hovered
@@ -488,8 +488,9 @@ function content_height(nv::NotebookView)
     isempty(nv.cell_widgets) && return 0
     h = Theme.TOP_MARGIN
     for i in eachindex(nv.cell_widgets)
-        h += cell_height(nv.cell_widgets[i])
-        h += output_height(nv.output_widgets[i])
+        oh = output_height(nv.output_widgets[i])
+        h += cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        h += oh
         h += Theme.CELL_GAP
     end
     h
@@ -512,12 +513,14 @@ function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
 
     y = Theme.TOP_MARGIN
     for i in 1:nv.focused_idx-1
-        y += cell_height(nv.cell_widgets[i])
-        y += output_height(nv.output_widgets[i])
+        oh = output_height(nv.output_widgets[i])
+        y += cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        y += oh
         y += Theme.CELL_GAP
     end
 
-    focused_h = cell_height(nv.cell_widgets[nv.focused_idx])
+    focused_oh = output_height(nv.output_widgets[nv.focused_idx])
+    focused_h = cell_height(nv.cell_widgets[nv.focused_idx]; has_output=focused_oh > 0)
 
     if y < nv.scroll_offset
         nv.scroll_offset = y
