@@ -88,6 +88,18 @@ function add_cell_after_focus!(nv::NotebookView)
     update_focus!(nv)
 end
 
+"""Move the focused cell up (swap with previous). Focus follows the cell."""
+function move_cell_up!(nv::NotebookView)
+    swap_cell_up!(nv.nb, nv.focused_idx) || return
+    rebuild_widgets!(nv)  # rebuild_widgets! tracks focused cell by ID
+end
+
+"""Move the focused cell down (swap with next). Focus follows the cell."""
+function move_cell_down!(nv::NotebookView)
+    swap_cell_down!(nv.nb, nv.focused_idx) || return
+    rebuild_widgets!(nv)  # rebuild_widgets! tracks focused cell by ID
+end
+
 """Delete the focused cell (if more than one cell exists)."""
 function delete_focused_cell!(nv::NotebookView)
     length(nv.cell_widgets) <= 1 && return

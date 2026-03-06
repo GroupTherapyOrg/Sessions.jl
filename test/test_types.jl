@@ -128,6 +128,55 @@ using UUIDs
         @test cells[3] === c3
     end
 
+    @testset "swap_cell_up!" begin
+        nb = Sessions.Notebook()
+        c1 = Sessions.add_cell!(nb, "a")
+        c2 = Sessions.add_cell!(nb, "b")
+        c3 = Sessions.add_cell!(nb, "c")
+
+        # Swap middle cell up
+        @test swap_cell_up!(nb, 2) == true
+        @test nb.cell_order == [c2.id, c1.id, c3.id]
+
+        # Can't swap first cell up
+        @test swap_cell_up!(nb, 1) == false
+        @test nb.cell_order == [c2.id, c1.id, c3.id]
+
+        # Out of range
+        @test swap_cell_up!(nb, 0) == false
+        @test swap_cell_up!(nb, 4) == false
+    end
+
+    @testset "swap_cell_down!" begin
+        nb = Sessions.Notebook()
+        c1 = Sessions.add_cell!(nb, "a")
+        c2 = Sessions.add_cell!(nb, "b")
+        c3 = Sessions.add_cell!(nb, "c")
+
+        # Swap middle cell down
+        @test swap_cell_down!(nb, 2) == true
+        @test nb.cell_order == [c1.id, c3.id, c2.id]
+
+        # Can't swap last cell down
+        @test swap_cell_down!(nb, 3) == false
+        @test nb.cell_order == [c1.id, c3.id, c2.id]
+
+        # Out of range
+        @test swap_cell_down!(nb, 0) == false
+        @test swap_cell_down!(nb, 4) == false
+    end
+
+    @testset "swap preserves cells dict" begin
+        nb = Sessions.Notebook()
+        c1 = Sessions.add_cell!(nb, "x = 1")
+        c2 = Sessions.add_cell!(nb, "y = 2")
+
+        swap_cell_down!(nb, 1)
+        @test Sessions.get_cell(nb, c1.id) === c1
+        @test Sessions.get_cell(nb, c2.id) === c2
+        @test Sessions.ordered_cells(nb) == [c2, c1]
+    end
+
     @testset "get_cell" begin
         nb = Sessions.Notebook()
         c = Sessions.add_cell!(nb, "x = 1")

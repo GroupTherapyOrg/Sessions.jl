@@ -85,6 +85,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Cell reorder (Alt+Up/Down) — works in both modes
+    if evt.key == :alt_up
+        move_cell_up!(app.notebook_view)
+        return
+    end
+    if evt.key == :alt_down
+        move_cell_down!(app.notebook_view)
+        return
+    end
+
     # Navigation between cells
     if app.mode == :normal
         if evt.key == :tab

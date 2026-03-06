@@ -171,6 +171,110 @@ using Markdown: @md_str
         @test app.notebook_view.focused_idx == 2
     end
 
+    @testset "E2E: Move cell up with Alt+Up" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        c3 = add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Focus second cell, then move it up
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        @test app.notebook_view.focused_idx == 2
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        @test app.notebook_view.focused_idx == 1
+        @test ordered_cells(nb) == [c2, c1, c3]
+    end
+
+    @testset "E2E: Move cell down with Alt+Down" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        c3 = add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Focus first cell, move it down
+        @test app.notebook_view.focused_idx == 1
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+        @test app.notebook_view.focused_idx == 2
+        @test ordered_cells(nb) == [c2, c1, c3]
+    end
+
+    @testset "E2E: Move cell — boundary no-ops" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        c2 = add_cell!(nb, "b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        # First cell can't move up
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        @test app.notebook_view.focused_idx == 1
+        @test ordered_cells(nb) == [c1, c2]
+
+        # Move to last, then can't move down
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        @test app.notebook_view.focused_idx == 2
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+        @test app.notebook_view.focused_idx == 2
+        @test ordered_cells(nb) == [c1, c2]
+    end
+
+    @testset "E2E: Move cell — focus follows moved cell" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "first")
+        c2 = add_cell!(nb, "second")
+        c3 = add_cell!(nb, "third")
+        app = Sessions.SessionsApp(nb)
+
+        # Focus third cell
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:tab))
+        @test app.notebook_view.focused_idx == 3
+
+        # Move it up twice — should end at position 1
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        @test app.notebook_view.focused_idx == 2
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_up))
+        @test app.notebook_view.focused_idx == 1
+        @test ordered_cells(nb) == [c3, c1, c2]
+
+        # Focused widget should show the right cell
+        fw = Sessions.focused_widget(app.notebook_view)
+        @test fw.cell === c3
+    end
+
+    @testset "E2E: Move cell — widgets rebuilt after reorder" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = 2")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+
+        # Widgets should match new order
+        @test length(app.notebook_view.cell_widgets) == 2
+        @test app.notebook_view.cell_widgets[1].cell === c2
+        @test app.notebook_view.cell_widgets[2].cell === c1
+    end
+
+    @testset "E2E: Move cell — render shows new order" begin
+        nb = Notebook()
+        add_cell!(nb, "alpha = 1")
+        add_cell!(nb, "beta = 2")
+        add_cell!(nb, "gamma = 3")
+        app = Sessions.SessionsApp(nb)
+
+        # Move first cell down
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:alt_down))
+
+        tb = render_app(app)
+        # Both cells should still be visible
+        @test Tachikoma.find_text(tb, "alpha") !== nothing
+        @test Tachikoma.find_text(tb, "beta") !== nothing
+        @test Tachikoma.find_text(tb, "gamma") !== nothing
+    end
+
     @testset "E2E: Delete cell with Ctrl+D" begin
         nb = Notebook()
         add_cell!(nb, "a = 1")

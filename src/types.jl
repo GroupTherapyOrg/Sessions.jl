@@ -89,6 +89,20 @@ end
 """Number of cells in the notebook."""
 Base.length(nb::Notebook) = length(nb.cell_order)
 
+"""Swap cell at `idx` with the one above it. Returns true if swapped."""
+function swap_cell_up!(nb::Notebook, idx::Int)
+    (idx <= 1 || idx > length(nb.cell_order)) && return false
+    nb.cell_order[idx], nb.cell_order[idx-1] = nb.cell_order[idx-1], nb.cell_order[idx]
+    true
+end
+
+"""Swap cell at `idx` with the one below it. Returns true if swapped."""
+function swap_cell_down!(nb::Notebook, idx::Int)
+    (idx < 1 || idx >= length(nb.cell_order)) && return false
+    nb.cell_order[idx], nb.cell_order[idx+1] = nb.cell_order[idx+1], nb.cell_order[idx]
+    true
+end
+
 # --- Stale detection ---
 
 """Deterministic hash of a cell's source code."""
