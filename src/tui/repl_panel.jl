@@ -4,6 +4,7 @@
 mutable struct ReplPanel
     process::Union{Base.Process, Nothing}
     proc_in::Union{IO, Nothing}       # write to julia's stdin
+    proc_out::Union{IO, Nothing}      # read from julia's stdout+stderr
     output_lines::Vector{String}       # output transcript (raw with ANSI codes)
     input_buffer::Vector{Char}         # current input line
     input_cursor::Int                  # 0-based cursor position in input
@@ -17,16 +18,15 @@ mutable struct ReplPanel
     read_task::Union{Task, Nothing}    # async output reader
     prompt::String                     # current display prompt
     repl_mode::Symbol                  # :julia, :pkg, :help, :shell
-    pending_line::String               # partial line from async reads
     max_scrollback::Int                # max output lines to keep
 end
 
 function ReplPanel()
-    ReplPanel(nothing, nothing, String[], Char[], 0, 0, false, Tachikoma.Rect(),
-        String[], 0, "", false, nothing, "julia> ", :julia, "", 5000)
+    ReplPanel(nothing, nothing, nothing, String[], Char[], 0, 0, false, Tachikoma.Rect(),
+        String[], 0, "", false, nothing, "julia> ", :julia, 5000)
 end
 
-"""Start the Julia subprocess."""
+"""Start the Julia subprocess with explicit pipes."""
 function spawn_repl!(panel::ReplPanel, dir::String=".")
     panel.alive && return  # already running
 
@@ -34,33 +34,41 @@ function spawn_repl!(panel::ReplPanel, dir::String=".")
     dir = abspath(dir)
     isdir(dir) || (dir = pwd())
 
-    # Build command — merge stderr into stdout so we see errors
     env = copy(ENV)
     env["TERM"] = "dumb"
-    env["NO_COLOR"] = ""  # some packages check this
-    cmd = setenv(`$julia_bin -i --color=yes --banner=short`, env; dir)
-    proc = Base.open(cmd, "r+")
+    cmd = setenv(`$julia_bin -i --color=yes --banner=short --startup-file=no`, env; dir)
+
+    # Use explicit Pipe objects so we get proper read/write ends
+    inp = Pipe()
+    out = Pipe()
+    proc = Base.run(pipeline(cmd; stdin=inp, stdout=out, stderr=out); wait=false)
+    close(out.in)   # close write end in parent (subprocess writes to it)
+    close(inp.out)   # close read end in parent (subprocess reads from it)
 
     panel.process = proc
-    panel.proc_in = proc
+    panel.proc_in = inp.in
+    panel.proc_out = out.out
     panel.alive = true
     panel.output_lines = String[]
-    panel.pending_line = ""
 
-    # Async output reader
-    panel.read_task = @async _read_output_loop!(panel, proc)
+    # Async output reader — uses blocking readline (not bytesavailable polling)
+    panel.read_task = @async _read_output_loop!(panel, out.out, proc)
     nothing
 end
 
-"""Async loop: read julia output and append to output_lines."""
-function _read_output_loop!(panel::ReplPanel, proc::Base.Process)
+"""Async loop: read julia output line by line (blocking readline)."""
+function _read_output_loop!(panel::ReplPanel, out::IO, proc::Base.Process)
     try
-        while panel.alive && process_running(proc)
-            if bytesavailable(proc) > 0
-                data = String(readavailable(proc))
-                _append_output!(panel, data)
-            else
-                sleep(0.02)  # 50Hz poll
+        while panel.alive && !eof(out)
+            line = readline(out; keep=false)
+            # Filter signal crash dump lines from kill
+            _is_signal_noise(line) && continue
+            push!(panel.output_lines, replace(line, '\r' => ""))
+            # Trim scrollback
+            if length(panel.output_lines) > panel.max_scrollback
+                excess = length(panel.output_lines) - panel.max_scrollback
+                deleteat!(panel.output_lines, 1:excess)
+                panel.scroll_offset = max(0, panel.scroll_offset - excess)
             end
         end
     catch e
@@ -72,31 +80,16 @@ function _read_output_loop!(panel::ReplPanel, proc::Base.Process)
     end
 end
 
-"""Append raw output data to the transcript, splitting on newlines."""
-function _append_output!(panel::ReplPanel, data::String)
-    buf = panel.pending_line * data
-    parts = split(buf, '\n')
-
-    # All but the last part are complete lines
-    for i in 1:length(parts)-1
-        line = String(parts[i])
-        # Strip carriage returns
-        line = replace(line, '\r' => "")
-        push!(panel.output_lines, line)
-    end
-    panel.pending_line = String(parts[end])
-
-    # Trim scrollback
-    if length(panel.output_lines) > panel.max_scrollback
-        excess = length(panel.output_lines) - panel.max_scrollback
-        deleteat!(panel.output_lines, 1:excess)
-        panel.scroll_offset = max(0, panel.scroll_offset - excess)
-    end
-
-    # Auto-scroll to bottom when new output arrives (unless user is scrolling up)
-    if panel.scroll_offset == 0
-        # Already at bottom — stays at bottom
-    end
+"""Filter noise from signal termination (crash dump, psynch_cvwait, etc.)."""
+function _is_signal_noise(line::String)
+    s = _strip_ansi_simple(line)
+    startswith(s, "[") && contains(s, "signal") && return true
+    contains(s, "at /usr/lib/system/") && return true
+    contains(s, "unknown function (ip:") && return true
+    contains(s, "__psynch_cvwait") && return true
+    startswith(s, "Allocations:") && return true
+    contains(s, "in expression starting at none:") && return true
+    false
 end
 
 """Send a line of input to the Julia subprocess."""
@@ -139,18 +132,28 @@ function send_input!(panel::ReplPanel, line::String)
     end
     panel.history_idx = 0
     panel.history_stash = ""
+
+    # Auto-scroll to bottom on new input
+    panel.scroll_offset = 0
 end
 
 """Stop the Julia subprocess."""
 function stop_repl!(panel::ReplPanel)
     panel.alive = false
+    if panel.proc_in !== nothing
+        try close(panel.proc_in) catch end
+        panel.proc_in = nothing
+    end
     if panel.process !== nothing
         try
             kill(panel.process)
         catch; end
         panel.process = nothing
     end
-    panel.proc_in = nothing
+    if panel.proc_out !== nothing
+        try close(panel.proc_out) catch end
+        panel.proc_out = nothing
+    end
     panel.read_task = nothing
 end
 
@@ -209,7 +212,6 @@ function handle_repl_key!(panel::ReplPanel, evt::Tachikoma.KeyEvent)
             # Ctrl+L: clear output
             empty!(panel.output_lines)
             panel.scroll_offset = 0
-            panel.pending_line = ""
             return true
         elseif evt.char == 'a'
             panel.input_cursor = 0
@@ -449,14 +451,8 @@ function Tachikoma.render(panel::ReplPanel, rect::Tachikoma.Rect, buf::Tachikoma
     output_h = divider_y - inner_y
     output_h < 1 && return
 
-    # Combine complete lines + pending partial line for display
-    all_lines = copy(panel.output_lines)
-    if !isempty(panel.pending_line)
-        push!(all_lines, panel.pending_line)
-    end
-
-    # Filter out bare prompt lines from julia (we show our own prompt)
-    filtered = _filter_prompts(all_lines)
+    # Filter out bare prompt lines from julia output (we show our own echo)
+    filtered = _filter_prompts(panel.output_lines)
 
     n_lines = length(filtered)
     # Visible window: show the last `output_h` lines, offset by scroll
