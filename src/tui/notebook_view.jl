@@ -409,10 +409,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # correct virtual position. Buffer in_bounds silently clips writes
         # outside the terminal. The notebook border re-draw after this loop
         # seals any overflow into the inset/border area.
+        # Clamp top to rect.y and bottom to rect.y+rect.height to prevent
+        # writes outside the notebook pane.
         if y + ch > visible_start && y <= visible_end
-            cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
-                            ch - max(0, rect.y - y))
-            Tachikoma.render(cw, cell_rect, buf)
+            cr_y = max(y, rect.y)
+            cr_h = min(ch - (cr_y - y), rect.y + rect.height - cr_y)
+            cr_h > 0 && Tachikoma.render(cw, Tachikoma.Rect(cx, cr_y, cw_width, cr_h), buf)
         end
 
         # --- Eye button (left margin, vertically centered) ---
@@ -431,9 +433,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- Output rendering ---
         if oh > 0
             if y + oh > visible_start && y <= visible_end
-                out_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
-                                oh - max(0, rect.y - y))
-                Tachikoma.render(ow, out_rect, buf)
+                or_y = max(y, rect.y)
+                or_h = min(oh - (or_y - y), rect.y + rect.height - or_y)
+                or_h > 0 && Tachikoma.render(ow, Tachikoma.Rect(cx, or_y, cw_width, or_h), buf)
             end
             y += oh
         end
