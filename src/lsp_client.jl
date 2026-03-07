@@ -452,11 +452,14 @@ function lsp_complete_with_timeout!(client::LspClient, uri::String, line::Int, c
     if result == :ok
         response = take!(ch)
         if response isa Dict && haskey(response, "error")
-            return LspCompletionItem[]
+            client.completion_cache = LspCompletionItem[]
+            return client.completion_cache
         end
-        return parse_completions(response)
+        client.completion_cache = parse_completions(response)
+        return client.completion_cache
     end
-    LspCompletionItem[]
+    client.completion_cache = LspCompletionItem[]
+    client.completion_cache
 end
 
 # ── Hover ──────────────────────────────────────────────────────────
