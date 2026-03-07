@@ -36,4 +36,5 @@ using Sessions
     include("test_png_decoder.jl")
     include("test_output_cache.jl")
     include("test_encoded_cache.jl")
+    include("test_aspect_sizing.jl")
 end

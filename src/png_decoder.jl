@@ -11,6 +11,25 @@
 
 const _PNG_SIGNATURE = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 
+"""
+    decode_png_dimensions(bytes::Vector{UInt8}) → Union{Tuple{Int,Int}, Nothing}
+
+Lightweight header-only parser: reads PNG IHDR to extract (width, height).
+Returns `nothing` on invalid/truncated data. Does NOT decompress IDAT.
+"""
+function decode_png_dimensions(bytes::Vector{UInt8})::Union{Tuple{Int,Int}, Nothing}
+    length(bytes) < 24 && return nothing  # sig(8) + IHDR length(4) + type(4) + data(8 min)
+    bytes[1:8] != _PNG_SIGNATURE && return nothing
+    # IHDR must be the first chunk after signature
+    chunk_type = String(bytes[13:16])
+    chunk_type == "IHDR" || return nothing
+    length(bytes) < 24 && return nothing
+    width = Int(ntoh(reinterpret(UInt32, bytes[17:20])[1]))
+    height = Int(ntoh(reinterpret(UInt32, bytes[21:24])[1]))
+    (width <= 0 || height <= 0) && return nothing
+    (width, height)
+end
+
 # Locate CodecZlib from loaded modules (guaranteed available via Tachikoma dep)
 const _CODECZLIB_PKGID = Base.PkgId(Base.UUID("944b1d66-785c-5afd-91f1-9de20f533193"), "CodecZlib")
 

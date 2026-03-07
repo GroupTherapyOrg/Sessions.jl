@@ -20,3 +20,10 @@
 - Regression gate: 3489 tests pass (was 3473, +16 new)
 - Learning: Frame constructor requires 4 args (Buffer, Rect, gfx_regions, pixel_snapshots). encode_kitty needs cols/rows kwargs. Cache invalidates on image objectid, rect width/height, or protocol change
 - Next: SESSIONS-9003 (aspect-aware image sizing)
+
+### 2026-03-07: SESSIONS-9003 [PASS]
+- Attempted: Replace fixed _IMAGE_OUTPUT_HEIGHT=12 with aspect-ratio-based computation
+- Result: Added decode_png_dimensions() header parser, image_output_height() formula (aspect * cols / 2, clamped [4,30]). Updated _compute_output_height to use it
+- Regression gate: 3515 tests pass (was 3489, +26 new)
+- Learning: A square 1x1 image at 80 cols → rows=40 → clamped to max=30. The formula is aspect-correct: square images need many rows, wide ones need few
+- Next: SESSIONS-9004 (terminal resize cache invalidation)

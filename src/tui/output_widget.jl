@@ -201,8 +201,26 @@ function _parse_sgr_params(s::AbstractString)::Vector{Int}
     codes
 end
 
-"""Default image output height in terminal rows."""
+"""Default image output height in terminal rows (used when dimensions can't be read)."""
 const _IMAGE_OUTPUT_HEIGHT = 12
+const _IMAGE_HEIGHT_DEFAULT = 12
+const _IMAGE_HEIGHT_MIN = 4
+const _IMAGE_HEIGHT_MAX = 30
+const _CELL_ASPECT_RATIO = 2.0  # terminal chars are ~2× taller than wide
+
+"""Compute image output height from pixel dimensions and available terminal width.
+
+Terminal cells are approximately twice as tall as wide, so a square image
+needs half as many rows as columns. Formula:
+  rows = (img_height / img_width) * available_cols / cell_aspect_ratio
+Clamped to [_IMAGE_HEIGHT_MIN, _IMAGE_HEIGHT_MAX].
+"""
+function image_output_height(img_width::Int, img_height::Int, available_cols::Int)
+    (img_width <= 0 || img_height <= 0 || available_cols <= 0) && return _IMAGE_HEIGHT_MIN
+    aspect = img_height / img_width
+    rows = round(Int, aspect * available_cols / _CELL_ASPECT_RATIO)
+    clamp(rows, _IMAGE_HEIGHT_MIN, _IMAGE_HEIGHT_MAX)
+end
 
 """Height needed for output display (borderless — just the lines + 1 for top padding).
 
@@ -241,7 +259,11 @@ function _compute_output_height(ow::OutputWidget)
     elseif otype == :markdown
         return _markdown_height(ow.cell)
     elseif otype == :image_png && ow.cell.output.image_data !== nothing
-        return _IMAGE_OUTPUT_HEIGHT
+        dims = decode_png_dimensions(ow.cell.output.image_data)
+        if dims !== nothing
+            return image_output_height(dims[1], dims[2], 80)  # 80 cols default
+        end
+        return _IMAGE_HEIGHT_DEFAULT
     end
     lines = output_lines(ow.cell)
     isempty(lines) ? 0 : length(lines)

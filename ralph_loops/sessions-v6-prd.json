@@ -13,7 +13,7 @@
       "id": "P1",
       "title": "Image Quality",
       "description": "Aspect-aware sizing and resize handling",
-      "stories_done": 0,
+      "stories_done": 1,
       "stories_total": 2
     },
     {
@@ -71,7 +71,8 @@
       "title": "Aspect-aware image sizing",
       "milestone": "P1",
       "priority": 1,
-      "status": "open",
+      "status": "done",
+      "completedNote": "Added decode_png_dimensions() header parser, image_output_height() with aspect ratio formula. Height clamped [4,30]. 26 new tests, 3515 total.",
       "blockedBy": ["SESSIONS-9001"],
       "description": "Replace fixed _IMAGE_OUTPUT_HEIGHT=12 with aspect ratio computation. Read PNG IHDR dimensions from decode_png (or a lightweight header-only parser). Compute terminal rows = (img_height / img_width) * available_width / cell_pixel_ratio. Clamp to [4, 30] rows. Cache dimensions alongside pixel cache.",
       "acceptanceCriteria": [
