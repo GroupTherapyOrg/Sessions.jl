@@ -19,9 +19,12 @@ mutable struct OutputWidget
     _cached_height_output_id::UInt64  # objectid(cell.output) when height was cached
     _cached_height_state::CellState
     _cached_height_collapsed::Bool
+    # Text output cache: avoid re-calling sprint(show,...) every frame
+    _cached_output_lines::Union{Nothing, Vector{String}}
+    _cached_output_lines_id::UInt64  # objectid(cell.output) when lines were cached
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0))
 
 """Format cell output as displayable lines.
 
@@ -70,6 +73,21 @@ function output_lines(cell::Cell)
         end
     end
 
+    lines
+end
+
+"""Cached version of output_lines() — avoids re-calling sprint(show,...) every frame.
+
+Invalidated when objectid(cell.output) changes (new execution result).
+"""
+function cached_output_lines(ow::OutputWidget)::Vector{String}
+    out_id = objectid(ow.cell.output)
+    if ow._cached_output_lines !== nothing && ow._cached_output_lines_id == out_id
+        return ow._cached_output_lines
+    end
+    lines = output_lines(ow.cell)
+    ow._cached_output_lines = lines
+    ow._cached_output_lines_id = out_id
     lines
 end
 
@@ -258,8 +276,8 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         return
     end
 
-    # Default: Pluto-style borderless output on canvas bg
-    lines = output_lines(ow.cell)
+    # Default: Pluto-style borderless output on canvas bg (cached to avoid per-frame sprint)
+    lines = cached_output_lines(ow)
     isempty(lines) && return
 
     errored = ow.cell.state == cell_errored
