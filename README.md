@@ -15,32 +15,33 @@ A terminal-native reactive Julia notebook. Pluto-compatible file format with a f
 
 ## Installation
 
-```julia
-using Pkg
-Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")
-```
-
-### JETLS (Optional -- Real-time Diagnostics)
-
-For real-time type error detection while editing:
+Requires Julia 1.12+.
 
 ```julia
 using Pkg
-Pkg.Apps.add(; url="https://github.com/aviatesk/JETLS.jl", rev="release")
+Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")
 ```
 
-This installs the `jetls` binary to `~/.julia/bin/`. Sessions.jl will detect and use it automatically.
+This installs the `sessions` command to `~/.julia/bin/`. On first launch, JETLS (real-time diagnostics) is auto-installed.
 
 ## Quick Start
 
+```bash
+# Open a notebook
+sessions my_notebook.jl
+
+# Create a new notebook
+sessions
+
+# Run headlessly (CI, scripts)
+sessions run my_notebook.jl
+```
+
+Or from the Julia REPL:
+
 ```julia
 using Sessions
-
-# Launch the TUI with a notebook
 Sessions.main("my_notebook.jl")
-
-# Or create a new notebook interactively
-Sessions.main()
 ```
 
 ## Keyboard Shortcuts

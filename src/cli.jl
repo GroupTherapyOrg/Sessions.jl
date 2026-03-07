@@ -1,78 +1,110 @@
 # Layer 3: CLI — Entry points and ARGS parsing
 
 """
-    Sessions.main(args=ARGS)
+    (@main)(args)
 
-Main CLI entry point. Parses command-line arguments and dispatches.
+Pkg.Apps entry point. Called by `julia -m Sessions` or the `sessions` shim.
 
 Usage:
-    julia -e 'using Sessions; Sessions.main()' -- [command] [options]
-
-Commands:
-    open <file.jl>     Open notebook in TUI (auto-detects notebook vs plain file)
-    edit <file.jl>     Open plain .jl file in editor
-    run <file.jl>      Run notebook headlessly
-    new [file.jl]      Create new notebook and open in TUI
-
-Options:
-    --verbose, -v      Verbose output (for run mode)
+    sessions [file.jl]              Open notebook or file in TUI
+    sessions open <file.jl>         Open notebook or file in TUI
+    sessions new [file.jl]          Create new notebook
+    sessions run <file.jl>          Run notebook headlessly
+    sessions install-jetls          Install JETLS for real-time diagnostics
 """
-function main(args::Vector{String}=ARGS)
+function (@main)(args::Vector{String})::Cint
+    # Auto-install JETLS on first run if missing
+    _ensure_jetls()
+
     if isempty(args)
-        println("Sessions.jl v2 — Terminal-Native Reactive Julia Notebook & Editor")
-        println()
-        println("Usage:")
-        println("  sessions open <file.jl>   Open notebook or file in TUI")
-        println("  sessions edit <file.jl>   Open plain .jl file in editor")
-        println("  sessions run <file.jl>    Run notebook headlessly")
-        println("  sessions new [file.jl]    Create new notebook")
-        println()
-        println("Or: julia -e 'using Sessions; Sessions.open(\"file.jl\")'")
-        return
+        # No args → open new notebook
+        new()
+        return 0
     end
 
     cmd = args[1]
     rest = args[2:end]
 
-    if cmd == "open"
-        isempty(rest) && error("Usage: sessions open <file.jl>")
-        open(rest[1])
-    elseif cmd == "edit"
-        isempty(rest) && error("Usage: sessions edit <file.jl>")
-        edit(rest[1])
-    elseif cmd == "run"
-        isempty(rest) && error("Usage: sessions run <file.jl>")
-        verbose = "--verbose" in rest || "-v" in rest
-        path = first(filter(a -> !startswith(a, "-"), rest))
-        nb = run(path; verbose)
-        cells = ordered_cells(nb)
-        n_done = count(c -> c.state == cell_done, cells)
-        n_err = count(c -> c.state == cell_errored, cells)
-        if n_err > 0
-            println("$(n_done) ok, $(n_err) errors")
-            exit(1)
-        end
-    elseif cmd == "new"
-        path = isempty(rest) ? "Untitled.jl" : rest[1]
-        new(path)
-    else
-        # If first arg looks like a file path, treat as `open`
-        if endswith(cmd, ".jl") && isfile(cmd)
-            open(cmd)
+    try
+        if cmd == "open"
+            isempty(rest) ? new() : open(rest[1])
+        elseif cmd == "new"
+            path = isempty(rest) ? "Untitled.jl" : rest[1]
+            new(path)
+        elseif cmd == "run"
+            isempty(rest) && error("Usage: sessions run <file.jl>")
+            verbose = "--verbose" in rest || "-v" in rest
+            path = first(filter(a -> !startswith(a, "-"), rest))
+            nb = run(path; verbose)
+            cells = ordered_cells(nb)
+            n_err = count(c -> c.state == cell_errored, cells)
+            n_err > 0 && return 1
+        elseif cmd == "install-jetls"
+            _install_jetls()
+        elseif cmd in ("--help", "-h", "help")
+            _print_help()
+        elseif cmd in ("--version", "-v", "version")
+            println("Sessions.jl v2.0.0")
         else
-            error("Unknown command: $cmd. Use open, edit, run, or new.")
+            # Bare path — treat as `open`
+            if endswith(cmd, ".jl")
+                open(cmd)
+            else
+                println(stderr, "Unknown command: $cmd")
+                _print_help()
+                return 1
+            end
         end
+    catch e
+        println(stderr, sprint(showerror, e))
+        return 1
+    end
+
+    return 0
+end
+
+
+function _print_help()
+    println("Sessions.jl v2 — Terminal-Native Reactive Julia Notebook")
+    println()
+    println("Usage:")
+    println("  sessions [file.jl]          Open notebook or file (default: new notebook)")
+    println("  sessions open <file.jl>     Open notebook or file in TUI")
+    println("  sessions new [file.jl]      Create new notebook")
+    println("  sessions run <file.jl>      Run notebook headlessly")
+    println("  sessions install-jetls      Install JETLS for real-time diagnostics")
+    println("  sessions --help             Show this help")
+    println("  sessions --version          Show version")
+end
+
+const _JETLS_BIN = joinpath(homedir(), ".julia", "bin", "jetls")
+
+function _ensure_jetls()
+    isfile(_JETLS_BIN) && return
+    # First run — offer to install
+    printstyled("Sessions.jl"; color=:green, bold=true)
+    println(" — JETLS not found. Installing for real-time diagnostics...")
+    println("  (This is a one-time setup, may take a minute)")
+    println()
+    try
+        _install_jetls()
+    catch e
+        printstyled("  Warning: "; color=:yellow)
+        println("JETLS install failed — diagnostics will be disabled.")
+        println("  You can retry later with: sessions install-jetls")
+        println("  Error: ", sprint(showerror, e))
     end
 end
 
-"""Install the `sessions` CLI wrapper to ~/.local/bin/sessions."""
-function install_cli(; dest::String=expanduser("~/.local/bin/sessions"))
-    wrapper = """#!/bin/sh
-exec julia --startup-file=no --project=@Sessions -e 'using Sessions; Sessions.main()' -- "\$@"
-"""
-    mkpath(dirname(dest))
-    Base.write(dest, wrapper)
-    chmod(dest, 0o755)
-    println("Installed sessions CLI to $dest")
-    dest
+function _install_jetls()
+    # Import Pkg at runtime to avoid adding it as a dependency
+    Pkg = Base.require(Base.PkgId(Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f"), "Pkg"))
+    Apps = getfield(Pkg, :Apps)
+    printstyled("  Installing JETLS (JET.jl language server)...\n"; color=:cyan)
+    Apps.add(; url="https://github.com/aviatesk/JETLS.jl", rev="release")
+    if isfile(_JETLS_BIN)
+        printstyled("  ✓ JETLS installed successfully\n"; color=:green)
+    else
+        error("JETLS binary not found at $_JETLS_BIN after install")
+    end
 end
