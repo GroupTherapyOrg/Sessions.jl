@@ -53,6 +53,7 @@ export LspCompletionItem, parse_completions, lsp_completion!, lsp_complete_with_
 export LspHoverResult, parse_hover, lsp_hover!, lsp_hover_with_timeout!
 export LspLocation, parse_definition, lsp_definition!, lsp_definition_with_timeout!
 export LspSignatureHelp, parse_signature_help, lsp_signature_help!, lsp_signature_help_with_timeout!
+export LspTextEdit, parse_workspace_edit, lsp_rename!, lsp_rename_with_timeout!
 
 # Layer 1.5: Code Formatting (Runic.jl runtime-loaded)
 include("formatting.jl")

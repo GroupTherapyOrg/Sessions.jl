@@ -81,6 +81,12 @@ mutable struct SignatureHelpTooltip
     y::Int
 end
 
+mutable struct RenamePrompt
+    old_name::String
+    new_name::String
+    cursor::Int  # cursor position in new_name (0-based character offset)
+end
+
 const HOVER_DEBOUNCE = 0.5  # seconds of mouse stillness before requesting hover
 
 """Sessions notebook TUI application model."""
@@ -142,6 +148,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     scrollbar_col::Int
     scrollbar_y::Int
     scrollbar_h::Int
+    # Rename prompt
+    rename_prompt::Union{Nothing, RenamePrompt}
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -185,7 +193,7 @@ function _save_to_tab!(app::SessionsApp)
     tab.progress_recently = app.progress_recently
     tab.progress_done_tick = app.progress_done_tick
     # Persist mode (collapse transient modes to :normal)
-    tab.mode = (app.mode in (:dropdown, :confirm, :completion)) ? :normal : app.mode
+    tab.mode = (app.mode in (:dropdown, :confirm, :completion, :rename)) ? :normal : app.mode
 end
 
 """Load state from a tab into the app fields."""
@@ -474,7 +482,8 @@ function SessionsApp(nb::Notebook)
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
         nothing,
-        0, 0, 0)
+        0, 0, 0,
+        nothing)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -498,7 +507,8 @@ function SessionsApp(fev::FileEditorView)
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
         nothing,
-        0, 0, 0)
+        0, 0, 0,
+        nothing)
 end
 
 function SessionsApp(path::String)
@@ -814,6 +824,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         _render_signature_help!(app.signature_tooltip, buf, area)
     end
 
+    # Rename prompt overlay
+    if app.rename_prompt !== nothing
+        _render_rename_prompt!(app.rename_prompt, buf, area)
+    end
+
     # Confirm dialog overlay (centered, with dimmed backdrop)
     if app.confirm_dialog !== nothing
         _render_confirm_dialog!(app.confirm_dialog, buf, area)
@@ -1085,6 +1100,46 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         end
     end
 
+    # --- Rename mode: handle rename prompt input ---
+    if app.mode == :rename && app.rename_prompt !== nothing
+        rp = app.rename_prompt
+        if evt.key == :escape
+            app.rename_prompt = nothing
+            app.mode = :insert
+            return
+        elseif evt.key == :enter
+            if rp.new_name == rp.old_name || isempty(rp.new_name)
+                app.rename_prompt = nothing
+                app.mode = :insert
+                return
+            end
+            # Try LSP rename first, fall back to local
+            edits = lsp_rename_with_timeout!(app.lsp, _current_uri(app),
+                _current_editor(app).cursor_row, _current_editor(app).cursor_col,
+                rp.new_name; timeout=3.0)
+            if isempty(edits)
+                _apply_rename_local!(app, rp.old_name, rp.new_name)
+                app.message = "Renamed '$(rp.old_name)' → '$(rp.new_name)' (local)"
+            else
+                app.message = "Renamed '$(rp.old_name)' → '$(rp.new_name)' ($(length(edits)) edits)"
+            end
+            app.rename_prompt = nothing
+            app.mode = :insert
+            return
+        elseif evt.key == :backspace
+            if rp.cursor > 0
+                rp.new_name = rp.new_name[1:rp.cursor-1] * rp.new_name[rp.cursor+1:end]
+                rp.cursor -= 1
+            end
+            return
+        elseif evt.key == :char
+            rp.new_name = rp.new_name[1:rp.cursor] * string(evt.char) * rp.new_name[rp.cursor+1:end]
+            rp.cursor += 1
+            return
+        end
+        return
+    end
+
     # --- REPL mode: forward keys to REPL panel ---
     if app.mode == :repl && app.repl_open
         # Ctrl+Q still quits
@@ -1205,6 +1260,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     # Ctrl+G: go to definition (LSP)
     if evt.key == :ctrl && evt.char == 'g'
         _goto_definition!(app)
+        return
+    end
+
+    # F2: rename symbol
+    if evt.key == :f2
+        _start_rename!(app)
         return
     end
 
@@ -3158,6 +3219,12 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # F2: rename symbol
+    if evt.key == :f2
+        _start_rename!(app)
+        return
+    end
+
     editor = fev.editor
     sel = fev.selection
 
@@ -3340,4 +3407,149 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             _advance_signature_param!(app)
         end
     end
+end
+
+# --- Rename support ---
+
+"""Get the current editor (file or focused cell)."""
+function _current_editor(app::SessionsApp)
+    if app.editor_type == :file && app.file_editor_view !== nothing
+        return app.file_editor_view.editor
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return nothing
+        return cw.editor
+    end
+end
+
+"""Get the current file URI."""
+function _current_uri(app::SessionsApp)
+    if app.editor_type == :file && app.file_editor_view !== nothing
+        "file://" * abspath(app.file_editor_view.path)
+    else
+        notebook_uri(app.nb)
+    end
+end
+
+"""Extract the word (identifier) at cursor position. Returns empty string if none."""
+function _word_at_cursor(lines::Vector{Vector{Char}}, row::Int, col::Int)::String
+    (row < 1 || row > length(lines)) && return ""
+    line = lines[row]
+    isempty(line) && return ""
+    # col is 0-based cursor position
+    # Find start and end of word containing position
+    pos = clamp(col, 0, length(line) - 1) + 1  # 1-based index into line
+    _is_ident(c) = isletter(c) || isdigit(c) || c == '_' || c == '!'
+    (pos > length(line) || !_is_ident(line[pos])) && pos > 1 && _is_ident(line[pos-1]) && (pos -= 1)
+    (!_is_ident(line[pos])) && return ""
+    lo = pos
+    while lo > 1 && _is_ident(line[lo-1])
+        lo -= 1
+    end
+    hi = pos
+    while hi < length(line) && _is_ident(line[hi+1])
+        hi += 1
+    end
+    String(line[lo:hi])
+end
+
+"""Start the rename prompt for the word under cursor."""
+function _start_rename!(app::SessionsApp)
+    editor = _current_editor(app)
+    editor === nothing && return
+    word = _word_at_cursor(editor.lines, editor.cursor_row, editor.cursor_col)
+    if isempty(word)
+        app.message = "No symbol under cursor"
+        return
+    end
+    app.rename_prompt = RenamePrompt(word, word, length(word))
+    app.mode = :rename
+end
+
+"""Apply local find-replace rename in the current editor."""
+function _apply_rename_local!(app::SessionsApp, old_name::String, new_name::String)
+    if app.editor_type == :file && app.file_editor_view !== nothing
+        editor = app.file_editor_view.editor
+        _replace_in_editor!(editor, old_name, new_name)
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return
+        _replace_in_editor!(cw.editor, old_name, new_name)
+    end
+end
+
+"""Replace all whole-word occurrences of old_name with new_name in a CodeEditor."""
+function _replace_in_editor!(editor, old_name::String, new_name::String)
+    _is_ident(c) = isletter(c) || isdigit(c) || c == '_' || c == '!'
+    for (row_idx, line) in enumerate(editor.lines)
+        line_str = String(line)
+        new_line = ""
+        i = 1
+        while i <= length(line_str)
+            # Check if old_name starts here
+            if i + length(old_name) - 1 <= length(line_str) &&
+               line_str[i:i+length(old_name)-1] == old_name
+                # Check word boundaries
+                before_ok = (i == 1) || !_is_ident(line_str[i-1])
+                after_pos = i + length(old_name)
+                after_ok = (after_pos > length(line_str)) || !_is_ident(line_str[after_pos])
+                if before_ok && after_ok
+                    new_line *= new_name
+                    i += length(old_name)
+                    continue
+                end
+            end
+            new_line *= string(line_str[i])
+            i += 1
+        end
+        editor.lines[row_idx] = collect(new_line)
+    end
+end
+
+"""Render the rename prompt as a centered overlay."""
+function _render_rename_prompt!(rp::RenamePrompt, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    prompt_text = "Rename: "
+    label = prompt_text * rp.new_name
+    content_w = length(label) + 2  # padding
+    w = min(max(content_w + 2, 30), area.width - 4)
+    h = 3
+
+    x = area.x + max(0, div(area.width - w, 2))
+    y = area.y + 2
+
+    box = Theme.BOX
+    bg = Theme.ELEVATED_BG
+    border_style = Tachikoma.Style(; fg=Theme.ACCENT, bg)
+    text_style = Tachikoma.Style(; fg=Theme.FG, bg)
+    cursor_style = Tachikoma.Style(; fg=Theme.BG, bg=Theme.FG)
+
+    # Top border with title
+    title = " Rename Symbol "
+    top_left = string(box.tl) * repeat(string(box.h), 1) * title
+    remaining = w - 2 - length(title)
+    top = top_left * repeat(string(box.h), max(0, remaining)) * string(box.tr)
+    Tachikoma.set_string!(buf, x, y, top, border_style)
+
+    # Content line
+    iy = y + 1
+    Tachikoma.set_char!(buf, x, iy, box.v, border_style)
+    inner_w = w - 2
+    display = " " * label
+    if length(display) > inner_w
+        display = first(display, inner_w)
+    else
+        display = display * " " ^ (inner_w - length(display))
+    end
+    Tachikoma.set_string!(buf, x + 1, iy, display, text_style)
+    # Draw cursor
+    cursor_x = x + 1 + 1 + length(prompt_text) + rp.cursor  # +1 for padding, +1 for border
+    if cursor_x < x + w - 1
+        c = rp.cursor < length(rp.new_name) ? rp.new_name[rp.cursor+1] : ' '
+        Tachikoma.set_char!(buf, cursor_x, iy, c, cursor_style)
+    end
+    Tachikoma.set_char!(buf, x + w - 1, iy, box.v, border_style)
+
+    # Bottom border
+    bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
+    Tachikoma.set_string!(buf, x, y + 2, bot, border_style)
 end

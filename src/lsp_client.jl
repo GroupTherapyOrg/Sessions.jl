@@ -636,6 +636,100 @@ function lsp_definition_with_timeout!(client::LspClient, uri::String, line::Int,
     nothing
 end
 
+# ── Rename ─────────────────────────────────────────────────────────
+
+"""A single text edit from a WorkspaceEdit."""
+struct LspTextEdit
+    uri::String
+    start_line::Int   # 1-based
+    start_col::Int    # 0-based
+    end_line::Int     # 1-based
+    end_col::Int      # 0-based
+    new_text::String
+end
+
+"""Request rename at a position."""
+function lsp_rename!(client::LspClient, uri::String, line::Int, col::Int, new_name::String)::Channel{Any}
+    _send_request!(client, "textDocument/rename", Dict{String,Any}(
+        "textDocument" => Dict{String,Any}("uri" => uri),
+        "position" => Dict{String,Any}("line" => line - 1, "character" => col),
+        "newName" => new_name
+    ))
+end
+
+"""Parse a WorkspaceEdit response into a list of text edits."""
+function parse_workspace_edit(response)::Vector{LspTextEdit}
+    response === nothing && return LspTextEdit[]
+    !(response isa Dict) && return LspTextEdit[]
+    edits = LspTextEdit[]
+
+    # Format 1: { changes: { uri: TextEdit[] } }
+    changes = get(response, "changes", nothing)
+    if changes isa Dict
+        for (uri, file_edits) in changes
+            file_edits isa Vector || continue
+            for te in file_edits
+                te isa Dict || continue
+                range = get(te, "range", Dict())
+                start = get(range, "start", Dict())
+                finish = get(range, "end", Dict())
+                push!(edits, LspTextEdit(
+                    string(uri),
+                    get(start, "line", 0) + 1,
+                    get(start, "character", 0),
+                    get(finish, "line", 0) + 1,
+                    get(finish, "character", 0),
+                    get(te, "newText", "")
+                ))
+            end
+        end
+    end
+
+    # Format 2: { documentChanges: TextDocumentEdit[] }
+    doc_changes = get(response, "documentChanges", nothing)
+    if doc_changes isa Vector && isempty(edits)
+        for dc in doc_changes
+            dc isa Dict || continue
+            doc = get(dc, "textDocument", Dict())
+            uri = get(doc, "uri", "")
+            for te in get(dc, "edits", [])
+                te isa Dict || continue
+                range = get(te, "range", Dict())
+                start = get(range, "start", Dict())
+                finish = get(range, "end", Dict())
+                push!(edits, LspTextEdit(
+                    uri,
+                    get(start, "line", 0) + 1,
+                    get(start, "character", 0),
+                    get(finish, "line", 0) + 1,
+                    get(finish, "character", 0),
+                    get(te, "newText", "")
+                ))
+            end
+        end
+    end
+
+    edits
+end
+
+"""
+Request rename with timeout. Returns Vector{LspTextEdit}.
+"""
+function lsp_rename_with_timeout!(client::LspClient, uri::String, line::Int, col::Int, new_name::String;
+                                   timeout::Float64=3.0)::Vector{LspTextEdit}
+    client.status != lsp_ready && return LspTextEdit[]
+    ch = lsp_rename!(client, uri, line, col, new_name)
+    result = timedwait(() -> isready(ch), timeout)
+    if result == :ok
+        response = take!(ch)
+        if response isa Dict && haskey(response, "error")
+            return LspTextEdit[]
+        end
+        return parse_workspace_edit(response)
+    end
+    LspTextEdit[]
+end
+
 # ── Minimal JSON Serialization ─────────────────────────────────────
 # Avoids dependency on JSON.jl. Only needs to handle Dict, Vector, String, Number, Bool, Nothing.
 
