@@ -17,9 +17,10 @@ mutable struct CellOutput
     runtime_ns::UInt64                 # Execution time in nanoseconds
     output_type::Symbol                # :text, :nothing, :error, :markdown, :dataframe, :image_png
     text_representation::String        # Fallback text rendering for any output type
+    image_data::Union{Nothing, Vector{UInt8}}  # PNG bytes for :image_png output (not serialized)
 end
 
-CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "")
+CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "", nothing)
 
 """A single notebook cell."""
 mutable struct Cell

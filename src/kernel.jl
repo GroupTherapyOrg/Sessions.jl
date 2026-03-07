@@ -5,9 +5,9 @@ using Markdown: Markdown
 # --- MIME-based output classification (Pluto parity) ---
 # Follows Pluto's `allmimes` priority list, adapted for TUI rendering.
 # Pluto order: table > divelement > text/html > images > tree > text/latex > text/plain
-# TUI adaptation: text/plain is PROMOTED above images, because terminal-native
-# libraries (UnicodePlots, etc.) produce their richest output via text/plain.
-# Images are only useful in browsers (Pluto/Jupyter) or with Kitty/sixel protocol.
+# TUI adaptation: when a graphics protocol is available (Kitty/Sixel), images are
+# promoted ABOVE text/plain (like Pluto's browser). When no graphics protocol,
+# text/plain wins (UnicodePlots renders as text).
 # We use invokelatest for all showable checks (world age safety).
 
 """Image MIME types in preference order (matches Pluto's imagemimes)."""
@@ -36,18 +36,23 @@ function _tui_showable(m::MIME, @nospecialize(value))::Bool
 end
 
 """
+    _has_graphics_protocol() -> Bool
+
+Check if the terminal supports a graphics protocol (Kitty or Sixel).
+Uses Tachikoma's detected protocol (set at TUI startup).
+"""
+_has_graphics_protocol() = Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
+
+"""
     classify_output(value) -> Symbol
 
 Classify a cell's return value using MIME dispatch (Pluto parity, adapted for TUI).
 Tries MIME types in priority order and returns a Symbol for TUI rendering:
 :nothing, :bond, :dataframe, :markdown, :text, or :image_png.
 
-TUI priority (Pluto's `allmimes` reordered for terminal):
-1. Bond — Sessions-specific interactive widgets
-2. Table — Tables.jl row-accessible data
-3. Markdown — Markdown.MD objects
-4. text/plain — terminal-native output (UnicodePlots, etc.)
-5. Images — SVG/PNG/etc. (placeholder only, until Kitty/sixel support)
+TUI priority depends on graphics capability:
+- With Kitty/Sixel: images promoted above text/plain (like Pluto browser)
+- Without graphics: text/plain promoted above images (UnicodePlots path)
 """
 function classify_output(value)::Symbol
     value === nothing && return :nothing
@@ -63,14 +68,19 @@ function classify_output(value)::Symbol
     # 3. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
     value isa Markdown.MD && return :markdown
 
-    # 4. text/plain — preferred for TUI because terminal-native libraries
-    # (UnicodePlots, etc.) produce their richest output here.
-    # In Pluto's browser, images beat text/plain. In TUI, text/plain wins.
+    # 4. When graphics protocol available: check images BEFORE text/plain
+    if _has_graphics_protocol()
+        if _tui_showable(MIME"image/png"(), value)
+            return :image_png
+        end
+    end
+
+    # 5. text/plain — terminal-native output (UnicodePlots, etc.)
     if _tui_showable(MIME"text/plain"(), value)
         return :text
     end
 
-    # 5. Images — fallback for values with only image output (no text/plain)
+    # 6. Images — fallback for values with only image output (no text/plain)
     for m in _IMAGE_MIMES
         if _tui_showable(m, value)
             return :image_png
