@@ -21,4 +21,5 @@ using Sessions
     include("test_formatting.jl")
     include("test_inline_diagnostics.jl")
     include("test_file_editor_parity.jl")
+    include("test_auto_indent.jl")
 end
