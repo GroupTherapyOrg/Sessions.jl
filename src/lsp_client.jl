@@ -56,6 +56,7 @@ mutable struct LspClient
     reader_task::Union{Nothing, Task}
     error_message::String
     enabled::Bool       # opt-out flag
+    completion_cache::Vector{LspCompletionItem}  # last completion results
 end
 
 function LspClient(; enabled::Bool=true)
@@ -68,7 +69,8 @@ function LspClient(; enabled::Bool=true)
         Dict{String, Any}(),
         nothing,
         "",
-        enabled
+        enabled,
+        LspCompletionItem[]
     )
 end
 
@@ -436,6 +438,25 @@ function _extract_docs(doc)
     doc isa String && return doc
     doc isa Dict && return get(doc, "value", "")
     ""
+end
+
+"""
+Request completions with a timeout. Returns Vector{LspCompletionItem}.
+On timeout or error, returns empty vector (never hangs).
+"""
+function lsp_complete_with_timeout!(client::LspClient, uri::String, line::Int, col::Int;
+                                     timeout::Float64=1.0)::Vector{LspCompletionItem}
+    client.status != lsp_ready && return LspCompletionItem[]
+    ch = lsp_completion!(client, uri, line, col)
+    result = timedwait(() -> isready(ch), timeout)
+    if result == :ok
+        response = take!(ch)
+        if response isa Dict && haskey(response, "error")
+            return LspCompletionItem[]
+        end
+        return parse_completions(response)
+    end
+    LspCompletionItem[]
 end
 
 # ── Hover ──────────────────────────────────────────────────────────

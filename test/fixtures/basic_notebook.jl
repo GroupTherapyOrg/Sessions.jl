@@ -26,6 +26,14 @@ using Markdown
 # ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
 using UnicodePlots
 
+# ╔═╡ 9458ff79-a67a-430e-9a62-27d704d3e575
+function test_format()
+    "this is one indent"
+    "this is another"
+
+    return
+end
+
 # ╔═╡ 0b7a9ca3-5430-4e6a-9894-cd2339447be5
 md"""
 ### Damped Ripple Surface
@@ -38,14 +46,14 @@ A 3D surface plot of `cos(ω√(x²+y²)) · e^(−0.3√(x²+y²))` — a radia
 """
 
 # ╔═╡ 1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
-@bind n Slider(2:20, default=8)
+@bind n Slider(2:20, default = 8)
 
 # ╔═╡ 3d413fde-745c-4222-836a-24e5a6e7a481
-surfaceplot(-2:.05:2, -2:.05:2, (x, y) -> cos(n/3 * sqrt(x^2+y^2)) * exp(-0.3*sqrt(x^2+y^2)); width=50, height=20, title="$(n)-fold ripple")
+surfaceplot(-2:0.05:2, -2:0.05:2, (x, y) -> cos(n / 3 * sqrt(x^2 + y^2)) * exp(-0.3 * sqrt(x^2 + y^2)); width = 50, height = 20, title = "$(n)-fold ripple")
 
 # ╔═╡ 6e7bfb3a-23f5-499a-92b3-66207a5d898f
 function add_2(x)
-    return  x + 10
+    return x + 10
 end
 
 # ╔═╡ 4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
@@ -67,7 +75,7 @@ z = x * y
 a = x + y + z
 
 # ╔═╡ d8f99fd1-c355-4ea8-b049-fe02fef97966
-b = a ^ 2
+b = a^2
 
 # ╔═╡ bc4437d0-89f5-4862-8c07-32cf149cb296
 c = string("Result: ", b)
@@ -80,7 +88,7 @@ end
 
 # ╔═╡ 2c624f59-53d4-462a-8ed1-fb6a0d982c64
 begin
-    m = 2*l
+    m = 2 * l
     sleep(2)
 end
 
@@ -107,7 +115,7 @@ Normal
 # ╔═╡ bc9c0418-fe44-47a5-a7fa-c6c26c776d3c
 function strict_undef()
     println(i)  # Variable `i` is used before it is defined (JETLS lowering/undef-local-var)
-                # Severity: Warning (strict undef)
+    # Severity: Warning (strict undef)
     i = 1       # RelatedInformation: `i` is defined here
     return i
 end
@@ -120,9 +128,10 @@ end
 # ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 # ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
 # ╠═9c606da0-915a-4cfb-91fc-cdc93a454b8e
+# ╠═9458ff79-a67a-430e-9a62-27d704d3e575
 # ╟─0b7a9ca3-5430-4e6a-9894-cd2339447be5
 # ╟─1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
-# ╟─3d413fde-745c-4222-836a-24e5a6e7a481
+# ╠═3d413fde-745c-4222-836a-24e5a6e7a481
 # ╠═6e7bfb3a-23f5-499a-92b3-66207a5d898f
 # ╠═4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
 # ╠═16b64a46-205f-45e0-839a-79ae9d0398ce
