@@ -1169,6 +1169,42 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # --- Image interaction mode: pan/zoom focused image ---
+    if app.mode == :image_interact
+        nv = app.notebook_view
+        ow = nv.output_widgets[nv.focused_idx]
+        if evt.key == :escape || (evt.key == :char && evt.char == 'q')
+            app.mode = :normal
+            app.message = ""
+            return
+        elseif evt.key == :char && evt.char == 'r'
+            _reset_viewport!(ow)
+            app.message = "Image: reset"
+            return
+        elseif evt.key == :up
+            _pan!(ow, 0, -_PAN_STEP)
+            return
+        elseif evt.key == :down
+            _pan!(ow, 0, _PAN_STEP)
+            return
+        elseif evt.key == :left
+            _pan!(ow, -_PAN_STEP, 0)
+            return
+        elseif evt.key == :right
+            _pan!(ow, _PAN_STEP, 0)
+            return
+        elseif evt.key == :char && (evt.char == '+' || evt.char == '=')
+            _zoom_in!(ow)
+            app.message = "Image: zoom $(ow._img_zoom)x"
+            return
+        elseif evt.key == :char && evt.char == '-'
+            _zoom_out!(ow)
+            app.message = "Image: zoom $(ow._img_zoom)x"
+            return
+        end
+        return  # absorb all other keys in image interaction mode
+    end
+
     # --- REPL mode: forward keys to REPL panel ---
     if app.mode == :repl && app.repl_open
         # Ctrl+Q still quits
@@ -1375,8 +1411,17 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Enter: enter insert mode on focused cell
+    # Enter: enter image interaction mode if focused cell has image output, else insert mode
     if evt.key == :enter
+        nv = app.notebook_view
+        if !isempty(nv.output_widgets) && nv.focused_idx <= length(nv.output_widgets)
+            fc = nv.output_widgets[nv.focused_idx].cell
+            if _is_image_cell(fc)
+                app.mode = :image_interact
+                app.message = "Image: ←→↑↓ pan, +/- zoom, r reset, q/Esc exit"
+                return
+            end
+        end
         _enter_insert_mode!(app)
         return
     end

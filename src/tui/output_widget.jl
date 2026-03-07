@@ -27,9 +27,13 @@ mutable struct OutputWidget
     _cached_encoded_rect::Tachikoma.Rect                    # rect used for encoding
     _cached_encoded_image_hash::UInt64                      # objectid(image_data) when encoded
     _cached_encoded_protocol::Tachikoma.GraphicsProtocol    # protocol used for encoding
+    # Image interaction: viewport transform (pan/zoom)
+    _img_offset_x::Int
+    _img_offset_y::Int
+    _img_zoom::Float64
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, 0, 0, 1.0)
 
 """Format cell output as displayable lines.
 
@@ -653,6 +657,87 @@ function _render_markdown(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffe
     end
 end
 
+# --- Image interaction: viewport transform (pan/zoom) ---
+
+const _ZOOM_MIN = 1.0
+const _ZOOM_MAX = 8.0
+const _ZOOM_STEP = 0.5
+const _PAN_STEP = 4  # pixels per arrow key press
+
+"""Zoom in on the image."""
+function _zoom_in!(ow::OutputWidget)
+    ow._img_zoom = min(ow._img_zoom + _ZOOM_STEP, _ZOOM_MAX)
+    _invalidate_image_caches!(ow)
+end
+
+"""Zoom out on the image."""
+function _zoom_out!(ow::OutputWidget)
+    ow._img_zoom = max(ow._img_zoom - _ZOOM_STEP, _ZOOM_MIN)
+    if ow._img_zoom == _ZOOM_MIN
+        ow._img_offset_x = 0
+        ow._img_offset_y = 0
+    end
+    _invalidate_image_caches!(ow)
+end
+
+"""Pan the image by (dx, dy) pixels."""
+function _pan!(ow::OutputWidget, dx::Int, dy::Int)
+    ow._img_offset_x += dx
+    ow._img_offset_y += dy
+    _invalidate_image_caches!(ow)
+end
+
+"""Reset viewport to default (no zoom, no pan)."""
+function _reset_viewport!(ow::OutputWidget)
+    ow._img_offset_x = 0
+    ow._img_offset_y = 0
+    ow._img_zoom = 1.0
+    _invalidate_image_caches!(ow)
+end
+
+"""Invalidate PixelImage and encoded caches (needed after zoom/pan change)."""
+function _invalidate_image_caches!(ow::OutputWidget)
+    ow._cached_pixel_image = nothing
+    ow._cached_encoded_data = nothing
+end
+
+"""Check if a cell has an image output."""
+function _is_image_cell(cell::Cell)
+    (cell.output.output_type == :image_png || cell.output.output_type == :image_jpeg) &&
+    cell.output.image_data !== nothing
+end
+
+"""Apply viewport transform (zoom/pan) to a pixel matrix.
+
+Returns a cropped sub-matrix representing the visible region at the current zoom level.
+At zoom=1.0 with no offset, returns the original matrix unchanged.
+"""
+function _apply_viewport_transform(pixels::Matrix{Tachikoma.ColorRGB},
+                                    offset_x::Int, offset_y::Int, zoom::Float64)
+    zoom ≈ 1.0 && offset_x == 0 && offset_y == 0 && return pixels
+
+    src_h, src_w = size(pixels)
+    # Visible region size at current zoom
+    vis_w = max(1, round(Int, src_w / zoom))
+    vis_h = max(1, round(Int, src_h / zoom))
+
+    # Center point + offset
+    cx = src_w ÷ 2 + offset_x
+    cy = src_h ÷ 2 + offset_y
+
+    # Compute crop bounds
+    x1 = cx - vis_w ÷ 2
+    y1 = cy - vis_h ÷ 2
+
+    # Clamp to image bounds
+    x1 = clamp(x1, 1, max(1, src_w - vis_w + 1))
+    y1 = clamp(y1, 1, max(1, src_h - vis_h + 1))
+    x2 = min(x1 + vis_w - 1, src_w)
+    y2 = min(y1 + vis_h - 1, src_h)
+
+    pixels[y1:y2, x1:x2]
+end
+
 # --- Image rendering (PixelImage with decode cache) ---
 
 """Render image output via PixelImage (sixel/kitty raster or braille fallback).
@@ -699,7 +784,9 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
 
     # Only reload pixels when data changed or PixelImage was rebuilt
     if pixels_changed || needs_rebuild
-        Tachikoma.load_pixels!(pi, ow._cached_pixels)
+        visible = _apply_viewport_transform(ow._cached_pixels,
+                                             ow._img_offset_x, ow._img_offset_y, ow._img_zoom)
+        Tachikoma.load_pixels!(pi, visible)
     end
 
     # Render: prefer Frame (raster) when available, else Buffer (braille).

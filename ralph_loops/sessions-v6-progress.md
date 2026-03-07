@@ -48,3 +48,10 @@
 - Regression gate: 3570 tests pass (was 3553, +17 new)
 - Learning: SVG doesn't need graphics protocol — it's always renderable as text. Priority is: PNG/JPEG (with graphics) > SVG > text/plain > image fallback
 - Next: SESSIONS-9007 (image interaction mode)
+
+### 2026-03-07: SESSIONS-9007 [PASS]
+- Attempted: Add image interaction mode (pan/zoom for image outputs)
+- Result: Added :image_interact mode to SessionsApp. Enter on focused image cell enters mode. Arrow keys pan (_PAN_STEP=4 pixels), +/- zoom (1x-8x in 0.5 steps), r resets viewport, q/Escape exits. _apply_viewport_transform() crops source pixel matrix at zoom > 1x. Viewport state stored on OutputWidget (_img_offset_x, _img_offset_y, _img_zoom). Cache invalidation on zoom/pan change
+- Regression gate: 3597 tests pass (was 3570, +27 new)
+- Learning: Zoom works by cropping the source pixel matrix before load_pixels! — the PixelImage scaling handles the rest. At zoom=1.0, identity returns the original matrix (zero-cost). Pan offsets are clamped at image edges
+- v6 COMPLETE: All 7 stories done (P0-P3)

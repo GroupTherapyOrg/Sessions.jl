@@ -40,4 +40,5 @@ using Sessions
     include("test_resize_cache.jl")
     include("test_jpeg_decoder.jl")
     include("test_svg_fallback.jl")
+    include("test_image_interact.jl")
 end

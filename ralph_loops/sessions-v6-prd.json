@@ -27,7 +27,7 @@
       "id": "P3",
       "title": "Image Interaction",
       "description": "Zoom, pan, and save for image outputs",
-      "stories_done": 0,
+      "stories_done": 1,
       "stories_total": 1
     }
   ],
@@ -137,7 +137,8 @@
       "title": "Image interaction mode",
       "milestone": "P3",
       "priority": 3,
-      "status": "open",
+      "status": "done",
+      "completedNote": "Added :image_interact mode. Enter on focused image cell enters mode. Arrow keys pan, +/- zoom (1x-8x), r reset, q/Escape exit. Viewport transform via _apply_viewport_transform crops source pixels. 27 new tests, 3597 total.",
       "blockedBy": ["SESSIONS-9003", "SESSIONS-9004"],
       "description": "Add an image interaction mode triggered by a keybinding (e.g., Enter on focused image output). In this mode: arrow keys pan, +/- zoom, q exits. Maintain a viewport transform (offset_x, offset_y, zoom) that affects PixelImage rendering.",
       "acceptanceCriteria": [
