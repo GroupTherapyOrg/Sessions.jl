@@ -107,6 +107,89 @@ function _handle_auto_close!(editor::Tachikoma.CodeEditor, evt)
     false
 end
 
+# ── Bracket matching ────────────────────────────────────────────────
+
+const _OPEN_BRACKETS = Dict('(' => ')', '[' => ']', '{' => '}')
+const _CLOSE_BRACKETS_MAP = Dict(')' => '(', ']' => '[', '}' => '{')
+const _ALL_BRACKETS = Set(collect("()[]{}"))
+
+"""
+Find the matching bracket position for the bracket at (row, col) in editor lines.
+Returns (match_row, match_col) or nothing if no match found.
+col is 1-based (character index in line).
+"""
+function _find_matching_bracket(lines::Vector{Vector{Char}}, row::Int, col::Int)
+    (row < 1 || row > length(lines)) && return nothing
+    line = lines[row]
+    (col < 1 || col > length(line)) && return nothing
+    ch = line[col]
+    ch in _ALL_BRACKETS || return nothing
+
+    if haskey(_OPEN_BRACKETS, ch)
+        # Search forward for matching close
+        close = _OPEN_BRACKETS[ch]
+        depth = 1
+        r, c = row, col + 1
+        while r <= length(lines)
+            ln = lines[r]
+            while c <= length(ln)
+                if ln[c] == ch
+                    depth += 1
+                elseif ln[c] == close
+                    depth -= 1
+                    depth == 0 && return (r, c)
+                end
+                c += 1
+            end
+            r += 1
+            c = 1
+        end
+    elseif haskey(_CLOSE_BRACKETS_MAP, ch)
+        # Search backward for matching open
+        open = _CLOSE_BRACKETS_MAP[ch]
+        depth = 1
+        r, c = row, col - 1
+        while r >= 1
+            ln = lines[r]
+            while c >= 1
+                if ln[c] == ch
+                    depth += 1
+                elseif ln[c] == open
+                    depth -= 1
+                    depth == 0 && return (r, c)
+                end
+                c -= 1
+            end
+            r -= 1
+            r >= 1 && (c = length(lines[r]))
+        end
+    end
+    nothing
+end
+
+"""
+Get bracket match positions for cursor at (cursor_row, cursor_col) in editor.
+cursor_col is 0-based. Returns ((row1, col1), (row2, col2)) with 1-based cols, or nothing.
+Checks the char at cursor and the char after cursor (adjacent check).
+"""
+function _bracket_match_positions(lines::Vector{Vector{Char}}, cursor_row::Int, cursor_col::Int)
+    # Check char at cursor position (cursor_col is 0-based, lines are 1-based)
+    line = lines[cursor_row]
+    # Check char right of cursor (cursor_col+1 in 1-based)
+    col1 = cursor_col + 1
+    if col1 >= 1 && col1 <= length(line) && line[col1] in _ALL_BRACKETS
+        m = _find_matching_bracket(lines, cursor_row, col1)
+        m !== nothing && return ((cursor_row, col1), m)
+    end
+    # Check char left of cursor (cursor_col in 1-based)
+    col0 = cursor_col
+    if col0 >= 1 && col0 <= length(line) && line[col0] in _ALL_BRACKETS
+        m = _find_matching_bracket(lines, cursor_row, col0)
+        m !== nothing && return ((cursor_row, col0), m)
+    end
+    nothing
+end
+
 # ── CellWidget ───────────────────────────────────────────────────────
 
 """A cell widget combining a CodeEditor with state/output display."""
@@ -963,9 +1046,10 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
     # Running/queued left border indicator (Pluto-style colored left edge)
     _render_run_indicator!(cw.cell, border_rect, buf, surface_bg, tick)
 
-    # Selection highlight + cursor — only when cell is being edited
+    # Selection highlight + cursor + bracket match — only when cell is being edited
     if cw.editor.focused && !cw.cell.disabled
         _render_selection!(cw, inner, buf)
+        _render_bracket_match!(cw.editor, inner, buf)
         _render_cursor!(cw.editor, inner, buf, tick)
     end
 end
@@ -1138,6 +1222,29 @@ function _render_cursor!(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
     cursor_style = Tachikoma.Style(; fg=Theme.FG, bg=bg)
 
     Tachikoma.set_char!(buf, cx, cy, ch, cursor_style)
+end
+
+"""Highlight matching bracket pair in the editor area."""
+function _render_bracket_match!(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
+                                 buf::Tachikoma.Buffer)
+    positions = _bracket_match_positions(editor.lines, editor.cursor_row, editor.cursor_col)
+    positions === nothing && return
+
+    line_count = length(editor.lines)
+    gw = editor.show_line_numbers ? ndigits(max(line_count, 1)) + 1 : 0
+    match_bg = Theme.ACCENT_DIM
+
+    for (r, c) in positions
+        vis_row = r - editor.scroll_offset
+        (vis_row < 1 || vis_row > area.height) && continue
+        vis_col = c - 1 - editor.h_scroll  # c is 1-based, convert to 0-based screen offset
+        sy = area.y + vis_row - 1
+        sx = area.x + gw + vis_col
+        (sx < area.x + gw || sx > area.x + area.width - 1) && continue
+        ch = editor.lines[r][c]
+        bracket_style = Tachikoma.Style(; fg=Theme.FG, bg=match_bg, bold=true)
+        Tachikoma.set_char!(buf, sx, sy, ch, bracket_style)
+    end
 end
 
 """Render folded/disabled preview text."""

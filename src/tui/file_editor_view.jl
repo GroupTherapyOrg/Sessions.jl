@@ -184,8 +184,9 @@ function Tachikoma.render(fev::FileEditorView, rect::Tachikoma.Rect, buf::Tachik
         _render_fev_selection!(fev, editor_rect, buf)
     end
 
-    # Breathing cursor (matches CellWidget animation)
+    # Bracket match + cursor (matches CellWidget animation)
     if fev.editor.focused
+        _render_bracket_match!(fev.editor, editor_rect, buf)
         _render_cursor!(fev.editor, editor_rect, buf, Theme.tick())
     end
 
