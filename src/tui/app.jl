@@ -150,6 +150,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     scrollbar_h::Int
     # Rename prompt
     rename_prompt::Union{Nothing, RenamePrompt}
+    # Raster debounce: suppress sixel/kitty re-encoding during active interaction
+    last_interaction_time::Float64
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -483,7 +485,8 @@ function SessionsApp(nb::Notebook)
         nothing, 0, 0, 0.0, false,
         nothing,
         0, 0, 0,
-        nothing)
+        nothing,
+        0.0)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -508,7 +511,8 @@ function SessionsApp(fev::FileEditorView)
         nothing, 0, 0, 0.0, false,
         nothing,
         0, 0, 0,
-        nothing)
+        nothing,
+        0.0)
 end
 
 function SessionsApp(path::String)
@@ -773,11 +777,12 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.notebook_view.dirty = _is_notebook_dirty(app)
         app.notebook_view.cell_diags = app.cell_diagnostics_cache
         app.notebook_view.lsp_status = app.lsp.status
-        # Thread Frame for image rendering — suppress during insert mode (typing),
-        # slider drag, and active scrolling. Raster re-emission on every keystroke
-        # is the #1 cause of typing lag with visible images.
-        scrolling = app.notebook_view.last_scroll_time > 0.0 && (time() - app.notebook_view.last_scroll_time) < 0.3
-        suppress_raster = app.slider_drag || scrolling || app.mode == :insert
+        # Thread Frame for image rendering — suppress during ALL active interaction.
+        # Sixel/Kitty re-encoding is ~5-20ms per image. During interaction (typing,
+        # scrolling, arrow keys, clicks), suppress raster → braille fallback (fast).
+        # After 200ms of no events, allow raster → sharp images settle in.
+        interacting = app.last_interaction_time > 0.0 && (time() - app.last_interaction_time) < 0.2
+        suppress_raster = app.slider_drag || interacting
         app.notebook_view.current_frame = suppress_raster ? nothing : frame
         Tachikoma.render(app.notebook_view, editor_rect, buf)
         _update_and_render_progress!(app, editor_rect, buf)
@@ -1046,6 +1051,7 @@ function reset_to_folder!(app::SessionsApp, dir::String)
 end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
+    app.last_interaction_time = time()
     app.message = ""  # Clear status message on any key
     # Dismiss hover tooltip on any keypress
     app.hover_tooltip = nothing
@@ -1453,6 +1459,10 @@ end
 
 """Handle mouse events — Pluto-style click zones for cell controls."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
+    # Only debounce raster on actual interaction (clicks, scrolls, drags) — not hover
+    if evt.action != Tachikoma.mouse_move
+        app.last_interaction_time = time()
+    end
     nv = app.notebook_view
 
     # Clear status message on any click

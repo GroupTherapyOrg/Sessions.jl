@@ -531,19 +531,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
                 out_clip_y = max(y, visible_start)
                 out_clip_h = min(y + oh, visible_end + 1) - out_clip_y
                 out_rect = Tachikoma.Rect(cx, out_clip_y, cw_width, max(1, out_clip_h))
-                is_image = (ow.cell.output.output_type == :image_png || ow.cell.output.output_type == :image_jpeg) && ow.cell.output.image_data !== nothing
-                scrolling = nv.last_scroll_time > 0.0 && (time() - nv.last_scroll_time) < 0.3
-                # Images can't clip — only render when fully visible with margin, not scrolling
-                if is_image
-                    fully_visible = y >= visible_start + 1 && (y + oh) <= visible_end
-                    if !fully_visible || scrolling
-                        _render_image_scroll_placeholder(out_rect, buf)
-                    else
-                        Tachikoma.render(ow, out_rect, buf)
-                    end
-                else
-                    Tachikoma.render(ow, out_rect, buf)
-                end
+                # Render output (all types including images).
+                # Raster suppression is handled by app.jl's interaction debounce
+                # (sets current_frame=nothing during active interaction).
+                Tachikoma.render(ow, out_rect, buf)
             end
             y += oh
         end

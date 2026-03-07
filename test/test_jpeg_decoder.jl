@@ -120,8 +120,8 @@ import Tachikoma
 
         ow = Sessions.OutputWidget(cell)
         h = Sessions.output_height(ow)
-        # 200x100 image: aspect = 100/200 = 0.5, rows = 0.5*80/2 = 20
-        @test h == 20
+        # 200x100 image: aspect = 100/200 = 0.5, rows = 0.5*80/2 = 20, clamped to 16
+        @test h == 16
     end
 
     @testset "output_height falls back for corrupt JPEG" begin

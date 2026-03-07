@@ -69,9 +69,9 @@ end
     end
 
     @testset "image_output_height — wide image" begin
-        # 2:1 aspect ratio (wide) → fewer rows
-        h_wide = Sessions.image_output_height(200, 100, 80)
-        h_tall = Sessions.image_output_height(100, 200, 80)
+        # 4:1 aspect ratio (wide) → fewer rows than tall
+        h_wide = Sessions.image_output_height(400, 100, 80)
+        h_tall = Sessions.image_output_height(100, 400, 80)
         @test h_wide < h_tall  # wide image should use fewer rows than tall
     end
 

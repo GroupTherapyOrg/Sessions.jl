@@ -209,7 +209,7 @@ end
 const _IMAGE_OUTPUT_HEIGHT = 12
 const _IMAGE_HEIGHT_DEFAULT = 12
 const _IMAGE_HEIGHT_MIN = 4
-const _IMAGE_HEIGHT_MAX = 30
+const _IMAGE_HEIGHT_MAX = 16
 const _CELL_ASPECT_RATIO = 2.0  # terminal chars are ~2× taller than wide
 const _SVG_HEIGHT_MAX = 30  # max lines for SVG source display
 
@@ -792,53 +792,13 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     # Render: prefer Frame (raster) when available, else Buffer (braille).
     # current_frame is set to nothing during slider drag to avoid escape
     # sequence corruption from interleaving with mouse events.
+    # Always use Tachikoma.render() — it handles braille buffer background +
+    # gfx overlay + frame-to-frame sixel persistence correctly.
     frame = ow.current_frame
-    gfx = Tachikoma.GRAPHICS_PROTOCOL[]
-    if frame !== nothing && gfx != Tachikoma.gfx_none
-        # Layer 3: Encoded raster cache — reuse pre-encoded bytes when image+rect+protocol unchanged
-        _render_image_cached_raster!(ow, pi, rect, frame, gfx, img_id)
+    if frame !== nothing && Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
+        Tachikoma.render(pi, rect, frame)
     else
         Tachikoma.render(pi, rect, buf)
-    end
-end
-
-"""Render raster image with encoded byte caching.
-
-On cache hit (same image + same rect + same protocol), emits pre-encoded bytes
-directly via render_graphics! — skipping the expensive encode_sixel/encode_kitty call.
-"""
-function _render_image_cached_raster!(ow::OutputWidget, pi::Tachikoma.PixelImage,
-                                      rect::Tachikoma.Rect, frame::Tachikoma.Frame,
-                                      gfx::Tachikoma.GraphicsProtocol, img_id::UInt64)
-    # Check if we have a valid cache hit
-    cache_hit = ow._cached_encoded_data !== nothing &&
-                ow._cached_encoded_image_hash == img_id &&
-                ow._cached_encoded_rect.width == rect.width &&
-                ow._cached_encoded_rect.height == rect.height &&
-                ow._cached_encoded_protocol == gfx
-
-    if cache_hit
-        # Fast path: emit pre-encoded bytes directly
-        fmt = gfx == Tachikoma.gfx_kitty ? Tachikoma.gfx_fmt_kitty : Tachikoma.gfx_fmt_sixel
-        Tachikoma.render_graphics!(frame, ow._cached_encoded_data, rect;
-                                   pixels=ow._cached_pixels, format=fmt)
-    else
-        # Cold path: encode via PixelImage, then cache the result
-        if gfx == Tachikoma.gfx_kitty
-            data = Tachikoma.encode_kitty(pi.pixels; cols=rect.width, rows=rect.height)
-            fmt = Tachikoma.gfx_fmt_kitty
-        else
-            data = Tachikoma.encode_sixel(pi.pixels)
-            fmt = Tachikoma.gfx_fmt_sixel
-        end
-        if !isempty(data)
-            Tachikoma.render_graphics!(frame, data, rect;
-                                       pixels=ow._cached_pixels, format=fmt)
-            ow._cached_encoded_data = data
-            ow._cached_encoded_rect = rect
-            ow._cached_encoded_image_hash = img_id
-            ow._cached_encoded_protocol = gfx
-        end
     end
 end
 
