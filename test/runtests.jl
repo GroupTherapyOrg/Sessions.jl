@@ -19,4 +19,5 @@ using Sessions
     include("test_e2e.jl")
     include("test_pluto_compat.jl")
     include("test_formatting.jl")
+    include("test_inline_diagnostics.jl")
 end

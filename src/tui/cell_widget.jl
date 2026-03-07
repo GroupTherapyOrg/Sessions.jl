@@ -61,13 +61,14 @@ mutable struct CellWidget
     selected::Bool   # Whether this cell is part of multi-cell selection
     ellipsis_hovered::Bool  # Mouse hovering over ⋯ button
     selection::SelectionState
+    diagnostics::Vector{Diagnostic}  # inline diagnostics (populated from LSP/JET)
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
     editor.focused = false  # cursor hidden by default; app sets true only in insert mode
-    CellWidget(cell, editor, focused, false, false, false, false, SelectionState())
+    CellWidget(cell, editor, focused, false, false, false, false, SelectionState(), Diagnostic[])
 end
 
 """Sync editor text back to cell."""
@@ -134,7 +135,8 @@ function cell_height(cw::CellWidget; has_output::Bool=false)
         return 3 + 2 * vi
     end
     n_lines = count(==('\n'), cw.cell.code) + 1
-    n_lines + 2 + 2 * vi  # +2 for border, +2*vi for vertical padding
+    diag_lines = (cw.focused && !isempty(cw.diagnostics)) ? length(cw.diagnostics) : 0
+    n_lines + diag_lines + 2 + 2 * vi  # +2 for border, +2*vi for vertical padding
 end
 
 Tachikoma.focusable(::CellWidget) = true
@@ -769,6 +771,28 @@ function _shimmer_border_with_bg!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect,
     end
 end
 
+# ── Inline diagnostics rendering ─────────────────────────────────────
+
+"""Render inline diagnostic messages below code lines inside the cell border."""
+function _render_diagnostics!(cw::CellWidget, inner::Tachikoma.Rect, buf::Tachikoma.Buffer,
+                               surface_bg, n_code_lines::Int)
+    isempty(cw.diagnostics) && return
+    for (i, d) in enumerate(cw.diagnostics)
+        dy = inner.y + n_code_lines + i - 1
+        dy > inner.y + inner.height - 1 && break
+        fg = d.severity == :error ? Theme.RED :
+             d.severity == :warning ? Theme.ORANGE : Theme.CYAN
+        style = Tachikoma.Style(; fg, bg=surface_bg, italic=true)
+        prefix = "↳ "
+        msg = prefix * d.message
+        # Truncate to fit inner width
+        if length(msg) > inner.width
+            msg = msg[1:max(1, inner.width - 1)] * "…"
+        end
+        Tachikoma.set_string!(buf, inner.x, dy, msg, style)
+    end
+end
+
 # ── Main render ──────────────────────────────────────────────────────
 
 function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
@@ -828,6 +852,11 @@ function Tachikoma.render(cw::CellWidget, rect::Tachikoma.Rect, buf::Tachikoma.B
         end
         _render_code!(cw, inner, buf, surface_bg)
         _render_ellipsis_button!(border_rect, buf; hovered=cw.ellipsis_hovered)
+        # Inline diagnostics below code (only for focused cell)
+        if !isempty(cw.diagnostics)
+            n_code = count(==('\n'), cw.cell.code) + 1
+            _render_diagnostics!(cw, inner, buf, surface_bg, n_code)
+        end
 
     elseif cw.hovered && !cw.cell.disabled
         border_color = dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_BRIGHT

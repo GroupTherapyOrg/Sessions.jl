@@ -402,6 +402,9 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         cw = nv.cell_widgets[i]
         ow = nv.output_widgets[i]
 
+        # Sync diagnostics into cell widget for inline rendering
+        cw.diagnostics = get(nv.cell_diags, cw.cell.id, Diagnostic[])
+
         oh = output_height(ow)
         ch = cell_height(cw; has_output=oh > 0)
         is_focused = (i == nv.focused_idx)
