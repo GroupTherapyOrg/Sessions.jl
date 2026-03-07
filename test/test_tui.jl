@@ -710,16 +710,17 @@ using Markdown: @md_str
 
     # --- PixelImage placeholder tests ---
 
-    @testset "PixelImage — placeholder renders" begin
+    @testset "PixelImage — fallback renders for invalid PNG" begin
         cell = Cell("plot()")
         cell.state = cell_done
         cell.output.result = nothing
         cell.output.output_type = :image_png
+        cell.output.image_data = UInt8[0x00, 0x01, 0x02]  # invalid PNG
 
         ow = Sessions.OutputWidget(cell)
-        tb = TestBackend(60, 5)
+        tb = TestBackend(60, 14)
         Tachikoma.render_widget!(tb, ow)
-        @test Tachikoma.find_text(tb, "Image") !== nothing
+        @test Tachikoma.find_text(tb, "unable to decode") !== nothing
     end
 
     @testset "PixelImage — non-image output doesn't trigger image path" begin

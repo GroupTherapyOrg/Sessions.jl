@@ -7,9 +7,13 @@ mutable struct OutputWidget
     collapsed::Bool
     hovered::Bool      # mouse is hovering over this bond widget
     current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
+    # Image cache: avoid re-decoding PNG every frame
+    _cached_image_hash::UInt64
+    _cached_pixels::Union{Nothing, Matrix{Tachikoma.ColorRGB}}
+    _cached_pixel_image::Union{Nothing, Tachikoma.PixelImage}
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing)
 
 """Format cell output as displayable lines.
 
@@ -166,6 +170,9 @@ function _parse_sgr_params(s::AbstractString)::Vector{Int}
     codes
 end
 
+"""Default image output height in terminal rows."""
+const _IMAGE_OUTPUT_HEIGHT = 12
+
 """Height needed for output display (borderless — just the lines + 1 for top padding)."""
 function output_height(ow::OutputWidget)
     if ow.collapsed || ow.cell.state == cell_idle
@@ -178,6 +185,8 @@ function output_height(ow::OutputWidget)
         return _datatable_height(ow.cell)
     elseif otype == :markdown
         return _markdown_height(ow.cell)
+    elseif otype == :image_png && ow.cell.output.image_data !== nothing
+        return _IMAGE_OUTPUT_HEIGHT
     end
     lines = output_lines(ow.cell)
     isempty(lines) ? 0 : length(lines)
@@ -209,9 +218,9 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         return
     end
 
-    # Rich output: PixelImage placeholder for images
-    if otype == :image_png && !stale
-        _render_image_placeholder(ow.cell, rect, buf)
+    # Rich output: PixelImage for images
+    if otype == :image_png && !stale && ow.cell.output.image_data !== nothing
+        _render_image_output!(ow, rect, buf)
         return
     end
 
@@ -500,18 +509,51 @@ function _render_markdown(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffe
     end
 end
 
-# --- Image placeholder rendering ---
+# --- Image rendering (PixelImage with decode cache) ---
 
-"""Render a placeholder for image output (Kitty/sixel requires Frame, not Buffer)."""
-function _render_image_placeholder(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
-    block = Tachikoma.Block(; title="Image",
-        border_style=Tachikoma.Style(; fg=Theme.FG_MUTED))
-    Tachikoma.render(block, rect, buf)
+"""Render image output via PixelImage (sixel/kitty raster or braille fallback)."""
+function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    img_data = ow.cell.output.image_data
+    if img_data === nothing || isempty(img_data)
+        _render_image_fallback(rect, buf)
+        return
+    end
 
-    inner_y = rect.y + 1
-    inner_x = rect.x + 2
-    Tachikoma.set_string!(buf, inner_x, inner_y,
-        "[Image: use graphical terminal for pixel rendering]",
+    # Cache: only re-decode if image_data changed
+    h = hash(img_data)
+    if h != ow._cached_image_hash || ow._cached_pixels === nothing
+        pixels = decode_png(img_data)
+        if pixels === nothing
+            _render_image_fallback(rect, buf)
+            return
+        end
+        ow._cached_pixels = pixels
+        ow._cached_image_hash = h
+        ow._cached_pixel_image = nothing  # force PixelImage rebuild
+    end
+
+    # Create/resize PixelImage to fit the output rect
+    pi = ow._cached_pixel_image
+    if pi === nothing || pi.cells_w != rect.width || pi.cells_h != rect.height
+        pi = Tachikoma.PixelImage(rect.width, rect.height)
+        ow._cached_pixel_image = pi
+    end
+
+    Tachikoma.load_pixels!(pi, ow._cached_pixels)
+
+    # Render: prefer Frame (raster) when available, else Buffer (braille)
+    frame = ow.current_frame
+    if frame !== nothing && Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
+        Tachikoma.render(pi, rect, frame)
+    else
+        Tachikoma.render(pi, rect, buf)
+    end
+end
+
+"""Fallback text when image cannot be decoded."""
+function _render_image_fallback(rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    Tachikoma.set_string!(buf, rect.x + 2, rect.y,
+        "[Image: unable to decode PNG data]",
         Tachikoma.Style(; fg=Theme.FG_MUTED))
 end
 
