@@ -1152,6 +1152,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Ctrl+G: go to definition (LSP)
+    if evt.key == :ctrl && evt.char == 'g'
+        _goto_definition!(app)
+        return
+    end
+
     # Escape: insert → normal → panel (progressive de-focus)
     if evt.key == :escape
         if app.mode == :insert
@@ -1257,6 +1263,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     # Clear status message on any click
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
         app.message = ""
+    end
+
+    # Ctrl+Click: go to definition
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press && evt.ctrl
+        _goto_definition!(app)
+        return
     end
 
     # Clear hover states on every mouse move (specific handlers re-set them)
@@ -2414,6 +2426,70 @@ function _dismiss_hover!(app::SessionsApp)
     app.hover_tooltip = nothing
 end
 
+"""Go to definition at the current cursor position. Opens new tab for cross-file."""
+function _goto_definition!(app::SessionsApp)
+    editor = if app.editor_type == :file && app.file_editor_view !== nothing
+        app.file_editor_view.editor
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return
+        cw.editor
+    end
+    uri = if app.editor_type == :file && app.file_editor_view !== nothing
+        "file://" * abspath(app.file_editor_view.path)
+    else
+        notebook_uri(app.nb)
+    end
+    loc = lsp_definition_with_timeout!(app.lsp, uri, editor.cursor_row, editor.cursor_col; timeout=2.0)
+    if loc === nothing
+        app.message = "No definition found"
+        return
+    end
+    # Extract file path from URI
+    target_path = _uri_to_path(loc.uri)
+    current_path = if app.editor_type == :file && app.file_editor_view !== nothing
+        abspath(app.file_editor_view.path)
+    else
+        abspath(app.nb.path)
+    end
+    if target_path == current_path
+        # Same file — scroll to target line
+        editor.cursor_row = loc.line
+        editor.cursor_col = loc.col
+        if editor.cursor_row <= editor.scroll_offset
+            editor.scroll_offset = max(0, editor.cursor_row - 3)
+        end
+        app.message = "Jumped to line $(loc.line)"
+    else
+        # Cross-file — open in new tab, then jump to line
+        if isfile(target_path)
+            _open_in_tab!(app, target_path)
+            # After opening, set cursor to target position
+            ed = if app.editor_type == :file && app.file_editor_view !== nothing
+                app.file_editor_view.editor
+            else
+                cw2 = focused_widget(app.notebook_view)
+                cw2 !== nothing ? cw2.editor : nothing
+            end
+            if ed !== nothing
+                ed.cursor_row = min(loc.line, length(ed.lines))
+                ed.cursor_col = loc.col
+            end
+            app.message = "Opened $(basename(target_path)):$(loc.line)"
+        else
+            app.message = "File not found: $(target_path)"
+        end
+    end
+end
+
+"""Convert a file:// URI to an absolute path."""
+function _uri_to_path(uri::String)
+    if startswith(uri, "file://")
+        return uri[8:end]
+    end
+    uri
+end
+
 """Hit test a click against dropdown items. Returns item index or nothing."""
 function _dropdown_hit_test(dd::CellDropdown, click_x::Int, click_y::Int)
     # Dropdown layout: border row, then one row per item, then border row
@@ -2876,6 +2952,12 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     # Ctrl+Space: trigger completion popup
     if evt.key == :ctrl_space
         _trigger_completion!(app)
+        return
+    end
+
+    # Ctrl+G: go to definition
+    if evt.key == :ctrl && evt.char == 'g'
+        _goto_definition!(app)
         return
     end
 

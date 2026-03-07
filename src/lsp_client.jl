@@ -511,12 +511,58 @@ end
 
 # ── Go-to-Definition ───────────────────────────────────────────────
 
+"""A location result from go-to-definition."""
+struct LspLocation
+    uri::String
+    line::Int       # 1-based
+    col::Int        # 0-based
+end
+
 """Request go-to-definition at a position."""
 function lsp_definition!(client::LspClient, uri::String, line::Int, col::Int)::Channel{Any}
     _send_request!(client, "textDocument/definition", Dict{String,Any}(
         "textDocument" => Dict{String,Any}("uri" => uri),
         "position" => Dict{String,Any}("line" => line - 1, "character" => col)
     ))
+end
+
+"""Parse a definition response into an LspLocation. Returns nothing on failure."""
+function parse_definition(response)::Union{Nothing, LspLocation}
+    # Response can be Location, Location[], or LocationLink[]
+    loc = if response isa Dict && haskey(response, "uri")
+        response
+    elseif response isa Vector && !isempty(response)
+        first(response)
+    else
+        return nothing
+    end
+    !(loc isa Dict) && return nothing
+    # LocationLink has targetUri + targetRange; Location has uri + range
+    uri = get(loc, "targetUri", get(loc, "uri", ""))
+    isempty(uri) && return nothing
+    range = get(loc, "targetRange", get(loc, "range", Dict()))
+    start = get(range, "start", Dict())
+    line = get(start, "line", 0) + 1  # convert 0-based to 1-based
+    col = get(start, "character", 0)
+    LspLocation(uri, line, col)
+end
+
+"""
+Request go-to-definition with timeout. Returns LspLocation or nothing.
+"""
+function lsp_definition_with_timeout!(client::LspClient, uri::String, line::Int, col::Int;
+                                       timeout::Float64=2.0)::Union{Nothing, LspLocation}
+    client.status != lsp_ready && return nothing
+    ch = lsp_definition!(client, uri, line, col)
+    result = timedwait(() -> isready(ch), timeout)
+    if result == :ok
+        response = take!(ch)
+        if response isa Dict && haskey(response, "error")
+            return nothing
+        end
+        return parse_definition(response)
+    end
+    nothing
 end
 
 # ── Minimal JSON Serialization ─────────────────────────────────────

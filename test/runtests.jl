@@ -27,4 +27,5 @@ using Sessions
     include("test_lsp_completion.jl")
     include("test_completion_popup.jl")
     include("test_hover.jl")
+    include("test_goto_definition.jl")
 end
