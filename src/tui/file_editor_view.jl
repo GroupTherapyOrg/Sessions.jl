@@ -184,6 +184,11 @@ function Tachikoma.render(fev::FileEditorView, rect::Tachikoma.Rect, buf::Tachik
         _render_fev_selection!(fev, editor_rect, buf)
     end
 
+    # Breathing cursor (matches CellWidget animation)
+    if fev.editor.focused
+        _render_cursor!(fev.editor, editor_rect, buf, Theme.tick())
+    end
+
     # Diagnostic gutter markers (colored dots on lines with issues)
     if !isempty(fev.diagnostics)
         scroll = fev.editor.scroll_offset

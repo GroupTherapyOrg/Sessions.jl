@@ -243,4 +243,36 @@
         @test fev.editor.cursor_col == 0
         rm(path; force=true)
     end
+
+    @testset "Breathing cursor renders without crash" begin
+        path = tempname() * ".jl"
+        write(path, "x = 1\ny = 2\n")
+        fev = Sessions.FileEditorView(path)
+        app = Sessions.SessionsApp(fev)
+
+        # Render should include breathing cursor (editor.focused = true in insert mode)
+        tb = render_fev_app(app; height=20)
+        # Just verify it doesn't crash and content is visible
+        @test Tachikoma.find_text(tb, "x = 1") !== nothing
+        @test Tachikoma.find_text(tb, "y = 2") !== nothing
+        rm(path; force=true)
+    end
+
+    @testset "Selection rendering visible in file editor" begin
+        path = tempname() * ".jl"
+        write(path, "hello world\n")
+        fev = Sessions.FileEditorView(path)
+        app = Sessions.SessionsApp(fev)
+
+        # Set up selection
+        fev.selection.active = true
+        fev.selection.anchor_row = 1
+        fev.selection.anchor_col = 0
+        fev.editor.cursor_col = 5
+
+        # Should render without crash
+        tb = render_fev_app(app; height=20)
+        @test Tachikoma.find_text(tb, "hello") !== nothing
+        rm(path; force=true)
+    end
 end
