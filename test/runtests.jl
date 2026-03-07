@@ -25,4 +25,5 @@ using Sessions
     include("test_auto_close_brackets.jl")
     include("test_bracket_matching.jl")
     include("test_lsp_completion.jl")
+    include("test_completion_popup.jl")
 end

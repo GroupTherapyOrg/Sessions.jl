@@ -23,6 +23,49 @@ mutable struct ConfirmDialog
     no_hovered::Bool
 end
 
+"""Floating completion popup (triggered by Ctrl+Space)."""
+mutable struct CompletionPopup
+    items::Vector{LspCompletionItem}
+    x::Int                  # screen x of popup top-left
+    y::Int                  # screen y of popup top-left
+    selected_idx::Int       # 1-based index of highlighted item (0 if empty)
+end
+
+const COMPLETION_MAX_VISIBLE = 10
+
+"""Return icon character for a completion kind."""
+function _completion_kind_icon(kind::Symbol)
+    kind == :function    && return "ƒ"
+    kind == :method      && return "ƒ"
+    kind == :variable    && return "v"
+    kind == :module      && return "M"
+    kind == :keyword     && return "k"
+    kind == :constant    && return "c"
+    kind == :field       && return "□"
+    kind == :class       && return "T"
+    kind == :constructor && return "T"
+    kind == :property    && return "□"
+    kind == :interface   && return "I"
+    kind == :text        && return "·"
+    return "·"
+end
+
+"""Return the number of visible items in the popup (clamped to max)."""
+_popup_visible_count(popup::CompletionPopup) = min(length(popup.items), COMPLETION_MAX_VISIBLE)
+
+"""Extract the word (identifier) before the cursor position."""
+function _completion_prefix(lines::Vector{Vector{Char}}, row::Int, col::Int)
+    (row < 1 || row > length(lines) || col <= 0) && return ""
+    line = lines[row]
+    start = col
+    while start > 0 && start <= length(line)
+        c = line[start]
+        (isletter(c) || isdigit(c) || c == '_' || c == '!') || break
+        start -= 1
+    end
+    start < col ? String(line[start+1:col]) : ""
+end
+
 """Sessions notebook TUI application model."""
 mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
@@ -38,6 +81,7 @@ mutable struct SessionsApp <: Tachikoma.Model
     message::String     # Status message (temporary)
     cell_dropdown::Union{Nothing, CellDropdown}
     confirm_dialog::Union{Nothing, ConfirmDialog}
+    completion_popup::Union{Nothing, CompletionPopup}
     undo_buffer::Vector{DeletedCell}
     sidebar_open::Bool         # whether file panel is visible
     sidebar_rect::Tachikoma.Rect   # cached for mouse hit testing
@@ -112,7 +156,7 @@ function _save_to_tab!(app::SessionsApp)
     tab.progress_recently = app.progress_recently
     tab.progress_done_tick = app.progress_done_tick
     # Persist mode (collapse transient modes to :normal)
-    tab.mode = (app.mode == :dropdown || app.mode == :confirm) ? :normal : app.mode
+    tab.mode = (app.mode in (:dropdown, :confirm, :completion)) ? :normal : app.mode
 end
 
 """Load state from a tab into the app fields."""
@@ -392,7 +436,7 @@ function SessionsApp(nb::Notebook)
     tab.workspace = ws
     tab.notebook_view = nv
     tab.last_disk_nb = snapshot
-    SessionsApp(nb, ws, nv, nothing, :notebook, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing,
+    SessionsApp(nb, ws, nv, nothing, :notebook, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
@@ -413,7 +457,7 @@ function SessionsApp(fev::FileEditorView)
     tab.nb = nb
     tab.workspace = ws
     tab.notebook_view = nv
-    SessionsApp(nb, ws, nv, fev, :file, fp, ab, Tachikoma.TaskQueue(), :insert, false, "", nothing, nothing,
+    SessionsApp(nb, ws, nv, fev, :file, fp, ab, Tachikoma.TaskQueue(), :insert, false, "", nothing, nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
@@ -687,6 +731,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         _render_dropdown!(app.cell_dropdown, buf, area)
     end
 
+    # Completion popup overlay
+    if app.completion_popup !== nothing
+        _render_completion_popup!(app.completion_popup, buf, area)
+    end
+
     # Confirm dialog overlay (centered, with dimmed backdrop)
     if app.confirm_dialog !== nothing
         _render_confirm_dialog!(app.confirm_dialog, buf, area)
@@ -925,6 +974,33 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Completion popup mode — Up/Down navigate, Enter accepts, Escape/other dismisses
+    if app.mode == :completion && app.completion_popup !== nothing
+        popup = app.completion_popup
+        if evt.key == :escape
+            _close_completion!(app)
+            return
+        elseif evt.key == :down
+            n = length(popup.items)
+            popup.selected_idx = popup.selected_idx >= n ? 1 : popup.selected_idx + 1
+            return
+        elseif evt.key == :up
+            n = length(popup.items)
+            popup.selected_idx = popup.selected_idx <= 1 ? n : popup.selected_idx - 1
+            return
+        elseif evt.key == :enter
+            if popup.selected_idx >= 1 && popup.selected_idx <= length(popup.items)
+                _accept_completion!(app, popup.items[popup.selected_idx])
+            end
+            _close_completion!(app)
+            return
+        else
+            # Any other key dismisses and gets forwarded
+            _close_completion!(app)
+            # Fall through to normal key handling
+        end
+    end
+
     # --- REPL mode: forward keys to REPL panel ---
     if app.mode == :repl && app.repl_open
         # Ctrl+Q still quits
@@ -1053,6 +1129,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
                 _enter_panel_mode!(app)
             end
         end
+        return
+    end
+
+    # Ctrl+Space: trigger completion popup (insert mode only)
+    if evt.key == :ctrl_space && app.mode == :insert
+        _trigger_completion!(app)
         return
     end
 
@@ -2187,6 +2269,73 @@ function close_dropdown!(app::SessionsApp)
     app.mode = :normal
 end
 
+"""Open completion popup with items. No-op if items are empty."""
+function _open_completion!(app::SessionsApp, items::Vector{LspCompletionItem})
+    isempty(items) && return
+    app.completion_popup = CompletionPopup(items, 0, 0, 1)
+    app.mode = :completion
+end
+
+"""Close completion popup, restoring insert mode."""
+function _close_completion!(app::SessionsApp)
+    app.completion_popup = nothing
+    app.mode = :insert
+end
+
+"""Accept a completion item — replace the prefix before cursor with the completion label."""
+function _accept_completion!(app::SessionsApp, item::LspCompletionItem)
+    editor = if app.editor_type == :file && app.file_editor_view !== nothing
+        app.file_editor_view.editor
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return
+        cw.editor
+    end
+    prefix = _completion_prefix(editor.lines, editor.cursor_row, editor.cursor_col)
+    label = item.label
+    # Delete prefix characters backward
+    prefix_len = length(prefix)
+    if prefix_len > 0
+        line = editor.lines[editor.cursor_row]
+        start_col = editor.cursor_col - prefix_len
+        deleteat!(line, start_col+1:editor.cursor_col)
+        editor.cursor_col = start_col
+        Tachikoma._mark_dirty!(editor, editor.cursor_row)
+    end
+    # Insert the completion label
+    _insert_text!(editor, label)
+    # Sync cell if in notebook mode
+    if app.editor_type == :notebook
+        cw = focused_widget(app.notebook_view)
+        cw !== nothing && sync_to_cell!(cw)
+    elseif app.file_editor_view !== nothing
+        app.file_editor_view.dirty = true
+    end
+end
+
+"""Trigger completion request — queries LSP or uses cached completions."""
+function _trigger_completion!(app::SessionsApp)
+    editor = if app.editor_type == :file && app.file_editor_view !== nothing
+        app.file_editor_view.editor
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return
+        cw.editor
+    end
+    uri = if app.editor_type == :file && app.file_editor_view !== nothing
+        "file://" * abspath(app.file_editor_view.path)
+    else
+        notebook_uri(app.nb)
+    end
+    # Try LSP completion (with timeout)
+    items = lsp_complete_with_timeout!(app.lsp, uri, editor.cursor_row, editor.cursor_col; timeout=1.0)
+    if isempty(items)
+        app.message = "No completions"
+        return
+    end
+    _open_completion!(app, items)
+end
+
 """Hit test a click against dropdown items. Returns item index or nothing."""
 function _dropdown_hit_test(dd::CellDropdown, click_x::Int, click_y::Int)
     # Dropdown layout: border row, then one row per item, then border row
@@ -2336,6 +2485,73 @@ function _render_dropdown!(dd::CellDropdown, buf::Tachikoma.Buffer, area::Tachik
     # Bottom border (rounded)
     bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
     Tachikoma.set_string!(buf, x, y + length(dd.items) + 1, bot, border_style)
+end
+
+# --- Completion popup rendering ---
+
+function _render_completion_popup!(popup::CompletionPopup, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    isempty(popup.items) && return
+    n_visible = _popup_visible_count(popup)
+    # Compute scroll offset for long lists
+    scroll = 0
+    if popup.selected_idx > n_visible
+        scroll = popup.selected_idx - n_visible
+    end
+
+    # Calculate popup width: icon(2) + label + detail padding
+    max_label_w = maximum(length(item.label) for item in popup.items)
+    max_detail_w = maximum(length(item.detail) for item in popup.items)
+    content_w = 3 + max_label_w + (max_detail_w > 0 ? min(max_detail_w, 20) + 1 : 0)
+    w = min(max(content_w + 2, 20), area.width - 2)  # +2 for borders
+    h = n_visible + 2  # +2 for borders
+
+    # Clamp position
+    x = min(popup.x, area.x + area.width - w)
+    x = max(x, area.x)
+    y = min(popup.y, area.y + area.height - h)
+    y = max(y, area.y)
+
+    box = Theme.BOX
+    bg = Theme.DROPDOWN_BG
+    border_style = Tachikoma.Style(; fg=Theme.DROPDOWN_BORDER_FG, bg)
+
+    # Top border
+    top = string(box.tl) * repeat(string(box.h), w - 2) * string(box.tr)
+    Tachikoma.set_string!(buf, x, y, top, border_style)
+
+    # Items
+    for vi in 1:n_visible
+        idx = scroll + vi
+        idx > length(popup.items) && break
+        item = popup.items[idx]
+        iy = y + vi
+        is_selected = (idx == popup.selected_idx)
+        item_bg = is_selected ? Theme.SELECTION_BG : bg
+        item_fg = is_selected ? Theme.FG : Theme.DROPDOWN_ITEM_FG
+        icon_fg = is_selected ? Theme.ACCENT : Theme.FG_MUTED
+
+        Tachikoma.set_char!(buf, x, iy, box.v, border_style)
+        icon = _completion_kind_icon(item.kind)
+        label = item.label
+        inner_w = w - 2
+        # Render icon part: " icon"
+        Tachikoma.set_string!(buf, x + 1, iy, " ", Tachikoma.Style(; fg=icon_fg, bg=item_bg))
+        Tachikoma.set_string!(buf, x + 2, iy, icon, Tachikoma.Style(; fg=icon_fg, bg=item_bg))
+        # Render label part: " label" + padding
+        label_area = inner_w - 3  # subtract space + icon + space
+        display_label = " " * label
+        if length(display_label) > label_area
+            display_label = first(display_label, label_area)
+        else
+            display_label = display_label * " " ^ (label_area - length(display_label))
+        end
+        Tachikoma.set_string!(buf, x + 3, iy, display_label, Tachikoma.Style(; fg=item_fg, bg=item_bg))
+        Tachikoma.set_char!(buf, x + w - 1, iy, box.v, border_style)
+    end
+
+    # Bottom border
+    bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
+    Tachikoma.set_string!(buf, x, y + n_visible + 1, bot, border_style)
 end
 
 # --- Confirm dialog (centered modal) ---
@@ -2522,6 +2738,12 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     # Ctrl+B: toggle sidebar
     if evt.key == :ctrl && evt.char == 'b'
         app.sidebar_open = !app.sidebar_open
+        return
+    end
+
+    # Ctrl+Space: trigger completion popup
+    if evt.key == :ctrl_space
+        _trigger_completion!(app)
         return
     end
 
