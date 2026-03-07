@@ -24,13 +24,14 @@ mutable struct NotebookView
     cell_diags::Dict{UUID, Vector{Diagnostic}}  # JET/LSP diagnostics per cell
     lsp_status::LspStatus          # LSP server status for indicator
     current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
+    last_scroll_time::Float64  # time() of last scroll event — skip image rendering during active scroll
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0)
 end
 
 """Rebuild widgets when cells change."""
@@ -493,7 +494,19 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             ow.current_frame = nv.current_frame  # thread Frame for image rendering
             if y + oh > visible_start && y <= visible_end
                 out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
-                Tachikoma.render(ow, out_rect, buf)
+                is_image = ow.cell.output.output_type == :image_png && ow.cell.output.image_data !== nothing
+                scrolling = nv.last_scroll_time > 0.0 && (time() - nv.last_scroll_time) < 0.3
+                # Images can't clip — only render when fully visible with margin, not scrolling
+                if is_image
+                    fully_visible = y >= visible_start + 1 && (y + oh) <= visible_end
+                    if !fully_visible || scrolling
+                        _render_image_scroll_placeholder(out_rect, buf)
+                    else
+                        Tachikoma.render(ow, out_rect, buf)
+                    end
+                else
+                    Tachikoma.render(ow, out_rect, buf)
+                end
             end
             y += oh
         end
@@ -630,6 +643,17 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         if lsp_x + length(lsp_label) < save_x
             Tachikoma.set_string!(buf, lsp_x, top_border_y, lsp_label,
                 Tachikoma.Style(; fg=lsp_fg, bg=Theme.CANVAS_BG))
+        end
+    end
+end
+
+"""Lightweight placeholder for image output during scroll/clip — just blank space."""
+function _render_image_scroll_placeholder(rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    style = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG)
+    for row in 0:(rect.height - 1)
+        ry = rect.y + row
+        for col in 0:(rect.width - 1)
+            Tachikoma.set_char!(buf, rect.x + col, ry, ' ', style)
         end
     end
 end

@@ -11,9 +11,12 @@ mutable struct OutputWidget
     _cached_image_hash::UInt64
     _cached_pixels::Union{Nothing, Matrix{Tachikoma.ColorRGB}}
     _cached_pixel_image::Union{Nothing, Tachikoma.PixelImage}
+    # DataTable cache: persist interactive state (scroll, selection, sort) across frames
+    _cached_datatable::Union{Nothing, Tachikoma.DataTable}
+    _cached_datatable_id::UInt64  # objectid of the result that produced the cached table
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0))
 
 """Format cell output as displayable lines.
 
@@ -208,7 +211,7 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
 
     # Rich output: DataTable for tabular data
     if otype == :dataframe && ow.cell.output.result !== nothing && !stale
-        _render_datatable(ow.cell, rect, buf)
+        _render_datatable(ow, rect, buf)
         return
     end
 
@@ -219,7 +222,9 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
     end
 
     # Rich output: PixelImage for images
-    if otype == :image_png && !stale && ow.cell.output.image_data !== nothing
+    # Only render when cell is done (not running/queued) to avoid escape sequence corruption
+    if otype == :image_png && !stale && ow.cell.output.image_data !== nothing &&
+       ow.cell.state == cell_done
         _render_image_output!(ow, rect, buf)
         return
     end
@@ -276,26 +281,36 @@ function _table_nrows(value)
     end
 end
 
-"""Render a DataTable for tabular output."""
-function _render_datatable(cell::Cell, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
-    result = cell.output.result
+"""Render a DataTable for tabular output (uses OutputWidget for state caching)."""
+function _render_datatable(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    result = ow.cell.output.result
     result === nothing && return
 
-    # Build DataTable from data
-    dt = _make_datatable(result)
-    dt === nothing && return
+    # Cache DataTable so interactive state (scroll, selection, sort) persists across frames
+    result_id = objectid(result)
+    if ow._cached_datatable === nothing || ow._cached_datatable_id != result_id
+        dt = _make_datatable(result)
+        dt === nothing && return
+        ow._cached_datatable = dt
+        ow._cached_datatable_id = result_id
+    end
 
-    Tachikoma.render(dt, rect, buf)
+    Tachikoma.render(ow._cached_datatable, rect, buf)
 end
 
 """Create a Tachikoma DataTable from a table-like value."""
 function _make_datatable(value)
+    nrows = _table_nrows(value)
+    title = "Table ($nrows rows)"
+
     # Handle Vector{<:NamedTuple} directly
     if value isa AbstractVector{<:NamedTuple} && !isempty(value)
         headers = String[string(k) for k in keys(first(value))]
         data = [Any[row[k] for row in value] for k in keys(first(value))]
         return Tachikoma.DataTable(headers, data;
-            block=Tachikoma.Block(; title="Table"))
+            selected=1, show_scrollbar=true,
+            detail_fn=Tachikoma.datatable_detail,
+            block=Tachikoma.Block(; title=title))
     end
 
     # Try Tables.jl interface via loaded modules
@@ -308,7 +323,9 @@ function _make_datatable(value)
             headers = String[string(n) for n in names]
             data = [Any[v for v in tables_mod.getcolumn(cols, n)] for n in names]
             return Tachikoma.DataTable(headers, data;
-                block=Tachikoma.Block(; title="Table"))
+                selected=1, show_scrollbar=true,
+                detail_fn=Tachikoma.datatable_detail,
+                block=Tachikoma.Block(; title=title))
         catch
         end
     end
@@ -519,29 +536,36 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         return
     end
 
-    # Cache: only re-decode if image_data changed
-    h = hash(img_data)
-    if h != ow._cached_image_hash || ow._cached_pixels === nothing
+    # Cache: only re-decode if image_data is a different object (O(1) pointer check)
+    img_id = objectid(img_data)
+    pixels_changed = img_id != ow._cached_image_hash || ow._cached_pixels === nothing
+    if pixels_changed
         pixels = decode_png(img_data)
         if pixels === nothing
             _render_image_fallback(rect, buf)
             return
         end
         ow._cached_pixels = pixels
-        ow._cached_image_hash = h
+        ow._cached_image_hash = img_id
         ow._cached_pixel_image = nothing  # force PixelImage rebuild
     end
 
     # Create/resize PixelImage to fit the output rect
     pi = ow._cached_pixel_image
-    if pi === nothing || pi.cells_w != rect.width || pi.cells_h != rect.height
+    needs_rebuild = pi === nothing || pi.cells_w != rect.width || pi.cells_h != rect.height
+    if needs_rebuild
         pi = Tachikoma.PixelImage(rect.width, rect.height)
         ow._cached_pixel_image = pi
     end
 
-    Tachikoma.load_pixels!(pi, ow._cached_pixels)
+    # Only reload pixels when data changed or PixelImage was rebuilt
+    if pixels_changed || needs_rebuild
+        Tachikoma.load_pixels!(pi, ow._cached_pixels)
+    end
 
-    # Render: prefer Frame (raster) when available, else Buffer (braille)
+    # Render: prefer Frame (raster) when available, else Buffer (braille).
+    # current_frame is set to nothing during slider drag to avoid escape
+    # sequence corruption from interleaving with mouse events.
     frame = ow.current_frame
     if frame !== nothing && Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
         Tachikoma.render(pi, rect, frame)

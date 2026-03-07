@@ -193,7 +193,7 @@ function _save_to_tab!(app::SessionsApp)
     tab.progress_recently = app.progress_recently
     tab.progress_done_tick = app.progress_done_tick
     # Persist mode (collapse transient modes to :normal)
-    tab.mode = (app.mode in (:dropdown, :confirm, :completion, :rename)) ? :normal : app.mode
+    tab.mode = (app.mode in (:dropdown, :confirm, :completion, :rename, :datatable)) ? :normal : app.mode
 end
 
 """Load state from a tab into the app fields."""
@@ -627,8 +627,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     end
 
     # Debounced hover: after HOVER_DEBOUNCE of mouse stillness, request hover info
+    # Only in file editor mode — notebook cells are virtual documents where
+    # screen position doesn't map cleanly to LSP document positions
     if app.hover_still_since > 0.0 && !app.hover_requested && app.lsp.status == lsp_ready &&
-       app.hover_tooltip === nothing
+       app.hover_tooltip === nothing && app.mode in (:file_editor, :file_editor_insert)
         elapsed = time() - app.hover_still_since
         if elapsed >= HOVER_DEBOUNCE
             app.hover_requested = true
@@ -771,7 +773,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.notebook_view.dirty = _is_notebook_dirty(app)
         app.notebook_view.cell_diags = app.cell_diagnostics_cache
         app.notebook_view.lsp_status = app.lsp.status
-        app.notebook_view.current_frame = frame  # thread Frame for image rendering
+        # Thread Frame for image rendering — suppress during slider drag and
+        # active scrolling to prevent Sixel/Kitty escape sequence artifacts
+        scrolling = app.notebook_view.last_scroll_time > 0.0 && (time() - app.notebook_view.last_scroll_time) < 0.3
+        app.notebook_view.current_frame = (app.slider_drag || scrolling) ? nothing : frame
         Tachikoma.render(app.notebook_view, editor_rect, buf)
         _update_and_render_progress!(app, editor_rect, buf)
         # Scrollbar for notebook
@@ -1141,6 +1146,27 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # --- DataTable mode: forward keys to focused datatable ---
+    if app.mode == :datatable
+        dt = _focused_datatable(app)
+        if dt !== nothing
+            if evt.key == :escape
+                app.mode = :normal
+                return
+            end
+            # Number keys sort by column
+            if evt.key == :char && '1' <= evt.char <= '9'
+                col_num = Int(evt.char) - Int('0')
+                col_num <= length(dt.columns) && Tachikoma.sort_by!(dt, col_num)
+                return
+            end
+            Tachikoma.handle_key!(dt, evt)
+        else
+            app.mode = :normal
+        end
+        return
+    end
+
     # --- REPL mode: forward keys to REPL panel ---
     if app.mode == :repl && app.repl_open
         # Ctrl+Q still quits
@@ -1413,6 +1439,13 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             nv.scroll_offset = clamp(round(Int, relative * max_scroll), 0, max_scroll)
         end
         return
+    end
+
+    # Dismiss hover on scroll — content under cursor changes
+    if evt.button in (Tachikoma.mouse_scroll_up, Tachikoma.mouse_scroll_down)
+        app.hover_tooltip = nothing
+        app.hover_still_since = 0.0
+        app.hover_requested = false
     end
 
     # Clear hover states on every mouse move (specific handlers re-set them)
@@ -1699,6 +1732,20 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
+        # Check if click is on a DataTable output area — enter datatable mode
+        dt_idx = _datatable_cell_at_y(nv, evt.y)
+        if dt_idx > 0
+            dt = _datatable_at_idx(app, dt_idx)
+            if dt !== nothing
+                focus_cell!(nv, dt_idx)
+                _exit_insert_mode!(app)
+                app.mode = :datatable
+                # Forward click to DataTable's mouse handler
+                Tachikoma.handle_mouse!(dt, evt)
+                return
+            end
+        end
+
         # Cell click — only enter insert mode if click is inside the cell body
         idx = cell_at_y(nv, evt.y)
         if idx !== nothing
@@ -1796,18 +1843,32 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
+    # DataTable mode: forward scroll and click events to the DataTable
+    if app.mode == :datatable && in_notebook
+        dt = _focused_datatable(app)
+        if dt !== nothing
+            if evt.button in (Tachikoma.mouse_scroll_up, Tachikoma.mouse_scroll_down) ||
+               (evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press)
+                Tachikoma.handle_mouse!(dt, evt)
+                return
+            end
+        end
+    end
+
     if in_notebook && evt.button == Tachikoma.mouse_scroll_down
         vi = Theme.CELL_V_INSET
         inner_h = max(1, nb_vp.height - 2 * vi - 2)  # subtract inset + border
         max_scroll = max(0, content_height(nv) - inner_h)
         nv.scroll_offset = min(nv.scroll_offset + 2, max_scroll)
         nv.user_scrolling = true
+        nv.last_scroll_time = time()
         return
     end
 
     if in_notebook && evt.button == Tachikoma.mouse_scroll_up
         nv.scroll_offset = max(nv.scroll_offset - 2, 0)
         nv.user_scrolling = true
+        nv.last_scroll_time = time()
         return
     end
 
@@ -2181,6 +2242,30 @@ function _bond_cell_at_y(nv::NotebookView, screen_y::Int)::Int
             cell = nv.cell_widgets[i].cell
             cell.output.output_type == :bond || return 0
             cell.output.result isa Bond || return 0
+            return i
+        end
+        y += oh
+        y += Theme.CELL_GAP
+    end
+    0
+end
+
+"""Find which cell index has a DataTable output at the given screen y. Returns cell_index or 0."""
+function _datatable_cell_at_y(nv::NotebookView, screen_y::Int)::Int
+    isempty(nv.cell_widgets) && return 0
+    vp = nv.viewport
+    vi = Theme.CELL_V_INSET
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ow = nv.output_widgets[i]
+        oh = output_height(ow)
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        y += ch
+        if oh > 0 && content_y >= y && content_y < y + oh
+            cell = nv.cell_widgets[i].cell
+            cell.output.output_type == :dataframe || return 0
             return i
         end
         y += oh
@@ -2568,6 +2653,23 @@ end
 """Dismiss hover tooltip."""
 function _dismiss_hover!(app::SessionsApp)
     app.hover_tooltip = nothing
+end
+
+"""Get the DataTable from the focused cell's output widget (if it has one)."""
+function _focused_datatable(app::SessionsApp)
+    nv = app.notebook_view
+    idx = nv.focused_idx
+    (idx < 1 || idx > length(nv.output_widgets)) && return nothing
+    ow = nv.output_widgets[idx]
+    ow._cached_datatable
+end
+
+"""Get the DataTable from a specific cell index's output widget."""
+function _datatable_at_idx(app::SessionsApp, idx::Int)
+    nv = app.notebook_view
+    (idx < 1 || idx > length(nv.output_widgets)) && return nothing
+    ow = nv.output_widgets[idx]
+    ow._cached_datatable
 end
 
 """Go to definition at the current cursor position. Opens new tab for cross-file."""
