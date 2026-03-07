@@ -2664,8 +2664,16 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     old_lines = length(fev.editor.lines)
     old_text_hash = hash(Tachikoma.text(fev.editor))
 
+    # Auto-close brackets (before passing to editor)
+    if _handle_auto_close!(fev.editor, evt)
+        # Skip Tachikoma.handle_key! — auto-close handled the event
+        @goto fev_post_edit
+    end
+
     # Delegate all other keys to the CodeEditor (vim keybindings, undo, search, etc.)
     Tachikoma.handle_key!(fev.editor, evt)
+
+    @label fev_post_edit
 
     # Sync mode: CodeEditor's mode ↔ app.mode
     ce_mode = fev.editor.mode

@@ -22,4 +22,5 @@ using Sessions
     include("test_inline_diagnostics.jl")
     include("test_file_editor_parity.jl")
     include("test_auto_indent.jl")
+    include("test_auto_close_brackets.jl")
 end

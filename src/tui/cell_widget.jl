@@ -49,6 +49,64 @@ end
 const _NON_WORD_CHARS = Set(collect(" \t\n\"\\'\`@\$><=:;|&{}()[].,+-*/?%^~"))
 _is_non_word_char(c::Char) = c in _NON_WORD_CHARS
 
+# ── Auto-close brackets ──────────────────────────────────────────────
+
+const _BRACKET_PAIRS = Dict('(' => ')', '[' => ']', '{' => '}', '"' => '"')
+const _CLOSE_BRACKETS = Set(values(_BRACKET_PAIRS))
+
+"""
+Handle auto-close bracket logic for a CodeEditor.
+Returns true if the event was consumed, false if it should be passed through.
+Only active in insert mode.
+"""
+function _handle_auto_close!(editor::Tachikoma.CodeEditor, evt)
+    editor.mode == :insert || return false
+    line = editor.lines[editor.cursor_row]
+
+    # ── Opening bracket: insert pair, cursor between ──
+    if evt.key == :char && haskey(_BRACKET_PAIRS, evt.char)
+        close = _BRACKET_PAIRS[evt.char]
+        # For quotes: skip-over if next char is the same quote
+        if evt.char == '"' && editor.cursor_col < length(line) &&
+                line[editor.cursor_col + 1] == '"'
+            editor.cursor_col += 1
+            return true
+        end
+        Tachikoma._push_undo!(editor; force=true)
+        insert!(line, editor.cursor_col + 1, evt.char)
+        insert!(line, editor.cursor_col + 2, close)
+        editor.cursor_col += 1
+        Tachikoma._mark_dirty!(editor, editor.cursor_row)
+        Tachikoma._ensure_tokens!(editor)
+        return true
+    end
+
+    # ── Closing bracket: skip-over if next char matches ──
+    if evt.key == :char && evt.char in _CLOSE_BRACKETS && evt.char != '"'
+        if editor.cursor_col < length(line) && line[editor.cursor_col + 1] == evt.char
+            editor.cursor_col += 1
+            return true
+        end
+    end
+
+    # ── Backspace: delete both if cursor between matching pair ──
+    if evt.key == :backspace && editor.cursor_col > 0 && editor.cursor_col < length(line)
+        open_char = line[editor.cursor_col]
+        close_char = line[editor.cursor_col + 1]
+        if haskey(_BRACKET_PAIRS, open_char) && _BRACKET_PAIRS[open_char] == close_char
+            Tachikoma._push_undo!(editor; force=true)
+            deleteat!(line, editor.cursor_col + 1)  # delete close
+            deleteat!(line, editor.cursor_col)       # delete open
+            editor.cursor_col -= 1
+            Tachikoma._mark_dirty!(editor, editor.cursor_row)
+            Tachikoma._ensure_tokens!(editor)
+            return true
+        end
+    end
+
+    false
+end
+
 # ── CellWidget ───────────────────────────────────────────────────────
 
 """A cell widget combining a CodeEditor with state/output display."""
@@ -666,6 +724,12 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
     elseif evt.key == :escape
         sel.active = false
         # let escape propagate
+    end
+
+    # Auto-close brackets (before passing to editor)
+    if _handle_auto_close!(editor, evt)
+        sync_to_cell!(cw)
+        return true
     end
 
     # Pass to editor
