@@ -30,6 +30,9 @@ Tachikoma = "1"
 UnicodePlots = "3.8.1"
 julia = "1.10"
 
+[apps.sessions]
+julia_flags = ["--startup-file=no", "--history-file=no", "--threads=auto"]
+
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
