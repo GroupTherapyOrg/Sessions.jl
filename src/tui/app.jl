@@ -773,10 +773,12 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.notebook_view.dirty = _is_notebook_dirty(app)
         app.notebook_view.cell_diags = app.cell_diagnostics_cache
         app.notebook_view.lsp_status = app.lsp.status
-        # Thread Frame for image rendering — suppress during slider drag and
-        # active scrolling to prevent Sixel/Kitty escape sequence artifacts
+        # Thread Frame for image rendering — suppress during insert mode (typing),
+        # slider drag, and active scrolling. Raster re-emission on every keystroke
+        # is the #1 cause of typing lag with visible images.
         scrolling = app.notebook_view.last_scroll_time > 0.0 && (time() - app.notebook_view.last_scroll_time) < 0.3
-        app.notebook_view.current_frame = (app.slider_drag || scrolling) ? nothing : frame
+        suppress_raster = app.slider_drag || scrolling || app.mode == :insert
+        app.notebook_view.current_frame = suppress_raster ? nothing : frame
         Tachikoma.render(app.notebook_view, editor_rect, buf)
         _update_and_render_progress!(app, editor_rect, buf)
         # Scrollbar for notebook

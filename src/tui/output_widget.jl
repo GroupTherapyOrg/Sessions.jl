@@ -14,9 +14,14 @@ mutable struct OutputWidget
     # DataTable cache: persist interactive state (scroll, selection, sort) across frames
     _cached_datatable::Union{Nothing, Tachikoma.DataTable}
     _cached_datatable_id::UInt64  # objectid of the result that produced the cached table
+    # Height cache: avoid recomputing sprint(show,...) and markdown parsing every frame
+    _cached_height::Int
+    _cached_height_output_id::UInt64  # objectid(cell.output) when height was cached
+    _cached_height_state::CellState
+    _cached_height_collapsed::Bool
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0))
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false)
 
 """Format cell output as displayable lines.
 
@@ -176,8 +181,32 @@ end
 """Default image output height in terminal rows."""
 const _IMAGE_OUTPUT_HEIGHT = 12
 
-"""Height needed for output display (borderless — just the lines + 1 for top padding)."""
+"""Height needed for output display (borderless — just the lines + 1 for top padding).
+
+Cached to avoid recomputing expensive operations (sprint, markdown parsing)
+on every frame. Invalidated when output object, cell state, or collapsed flag changes.
+"""
 function output_height(ow::OutputWidget)
+    out_id = objectid(ow.cell.output)
+    state = ow.cell.state
+    collapsed = ow.collapsed
+    # Return cached value if nothing changed
+    if ow._cached_height >= 0 &&
+       ow._cached_height_output_id == out_id &&
+       ow._cached_height_state == state &&
+       ow._cached_height_collapsed == collapsed
+        return ow._cached_height
+    end
+    h = _compute_output_height(ow)
+    ow._cached_height = h
+    ow._cached_height_output_id = out_id
+    ow._cached_height_state = state
+    ow._cached_height_collapsed = collapsed
+    h
+end
+
+"""Compute output height (uncached)."""
+function _compute_output_height(ow::OutputWidget)
     if ow.collapsed || ow.cell.state == cell_idle
         return 0
     end
