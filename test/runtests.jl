@@ -35,4 +35,5 @@ using Sessions
     include("test_image_pipeline.jl")
     include("test_png_decoder.jl")
     include("test_output_cache.jl")
+    include("test_encoded_cache.jl")
 end

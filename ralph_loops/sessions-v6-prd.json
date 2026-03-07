@@ -6,7 +6,7 @@
       "id": "P0",
       "title": "Performance Foundation",
       "description": "Cache text and raster output to eliminate per-frame recomputation",
-      "stories_done": 1,
+      "stories_done": 2,
       "stories_total": 2
     },
     {
@@ -54,7 +54,8 @@
       "title": "Cache encoded raster bytes at OutputWidget level",
       "milestone": "P0",
       "priority": 0,
-      "status": "open",
+      "status": "done",
+      "completedNote": "Added _cached_encoded_data/rect/image_hash/protocol to OutputWidget. _render_image_cached_raster!() bypasses encode on cache hit, using render_graphics!() directly. 16 new tests, 3489 total.",
       "blockedBy": ["SESSIONS-9001"],
       "description": "Tachikoma re-encodes sixel/kitty data every frame (~5-20ms for sixel). Cache the encoded bytes at the OutputWidget level. Store _cached_encoded_data and _cached_encoded_rect. Invalidate when image_data objectid changes or rect dimensions change. Use Tachikoma.render_graphics!() to emit pre-encoded data directly to Frame.",
       "acceptanceCriteria": [

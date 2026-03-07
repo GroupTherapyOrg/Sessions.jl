@@ -22,9 +22,14 @@ mutable struct OutputWidget
     # Text output cache: avoid re-calling sprint(show,...) every frame
     _cached_output_lines::Union{Nothing, Vector{String}}
     _cached_output_lines_id::UInt64  # objectid(cell.output) when lines were cached
+    # Encoded raster cache: avoid re-encoding sixel/kitty bytes every frame
+    _cached_encoded_data::Union{Nothing, Vector{UInt8}}     # pre-encoded sixel/kitty bytes
+    _cached_encoded_rect::Tachikoma.Rect                    # rect used for encoding
+    _cached_encoded_image_hash::UInt64                      # objectid(image_data) when encoded
+    _cached_encoded_protocol::Tachikoma.GraphicsProtocol    # protocol used for encoding
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0))
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none)
 
 """Format cell output as displayable lines.
 
@@ -575,7 +580,13 @@ end
 
 # --- Image rendering (PixelImage with decode cache) ---
 
-"""Render image output via PixelImage (sixel/kitty raster or braille fallback)."""
+"""Render image output via PixelImage (sixel/kitty raster or braille fallback).
+
+Caching strategy (three layers):
+1. Pixel decode cache: _cached_pixels (invalidated on image_data objectid change)
+2. PixelImage cache: _cached_pixel_image (invalidated on rect size change)
+3. Encoded raster cache: _cached_encoded_data (invalidated on image/rect/protocol change)
+"""
 function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     img_data = ow.cell.output.image_data
     if img_data === nothing || isempty(img_data)
@@ -583,7 +594,7 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         return
     end
 
-    # Cache: only re-decode if image_data is a different object (O(1) pointer check)
+    # Layer 1: Pixel decode cache — only re-decode if image_data is a different object
     img_id = objectid(img_data)
     pixels_changed = img_id != ow._cached_image_hash || ow._cached_pixels === nothing
     if pixels_changed
@@ -595,14 +606,16 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         ow._cached_pixels = pixels
         ow._cached_image_hash = img_id
         ow._cached_pixel_image = nothing  # force PixelImage rebuild
+        ow._cached_encoded_data = nothing  # force re-encode
     end
 
-    # Create/resize PixelImage to fit the output rect
+    # Layer 2: PixelImage cache — rebuild when rect dimensions change
     pi = ow._cached_pixel_image
     needs_rebuild = pi === nothing || pi.cells_w != rect.width || pi.cells_h != rect.height
     if needs_rebuild
         pi = Tachikoma.PixelImage(rect.width, rect.height)
         ow._cached_pixel_image = pi
+        ow._cached_encoded_data = nothing  # force re-encode on size change
     end
 
     # Only reload pixels when data changed or PixelImage was rebuilt
@@ -614,10 +627,52 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     # current_frame is set to nothing during slider drag to avoid escape
     # sequence corruption from interleaving with mouse events.
     frame = ow.current_frame
-    if frame !== nothing && Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
-        Tachikoma.render(pi, rect, frame)
+    gfx = Tachikoma.GRAPHICS_PROTOCOL[]
+    if frame !== nothing && gfx != Tachikoma.gfx_none
+        # Layer 3: Encoded raster cache — reuse pre-encoded bytes when image+rect+protocol unchanged
+        _render_image_cached_raster!(ow, pi, rect, frame, gfx, img_id)
     else
         Tachikoma.render(pi, rect, buf)
+    end
+end
+
+"""Render raster image with encoded byte caching.
+
+On cache hit (same image + same rect + same protocol), emits pre-encoded bytes
+directly via render_graphics! — skipping the expensive encode_sixel/encode_kitty call.
+"""
+function _render_image_cached_raster!(ow::OutputWidget, pi::Tachikoma.PixelImage,
+                                      rect::Tachikoma.Rect, frame::Tachikoma.Frame,
+                                      gfx::Tachikoma.GraphicsProtocol, img_id::UInt64)
+    # Check if we have a valid cache hit
+    cache_hit = ow._cached_encoded_data !== nothing &&
+                ow._cached_encoded_image_hash == img_id &&
+                ow._cached_encoded_rect.width == rect.width &&
+                ow._cached_encoded_rect.height == rect.height &&
+                ow._cached_encoded_protocol == gfx
+
+    if cache_hit
+        # Fast path: emit pre-encoded bytes directly
+        fmt = gfx == Tachikoma.gfx_kitty ? Tachikoma.gfx_fmt_kitty : Tachikoma.gfx_fmt_sixel
+        Tachikoma.render_graphics!(frame, ow._cached_encoded_data, rect;
+                                   pixels=ow._cached_pixels, format=fmt)
+    else
+        # Cold path: encode via PixelImage, then cache the result
+        if gfx == Tachikoma.gfx_kitty
+            data = Tachikoma.encode_kitty(pi.pixels; cols=rect.width, rows=rect.height)
+            fmt = Tachikoma.gfx_fmt_kitty
+        else
+            data = Tachikoma.encode_sixel(pi.pixels)
+            fmt = Tachikoma.gfx_fmt_sixel
+        end
+        if !isempty(data)
+            Tachikoma.render_graphics!(frame, data, rect;
+                                       pixels=ow._cached_pixels, format=fmt)
+            ow._cached_encoded_data = data
+            ow._cached_encoded_rect = rect
+            ow._cached_encoded_image_hash = img_id
+            ow._cached_encoded_protocol = gfx
+        end
     end
 end
 
