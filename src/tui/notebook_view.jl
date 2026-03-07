@@ -454,8 +454,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         # --- Cell rendering ---
         if y + ch > visible_start && y <= visible_end
-            cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
-                            ch - max(0, rect.y - y))
+            # Clamp to inner content area (not outer rect) to prevent border overflow
+            clip_y = max(y, visible_start)
+            clip_h = min(y + ch, visible_end + 1) - clip_y
+            cell_rect = Tachikoma.Rect(cx, clip_y, cw_width, max(1, clip_h))
             Tachikoma.render(cw, cell_rect, buf)
 
             # --- Diagnostic gutter markers (colored dots on lines with issues) ---
@@ -493,7 +495,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             ow.hovered = (i == nv.hovered_bond_idx)
             ow.current_frame = nv.current_frame  # thread Frame for image rendering
             if y + oh > visible_start && y <= visible_end
-                out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
+                # Clamp output to inner content area
+                out_clip_y = max(y, visible_start)
+                out_clip_h = min(y + oh, visible_end + 1) - out_clip_y
+                out_rect = Tachikoma.Rect(cx, out_clip_y, cw_width, max(1, out_clip_h))
                 is_image = ow.cell.output.output_type == :image_png && ow.cell.output.image_data !== nothing
                 scrolling = nv.last_scroll_time > 0.0 && (time() - nv.last_scroll_time) < 0.3
                 # Images can't clip — only render when fully visible with margin, not scrolling

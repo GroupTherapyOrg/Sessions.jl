@@ -254,7 +254,7 @@ end
 """Execute a single cell in the workspace, capturing output and timing."""
 function execute_cell!(workspace::Workspace, cell::Cell)
     cell.state = cell_running
-    cell.output = CellOutput()
+    # Keep old output visible during execution (Pluto behavior) — replaced at the end
 
     # Set current cell ID so @bind knows which cell it's in
     _EXECUTING_CELL_ID[] = cell.id
@@ -282,23 +282,26 @@ function execute_cell!(workspace::Workspace, cell::Cell)
 
     t_end = time_ns()
 
-    cell.output.result = err === nothing ? result : nothing
-    cell.output.stdout = captured_stdout
-    cell.output.error = err
-    cell.output.runtime_ns = t_end - t_start
+    # Replace output atomically — old output was visible during execution
+    out = CellOutput()
+    out.result = err === nothing ? result : nothing
+    out.stdout = captured_stdout
+    out.error = err
+    out.runtime_ns = t_end - t_start
 
     if err === nothing
-        cell.output.output_type = classify_output(result)
-        cell.output.text_representation = text_representation(result)
-        # Capture PNG bytes for image outputs
-        if cell.output.output_type == :image_png
-            cell.output.image_data = _capture_png_bytes(result)
+        out.output_type = classify_output(result)
+        out.text_representation = text_representation(result)
+        if out.output_type == :image_png
+            out.image_data = _capture_png_bytes(result)
         end
+        cell.output = out
         cell.state = cell_done
         mark_executed!(cell)
     else
-        cell.output.output_type = :error
-        cell.output.text_representation = sprint(showerror, err.ex)
+        out.output_type = :error
+        out.text_representation = sprint(showerror, err.ex)
+        cell.output = out
         cell.state = cell_errored
         mark_executed!(cell)  # errors are also execution results — needed for session caching
     end
