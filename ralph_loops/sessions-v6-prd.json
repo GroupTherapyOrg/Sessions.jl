@@ -13,7 +13,7 @@
       "id": "P1",
       "title": "Image Quality",
       "description": "Aspect-aware sizing and resize handling",
-      "stories_done": 1,
+      "stories_done": 2,
       "stories_total": 2
     },
     {
@@ -88,7 +88,8 @@
       "title": "Terminal resize cache invalidation",
       "milestone": "P1",
       "priority": 1,
-      "status": "open",
+      "status": "done",
+      "completedNote": "Added _last_viewport_size to NotebookView, flush_image_caches!() and detect_viewport_resize!(). Wired into render(). 12 new tests, 3527 total.",
       "blockedBy": ["SESSIONS-9002"],
       "description": "When terminal resizes, cached encoded raster bytes and PixelImage become stale (wrong dimensions). Detect resize by comparing current rect to _cached_encoded_rect. Already handled by rect comparison in 9002, but add explicit _last_viewport_size to NotebookView that triggers full image cache flush on change.",
       "acceptanceCriteria": [

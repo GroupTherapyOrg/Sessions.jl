@@ -25,13 +25,44 @@ mutable struct NotebookView
     lsp_status::LspStatus          # LSP server status for indicator
     current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
     last_scroll_time::Float64  # time() of last scroll event — skip image rendering during active scroll
+    _last_viewport_size::Tuple{Int, Int}  # (width, height) for resize detection
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0))
+end
+
+"""Flush image-related caches on all OutputWidgets (encoded data, PixelImage, height).
+
+Called on terminal resize. Preserves text output caches and pixel decode caches
+(decode is dimension-independent; PixelImage and encoding are dimension-dependent).
+"""
+function flush_image_caches!(nv::NotebookView)
+    for ow in nv.output_widgets
+        ow._cached_encoded_data = nothing
+        ow._cached_pixel_image = nothing
+        # Invalidate height cache for image cells (dimensions may change with new width)
+        if ow.cell.output.output_type == :image_png
+            ow._cached_height = -1
+        end
+    end
+end
+
+"""Detect viewport resize and flush image caches if size changed.
+
+Called at the start of each render cycle. First call initializes the size
+without flushing (no previous data to invalidate).
+"""
+function detect_viewport_resize!(nv::NotebookView, width::Int, height::Int)
+    old_w, old_h = nv._last_viewport_size
+    nv._last_viewport_size = (width, height)
+    # Only flush if we had a previous size and it changed
+    if old_w > 0 && old_h > 0 && (old_w != width || old_h != height)
+        flush_image_caches!(nv)
+    end
 end
 
 """Rebuild widgets when cells change."""
@@ -337,6 +368,7 @@ const MARGIN_CTRL_WIDTH = Theme.MARGIN_CTRL_WIDTH
 
 function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     nv.viewport = rect
+    detect_viewport_resize!(nv, rect.width, rect.height)
     rect.width < 4 && return
     rect.height < 4 && return
 

@@ -27,3 +27,10 @@
 - Regression gate: 3515 tests pass (was 3489, +26 new)
 - Learning: A square 1x1 image at 80 cols → rows=40 → clamped to max=30. The formula is aspect-correct: square images need many rows, wide ones need few
 - Next: SESSIONS-9004 (terminal resize cache invalidation)
+
+### 2026-03-07: SESSIONS-9004 [PASS]
+- Attempted: Detect terminal resize and flush image-related caches
+- Result: Added _last_viewport_size to NotebookView, flush_image_caches!() clears encoded data + PixelImage + height cache for image cells, detect_viewport_resize!() wired into render(). Preserves text caches and pixel decode caches
+- Regression gate: 3527 tests pass (was 3515, +12 new)
+- Learning: First render initializes size without flush (no stale data). Only flush when actual size change detected. Height cache must also be invalidated for image cells (aspect ratio depends on available width)
+- Next: SESSIONS-9005 (JPEG image support) or SESSIONS-9006 (SVG text fallback)

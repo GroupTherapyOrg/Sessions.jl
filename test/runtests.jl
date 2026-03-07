@@ -37,4 +37,5 @@ using Sessions
     include("test_output_cache.jl")
     include("test_encoded_cache.jl")
     include("test_aspect_sizing.jl")
+    include("test_resize_cache.jl")
 end
