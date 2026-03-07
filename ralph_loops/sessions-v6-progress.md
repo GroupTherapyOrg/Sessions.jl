@@ -34,3 +34,10 @@
 - Regression gate: 3527 tests pass (was 3515, +12 new)
 - Learning: First render initializes size without flush (no stale data). Only flush when actual size change detected. Height cache must also be invalidated for image cells (aspect ratio depends on available width)
 - Next: SESSIONS-9005 (JPEG image support) or SESSIONS-9006 (SVG text fallback)
+
+### 2026-03-07: SESSIONS-9005 [PASS]
+- Attempted: Add JPEG image support (detection, dimension parsing, baseline decoder)
+- Result: Added jpeg_decoder.jl with decode_jpeg() (baseline SOF0, YCbCr, 4:4:4/4:2:0) and decode_jpeg_dimensions(). classify_output returns :image_jpeg. _capture_jpeg_bytes captures JPEG bytes. Render pipeline tries PNG then JPEG decode
+- Regression gate: 3553 tests pass (was 3527, +26 new)
+- Learning: JPEG SOF0 header offsets: pos+0,+1=length, pos+2=precision, pos+3,+4=height, pos+5,+6=width. Huffman decode uses mincode+valptr for O(1) symbol lookup
+- Next: SESSIONS-9006 (SVG text fallback)

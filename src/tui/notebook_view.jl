@@ -45,7 +45,7 @@ function flush_image_caches!(nv::NotebookView)
         ow._cached_encoded_data = nothing
         ow._cached_pixel_image = nothing
         # Invalidate height cache for image cells (dimensions may change with new width)
-        if ow.cell.output.output_type == :image_png
+        if ow.cell.output.output_type == :image_png || ow.cell.output.output_type == :image_jpeg
             ow._cached_height = -1
         end
     end
@@ -531,7 +531,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
                 out_clip_y = max(y, visible_start)
                 out_clip_h = min(y + oh, visible_end + 1) - out_clip_y
                 out_rect = Tachikoma.Rect(cx, out_clip_y, cw_width, max(1, out_clip_h))
-                is_image = ow.cell.output.output_type == :image_png && ow.cell.output.image_data !== nothing
+                is_image = (ow.cell.output.output_type == :image_png || ow.cell.output.output_type == :image_jpeg) && ow.cell.output.image_data !== nothing
                 scrolling = nv.last_scroll_time > 0.0 && (time() - nv.last_scroll_time) < 0.3
                 # Images can't clip — only render when fully visible with margin, not scrolling
                 if is_image

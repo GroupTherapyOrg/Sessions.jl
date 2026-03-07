@@ -73,6 +73,9 @@ function classify_output(value)::Symbol
         if _tui_showable(MIME"image/png"(), value)
             return :image_png
         end
+        if _tui_showable(MIME"image/jpeg"(), value)
+            return :image_jpeg
+        end
     end
 
     # 5. text/plain — terminal-native output (UnicodePlots, etc.)
@@ -132,6 +135,17 @@ function _capture_png_bytes(@nospecialize(value))::Union{Nothing, Vector{UInt8}}
     try
         io = IOBuffer()
         Base.invokelatest(show, io, MIME"image/png"(), value)
+        take!(io)
+    catch
+        nothing
+    end
+end
+
+"""Capture JPEG bytes from a value that supports MIME"image/jpeg"."""
+function _capture_jpeg_bytes(@nospecialize(value))::Union{Nothing, Vector{UInt8}}
+    try
+        io = IOBuffer()
+        Base.invokelatest(show, io, MIME"image/jpeg"(), value)
         take!(io)
     catch
         nothing
@@ -294,6 +308,8 @@ function execute_cell!(workspace::Workspace, cell::Cell)
         out.text_representation = text_representation(result)
         if out.output_type == :image_png
             out.image_data = _capture_png_bytes(result)
+        elseif out.output_type == :image_jpeg
+            out.image_data = _capture_jpeg_bytes(result)
         end
         cell.output = out
         cell.state = cell_done

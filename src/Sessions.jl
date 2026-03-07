@@ -40,6 +40,9 @@ export format_error, format_cell_error
 include("png_decoder.jl")
 export decode_png
 
+include("jpeg_decoder.jl")
+export decode_jpeg
+
 include("run.jl")
 
 include("session.jl")

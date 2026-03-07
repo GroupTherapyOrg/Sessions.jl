@@ -261,7 +261,13 @@ function _compute_output_height(ow::OutputWidget)
     elseif otype == :image_png && ow.cell.output.image_data !== nothing
         dims = decode_png_dimensions(ow.cell.output.image_data)
         if dims !== nothing
-            return image_output_height(dims[1], dims[2], 80)  # 80 cols default
+            return image_output_height(dims[1], dims[2], 80)
+        end
+        return _IMAGE_HEIGHT_DEFAULT
+    elseif otype == :image_jpeg && ow.cell.output.image_data !== nothing
+        dims = decode_jpeg_dimensions(ow.cell.output.image_data)
+        if dims !== nothing
+            return image_output_height(dims[1], dims[2], 80)
         end
         return _IMAGE_HEIGHT_DEFAULT
     end
@@ -295,10 +301,10 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         return
     end
 
-    # Rich output: PixelImage for images
+    # Rich output: PixelImage for images (PNG or JPEG)
     # Only render when cell is done (not running/queued) to avoid escape sequence corruption
-    if otype == :image_png && !stale && ow.cell.output.image_data !== nothing &&
-       ow.cell.state == cell_done
+    if (otype == :image_png || otype == :image_jpeg) && !stale &&
+       ow.cell.output.image_data !== nothing && ow.cell.state == cell_done
         _render_image_output!(ow, rect, buf)
         return
     end
@@ -620,7 +626,11 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     img_id = objectid(img_data)
     pixels_changed = img_id != ow._cached_image_hash || ow._cached_pixels === nothing
     if pixels_changed
+        # Try PNG first, then JPEG
         pixels = decode_png(img_data)
+        if pixels === nothing
+            pixels = decode_jpeg(img_data)
+        end
         if pixels === nothing
             _render_image_fallback(rect, buf)
             return
@@ -701,7 +711,7 @@ end
 """Fallback text when image cannot be decoded."""
 function _render_image_fallback(rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     Tachikoma.set_string!(buf, rect.x + 2, rect.y,
-        "[Image: unable to decode PNG data]",
+        "[Image: unable to decode image data]",
         Tachikoma.Style(; fg=Theme.FG_MUTED))
 end
 

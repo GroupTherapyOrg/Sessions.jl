@@ -20,7 +20,7 @@
       "id": "P2",
       "title": "Format Expansion",
       "description": "JPEG and SVG support",
-      "stories_done": 0,
+      "stories_done": 1,
       "stories_total": 2
     },
     {
@@ -104,7 +104,8 @@
       "title": "JPEG image support",
       "milestone": "P2",
       "priority": 2,
-      "status": "open",
+      "status": "done",
+      "completedNote": "Added jpeg_decoder.jl with decode_jpeg() (baseline SOF0) and decode_jpeg_dimensions(). classify_output detects :image_jpeg. Capture/render pipeline supports JPEG alongside PNG. 26 new tests, 3553 total.",
       "blockedBy": ["SESSIONS-9003"],
       "description": "Add JPEG detection and decoding alongside PNG. Detect JPEG by signature (0xFF 0xD8). For decode, use pure Julia baseline JPEG decoder (8-bit, no progressive) or fall back to text representation. Add :image_jpeg output_type or reuse :image_png with generic :image type.",
       "acceptanceCriteria": [
