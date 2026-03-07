@@ -20,4 +20,5 @@ using Sessions
     include("test_pluto_compat.jl")
     include("test_formatting.jl")
     include("test_inline_diagnostics.jl")
+    include("test_file_editor_parity.jl")
 end

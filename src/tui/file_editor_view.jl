@@ -12,6 +12,7 @@ mutable struct FileEditorView
     viewport::Tachikoma.Rect
     diagnostics::Vector{Diagnostic}  # inline diagnostics from LSP
     lsp_doc_version::Int             # LSP document version counter
+    selection::SelectionState        # text selection (shared with CellWidget)
 end
 
 function FileEditorView(path::String)
@@ -31,7 +32,7 @@ function FileEditorView(path::String)
         editor.cursor_col = 0
         editor.scroll_offset = 0
     end
-    FileEditorView(path, editor, false, Tachikoma.Rect(), Diagnostic[], 1)
+    FileEditorView(path, editor, false, Tachikoma.Rect(), Diagnostic[], 1, SelectionState())
 end
 
 """Save the editor contents to disk."""
@@ -65,6 +66,58 @@ cursor_pos(fev::FileEditorView) = (fev.editor.cursor_row, fev.editor.cursor_col 
 
 """Get editor mode symbol."""
 editor_mode(fev::FileEditorView) = fev.editor.mode
+
+"""Render selection highlight in file editor (blue bg on selected text)."""
+function _render_fev_selection!(fev::FileEditorView, area::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    sel = fev.selection
+    !sel.active && return
+    editor = fev.editor
+    sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
+
+    line_count = length(editor.lines)
+    gw = editor.show_line_numbers ? ndigits(max(line_count, 1)) + 1 : 0
+    code_x = area.x + gw
+    code_width = area.width - gw
+    code_width < 1 && return
+
+    Tachikoma._ensure_tokens!(editor)
+
+    for vi in 1:area.height
+        li = editor.scroll_offset + vi
+        li > line_count && break
+        (li < sr || li > er) && continue
+
+        y = area.y + vi - 1
+        line = editor.lines[li]
+        tokens = li <= length(editor.token_cache) ? editor.token_cache[li] : Tachikoma.Token[]
+
+        line_sel_start = li == sr ? sc + 1 : 1
+        line_sel_end = li == er ? ec : length(line)
+
+        for ci in 1:code_width
+            char_idx = editor.h_scroll + ci
+            x = code_x + ci - 1
+            x > Tachikoma.right(area) && break
+
+            (char_idx < line_sel_start || char_idx > line_sel_end) && continue
+
+            if char_idx >= 1 && char_idx <= length(line)
+                ch = line[char_idx]
+                tok = nothing
+                for t in tokens
+                    if char_idx >= t.start && char_idx <= t.stop
+                        tok = t
+                        break
+                    end
+                end
+                fg = tok !== nothing ? Tachikoma._token_style(tok.kind).fg : editor.style.fg
+                Tachikoma.set_char!(buf, x, y, ch, Tachikoma.Style(; fg=fg, bg=Theme.SELECTION_BG))
+            else
+                Tachikoma.set_char!(buf, x, y, ' ', Tachikoma.Style(; bg=Theme.SELECTION_BG))
+            end
+        end
+    end
+end
 
 function Tachikoma.render(fev::FileEditorView, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     fev.viewport = rect
@@ -125,6 +178,11 @@ function Tachikoma.render(fev::FileEditorView, rect::Tachikoma.Rect, buf::Tachik
 
     editor_rect = Tachikoma.Rect(inner_x, inner_y, inner_w, inner_h)
     Tachikoma.render(fev.editor, editor_rect, buf)
+
+    # Selection highlight
+    if fev.selection.active
+        _render_fev_selection!(fev, editor_rect, buf)
+    end
 
     # Diagnostic gutter markers (colored dots on lines with issues)
     if !isempty(fev.diagnostics)
