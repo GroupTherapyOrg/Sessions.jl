@@ -42,13 +42,13 @@ perimeter(t::Triangle) = t.a + t.b + t.c
 
 # ── Sorting algorithms ──────────────────────────────────────────────
 
-function bubble_sort!(arr::Vector{T}) where T
+function bubble_sort!(arr::Vector{T}) where {T}
     n = length(arr)
-    for i in 1:n-1
+    for i in 1:(n - 1)
         swapped = false
-        for j in 1:n-i
-            if arr[j] > arr[j+1]
-                arr[j], arr[j+1] = arr[j+1], arr[j]
+        for j in 1:(n - i)
+            if arr[j] > arr[j + 1]
+                arr[j], arr[j + 1] = arr[j + 1], arr[j]
                 swapped = true
             end
         end
@@ -57,15 +57,15 @@ function bubble_sort!(arr::Vector{T}) where T
     return arr
 end
 
-function merge_sort(arr::Vector{T}) where T
+function merge_sort(arr::Vector{T}) where {T}
     length(arr) <= 1 && return arr
     mid = div(length(arr), 2)
     left = merge_sort(arr[1:mid])
-    right = merge_sort(arr[mid+1:end])
+    right = merge_sort(arr[(mid + 1):end])
     return _merge(left, right)
 end
 
-function _merge(left::Vector{T}, right::Vector{T}) where T
+function _merge(left::Vector{T}, right::Vector{T}) where {T}
     result = T[]
     i, j = 1, 1
     while i <= length(left) && j <= length(right)
@@ -85,8 +85,10 @@ end
 # ── Matrix utilities ────────────────────────────────────────────────
 
 function create_rotation_matrix(θ::Float64)
-    return [cos(θ) -sin(θ);
-            sin(θ)  cos(θ)]
+    return [
+        cos(θ) -sin(θ);
+        sin(θ)  cos(θ)
+    ]
 end
 
 function matrix_power(A::Matrix, n::Int)
@@ -124,17 +126,21 @@ end
 function levenshtein(s1::String, s2::String)
     m, n = length(s1), length(s2)
     d = zeros(Int, m + 1, n + 1)
-    for i in 0:m; d[i+1, 1] = i; end
-    for j in 0:n; d[1, j+1] = j; end
+    for i in 0:m
+        d[i + 1, 1] = i
+    end
+    for j in 0:n
+        d[1, j + 1] = j
+    end
     for j in 1:n, i in 1:m
         cost = s1[i] == s2[j] ? 0 : 1
-        d[i+1, j+1] = min(
-            d[i, j+1] + 1,      # deletion
-            d[i+1, j] + 1,      # insertion
+        d[i + 1, j + 1] = min(
+            d[i, j + 1] + 1,      # deletion
+            d[i + 1, j] + 1,      # insertion
             d[i, j] + cost       # substitution
         )
     end
-    return d[m+1, n+1]
+    return d[m + 1, n + 1]
 end
 
 # ── Number theory ───────────────────────────────────────────────────

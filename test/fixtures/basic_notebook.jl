@@ -26,14 +26,6 @@ using Markdown
 # ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
 using UnicodePlots
 
-# ╔═╡ 9458ff79-a67a-430e-9a62-27d704d3e575
-function test_format()
-    "this is one indent"
-    "this is another"
-
-    return
-end
-
 # ╔═╡ 0b7a9ca3-5430-4e6a-9894-cd2339447be5
 md"""
 ### Damped Ripple Surface
@@ -128,7 +120,6 @@ end
 # ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 # ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
 # ╠═9c606da0-915a-4cfb-91fc-cdc93a454b8e
-# ╠═9458ff79-a67a-430e-9a62-27d704d3e575
 # ╟─0b7a9ca3-5430-4e6a-9894-cd2339447be5
 # ╟─1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
 # ╠═3d413fde-745c-4222-836a-24e5a6e7a481

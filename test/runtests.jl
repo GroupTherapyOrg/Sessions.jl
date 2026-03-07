@@ -31,4 +31,5 @@ using Sessions
     include("test_signature_help.jl")
     include("test_scrollbar.jl")
     include("test_rename.jl")
+    include("test_e2e_editing.jl")
 end
