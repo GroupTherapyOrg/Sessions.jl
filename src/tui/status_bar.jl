@@ -33,7 +33,18 @@ function make_top_bar(nb::Notebook; lsp_status::LspStatus=lsp_off, n_diags::Int=
         Tachikoma.Span("", Theme.S_MUTED)  # lsp_off — show nothing
     end
 
-    Tachikoma.StatusBar(; left=[path_span, status, lsp_span])
+    # Graphics protocol indicator
+    gfx_span = let gfx = Tachikoma.GRAPHICS_PROTOCOL[]
+        if gfx == Tachikoma.gfx_kitty
+            Tachikoma.Span("  ⬡ kitty", Tachikoma.Style(; fg=Theme.GREEN))
+        elseif gfx == Tachikoma.gfx_sixel
+            Tachikoma.Span("  ⬡ sixel", Tachikoma.Style(; fg=Theme.GREEN))
+        else
+            Tachikoma.Span("", Theme.S_MUTED)  # gfx_none — show nothing
+        end
+    end
+
+    Tachikoma.StatusBar(; left=[path_span, status, lsp_span, gfx_span])
 end
 
 """Create top status bar for file editor mode."""

@@ -13,6 +13,12 @@ Usage:
     sessions install-jetls          Install JETLS for real-time diagnostics
 """
 function (@main)(args::Vector{String})::Cint
+    # Map SESSIONS_GRAPHICS_PROTOCOL → TACHIKOMA_GFX (user-facing alias)
+    sgp = get(ENV, "SESSIONS_GRAPHICS_PROTOCOL", "")
+    if !isempty(sgp) && !haskey(ENV, "TACHIKOMA_GFX")
+        ENV["TACHIKOMA_GFX"] = sgp
+    end
+
     # Auto-install JETLS on first run if missing
     _ensure_jetls()
 

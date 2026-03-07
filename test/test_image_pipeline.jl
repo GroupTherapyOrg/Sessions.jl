@@ -271,6 +271,49 @@ end
         @test ow._cached_image_hash != h1 || ow._cached_pixels === nothing
     end
 
+    @testset "Status bar shows graphics indicator (kitty)" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
+            nb = Notebook()
+            bar = Sessions.make_top_bar(nb)
+            tb = Tachikoma.TestBackend(80, 1)
+            Tachikoma.render_widget!(tb, bar)
+            @test Tachikoma.find_text(tb, "kitty") !== nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "Status bar shows graphics indicator (sixel)" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_sixel
+            nb = Notebook()
+            bar = Sessions.make_top_bar(nb)
+            tb = Tachikoma.TestBackend(80, 1)
+            Tachikoma.render_widget!(tb, bar)
+            @test Tachikoma.find_text(tb, "sixel") !== nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "Status bar hides graphics indicator (gfx_none)" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
+            nb = Notebook()
+            bar = Sessions.make_top_bar(nb)
+            tb = Tachikoma.TestBackend(80, 1)
+            Tachikoma.render_widget!(tb, bar)
+            @test Tachikoma.find_text(tb, "kitty") === nothing
+            @test Tachikoma.find_text(tb, "sixel") === nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
     @testset "E2E: full pipeline — classify → capture → decode → render" begin
         old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
         try

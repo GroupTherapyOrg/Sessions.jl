@@ -79,4 +79,48 @@ using Sessions
         @test startswith(content, "#!/bin/sh")
         @test contains(content, "julia")
     end
+
+    @testset "SESSIONS_GRAPHICS_PROTOCOL maps to TACHIKOMA_GFX" begin
+        old_sgp = get(ENV, "SESSIONS_GRAPHICS_PROTOCOL", nothing)
+        old_tgfx = get(ENV, "TACHIKOMA_GFX", nothing)
+        try
+            delete!(ENV, "TACHIKOMA_GFX")
+            ENV["SESSIONS_GRAPHICS_PROTOCOL"] = "kitty"
+            # Call main with --version (safe, exits quickly)
+            old_stdout = stdout
+            rd, wr = redirect_stdout()
+            try
+                Sessions.main(["--version"])
+            finally
+                redirect_stdout(old_stdout)
+                close(wr)
+            end
+            @test get(ENV, "TACHIKOMA_GFX", "") == "kitty"
+        finally
+            # Restore env
+            if old_sgp === nothing; delete!(ENV, "SESSIONS_GRAPHICS_PROTOCOL"); else ENV["SESSIONS_GRAPHICS_PROTOCOL"] = old_sgp; end
+            if old_tgfx === nothing; delete!(ENV, "TACHIKOMA_GFX"); else ENV["TACHIKOMA_GFX"] = old_tgfx; end
+        end
+    end
+
+    @testset "SESSIONS_GRAPHICS_PROTOCOL does not override existing TACHIKOMA_GFX" begin
+        old_sgp = get(ENV, "SESSIONS_GRAPHICS_PROTOCOL", nothing)
+        old_tgfx = get(ENV, "TACHIKOMA_GFX", nothing)
+        try
+            ENV["TACHIKOMA_GFX"] = "sixel"
+            ENV["SESSIONS_GRAPHICS_PROTOCOL"] = "kitty"
+            old_stdout = stdout
+            rd, wr = redirect_stdout()
+            try
+                Sessions.main(["--version"])
+            finally
+                redirect_stdout(old_stdout)
+                close(wr)
+            end
+            @test get(ENV, "TACHIKOMA_GFX", "") == "sixel"  # not overridden
+        finally
+            if old_sgp === nothing; delete!(ENV, "SESSIONS_GRAPHICS_PROTOCOL"); else ENV["SESSIONS_GRAPHICS_PROTOCOL"] = old_sgp; end
+            if old_tgfx === nothing; delete!(ENV, "TACHIKOMA_GFX"); else ENV["TACHIKOMA_GFX"] = old_tgfx; end
+        end
+    end
 end
