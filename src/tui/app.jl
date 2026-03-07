@@ -1737,7 +1737,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         if dt_idx > 0
             dt = _datatable_at_idx(app, dt_idx)
             if dt !== nothing
-                focus_cell!(nv, dt_idx)
+                # Focus without auto-scrolling — user already sees the table output
+                nv.focused_idx = dt_idx
+                update_focus!(nv)
                 _exit_insert_mode!(app)
                 app.mode = :datatable
                 # Forward click to DataTable's mouse handler
@@ -2297,7 +2299,9 @@ function _try_slider_click(app::SessionsApp, nv::NotebookView, click_x::Int, cli
     !hit && return false
 
     cell = nv.cell_widgets[idx].cell
-    focus_cell!(nv, idx)
+    # Focus without auto-scrolling — user already sees the slider output
+    nv.focused_idx = idx
+    update_focus!(nv)
     _exit_insert_mode!(app)
     _apply_slider_value!(app, cell, bond, new_val)
 

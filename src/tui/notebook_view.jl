@@ -696,12 +696,17 @@ function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
 
     focused_oh = output_height(nv.output_widgets[nv.focused_idx])
     focused_h = cell_height(nv.cell_widgets[nv.focused_idx]; has_output=focused_oh > 0)
+    # Include output height so scrolling doesn't clip the output area
+    total_focused_h = focused_h + focused_oh
 
+    # Scroll up if cell code is above viewport
     if y < nv.scroll_offset
         nv.scroll_offset = y
     end
 
-    if y + focused_h > nv.scroll_offset + inner_h
-        nv.scroll_offset = y + focused_h - inner_h
+    # Scroll down if cell+output extends below viewport
+    if y + total_focused_h > nv.scroll_offset + inner_h
+        # But don't scroll so far that the cell code disappears off the top
+        nv.scroll_offset = min(y + total_focused_h - inner_h, y)
     end
 end
