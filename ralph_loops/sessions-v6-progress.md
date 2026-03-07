@@ -41,3 +41,10 @@
 - Regression gate: 3553 tests pass (was 3527, +26 new)
 - Learning: JPEG SOF0 header offsets: pos+0,+1=length, pos+2=precision, pos+3,+4=height, pos+5,+6=width. Huffman decode uses mincode+valptr for O(1) symbol lookup
 - Next: SESSIONS-9006 (SVG text fallback)
+
+### 2026-03-07: SESSIONS-9006 [PASS]
+- Attempted: Add SVG text fallback rendering (show SVG XML source in output widget)
+- Result: Added :image_svg detection in classify_output (priority: after PNG/JPEG, before text/plain, independent of graphics protocol). _capture_svg_source() captures SVG XML via MIME"image/svg+xml". _render_svg_output!() shows "SVG image (source)" header + source lines with bar styling. _svg_height() computes 1 + source lines, clamped to _SVG_HEIGHT_MAX=30
+- Regression gate: 3570 tests pass (was 3553, +17 new)
+- Learning: SVG doesn't need graphics protocol — it's always renderable as text. Priority is: PNG/JPEG (with graphics) > SVG > text/plain > image fallback
+- Next: SESSIONS-9007 (image interaction mode)

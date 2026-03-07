@@ -78,12 +78,17 @@ function classify_output(value)::Symbol
         end
     end
 
-    # 5. text/plain — terminal-native output (UnicodePlots, etc.)
+    # 5. SVG — text fallback (no rasterization needed, works without graphics protocol)
+    if _tui_showable(MIME"image/svg+xml"(), value)
+        return :image_svg
+    end
+
+    # 6. text/plain — terminal-native output (UnicodePlots, etc.)
     if _tui_showable(MIME"text/plain"(), value)
         return :text
     end
 
-    # 6. Images — fallback for values with only image output (no text/plain)
+    # 7. Images — fallback for values with only image output (no text/plain)
     for m in _IMAGE_MIMES
         if _tui_showable(m, value)
             return :image_png
@@ -136,6 +141,17 @@ function _capture_png_bytes(@nospecialize(value))::Union{Nothing, Vector{UInt8}}
         io = IOBuffer()
         Base.invokelatest(show, io, MIME"image/png"(), value)
         take!(io)
+    catch
+        nothing
+    end
+end
+
+"""Capture SVG source text from a value that supports MIME"image/svg+xml"."""
+function _capture_svg_source(@nospecialize(value))::Union{Nothing, String}
+    try
+        io = IOBuffer()
+        Base.invokelatest(show, io, MIME"image/svg+xml"(), value)
+        String(take!(io))
     catch
         nothing
     end
@@ -310,6 +326,11 @@ function execute_cell!(workspace::Workspace, cell::Cell)
             out.image_data = _capture_png_bytes(result)
         elseif out.output_type == :image_jpeg
             out.image_data = _capture_jpeg_bytes(result)
+        elseif out.output_type == :image_svg
+            svg_src = _capture_svg_source(result)
+            if svg_src !== nothing
+                out.text_representation = svg_src
+            end
         end
         cell.output = out
         cell.state = cell_done

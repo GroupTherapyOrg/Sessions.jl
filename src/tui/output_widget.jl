@@ -207,6 +207,7 @@ const _IMAGE_HEIGHT_DEFAULT = 12
 const _IMAGE_HEIGHT_MIN = 4
 const _IMAGE_HEIGHT_MAX = 30
 const _CELL_ASPECT_RATIO = 2.0  # terminal chars are ~2× taller than wide
+const _SVG_HEIGHT_MAX = 30  # max lines for SVG source display
 
 """Compute image output height from pixel dimensions and available terminal width.
 
@@ -270,6 +271,8 @@ function _compute_output_height(ow::OutputWidget)
             return image_output_height(dims[1], dims[2], 80)
         end
         return _IMAGE_HEIGHT_DEFAULT
+    elseif otype == :image_svg
+        return _svg_height(ow.cell)
     end
     lines = output_lines(ow.cell)
     isempty(lines) ? 0 : length(lines)
@@ -298,6 +301,12 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
     # Rich output: MarkdownPane for markdown
     if otype == :markdown && ow.cell.output.result !== nothing && !stale
         _render_markdown(ow.cell, rect, buf)
+        return
+    end
+
+    # Rich output: SVG source text
+    if otype == :image_svg && !stale
+        _render_svg_output!(ow, rect, buf)
         return
     end
 
@@ -335,6 +344,44 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
             text = first(seg.text, remaining)
             Tachikoma.set_string!(buf, x, row, text, seg.style)
             x += length(text)
+        end
+    end
+end
+
+# --- SVG text fallback rendering ---
+
+"""Height for SVG source display: 1 header + source lines, clamped."""
+function _svg_height(cell::Cell)
+    src = cell.output.text_representation
+    isempty(src) && return 1  # header only
+    nlines = count('\n', src) + 1
+    min(1 + nlines, _SVG_HEIGHT_MAX)
+end
+
+"""Render SVG source text with a header label."""
+function _render_svg_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    src = ow.cell.output.text_representation
+    header_style = Tachikoma.Style(; fg=Tachikoma.ColorRGB(0xB4, 0xB4, 0xDC), bg=Theme.CANVAS_BG)
+    bar_style = Tachikoma.Style(; fg=Theme.output_bar_color(false, false), bg=Theme.CANVAS_BG)
+    text_style = Theme.output_text_style(false, false)
+
+    text_x = rect.x + 3
+    max_width = max(rect.width - 3, 1)
+    row = rect.y
+
+    # Header line
+    Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+    Tachikoma.set_string!(buf, text_x, row, first("SVG image (source)", max_width), header_style)
+    row += 1
+
+    # Source lines
+    if !isempty(src)
+        for line in split(src, '\n')
+            row > rect.y + rect.height - 1 && break
+            Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+            display_line = first(string(line), max_width)
+            Tachikoma.set_string!(buf, text_x, row, display_line, text_style)
+            row += 1
         end
     end
 end

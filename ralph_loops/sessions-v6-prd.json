@@ -20,7 +20,7 @@
       "id": "P2",
       "title": "Format Expansion",
       "description": "JPEG and SVG support",
-      "stories_done": 1,
+      "stories_done": 2,
       "stories_total": 2
     },
     {
@@ -121,7 +121,8 @@
       "title": "SVG text fallback rendering",
       "milestone": "P2",
       "priority": 2,
-      "status": "open",
+      "status": "done",
+      "completedNote": "Added :image_svg detection in classify_output (before text/plain, after PNG/JPEG). _capture_svg_source() captures SVG XML. SVG rendered as text with header label + source lines, clamped to 30 lines. 17 new tests, 3570 total.",
       "blockedBy": ["SESSIONS-9003"],
       "description": "For image/svg+xml output, render a text-based representation. Parse basic SVG elements (rect, circle, text, path) and show a simplified ASCII/Unicode rendering or just show the SVG source with syntax highlighting. No rasterization needed.",
       "acceptanceCriteria": [
