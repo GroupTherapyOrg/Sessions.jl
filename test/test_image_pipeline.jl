@@ -358,4 +358,107 @@ end
             Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
         end
     end
+
+    # --- E2E Polish (SESSIONS-8042) ---
+
+    @testset "Cell re-execution updates image (cache invalidation)" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
+            ws = Workspace()
+
+            tiny_png_literal = join(["0x" * string(b, base=16, pad=2) for b in TINY_PNG], ", ")
+            execute_cell!(ws, Cell("""
+                struct ReExecImg end
+                const _REEXEC_PNG = UInt8[$tiny_png_literal]
+                Base.showable(::MIME"image/png", ::ReExecImg) = true
+                Base.show(io::IO, ::MIME"image/png", ::ReExecImg) = write(io, _REEXEC_PNG)
+                Base.show(io::IO, ::MIME"text/plain", ::ReExecImg) = print(io, "ReExecImg()")
+            """))
+
+            c = Cell("ReExecImg()")
+            execute_cell!(ws, c)
+            @test c.output.output_type == :image_png
+            first_data = copy(c.output.image_data)
+
+            # Re-execute same cell — should still have image
+            execute_cell!(ws, c)
+            @test c.output.output_type == :image_png
+            @test c.output.image_data == first_data
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "Folded cell does not render image" begin
+        cell = Cell("img()")
+        cell.state = Sessions.cell_done
+        cell.output.output_type = :image_png
+        cell.output.image_data = copy(TINY_PNG)
+
+        ow = Sessions.OutputWidget(cell)
+        ow.collapsed = true
+        @test Sessions.output_height(ow) == 0
+
+        tb = Tachikoma.TestBackend(40, 14)
+        Tachikoma.render_widget!(tb, ow)
+        # Nothing rendered — collapsed
+        @test Tachikoma.find_text(tb, "unable") === nothing
+        @test ow._cached_pixels === nothing  # no decode happened
+    end
+
+    @testset "Idle cell does not render image" begin
+        cell = Cell("img()")
+        cell.state = Sessions.cell_idle
+        cell.output.output_type = :image_png
+        cell.output.image_data = copy(TINY_PNG)
+
+        ow = Sessions.OutputWidget(cell)
+        @test Sessions.output_height(ow) == 0
+    end
+
+    @testset "Text result unaffected by graphics protocol" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
+            ws = Workspace()
+            c = Cell("42")
+            execute_cell!(ws, c)
+            @test c.output.output_type == :text
+            @test c.output.image_data === nothing
+
+            ow = Sessions.OutputWidget(c)
+            tb = Tachikoma.TestBackend(40, 5)
+            Tachikoma.render_widget!(tb, ow)
+            @test Tachikoma.find_text(tb, "42") !== nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "Markdown result unaffected by graphics protocol" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
+            ws = Workspace()
+            execute_cell!(ws, Cell("using Markdown"))
+            c = Cell("md\"hello world\"")
+            execute_cell!(ws, c)
+            @test c.output.output_type == :markdown
+            @test c.output.image_data === nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "gfx_none — image-capable type falls back to text" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
+            mock = MockImageResult()
+            @test classify_output(mock) == :text  # text/plain wins
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
 end
