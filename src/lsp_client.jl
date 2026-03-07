@@ -299,6 +299,11 @@ function _send_initialize!(client::LspClient, project_dir::String)
                 ),
                 "hover" => Dict{String,Any}(
                     "contentFormat" => ["plaintext", "markdown"]
+                ),
+                "signatureHelp" => Dict{String,Any}(
+                    "signatureInformation" => Dict{String,Any}(
+                        "documentationFormat" => ["plaintext"]
+                    )
                 )
             )
         ),
@@ -505,6 +510,72 @@ function lsp_hover_with_timeout!(client::LspClient, uri::String, line::Int, col:
             return nothing
         end
         return parse_hover(response)
+    end
+    nothing
+end
+
+# ── Signature Help ────────────────────────────────────────────────
+
+"""LSP signature help result."""
+struct LspSignatureHelp
+    label::String
+    parameters::Vector{String}
+    active_param::Int  # 0-based
+end
+
+"""Request signature help at a position."""
+function lsp_signature_help!(client::LspClient, uri::String, line::Int, col::Int)::Channel{Any}
+    _send_request!(client, "textDocument/signatureHelp", Dict{String,Any}(
+        "textDocument" => Dict{String,Any}("uri" => uri),
+        "position" => Dict{String,Any}("line" => line - 1, "character" => col)
+    ))
+end
+
+"""Parse a signatureHelp response into an LspSignatureHelp. Returns nothing on failure."""
+function parse_signature_help(response)::Union{Nothing, LspSignatureHelp}
+    response === nothing && return nothing
+    !(response isa Dict) && return nothing
+    sigs = get(response, "signatures", [])
+    isempty(sigs) && return nothing
+    active_sig = Int(get(response, "activeSignature", 0))
+    active_sig = clamp(active_sig, 0, length(sigs) - 1)
+    sig = sigs[active_sig + 1]
+    !(sig isa Dict) && return nothing
+    label = get(sig, "label", "")
+    raw_params = get(sig, "parameters", [])
+    params = String[]
+    for p in raw_params
+        !(p isa Dict) && continue
+        plabel = get(p, "label", "")
+        if plabel isa String
+            push!(params, plabel)
+        elseif plabel isa Vector && length(plabel) == 2
+            # [start, end) range into the signature label
+            s = Int(plabel[1]) + 1  # 0-based to 1-based
+            e = Int(plabel[2])      # exclusive end → inclusive in Julia
+            push!(params, label[s:min(e, lastindex(label))])
+        else
+            push!(params, "")
+        end
+    end
+    active_param = Int(get(response, "activeParameter", 0))
+    LspSignatureHelp(label, params, active_param)
+end
+
+"""
+Request signature help with timeout. Returns LspSignatureHelp or nothing.
+"""
+function lsp_signature_help_with_timeout!(client::LspClient, uri::String, line::Int, col::Int;
+                                           timeout::Float64=1.0)::Union{Nothing, LspSignatureHelp}
+    client.status != lsp_ready && return nothing
+    ch = lsp_signature_help!(client, uri, line, col)
+    result = timedwait(() -> isready(ch), timeout)
+    if result == :ok
+        response = take!(ch)
+        if response isa Dict && haskey(response, "error")
+            return nothing
+        end
+        return parse_signature_help(response)
     end
     nothing
 end

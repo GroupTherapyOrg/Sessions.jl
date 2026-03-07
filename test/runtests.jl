@@ -28,4 +28,5 @@ using Sessions
     include("test_completion_popup.jl")
     include("test_hover.jl")
     include("test_goto_definition.jl")
+    include("test_signature_help.jl")
 end

@@ -73,6 +73,14 @@ mutable struct HoverTooltip
     y::Int                  # screen y of tooltip top-left
 end
 
+mutable struct SignatureHelpTooltip
+    label::String
+    parameters::Vector{String}
+    active_param::Int  # 0-based
+    x::Int
+    y::Int
+end
+
 const HOVER_DEBOUNCE = 0.5  # seconds of mouse stillness before requesting hover
 
 """Sessions notebook TUI application model."""
@@ -128,6 +136,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     hover_last_mouse_y::Int               # last mouse y for stillness detection
     hover_still_since::Float64            # time() when mouse became still (0.0 = moving)
     hover_requested::Bool                 # true if hover request already sent for this position
+    # Signature help tooltip
+    signature_tooltip::Union{Nothing, SignatureHelpTooltip}
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -458,7 +468,8 @@ function SessionsApp(nb::Notebook)
         ReplPanel(), false, Tachikoma.Rect(),
         LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
-        nothing, 0, 0, 0.0, false)
+        nothing, 0, 0, 0.0, false,
+        nothing)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -480,7 +491,8 @@ function SessionsApp(fev::FileEditorView)
         ReplPanel(), false, Tachikoma.Rect(),
         LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
-        nothing, 0, 0, 0.0, false)
+        nothing, 0, 0, 0.0, false,
+        nothing)
 end
 
 function SessionsApp(path::String)
@@ -768,6 +780,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         _render_hover_tooltip!(app.hover_tooltip, buf, area)
     end
 
+    # Signature help tooltip overlay
+    if app.signature_tooltip !== nothing
+        _render_signature_help!(app.signature_tooltip, buf, area)
+    end
+
     # Confirm dialog overlay (centered, with dimmed backdrop)
     if app.confirm_dialog !== nothing
         _render_confirm_dialog!(app.confirm_dialog, buf, area)
@@ -980,6 +997,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     app.message = ""  # Clear status message on any key
     # Dismiss hover tooltip on any keypress
     app.hover_tooltip = nothing
+    # Dismiss signature help on non-typing keys (movement, escape, enter, etc.)
+    if app.signature_tooltip !== nothing && !(evt.key in (:char, :backspace, :delete))
+        app.signature_tooltip = nothing
+    end
 
     # Confirm dialog mode — arrow keys navigate, Enter submits, Escape dismisses
     if app.mode == :confirm && app.confirm_dialog !== nothing
@@ -1186,6 +1207,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             # Mark that LSP needs re-sync (debounced in view loop)
             if app.lsp.status == lsp_ready
                 app.lsp_sync_needed = time()
+            end
+            # Signature help triggers
+            if evt.key == :char
+                if evt.char == '('
+                    _trigger_signature_help!(app)
+                elseif evt.char == ')'
+                    app.signature_tooltip = nothing
+                elseif evt.char == ',' && app.signature_tooltip !== nothing
+                    _advance_signature_param!(app)
+                end
             end
         end
         return
@@ -2490,6 +2521,39 @@ function _uri_to_path(uri::String)
     uri
 end
 
+"""Trigger signature help request at the current cursor position."""
+function _trigger_signature_help!(app::SessionsApp)
+    editor = if app.editor_type == :file && app.file_editor_view !== nothing
+        app.file_editor_view.editor
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return
+        cw.editor
+    end
+    uri = if app.editor_type == :file && app.file_editor_view !== nothing
+        "file://" * abspath(app.file_editor_view.path)
+    else
+        notebook_uri(app.nb)
+    end
+    result = lsp_signature_help_with_timeout!(app.lsp, uri, editor.cursor_row, editor.cursor_col; timeout=1.0)
+    result === nothing && return
+    app.signature_tooltip = SignatureHelpTooltip(result.label, result.parameters, result.active_param, 0, 0)
+end
+
+"""Dismiss the signature help tooltip."""
+function _dismiss_signature_help!(app::SessionsApp)
+    app.signature_tooltip = nothing
+end
+
+"""Advance the active parameter index in the signature help tooltip."""
+function _advance_signature_param!(app::SessionsApp)
+    st = app.signature_tooltip
+    st === nothing && return
+    if st.active_param < length(st.parameters) - 1
+        st.active_param += 1
+    end
+end
+
 """Hit test a click against dropdown items. Returns item index or nothing."""
 function _dropdown_hit_test(dd::CellDropdown, click_x::Int, click_y::Int)
     # Dropdown layout: border row, then one row per item, then border row
@@ -2760,6 +2824,63 @@ function _render_hover_tooltip!(tooltip::HoverTooltip, buf::Tachikoma.Buffer, ar
     # Bottom border
     bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
     Tachikoma.set_string!(buf, x, y + n_lines + 1, bot, border_style)
+end
+
+# --- Signature help tooltip rendering ---
+
+function _render_signature_help!(tooltip::SignatureHelpTooltip, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    label = tooltip.label
+    isempty(label) && return
+
+    content_w = length(label) + 2  # +2 for padding
+    w = min(max(content_w + 2, 12), area.width - 4)  # +2 for borders
+    h = 3  # border + content + border
+
+    # Position: centered horizontally, near top of area
+    x = area.x + max(0, div(area.width - w, 2))
+    y = area.y + 2
+    y = max(y, area.y)
+
+    box = Theme.BOX
+    bg = Theme.ELEVATED_BG
+    border_style = Tachikoma.Style(; fg=Theme.BORDER_BRIGHT, bg)
+    text_style = Tachikoma.Style(; fg=Theme.FG, bg)
+    active_style = Tachikoma.Style(; fg=Theme.ACCENT, bg, bold=true)
+
+    # Top border
+    top = string(box.tl) * repeat(string(box.h), w - 2) * string(box.tr)
+    Tachikoma.set_string!(buf, x, y, top, border_style)
+
+    # Content line
+    iy = y + 1
+    Tachikoma.set_char!(buf, x, iy, box.v, border_style)
+    inner_w = w - 2
+    display = " " * label
+    if length(display) > inner_w
+        display = first(display, inner_w)
+    else
+        display = display * " " ^ (inner_w - length(display))
+    end
+    # Render full label with normal style
+    Tachikoma.set_string!(buf, x + 1, iy, display, text_style)
+    # Overlay active parameter with accent style
+    active_label = if tooltip.active_param >= 0 && tooltip.active_param < length(tooltip.parameters)
+        tooltip.parameters[tooltip.active_param + 1]
+    else
+        ""
+    end
+    if !isempty(active_label)
+        idx = findfirst(active_label, label)
+        if idx !== nothing
+            offset = first(idx)  # position in label (1-based)
+            Tachikoma.set_string!(buf, x + 1 + offset, iy, active_label, active_style)
+        end
+    end
+    Tachikoma.set_char!(buf, x + w - 1, iy, box.v, border_style)
+
+    # Bottom border
+    bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
+    Tachikoma.set_string!(buf, x, y + 2, bot, border_style)
 end
 
 # --- Confirm dialog (centered modal) ---
@@ -3130,6 +3251,17 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             fev.lsp_doc_version += 1
             lsp_did_change!(app.lsp, "file://" * abspath(fev.path),
                 Tachikoma.text(fev.editor), fev.lsp_doc_version)
+        end
+    end
+
+    # Signature help triggers
+    if evt.key == :char
+        if evt.char == '('
+            _trigger_signature_help!(app)
+        elseif evt.char == ')'
+            app.signature_tooltip = nothing
+        elseif evt.char == ',' && app.signature_tooltip !== nothing
+            _advance_signature_param!(app)
         end
     end
 end
