@@ -50,6 +50,10 @@ include("lsp_client.jl")
 export LspClient, LspDiagnostic, LspStatus, lsp_off, lsp_starting, lsp_ready, lsp_error
 export start_lsp!, stop_lsp!, lsp_sync_notebook!, lsp_did_save!, lsp_cell_diagnostics
 
+# Layer 1.5: Code Formatting (Runic.jl runtime-loaded)
+include("formatting.jl")
+export format_code, format_code_available
+
 # Layer 2: Watcher (needed by TUI app for DebouncedWatcher type)
 include("watcher.jl")
 
