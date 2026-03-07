@@ -21,13 +21,15 @@ mutable struct NotebookView
     save_rect::Tachikoma.Rect      # clickable "Save" button in top border
     save_hovered::Bool             # mouse hovering over save button
     dirty::Bool                    # notebook has unsaved changes
+    cell_diags::Dict{UUID, Vector{Diagnostic}}  # JET/LSP diagnostics per cell
+    lsp_status::LspStatus          # LSP server status for indicator
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off)
 end
 
 """Rebuild widgets when cells change."""
@@ -439,6 +441,21 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
                             ch - max(0, rect.y - y))
             Tachikoma.render(cw, cell_rect, buf)
+
+            # --- Diagnostic gutter markers (colored dots on lines with issues) ---
+            diags = get(nv.cell_diags, cw.cell.id, Diagnostic[])
+            if !isempty(diags)
+                # Mark lines with diagnostic dots in the left margin
+                for d in diags
+                    diag_y = y + d.line  # line is 1-based, y is the cell top (border row)
+                    if diag_y >= visible_start && diag_y <= visible_end
+                        marker_fg = d.severity == :error ? Theme.RED :
+                                    d.severity == :warning ? Theme.ORANGE : Theme.CYAN
+                        Tachikoma.set_string!(buf, margin_x, diag_y, "●",
+                            Tachikoma.Style(; fg=marker_fg, bg=Theme.MARGIN_BG))
+                    end
+                end
+            end
         end
 
         # --- Eye button (left margin, vertically centered) ---
@@ -575,6 +592,29 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         nv.save_rect = Tachikoma.Rect(save_x, top_border_y, save_len, 1)
     else
         nv.save_rect = Tachikoma.Rect()
+    end
+
+    # ── LSP status indicator in top-left border ──
+    lsp_label, lsp_fg = if nv.lsp_status == lsp_ready
+        n_diags = sum(length(ds) for ds in values(nv.cell_diags); init=0)
+        if n_diags > 0
+            (" ⚠ $(n_diags) ", Theme.ORANGE)
+        else
+            (" ✓ JET ", Theme.GREEN)
+        end
+    elseif nv.lsp_status == lsp_starting
+        (" ◌ JET ", Theme.FG_MUTED)
+    elseif nv.lsp_status == lsp_error
+        (" ✕ JET ", Theme.RED)
+    else
+        ("", Theme.FG_MUTED)
+    end
+    if !isempty(lsp_label)
+        lsp_x = bx + 2
+        if lsp_x + length(lsp_label) < save_x
+            Tachikoma.set_string!(buf, lsp_x, top_border_y, lsp_label,
+                Tachikoma.Style(; fg=lsp_fg, bg=Theme.CANVAS_BG))
+        end
     end
 end
 

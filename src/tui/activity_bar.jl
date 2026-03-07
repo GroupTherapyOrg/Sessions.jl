@@ -9,6 +9,7 @@ end
 const ACTIVITY_BUTTONS = [
     ActivityButton("⊟", :explorer),
     ActivityButton("⊳", :terminal),
+    ActivityButton("⚠", :diagnostics),
 ]
 
 mutable struct ActivityBar
@@ -90,9 +91,10 @@ function Tachikoma.render(ab::ActivityBar, rect::Tachikoma.Rect, buf::Tachikoma.
         is_active = btn.id in ab.active
         is_hovered = (btn.id == ab.hovered)
 
-        # Active indicator — accent bar on left edge (green for terminal, blue for others)
+        # Active indicator — accent bar on left edge (green for terminal, orange for diagnostics, blue for others)
         if is_active
-            indicator_fg = btn.id == :terminal ? Theme.REPL_INDICATOR : Theme.ACTIVITY_INDICATOR
+            indicator_fg = btn.id == :terminal ? Theme.REPL_INDICATOR :
+                           btn.id == :diagnostics ? Theme.DIAG_INDICATOR : Theme.ACTIVITY_INDICATOR
             Tachikoma.set_char!(buf, bx, btn_y,
                 '▎', Tachikoma.Style(; fg=indicator_fg, bg=Theme.ACTIVITY_BG))
         end

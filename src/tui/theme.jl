@@ -242,4 +242,13 @@ const REPL_PCT          = 25                              # default % of vertica
 const S_REPL            = Style(; fg=FG_DIM, bg=REPL_BG)
 const S_REPL_INPUT      = Style(; fg=FG, bg=REPL_BG)
 
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  Component: Diagnostics (JET analysis markers)                  │
+# ╰──────────────────────────────────────────────────────────────────╯
+
+const DIAG_ERROR_FG     = RED                            # error marker
+const DIAG_WARNING_FG   = ORANGE                         # warning marker
+const DIAG_INFO_FG      = CYAN                           # info marker
+const DIAG_INDICATOR    = ORANGE                         # activity bar indicator (orange ⚠)
+
 end # module Theme

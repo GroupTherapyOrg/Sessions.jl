@@ -42,6 +42,14 @@ include("run.jl")
 include("session.jl")
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
+# Layer 1.5: Static Analysis (JET.jl + JETLS LSP)
+include("jet_analysis.jl")
+export Diagnostic, CellDiagnostics, analyze_cell_jet, analyze_notebook_jet, total_diagnostics, cell_diagnostics
+
+include("lsp_client.jl")
+export LspClient, LspDiagnostic, LspStatus, lsp_off, lsp_starting, lsp_ready, lsp_error
+export start_lsp!, stop_lsp!, lsp_sync_notebook!, lsp_did_save!, lsp_cell_diagnostics
+
 # Layer 2: Watcher (needed by TUI app for DebouncedWatcher type)
 include("watcher.jl")
 
@@ -56,6 +64,7 @@ include("tui/file_panel.jl")
 include("tui/activity_bar.jl")
 include("tui/tab_bar.jl")
 include("tui/repl_panel.jl")
+include("tui/diagnostics_panel.jl")
 include("tui/app.jl")
 
 # Layer 3: CLI

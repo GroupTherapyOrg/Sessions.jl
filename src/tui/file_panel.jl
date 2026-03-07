@@ -313,7 +313,7 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     end
     fp.scroll_offset = clamp(fp.scroll_offset, 0, max(0, length(fp.entries) - entries_height))
 
-    max_name_w = inner_w - 5  # cursor(1) + space(1) + icon(1) + space(1) + padding(1)
+    max_name_w = inner_w - 7  # cursor(1) + space(1) + icon(1) + space(1) + padding(1) + trash(1) + pad(1)
 
     for vi_idx in 0:(entries_height - 1)
         ei = fp.scroll_offset + vi_idx + 1
@@ -358,6 +358,14 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
         end
         Tachikoma.set_string!(buf, inner_x + 4, row, name,
             Tachikoma.Style(; fg=name_fg, bg=Theme.SIDEBAR_BG))
+
+        # Trash icon on far right (skip ".." parent entry)
+        if entry.name != ".."
+            trash_x = inner_x + inner_w - 2
+            trash_fg = (is_hovered || is_cursor) ? Theme.RED : Theme.FG_MUTED
+            Tachikoma.set_string!(buf, trash_x, row, "✕",
+                Tachikoma.Style(; fg=trash_fg, bg=Theme.SIDEBAR_BG))
+        end
     end
 
     # ── Bottom border with cursor position ────────────────────────────
@@ -372,6 +380,19 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
                 '├', border_style)
         end
     end
+end
+
+"""Check if a click x-coordinate hits the trash icon for an entry row."""
+function is_trash_click(fp::FilePanel, screen_x::Int, screen_y::Int)
+    vp = fp.viewport
+    vp.width == 0 && return false
+    hi = Theme.CELL_H_INSET
+    bx = vp.x + hi
+    bw = max(vp.width - 2 * hi, 3)
+    inner_x = bx + 1
+    inner_w = bw - 2
+    trash_x = inner_x + inner_w - 2
+    return screen_x == trash_x
 end
 
 """Truncate a path from the beginning with ... prefix."""

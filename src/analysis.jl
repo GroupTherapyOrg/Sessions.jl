@@ -28,6 +28,16 @@ function cell_references(cell::Cell)
     analyze_cell(cell).references
 end
 
+"""Parse cell code safely — returns a placeholder Expr on ParseError instead of crashing."""
+function _safe_parse(code::String)
+    try
+        Meta.parse("begin\n$(code)\nend")
+    catch
+        # Return an empty block so topology analysis can continue
+        :(begin end)
+    end
+end
+
 """
 Build a NotebookTopology from a Notebook.
 Returns the topology and a mapping from SessionCell wrappers to Cells.
@@ -43,7 +53,7 @@ function build_topology(nb::Notebook)
         session_cells,
         session_cells;
         get_code_str = sc -> sc.cell.code,
-        get_code_expr = sc -> Meta.parse("begin\n$(sc.cell.code)\nend"),
+        get_code_expr = sc -> _safe_parse(sc.cell.code),
     )
 
     topology, session_cells

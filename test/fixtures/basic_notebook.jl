@@ -1,9 +1,6 @@
 ### A Pluto.jl notebook ###
 # v0.19.0
 
-# ╔═╡ 66ef225a-dd9b-4b36-880c-5e777688f37a
-using Markdown
-
 # ╔═╡ f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 md"""
 # Welcome to Sessions.jl
@@ -22,6 +19,9 @@ Try editing a cell and pressing `Ctrl+R` to run it!
 
 > "The best way to predict the future is to invent it." — Alan Kay
 """
+
+# ╔═╡ 66ef225a-dd9b-4b36-880c-5e777688f37a
+using Markdown
 
 # ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
 using UnicodePlots
@@ -45,10 +45,13 @@ surfaceplot(-2:.05:2, -2:.05:2, (x, y) -> cos(n/3 * sqrt(x^2+y^2)) * exp(-0.3*sq
 
 # ╔═╡ 6e7bfb3a-23f5-499a-92b3-66207a5d898f
 function add_2(x)
-    return  x+10
+    return  x + 10
 end
 
 # ╔═╡ 4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
+add_2(20)
+
+# ╔═╡ 16b64a46-205f-45e0-839a-79ae9d0398ce
 add_2(40)
 
 # ╔═╡ 00000001-0000-0000-0000-000000000001
@@ -102,22 +105,27 @@ Normal
 """
 
 # ╔═╡ bc9c0418-fe44-47a5-a7fa-c6c26c776d3c
-
-# ╔═╡ 2963dc7d-2ee9-48e6-a93e-3eb1457bec86
+function strict_undef()
+    println(i)  # Variable `i` is used before it is defined (JETLS lowering/undef-local-var)
+                # Severity: Warning (strict undef)
+    i = 1       # RelatedInformation: `i` is defined here
+    return i
+end
 
 # ╔═╡ 0ab3d0c8-b8c7-4723-8d53-e50d221ec3a7
 
 # ╔═╡ 265a22e7-9448-4e94-a667-bcbed2268af6
 
 # ╔═╡ Cell order:
-# ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
 # ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
+# ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
 # ╠═9c606da0-915a-4cfb-91fc-cdc93a454b8e
 # ╟─0b7a9ca3-5430-4e6a-9894-cd2339447be5
 # ╟─1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
 # ╟─3d413fde-745c-4222-836a-24e5a6e7a481
 # ╠═6e7bfb3a-23f5-499a-92b3-66207a5d898f
 # ╠═4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
+# ╠═16b64a46-205f-45e0-839a-79ae9d0398ce
 # ╠═00000001-0000-0000-0000-000000000001
 # ╠═00000002-0000-0000-0000-000000000002
 # ╠═00000003-0000-0000-0000-000000000003
@@ -126,8 +134,7 @@ Normal
 # ╠═bc4437d0-89f5-4862-8c07-32cf149cb296
 # ╠═a6194bff-a34c-4e43-b2d7-e62997ccbf34
 # ╠═2c624f59-53d4-462a-8ed1-fb6a0d982c64
-# ╠═b236809c-50e5-45e4-8158-f41bad0e9103
+# ╟─b236809c-50e5-45e4-8158-f41bad0e9103
 # ╠═bc9c0418-fe44-47a5-a7fa-c6c26c776d3c
-# ╠═2963dc7d-2ee9-48e6-a93e-3eb1457bec86
 # ╠═0ab3d0c8-b8c7-4723-8d53-e50d221ec3a7
 # ╠═265a22e7-9448-4e94-a667-bcbed2268af6

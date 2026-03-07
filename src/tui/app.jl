@@ -61,6 +61,14 @@ mutable struct SessionsApp <: Tachikoma.Model
     repl_panel::ReplPanel
     repl_open::Bool                       # whether REPL panel is visible
     repl_rect::Tachikoma.Rect            # cached for mouse hit testing
+    # JETLS / Diagnostics
+    lsp::LspClient                        # LSP client for JETLS
+    diagnostics_panel::DiagnosticsPanel   # diagnostics sidebar panel
+    diagnostics_open::Bool                # whether diagnostics panel is visible
+    cell_diagnostics_cache::Dict{UUID, Vector{Diagnostic}}  # cell_id -> diagnostics
+    lsp_doc_version::Int                  # LSP document version counter
+    jet_diagnostics_cache::Dict{UUID, CellDiagnostics}      # JET direct analysis cache
+    lsp_sync_needed::Float64              # time() of last edit that needs LSP sync (0.0 = none pending)
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -175,6 +183,66 @@ function _toggle_repl!(app::SessionsApp)
     end
 end
 
+"""Toggle the diagnostics panel open/closed."""
+function _toggle_diagnostics!(app::SessionsApp)
+    app.diagnostics_open = !app.diagnostics_open
+    if app.diagnostics_open
+        push!(app.activity_bar.active, :diagnostics)
+        # Refresh diagnostics from LSP + JET
+        _refresh_diagnostics!(app)
+    else
+        delete!(app.activity_bar.active, :diagnostics)
+    end
+end
+
+"""Refresh diagnostics from all sources (LSP + JET direct)."""
+function _refresh_diagnostics!(app::SessionsApp)
+    # Merge LSP diagnostics
+    if app.lsp.status == lsp_ready
+        app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
+    end
+
+    # Also run JET direct analysis as fallback if LSP isn't ready
+    if app.lsp.status != lsp_ready
+        Tachikoma.spawn_task!(app.tq, :jet_analyze) do
+            jet_results = analyze_notebook_jet(app.nb)
+            app.jet_diagnostics_cache = jet_results
+            # Convert to cell diagnostics format
+            for (id, cd) in jet_results
+                app.cell_diagnostics_cache[id] = cd.diagnostics
+            end
+            update_entries!(app.diagnostics_panel, app.jet_diagnostics_cache, app.nb)
+        end
+    else
+        # Build CellDiagnostics from LSP data for the panel
+        jet_cache = Dict{UUID, CellDiagnostics}()
+        for (id, diags) in app.cell_diagnostics_cache
+            jet_cache[id] = CellDiagnostics(id, diags, UInt64(0), :error)
+        end
+        update_entries!(app.diagnostics_panel, jet_cache, app.nb)
+    end
+end
+
+"""Sync notebook changes to LSP and refresh diagnostics."""
+function _lsp_sync_and_refresh!(app::SessionsApp)
+    if app.lsp.status == lsp_ready
+        app.lsp_doc_version += 1
+        lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+        # Schedule diagnostic refresh after a brief delay to let LSP process
+        @async begin
+            sleep(0.5)
+            app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
+            if app.diagnostics_open
+                jet_cache = Dict{UUID, CellDiagnostics}()
+                for (id, diags) in app.cell_diagnostics_cache
+                    jet_cache[id] = CellDiagnostics(id, diags, UInt64(0), :error)
+                end
+                update_entries!(app.diagnostics_panel, jet_cache, app.nb)
+            end
+        end
+    end
+end
+
 """Quit the app, cleaning up all resources."""
 function _quit_app!(app::SessionsApp)
     for tab in app.tabs
@@ -185,6 +253,7 @@ function _quit_app!(app::SessionsApp)
     end
     app.watcher = nothing
     stop_repl!(app.repl_panel)
+    stop_lsp!(app.lsp)
     app.quit = true
 end
 
@@ -303,7 +372,9 @@ function SessionsApp(nb::Notebook)
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
-        ReplPanel(), false, Tachikoma.Rect())
+        ReplPanel(), false, Tachikoma.Rect(),
+        LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
+        Dict{UUID, CellDiagnostics}(), 0.0)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -322,7 +393,9 @@ function SessionsApp(fev::FileEditorView)
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
-        ReplPanel(), false, Tachikoma.Rect())
+        ReplPanel(), false, Tachikoma.Rect(),
+        LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
+        Dict{UUID, CellDiagnostics}(), 0.0)
 end
 
 function SessionsApp(path::String)
@@ -340,6 +413,23 @@ function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
     print(t.io, "\e[?1003h")  # upgrade to any-event tracking
     try; Tachikoma.enable_markdown(); catch; end  # load CommonMark extension
     _start_watcher!(app)
+    # Start JETLS language server (on by default)
+    if app.lsp.enabled
+        dir = _find_project_root(app.nb.path)
+        @async begin
+            start_lsp!(app.lsp; project_dir=dir)
+            # Wait for initialize handshake to complete (up to 45s)
+            for _ in 1:90
+                app.lsp.status in (lsp_ready, lsp_error, lsp_off) && break
+                sleep(0.5)
+            end
+            # Once ready, sync the current notebook
+            if app.lsp.status == lsp_ready
+                app.lsp_doc_version += 1
+                lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+            end
+        end
+    end
 end
 
 """Start or restart the file watcher for external change detection."""
@@ -407,6 +497,29 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     buf = frame.buffer
     g = Theme.ISLAND_GAP
 
+    # Debounced LSP sync: after 1s of no typing, push changes to JETLS
+    if app.lsp_sync_needed > 0.0 && app.lsp.status == lsp_ready
+        elapsed = time() - app.lsp_sync_needed
+        if elapsed >= 1.0
+            app.lsp_sync_needed = 0.0
+            app.lsp_doc_version += 1
+            lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+        end
+    end
+
+    # Poll LSP diagnostics (async notifications arrive on reader task)
+    if app.lsp.status == lsp_ready
+        app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
+        # Update diagnostics panel entries if panel is open
+        if app.diagnostics_open
+            jet_cache = Dict{UUID, CellDiagnostics}()
+            for (id, diags) in app.cell_diagnostics_cache
+                jet_cache[id] = CellDiagnostics(id, diags, UInt64(0), :lsp)
+            end
+            update_entries!(app.diagnostics_panel, jet_cache, app.nb)
+        end
+    end
+
     # Fill entire screen with pure black background — islands float on top
     for fy in area.y:(area.y + area.height - 1)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
@@ -416,9 +529,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     content_rect = Tachikoma.Rect(area.x + g, area.y + g,
         max(1, area.width - 2 * g), max(1, area.height - 2 * g))
 
-    # Horizontal layout: activity bar | gap | [file panel | gap] | notebook
+    # Horizontal layout: activity bar | gap | [sidebar | gap] | notebook
+    # Sidebar opens if file explorer OR diagnostics is active
+    sidebar_visible = app.sidebar_open || app.diagnostics_open
     ab_w = Theme.ACTIVITY_BAR_W
-    if app.sidebar_open
+    if sidebar_visible
         h_layout = Tachikoma.Layout(Tachikoma.Horizontal,
             [Tachikoma.Fixed(ab_w), Tachikoma.Fixed(g),
              Tachikoma.Percent(Theme.SIDEBAR_PCT), Tachikoma.Fixed(g),
@@ -449,9 +564,21 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Render activity bar (always visible)
     Tachikoma.render(app.activity_bar, activity_rect, buf)
 
-    # Render file panel (only when open)
-    if app.sidebar_open
-        Tachikoma.render(app.file_panel, sidebar_rect, buf)
+    # Render sidebar panels (file explorer and/or diagnostics)
+    if sidebar_visible
+        both = app.sidebar_open && app.diagnostics_open
+        if both
+            # Split sidebar: file panel on top, diagnostics on bottom
+            side_layout = Tachikoma.Layout(Tachikoma.Vertical,
+                [Tachikoma.Percent(60), Tachikoma.Fill()])
+            side_rects = Tachikoma.split_layout(side_layout, sidebar_rect)
+            Tachikoma.render(app.file_panel, side_rects[1], buf)
+            Tachikoma.render(app.diagnostics_panel, side_rects[2], buf)
+        elseif app.sidebar_open
+            Tachikoma.render(app.file_panel, sidebar_rect, buf)
+        elseif app.diagnostics_open
+            Tachikoma.render(app.diagnostics_panel, sidebar_rect, buf)
+        end
     end
 
     # ── Tab bar (only when multiple tabs are open) ──
@@ -497,6 +624,8 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
             end
         end
         app.notebook_view.dirty = _is_notebook_dirty(app)
+        app.notebook_view.cell_diags = app.cell_diagnostics_cache
+        app.notebook_view.lsp_status = app.lsp.status
         Tachikoma.render(app.notebook_view, editor_rect, buf)
         _update_and_render_progress!(app, editor_rect, buf)
     end
@@ -624,26 +753,22 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Left click on a file entry — open file or enter directory
+    # Left click on a file entry
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
         idx = entry_at_y(fp, evt.y)
         if idx !== nothing
+            entry = fp.entries[idx]
+            # Trash icon click — delete with confirmation
+            if entry.name != ".." && is_trash_click(fp, evt.x, evt.y)
+                _request_delete_file!(app, entry)
+                return
+            end
+            # Normal click — open file or enter directory
             fp.cursor_idx = idx
             result = activate!(fp)
             if result !== nothing
                 _open_file!(app, result)
             end
-        end
-    end
-
-    # Right click on a file entry — delete with confirmation
-    if evt.button == Tachikoma.mouse_right && evt.action == Tachikoma.mouse_press
-        idx = entry_at_y(fp, evt.y)
-        if idx !== nothing
-            entry = fp.entries[idx]
-            # Don't allow deleting ".." parent entry
-            entry.name == ".." && return
-            _request_delete_file!(app, entry)
         end
     end
 end
@@ -849,13 +974,15 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         end
     end
 
-    # Ctrl+S / Cmd+S: save + run stale
+    # Ctrl+S / Cmd+S: save + run stale + sync LSP
     if evt.key == :ctrl && evt.char == 's'
         save_notebook(app.nb)
         app.last_save_time = time()
         app.last_disk_nb = _snapshot_notebook(app.nb)
         _sync_to_active_tab!(app)
         n_stale = run_stale_cells!(app)
+        # Re-sync to JETLS after save for updated diagnostics
+        _lsp_sync_and_refresh!(app)
         if n_stale > 0
             app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
         else
@@ -868,6 +995,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if (evt.key == :ctrl && evt.char == 'r') ||
        evt.key == :shift_enter || evt.key == :ctrl_enter || evt.key == :shift_ctrl_enter
         run_focused_cell_async!(app)
+        return
+    end
+
+    # Ctrl+J: toggle diagnostics panel
+    if evt.key == :ctrl && evt.char == 'j'
+        _toggle_diagnostics!(app)
         return
     end
 
@@ -890,6 +1023,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         cw = focused_widget(app.notebook_view)
         if cw !== nothing
             Tachikoma.handle_key!(cw, evt)
+            # Mark that LSP needs re-sync (debounced in view loop)
+            if app.lsp.status == lsp_ready
+                app.lsp_sync_needed = time()
+            end
         end
         return
     end
@@ -1023,6 +1160,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 app.sidebar_open = is_active(app.activity_bar, :explorer)
             elseif btn_id == :terminal
                 _toggle_repl!(app)
+            elseif btn_id == :diagnostics
+                _toggle_diagnostics!(app)
             end
         elseif evt.action == Tachikoma.mouse_move
             app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)
@@ -1835,6 +1974,8 @@ function run_focused_cell_async!(app::SessionsApp)
     Tachikoma.spawn_task!(app.tq, :execute_cell) do
         execute_changed!(app.nb, [cell]; workspace=app.workspace)
         save_session!(app.nb)
+        # Sync to LSP after execution for updated diagnostics
+        _lsp_sync_and_refresh!(app)
     end
 end
 
@@ -1863,8 +2004,12 @@ function run_stale_cells!(app::SessionsApp)
 
     # Use execute_changed! which computes the right topological order
     # and includes downstream dependents
-    execute_changed!(app.nb, sc; workspace=app.workspace)
-    save_session!(app.nb)
+    try
+        execute_changed!(app.nb, sc; workspace=app.workspace)
+        save_session!(app.nb)
+    catch e
+        app.message = "Execution error: $(sprint(showerror, e))"
+    end
     length(sc)
 end
 
@@ -2082,6 +2227,11 @@ function _exit_insert_mode!(app::SessionsApp)
     app.mode = :normal
     for cw in app.notebook_view.cell_widgets
         cw.editor.focused = false
+    end
+    # Flush any pending LSP sync immediately on mode exit
+    if app.lsp_sync_needed > 0.0
+        app.lsp_sync_needed = 0.0
+        _lsp_sync_and_refresh!(app)
     end
 end
 

@@ -1,7 +1,7 @@
 # TUI: Status bar — Islands Dark themed top and bottom bars
 
 """Create the top status bar showing notebook info."""
-function make_top_bar(nb::Notebook)
+function make_top_bar(nb::Notebook; lsp_status::LspStatus=lsp_off, n_diags::Int=0)
     n_cells = length(nb)
     n_done = count(c -> c.state == cell_done, values(nb.cells))
     n_err = count(c -> c.state == cell_errored, values(nb.cells))
@@ -18,7 +18,22 @@ function make_top_bar(nb::Notebook)
         Tachikoma.Span("  $(n_done)/$(n_cells) cells", Theme.S_MUTED)
     end
 
-    Tachikoma.StatusBar(; left=[path_span, status])
+    # LSP status indicator
+    lsp_span = if lsp_status == lsp_ready
+        if n_diags > 0
+            Tachikoma.Span("  ⚠ $(n_diags)", Tachikoma.Style(; fg=Theme.ORANGE))
+        else
+            Tachikoma.Span("  ✓ JETLS", Tachikoma.Style(; fg=Theme.GREEN))
+        end
+    elseif lsp_status == lsp_starting
+        Tachikoma.Span("  ◌ JETLS", Theme.S_MUTED)
+    elseif lsp_status == lsp_error
+        Tachikoma.Span("  ✕ JETLS", Tachikoma.Style(; fg=Theme.RED))
+    else
+        Tachikoma.Span("", Theme.S_MUTED)  # lsp_off — show nothing
+    end
+
+    Tachikoma.StatusBar(; left=[path_span, status, lsp_span])
 end
 
 """Create top status bar for file editor mode."""
@@ -49,7 +64,7 @@ function make_bottom_bar(; mode::Symbol=:normal, editor_type::Symbol=:notebook)
     elseif mode == :insert
         "Esc: Normal mode  Ctrl+R: Run  Ctrl+S: Save  Ctrl+C: Copy"
     else  # :normal
-        "Esc: Panel  Enter: Edit  Ctrl+R: Run  R: Run All  Ctrl+S: Save  Ctrl+C: Copy cell"
+        "Esc: Panel  Enter: Edit  Ctrl+R: Run  R: Run All  Ctrl+J: JET  Ctrl+S: Save"
     end
 
     Tachikoma.StatusBar(; left=[Tachikoma.Span(" " * keys, Theme.S_DIM)])
