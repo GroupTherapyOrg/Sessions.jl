@@ -413,6 +413,17 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         cw.hovered = is_hovered && !is_focused
 
+        # --- Horizontal separator rule in gap above cell ---
+        if i > 1
+            rule_y = y - Theme.CELL_GAP + gap_mid
+            if rule_y >= visible_start && rule_y <= visible_end
+                rule_style = Tachikoma.Style(; fg=Theme.FG_FAINT, bg=Theme.CANVAS_BG)
+                for rx in cx:(cx + cw_width - 1)
+                    Tachikoma.set_char!(buf, rx, rule_y, '─', rule_style)
+                end
+            end
+        end
+
         # --- Gap ABOVE this cell: + button (and ▲ for active cell) ---
         # + shown when this cell or the previous cell shows controls.
         # ▲ only shown on the active cell's top gap (to move it up).

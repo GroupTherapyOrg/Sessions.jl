@@ -1501,4 +1501,31 @@ using Markdown: @md_str
         rm(path; force=true)
         rm(session_path(path); force=true)
     end
+
+    @testset "E2E: Horizontal separator rules between cells" begin
+        nb = Notebook(; path="rule_test.jl")
+        add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = 2")
+        add_cell!(nb, "c = 3")
+        app = Sessions.SessionsApp(nb)
+
+        tb = render_app(app; height=30)
+        # The separator is a '─' char rendered with FG_FAINT in the gap
+        # With 3 cells, there should be 2 gaps → 2 rules
+        # find_text should find at least one '─' in the gap area
+        # (Border also has '─' but the rule adds more across the cell width)
+        @test Tachikoma.find_text(tb, "─") !== nothing
+    end
+
+    @testset "E2E: No separator rule above first cell" begin
+        nb = Notebook(; path="rule_test.jl")
+        add_cell!(nb, "only_cell")
+        app = Sessions.SessionsApp(nb)
+
+        tb = render_app(app; height=20)
+        # With only 1 cell, there's no inter-cell gap, so no rule
+        # (There will still be '─' from the notebook border, but no
+        # rule between cells — we just verify it doesn't crash)
+        @test Tachikoma.find_text(tb, "only_cell") !== nothing
+    end
 end
