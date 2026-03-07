@@ -771,6 +771,7 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.notebook_view.dirty = _is_notebook_dirty(app)
         app.notebook_view.cell_diags = app.cell_diagnostics_cache
         app.notebook_view.lsp_status = app.lsp.status
+        app.notebook_view.current_frame = frame  # thread Frame for image rendering
         Tachikoma.render(app.notebook_view, editor_rect, buf)
         _update_and_render_progress!(app, editor_rect, buf)
         # Scrollbar for notebook

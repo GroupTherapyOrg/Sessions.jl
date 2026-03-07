@@ -6,9 +6,10 @@ mutable struct OutputWidget
     cell::Cell
     collapsed::Bool
     hovered::Bool      # mouse is hovering over this bond widget
+    current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing)
 
 """Format cell output as displayable lines.
 

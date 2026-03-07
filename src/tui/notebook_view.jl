@@ -23,13 +23,14 @@ mutable struct NotebookView
     dirty::Bool                    # notebook has unsaved changes
     cell_diags::Dict{UUID, Vector{Diagnostic}}  # JET/LSP diagnostics per cell
     lsp_status::LspStatus          # LSP server status for indicator
+    current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off)
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing)
 end
 
 """Rebuild widgets when cells change."""
@@ -489,6 +490,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # --- Output rendering ---
         if oh > 0
             ow.hovered = (i == nv.hovered_bond_idx)
+            ow.current_frame = nv.current_frame  # thread Frame for image rendering
             if y + oh > visible_start && y <= visible_end
                 out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
                 Tachikoma.render(ow, out_rect, buf)
