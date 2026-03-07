@@ -490,6 +490,25 @@ function parse_hover(response)::Union{Nothing, LspHoverResult}
     LspHoverResult(text, 0, 0)
 end
 
+"""
+Request hover info with a timeout. Returns LspHoverResult or nothing.
+On timeout or error, returns nothing (never hangs).
+"""
+function lsp_hover_with_timeout!(client::LspClient, uri::String, line::Int, col::Int;
+                                  timeout::Float64=1.0)::Union{Nothing, LspHoverResult}
+    client.status != lsp_ready && return nothing
+    ch = lsp_hover!(client, uri, line, col)
+    result = timedwait(() -> isready(ch), timeout)
+    if result == :ok
+        response = take!(ch)
+        if response isa Dict && haskey(response, "error")
+            return nothing
+        end
+        return parse_hover(response)
+    end
+    nothing
+end
+
 # ── Go-to-Definition ───────────────────────────────────────────────
 
 """Request go-to-definition at a position."""

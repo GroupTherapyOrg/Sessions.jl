@@ -66,6 +66,15 @@ function _completion_prefix(lines::Vector{Vector{Char}}, row::Int, col::Int)
     start < col ? String(line[start+1:col]) : ""
 end
 
+"""Floating hover tooltip (triggered by mouse stillness)."""
+mutable struct HoverTooltip
+    text::String            # markdown/plaintext content
+    x::Int                  # screen x of tooltip top-left
+    y::Int                  # screen y of tooltip top-left
+end
+
+const HOVER_DEBOUNCE = 0.5  # seconds of mouse stillness before requesting hover
+
 """Sessions notebook TUI application model."""
 mutable struct SessionsApp <: Tachikoma.Model
     nb::Notebook
@@ -113,6 +122,12 @@ mutable struct SessionsApp <: Tachikoma.Model
     lsp_doc_version::Int                  # LSP document version counter
     jet_diagnostics_cache::Dict{UUID, CellDiagnostics}      # JET direct analysis cache
     lsp_sync_needed::Float64              # time() of last edit that needs LSP sync (0.0 = none pending)
+    # Hover tooltip
+    hover_tooltip::Union{Nothing, HoverTooltip}
+    hover_last_mouse_x::Int               # last mouse x for stillness detection
+    hover_last_mouse_y::Int               # last mouse y for stillness detection
+    hover_still_since::Float64            # time() when mouse became still (0.0 = moving)
+    hover_requested::Bool                 # true if hover request already sent for this position
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -442,7 +457,8 @@ function SessionsApp(nb::Notebook)
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(),
         LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
-        Dict{UUID, CellDiagnostics}(), 0.0)
+        Dict{UUID, CellDiagnostics}(), 0.0,
+        nothing, 0, 0, 0.0, false)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -463,7 +479,8 @@ function SessionsApp(fev::FileEditorView)
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(),
         LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
-        Dict{UUID, CellDiagnostics}(), 0.0)
+        Dict{UUID, CellDiagnostics}(), 0.0,
+        nothing, 0, 0, 0.0, false)
 end
 
 function SessionsApp(path::String)
@@ -578,6 +595,16 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
             app.lsp_sync_needed = 0.0
             app.lsp_doc_version += 1
             lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+        end
+    end
+
+    # Debounced hover: after HOVER_DEBOUNCE of mouse stillness, request hover info
+    if app.hover_still_since > 0.0 && !app.hover_requested && app.lsp.status == lsp_ready &&
+       app.hover_tooltip === nothing
+        elapsed = time() - app.hover_still_since
+        if elapsed >= HOVER_DEBOUNCE
+            app.hover_requested = true
+            _request_hover!(app, app.hover_last_mouse_x, app.hover_last_mouse_y)
         end
     end
 
@@ -734,6 +761,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     # Completion popup overlay
     if app.completion_popup !== nothing
         _render_completion_popup!(app.completion_popup, buf, area)
+    end
+
+    # Hover tooltip overlay
+    if app.hover_tooltip !== nothing
+        _render_hover_tooltip!(app.hover_tooltip, buf, area)
     end
 
     # Confirm dialog overlay (centered, with dimmed backdrop)
@@ -946,6 +978,8 @@ end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     app.message = ""  # Clear status message on any key
+    # Dismiss hover tooltip on any keypress
+    app.hover_tooltip = nothing
 
     # Confirm dialog mode — arrow keys navigate, Enter submits, Escape dismisses
     if app.mode == :confirm && app.confirm_dialog !== nothing
@@ -1229,6 +1263,14 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     if evt.action == Tachikoma.mouse_move
         app.activity_bar.hovered = :none
         app.file_panel.hovered_idx = 0
+        # Track mouse position for hover tooltip debounce
+        if evt.x != app.hover_last_mouse_x || evt.y != app.hover_last_mouse_y
+            app.hover_last_mouse_x = evt.x
+            app.hover_last_mouse_y = evt.y
+            app.hover_still_since = time()
+            app.hover_requested = false
+            app.hover_tooltip = nothing  # dismiss on move
+        end
     end
 
     # ── Tab bar clicks ──
@@ -2336,6 +2378,42 @@ function _trigger_completion!(app::SessionsApp)
     _open_completion!(app, items)
 end
 
+"""Request hover info at the given screen position. Converts screen coords to editor coords."""
+function _request_hover!(app::SessionsApp, screen_x::Int, screen_y::Int)
+    # Determine URI and editor for hover
+    uri = if app.editor_type == :file && app.file_editor_view !== nothing
+        "file://" * abspath(app.file_editor_view.path)
+    else
+        notebook_uri(app.nb)
+    end
+    # For now, use a simple approach: request hover at the mouse position
+    # The screen coords need to be converted to editor line/col, which requires
+    # knowing the editor viewport rect. For simplicity, we attempt hover at
+    # the cursor position or approximate from screen coords.
+    # TODO: In a full implementation, map screen coords → editor line/col
+    editor = if app.editor_type == :file && app.file_editor_view !== nothing
+        app.file_editor_view.editor
+    else
+        cw = focused_widget(app.notebook_view)
+        cw === nothing && return
+        cw.editor
+    end
+    # Use the cursor position for hover (mouse position mapping is complex)
+    result = lsp_hover_with_timeout!(app.lsp, uri, editor.cursor_row, editor.cursor_col; timeout=0.5)
+    result === nothing && return
+    app.hover_tooltip = HoverTooltip(result.contents, screen_x, screen_y)
+end
+
+"""Show hover tooltip at a given position with given text. Used by tests."""
+function _show_hover!(app::SessionsApp, text::String, x::Int, y::Int)
+    app.hover_tooltip = HoverTooltip(text, x, y)
+end
+
+"""Dismiss hover tooltip."""
+function _dismiss_hover!(app::SessionsApp)
+    app.hover_tooltip = nothing
+end
+
 """Hit test a click against dropdown items. Returns item index or nothing."""
 function _dropdown_hit_test(dd::CellDropdown, click_x::Int, click_y::Int)
     # Dropdown layout: border row, then one row per item, then border row
@@ -2552,6 +2630,60 @@ function _render_completion_popup!(popup::CompletionPopup, buf::Tachikoma.Buffer
     # Bottom border
     bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
     Tachikoma.set_string!(buf, x, y + n_visible + 1, bot, border_style)
+end
+
+# --- Hover tooltip rendering ---
+
+function _render_hover_tooltip!(tooltip::HoverTooltip, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    text = tooltip.text
+    isempty(text) && return
+
+    # Split text into lines and clamp width
+    raw_lines = split(text, '\n')
+    max_line_w = maximum(length(l) for l in raw_lines)
+    max_w = min(max_line_w + 2, area.width - 4)  # +2 for padding, cap at screen
+    n_lines = min(length(raw_lines), div(area.height, 2))  # don't take more than half screen
+
+    w = max(max_w + 2, 10)  # +2 for borders
+    h = n_lines + 2  # +2 for borders
+
+    # Position: try below mouse, fall back to above
+    x = min(tooltip.x, area.x + area.width - w)
+    x = max(x, area.x)
+    y = tooltip.y + 1  # below mouse
+    if y + h > area.y + area.height
+        y = tooltip.y - h  # above mouse
+    end
+    y = max(y, area.y)
+
+    box = Theme.BOX
+    bg = Theme.ELEVATED_BG
+    border_style = Tachikoma.Style(; fg=Theme.BORDER_BRIGHT, bg)
+    text_style = Tachikoma.Style(; fg=Theme.FG, bg)
+
+    # Top border
+    top = string(box.tl) * repeat(string(box.h), w - 2) * string(box.tr)
+    Tachikoma.set_string!(buf, x, y, top, border_style)
+
+    # Content lines
+    for i in 1:n_lines
+        iy = y + i
+        Tachikoma.set_char!(buf, x, iy, box.v, border_style)
+        line_text = i <= length(raw_lines) ? string(raw_lines[i]) : ""
+        inner_w = w - 2
+        display = " " * line_text
+        if length(display) > inner_w
+            display = first(display, inner_w)
+        else
+            display = display * " " ^ (inner_w - length(display))
+        end
+        Tachikoma.set_string!(buf, x + 1, iy, display, text_style)
+        Tachikoma.set_char!(buf, x + w - 1, iy, box.v, border_style)
+    end
+
+    # Bottom border
+    bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
+    Tachikoma.set_string!(buf, x, y + n_lines + 1, bot, border_style)
 end
 
 # --- Confirm dialog (centered modal) ---

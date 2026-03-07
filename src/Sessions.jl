@@ -50,6 +50,7 @@ include("lsp_client.jl")
 export LspClient, LspDiagnostic, LspStatus, lsp_off, lsp_starting, lsp_ready, lsp_error
 export start_lsp!, stop_lsp!, lsp_sync_notebook!, lsp_did_save!, lsp_cell_diagnostics
 export LspCompletionItem, parse_completions, lsp_completion!, lsp_complete_with_timeout!
+export LspHoverResult, parse_hover, lsp_hover!, lsp_hover_with_timeout!
 
 # Layer 1.5: Code Formatting (Runic.jl runtime-loaded)
 include("formatting.jl")
