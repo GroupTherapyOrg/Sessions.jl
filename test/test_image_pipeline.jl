@@ -6,16 +6,16 @@ using Markdown: MD, Paragraph
 # --- Mock image type that supports MIME"image/png" ---
 struct MockImageResult end
 
-# Minimal valid 1x1 red PNG (67 bytes)
+# Minimal valid 1x1 red PNG (69 bytes) — properly zlib-compressed
 const TINY_PNG = UInt8[
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,  # PNG signature
     0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1
     0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # 8-bit RGB
     0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,  # IDAT chunk
-    0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,  # compressed data
-    0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-    0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,  # IEND chunk
+    0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00,  # zlib compressed
+    0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92,
+    0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,  # IEND chunk
     0x44, 0xae, 0x42, 0x60, 0x82
 ]
 
@@ -179,5 +179,140 @@ end
         execute_cell!(ws, c)
         @test c.output.output_type == :text
         @test c.output.image_data === nothing
+    end
+
+    # --- E2E: OutputWidget rendering (SESSIONS-8035) ---
+
+    @testset "OutputWidget renders braille for valid PNG (gfx_none)" begin
+        cell = Cell("img()")
+        cell.state = Sessions.cell_done
+        cell.output.output_type = :image_png
+        cell.output.image_data = copy(TINY_PNG)
+
+        ow = Sessions.OutputWidget(cell)
+        tb = Tachikoma.TestBackend(40, 14)
+        Tachikoma.render_widget!(tb, ow)
+
+        # Should NOT show placeholder text
+        @test Tachikoma.find_text(tb, "unable to decode") === nothing
+        @test Tachikoma.find_text(tb, "placeholder") === nothing
+
+        # Cache should be populated after render
+        @test ow._cached_image_hash != UInt64(0)
+        @test ow._cached_pixels !== nothing
+        @test ow._cached_pixel_image !== nothing
+    end
+
+    @testset "OutputWidget fallback for corrupt PNG" begin
+        cell = Cell("bad()")
+        cell.state = Sessions.cell_done
+        cell.output.output_type = :image_png
+        cell.output.image_data = UInt8[0xff, 0xfe, 0xfd]  # not a PNG
+
+        ow = Sessions.OutputWidget(cell)
+        tb = Tachikoma.TestBackend(60, 14)
+        Tachikoma.render_widget!(tb, ow)
+        @test Tachikoma.find_text(tb, "unable to decode") !== nothing
+    end
+
+    @testset "OutputWidget — no render when image_data is nothing" begin
+        cell = Cell("nothing_img()")
+        cell.state = Sessions.cell_done
+        cell.output.output_type = :image_png
+        cell.output.image_data = nothing
+
+        ow = Sessions.OutputWidget(cell)
+        @test Sessions.output_height(ow) == 0  # no height allocated
+    end
+
+    @testset "OutputWidget cache — same image_data reuses cache" begin
+        cell = Cell("cached()")
+        cell.state = Sessions.cell_done
+        cell.output.output_type = :image_png
+        cell.output.image_data = copy(TINY_PNG)
+
+        ow = Sessions.OutputWidget(cell)
+        tb = Tachikoma.TestBackend(40, 14)
+        Tachikoma.render_widget!(tb, ow)
+
+        # Remember cache state
+        h1 = ow._cached_image_hash
+        px1 = ow._cached_pixels
+        pi1 = ow._cached_pixel_image
+
+        # Render again — cache should be reused (same hash)
+        tb2 = Tachikoma.TestBackend(40, 14)
+        Tachikoma.render_widget!(tb2, ow)
+        @test ow._cached_image_hash == h1
+        @test ow._cached_pixels === px1  # same object
+    end
+
+    @testset "OutputWidget cache invalidation on new image_data" begin
+        cell = Cell("new_img()")
+        cell.state = Sessions.cell_done
+        cell.output.output_type = :image_png
+        cell.output.image_data = copy(TINY_PNG)
+
+        ow = Sessions.OutputWidget(cell)
+        tb = Tachikoma.TestBackend(40, 14)
+        Tachikoma.render_widget!(tb, ow)
+
+        h1 = ow._cached_image_hash
+
+        # Change image_data (append a byte to change hash)
+        new_data = copy(TINY_PNG)
+        push!(new_data, 0x00)
+        cell.output.image_data = new_data
+
+        # Re-render — cache should be invalidated (different hash)
+        # (decode will fail on modified PNG but that's OK — testing cache invalidation)
+        tb2 = Tachikoma.TestBackend(40, 14)
+        Tachikoma.render_widget!(tb2, ow)
+        @test ow._cached_image_hash != h1 || ow._cached_pixels === nothing
+    end
+
+    @testset "E2E: full pipeline — classify → capture → decode → render" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
+            ws = Workspace()
+
+            # Define mock type that produces valid TINY_PNG
+            tiny_png_literal = join(["0x" * string(b, base=16, pad=2) for b in TINY_PNG], ", ")
+            execute_cell!(ws, Cell("""
+                struct E2EImg end
+                const _E2E_PNG = UInt8[$tiny_png_literal]
+                Base.showable(::MIME"image/png", ::E2EImg) = true
+                Base.show(io::IO, ::MIME"image/png", ::E2EImg) = write(io, _E2E_PNG)
+                Base.show(io::IO, ::MIME"text/plain", ::E2EImg) = print(io, "E2EImg()")
+            """))
+
+            c = Cell("E2EImg()")
+            execute_cell!(ws, c)
+
+            # 1. classify_output returned :image_png
+            @test c.output.output_type == :image_png
+
+            # 2. PNG bytes captured
+            @test c.output.image_data !== nothing
+            @test c.output.image_data[1:8] == TINY_PNG[1:8]
+
+            # 3. text_representation also captured
+            @test c.output.text_representation == "E2EImg()"
+
+            # 4. OutputWidget renders (braille path via TestBackend, gfx_none for render)
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
+            ow = Sessions.OutputWidget(c)
+            @test Sessions.output_height(ow) == 12  # _IMAGE_OUTPUT_HEIGHT
+
+            tb = Tachikoma.TestBackend(40, 14)
+            Tachikoma.render_widget!(tb, ow)
+
+            # Should have decoded and rendered (no fallback text)
+            @test Tachikoma.find_text(tb, "unable to decode") === nothing
+            @test ow._cached_pixels !== nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
     end
 end
