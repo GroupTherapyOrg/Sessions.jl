@@ -127,6 +127,17 @@ function text_representation(value)::String
     end
 end
 
+"""Capture PNG bytes from a value that supports MIME"image/png"."""
+function _capture_png_bytes(@nospecialize(value))::Union{Nothing, Vector{UInt8}}
+    try
+        io = IOBuffer()
+        Base.invokelatest(show, io, MIME"image/png"(), value)
+        take!(io)
+    catch
+        nothing
+    end
+end
+
 # --- Error formatting ---
 
 """Format an exception with a clean, filtered stacktrace for display."""
@@ -279,6 +290,10 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     if err === nothing
         cell.output.output_type = classify_output(result)
         cell.output.text_representation = text_representation(result)
+        # Capture PNG bytes for image outputs
+        if cell.output.output_type == :image_png
+            cell.output.image_data = _capture_png_bytes(result)
+        end
         cell.state = cell_done
         mark_executed!(cell)
     else

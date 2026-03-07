@@ -109,4 +109,75 @@ end
             Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
         end
     end
+
+    @testset "PNG capture — _capture_png_bytes" begin
+        mock = MockImageResult()
+        png_bytes = Sessions._capture_png_bytes(mock)
+        @test png_bytes !== nothing
+        @test length(png_bytes) > 0
+        # Should start with PNG signature
+        @test png_bytes[1:8] == UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+
+        # Non-image type returns nothing
+        @test Sessions._capture_png_bytes(42) === nothing
+        @test Sessions._capture_png_bytes("hello") === nothing
+    end
+
+    @testset "execute_cell! captures image_data with graphics protocol" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
+            ws = Workspace()
+
+            # Define mock image type in workspace
+            execute_cell!(ws, Cell("""
+                struct TestImg end
+                Base.showable(::MIME"image/png", ::TestImg) = true
+                Base.show(io::IO, ::MIME"image/png", ::TestImg) = write(io, UInt8[0x89, 0x50, 0x4e, 0x47])
+                Base.show(io::IO, ::MIME"text/plain", ::TestImg) = print(io, "TestImg()")
+            """))
+
+            # Execute cell that returns image type
+            c = Cell("TestImg()")
+            execute_cell!(ws, c)
+            @test c.output.output_type == :image_png
+            @test c.output.image_data !== nothing
+            @test length(c.output.image_data) > 0
+            @test c.output.image_data[1:4] == UInt8[0x89, 0x50, 0x4e, 0x47]
+            @test c.output.text_representation == "TestImg()"
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "execute_cell! — no image_data without graphics protocol" begin
+        old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
+        try
+            Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
+            ws = Workspace()
+
+            # Same mock but with gfx_none → text output, no image_data
+            execute_cell!(ws, Cell("""
+                struct TestImg2 end
+                Base.showable(::MIME"image/png", ::TestImg2) = true
+                Base.show(io::IO, ::MIME"image/png", ::TestImg2) = write(io, UInt8[1,2,3])
+                Base.show(io::IO, ::MIME"text/plain", ::TestImg2) = print(io, "TestImg2()")
+            """))
+
+            c = Cell("TestImg2()")
+            execute_cell!(ws, c)
+            @test c.output.output_type == :text  # text/plain wins when no graphics
+            @test c.output.image_data === nothing
+        finally
+            Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
+        end
+    end
+
+    @testset "execute_cell! — non-image results have nothing image_data" begin
+        ws = Workspace()
+        c = Cell("42")
+        execute_cell!(ws, c)
+        @test c.output.output_type == :text
+        @test c.output.image_data === nothing
+    end
 end
