@@ -29,4 +29,5 @@ using Sessions
     include("test_hover.jl")
     include("test_goto_definition.jl")
     include("test_signature_help.jl")
+    include("test_scrollbar.jl")
 end

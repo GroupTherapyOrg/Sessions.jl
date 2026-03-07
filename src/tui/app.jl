@@ -138,6 +138,10 @@ mutable struct SessionsApp <: Tachikoma.Model
     hover_requested::Bool                 # true if hover request already sent for this position
     # Signature help tooltip
     signature_tooltip::Union{Nothing, SignatureHelpTooltip}
+    # Scrollbar state (set during render for mouse hit testing)
+    scrollbar_col::Int
+    scrollbar_y::Int
+    scrollbar_h::Int
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -469,7 +473,8 @@ function SessionsApp(nb::Notebook)
         LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
-        nothing)
+        nothing,
+        0, 0, 0)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -492,7 +497,8 @@ function SessionsApp(fev::FileEditorView)
         LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
-        nothing)
+        nothing,
+        0, 0, 0)
 end
 
 function SessionsApp(path::String)
@@ -734,6 +740,17 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
             fev.diagnostics = lsp_file_diagnostics(app.lsp, abspath(fev.path))
         end
         Tachikoma.render(fev, editor_rect, buf)
+        # Scrollbar for file editor
+        sb_x = editor_rect.x + editor_rect.width - 1
+        sb_y = editor_rect.y
+        sb_h = editor_rect.height
+        total_lines = length(fev.editor.lines)
+        vi = Theme.CELL_V_INSET
+        viewport_h = max(1, editor_rect.height - 2 * vi - 2)
+        _render_scrollbar!(buf, sb_x, sb_y, sb_h, total_lines, viewport_h, fev.editor.scroll_offset)
+        app.scrollbar_col = sb_x
+        app.scrollbar_y = sb_y
+        app.scrollbar_h = sb_h
     else
         for (i, cw) in enumerate(app.notebook_view.cell_widgets)
             cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
@@ -746,6 +763,18 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.notebook_view.lsp_status = app.lsp.status
         Tachikoma.render(app.notebook_view, editor_rect, buf)
         _update_and_render_progress!(app, editor_rect, buf)
+        # Scrollbar for notebook
+        sb_x = editor_rect.x + editor_rect.width - 1
+        sb_y = editor_rect.y
+        sb_h = editor_rect.height
+        nv = app.notebook_view
+        total_h = content_height(nv)
+        vi = Theme.CELL_V_INSET
+        viewport_h = max(1, editor_rect.height - 2 * vi - 2)
+        _render_scrollbar!(buf, sb_x, sb_y, sb_h, total_h, viewport_h, nv.scroll_offset)
+        app.scrollbar_col = sb_x
+        app.scrollbar_y = sb_y
+        app.scrollbar_h = sb_h
     end
 
     # Repaint overflow areas — scoped to editor column only (don't overwrite sidebar)
@@ -1299,6 +1328,28 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     # Ctrl+Click: go to definition
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press && evt.ctrl
         _goto_definition!(app)
+        return
+    end
+
+    # Scrollbar click: jump to relative position
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press &&
+       app.scrollbar_col > 0 && evt.x == app.scrollbar_col &&
+       evt.y >= app.scrollbar_y && evt.y < app.scrollbar_y + app.scrollbar_h
+        relative = (evt.y - app.scrollbar_y) / max(1, app.scrollbar_h - 1)
+        if app.editor_type == :file && app.file_editor_view !== nothing
+            fev = app.file_editor_view
+            total_lines = length(fev.editor.lines)
+            vi = Theme.CELL_V_INSET
+            viewport_h = max(1, app.scrollbar_h - 2 * vi - 2)
+            max_scroll = max(0, total_lines - viewport_h)
+            fev.editor.scroll_offset = clamp(round(Int, relative * max_scroll), 0, max_scroll)
+        else
+            nv = app.notebook_view
+            vi = Theme.CELL_V_INSET
+            viewport_h = max(1, app.scrollbar_h - 2 * vi - 2)
+            max_scroll = max(0, content_height(nv) - viewport_h)
+            nv.scroll_offset = clamp(round(Int, relative * max_scroll), 0, max_scroll)
+        end
         return
     end
 
@@ -2824,6 +2875,31 @@ function _render_hover_tooltip!(tooltip::HoverTooltip, buf::Tachikoma.Buffer, ar
     # Bottom border
     bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
     Tachikoma.set_string!(buf, x, y + n_lines + 1, bot, border_style)
+end
+
+# --- Scrollbar rendering ---
+
+"""Compute scrollbar thumb position and size. Returns NamedTuple or nothing."""
+function _scrollbar_metrics(total_content::Int, viewport::Int, scroll_offset::Int, track_height::Int)
+    total_content <= viewport && return nothing
+    thumb_size = max(1, round(Int, viewport / total_content * track_height))
+    max_scroll = total_content - viewport
+    thumb_start = round(Int, scroll_offset / max(1, max_scroll) * (track_height - thumb_size))
+    (thumb_start=thumb_start, thumb_size=thumb_size)
+end
+
+"""Render a 1-char wide scrollbar on the right edge."""
+function _render_scrollbar!(buf::Tachikoma.Buffer, x::Int, y_start::Int, track_height::Int,
+                             total_content::Int, viewport::Int, scroll_offset::Int)
+    metrics = _scrollbar_metrics(total_content, viewport, scroll_offset, track_height)
+    metrics === nothing && return
+    track_style = Tachikoma.Style(; fg=Theme.FG_FAINT, bg=Theme.CANVAS_BG)
+    thumb_style = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.ELEVATED_BG)
+    for i in 0:track_height-1
+        y = y_start + i
+        in_thumb = i >= metrics.thumb_start && i < metrics.thumb_start + metrics.thumb_size
+        Tachikoma.set_char!(buf, x, y, in_thumb ? '█' : '│', in_thumb ? thumb_style : track_style)
+    end
 end
 
 # --- Signature help tooltip rendering ---
