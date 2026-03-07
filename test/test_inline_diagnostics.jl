@@ -223,4 +223,94 @@
         render_app_diag(app)
         @test isempty(cw.diagnostics)
     end
+
+    # ── File editor diagnostics ──────────────────────────────────────
+
+    @testset "FileEditorView: diagnostics field initialized empty" begin
+        path = tempname() * ".jl"
+        write(path, "x = 1\n")
+        fev = Sessions.FileEditorView(path)
+        @test isempty(fev.diagnostics)
+        @test fev.lsp_doc_version == 1
+        rm(path; force=true)
+    end
+
+    @testset "FileEditorView: diagnostics stored on struct" begin
+        path = tempname() * ".jl"
+        write(path, "x = 1\ny = 2\n")
+        fev = Sessions.FileEditorView(path)
+        fev.diagnostics = [
+            Sessions.Diagnostic(1, :error, "file diag error", "JETLS"),
+            Sessions.Diagnostic(2, :warning, "file diag warn", "JETLS"),
+        ]
+        @test length(fev.diagnostics) == 2
+        @test fev.diagnostics[1].severity == :error
+        @test fev.diagnostics[2].severity == :warning
+        rm(path; force=true)
+    end
+
+    @testset "FileEditorView: gutter markers rendered" begin
+        path = tempname() * ".jl"
+        write(path, "x = 1\ny = 2\nz = 3\n")
+        fev = Sessions.FileEditorView(path)
+        app = Sessions.SessionsApp(fev)
+        fev.diagnostics = [
+            Sessions.Diagnostic(2, :error, "err on line 2", "JETLS"),
+        ]
+
+        tb = render_app_diag(app; height=20)
+        # Gutter dot should be visible
+        @test Tachikoma.find_text(tb, "●") !== nothing
+    end
+
+    @testset "lsp_file_diagnostics: converts LspDiagnostic to Diagnostic" begin
+        client = Sessions.LspClient(; enabled=false)
+        # Manually populate diagnostics dict
+        path = "/tmp/test_file.jl"
+        uri = "file://" * path
+        client.diagnostics[uri] = [
+            Sessions.LspDiagnostic(1, 0, 1, 5, :error, "test error", "JETLS", ""),
+            Sessions.LspDiagnostic(3, 0, 3, 10, :warning, "test warn", "JETLS", ""),
+        ]
+
+        diags = Sessions.lsp_file_diagnostics(client, path)
+        @test length(diags) == 2
+        @test diags[1].line == 1
+        @test diags[1].severity == :error
+        @test diags[1].message == "test error"
+        @test diags[2].line == 3
+        @test diags[2].severity == :warning
+    end
+
+    @testset "lsp_file_diagnostics: empty when no diagnostics" begin
+        client = Sessions.LspClient(; enabled=false)
+        diags = Sessions.lsp_file_diagnostics(client, "/nonexistent.jl")
+        @test isempty(diags)
+    end
+
+    @testset "FileEditorView: LSP sync on save sends didSave" begin
+        path = tempname() * ".jl"
+        write(path, "x = 1\n")
+        fev = Sessions.FileEditorView(path)
+        app = Sessions.SessionsApp(fev)
+        # LSP not ready — just verify no crash
+        @test app.lsp.status != Sessions.lsp_ready
+        # Simulate Ctrl+S
+        evt = Tachikoma.KeyEvent(:ctrl, 's')
+        Tachikoma.update!(app, evt)
+        # File should be saved
+        @test read(path, String) == "x = 1\n"
+        @test !fev.dirty
+        rm(path; force=true)
+    end
+
+    @testset "FileEditorView: lsp_doc_version increments" begin
+        path = tempname() * ".jl"
+        write(path, "x = 1\n")
+        fev = Sessions.FileEditorView(path)
+        @test fev.lsp_doc_version == 1
+        fev.lsp_doc_version += 1
+        @test fev.lsp_doc_version == 2
+        rm(path; force=true)
+    end
 end

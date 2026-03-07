@@ -447,10 +447,16 @@ function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
                 app.lsp.status in (lsp_ready, lsp_error, lsp_off) && break
                 sleep(0.5)
             end
-            # Once ready, sync the current notebook
+            # Once ready, sync the current document
             if app.lsp.status == lsp_ready
-                app.lsp_doc_version += 1
-                lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+                if app.editor_type == :file && app.file_editor_view !== nothing
+                    fev = app.file_editor_view
+                    lsp_did_open!(app.lsp, "file://" * abspath(fev.path),
+                        Tachikoma.text(fev.editor))
+                else
+                    app.lsp_doc_version += 1
+                    lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+                end
             end
         end
     end
@@ -640,6 +646,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     if app.editor_type == :file && app.file_editor_view !== nothing
         fev = app.file_editor_view
         fev.editor.focused = (app.mode == :insert)
+        # Sync file diagnostics from LSP
+        if app.lsp.status == lsp_ready
+            fev.diagnostics = lsp_file_diagnostics(app.lsp, abspath(fev.path))
+        end
         Tachikoma.render(fev, editor_rect, buf)
     else
         for (i, cw) in enumerate(app.notebook_view.cell_widgets)
@@ -2467,6 +2477,10 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if evt.key == :ctrl && evt.char == 's'
         did_format = _format_file_editor!(fev)
         save_file!(fev)
+        # Notify LSP of save (triggers deep analysis)
+        if app.lsp.status == lsp_ready
+            lsp_did_save!(app.lsp, "file://" * abspath(fev.path), Tachikoma.text(fev.editor))
+        end
         if did_format
             app.message = "Formatted + Saved: $(fev.path)"
         else
@@ -2502,5 +2516,11 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     new_text_hash = hash(Tachikoma.text(fev.editor))
     if new_text_hash != old_text_hash
         fev.dirty = true
+        # Debounced LSP sync for file editor
+        if app.lsp.status == lsp_ready
+            fev.lsp_doc_version += 1
+            lsp_did_change!(app.lsp, "file://" * abspath(fev.path),
+                Tachikoma.text(fev.editor), fev.lsp_doc_version)
+        end
     end
 end

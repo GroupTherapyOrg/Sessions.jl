@@ -789,3 +789,10 @@ function lsp_cell_diagnostics(client::LspClient, nb::Notebook)::Dict{UUID, Vecto
     end
     result
 end
+
+"""Convert LSP diagnostics for a standalone file into `Diagnostic` vector."""
+function lsp_file_diagnostics(client::LspClient, path::String)::Vector{Diagnostic}
+    uri = "file://" * path
+    lsp_diags = get(client.diagnostics, uri, LspDiagnostic[])
+    [Diagnostic(ld.line, ld.severity, ld.message, ld.source) for ld in lsp_diags]
+end

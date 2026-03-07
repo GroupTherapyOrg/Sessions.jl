@@ -10,6 +10,8 @@ mutable struct FileEditorView
     editor::Tachikoma.CodeEditor
     dirty::Bool            # unsaved changes
     viewport::Tachikoma.Rect
+    diagnostics::Vector{Diagnostic}  # inline diagnostics from LSP
+    lsp_doc_version::Int             # LSP document version counter
 end
 
 function FileEditorView(path::String)
@@ -29,7 +31,7 @@ function FileEditorView(path::String)
         editor.cursor_col = 0
         editor.scroll_offset = 0
     end
-    FileEditorView(path, editor, false, Tachikoma.Rect())
+    FileEditorView(path, editor, false, Tachikoma.Rect(), Diagnostic[], 1)
 end
 
 """Save the editor contents to disk."""
@@ -123,4 +125,20 @@ function Tachikoma.render(fev::FileEditorView, rect::Tachikoma.Rect, buf::Tachik
 
     editor_rect = Tachikoma.Rect(inner_x, inner_y, inner_w, inner_h)
     Tachikoma.render(fev.editor, editor_rect, buf)
+
+    # Diagnostic gutter markers (colored dots on lines with issues)
+    if !isempty(fev.diagnostics)
+        scroll = fev.editor.scroll_offset
+        for d in fev.diagnostics
+            vis_row = d.line - scroll  # 1-based visible row
+            dy = inner_y + vis_row - 1
+            (dy < inner_y || dy > inner_y + inner_h - 1) && continue
+            marker_fg = d.severity == :error ? Theme.RED :
+                        d.severity == :warning ? Theme.ORANGE : Theme.CYAN
+            # Place dot just outside the left border
+            marker_x = bx - 1
+            marker_x >= rect.x && Tachikoma.set_string!(buf, marker_x, dy, "●",
+                Tachikoma.Style(; fg=marker_fg, bg=Theme.CANVAS_BG))
+        end
+    end
 end
