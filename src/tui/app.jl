@@ -243,6 +243,30 @@ function _lsp_sync_and_refresh!(app::SessionsApp)
     end
 end
 
+"""Format all notebook cells using Runic.jl. Returns number of cells that changed."""
+function _format_notebook_cells!(app::SessionsApp)::Int
+    n_formatted = 0
+    nv = app.notebook_view
+    for (i, cw) in enumerate(nv.cell_widgets)
+        cell = cw.cell
+        cell.disabled && continue
+        original = cell.code
+        formatted = format_code(original)
+        if formatted != original
+            n_formatted += 1
+            cell.code = formatted
+            # Update editor text, preserving cursor as best we can
+            old_row = cw.editor.cursor_row
+            old_col = cw.editor.cursor_col
+            Tachikoma.set_text!(cw.editor, formatted)
+            new_nlines = length(cw.editor.lines)
+            cw.editor.cursor_row = clamp(old_row, 1, max(1, new_nlines))
+            cw.editor.cursor_col = clamp(old_col, 0, length(cw.editor.lines[cw.editor.cursor_row]))
+        end
+    end
+    n_formatted
+end
+
 """Quit the app, cleaning up all resources."""
 function _quit_app!(app::SessionsApp)
     for tab in app.tabs
@@ -525,9 +549,10 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         Tachikoma.set_string!(buf, area.x, fy, " " ^ area.width, Theme.S_BG)
     end
 
-    # Inset content by the same gap on all edges (uniform padding from terminal edge)
-    content_rect = Tachikoma.Rect(area.x + g, area.y + g,
-        max(1, area.width - 2 * g), max(1, area.height - 2 * g))
+    # Inset content: minimal top padding (1 row), standard gap on other edges
+    top_pad = 1
+    content_rect = Tachikoma.Rect(area.x + g, area.y + top_pad,
+        max(1, area.width - 2 * g), max(1, area.height - top_pad - g))
 
     # Horizontal layout: activity bar | gap | [sidebar | gap] | notebook
     # Sidebar opens if file explorer OR diagnostics is active
@@ -974,8 +999,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         end
     end
 
-    # Ctrl+S / Cmd+S: save + run stale + sync LSP
+    # Ctrl+S / Cmd+S: format + save + run stale + sync LSP
     if evt.key == :ctrl && evt.char == 's'
+        n_formatted = _format_notebook_cells!(app)
         save_notebook(app.nb)
         app.last_save_time = time()
         app.last_disk_nb = _snapshot_notebook(app.nb)
@@ -985,6 +1011,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         _lsp_sync_and_refresh!(app)
         if n_stale > 0
             app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
+        elseif n_formatted > 0
+            app.message = "Formatted $(n_formatted) cell$(n_formatted == 1 ? "" : "s") + Saved"
         else
             app.message = "Saved: $(app.nb.path)"
         end
@@ -2408,7 +2436,20 @@ end
 
 # ── File Editor Mode ─────────────────────────────────────────────────
 
-"""Handle key events in file editor mode."""
+"""Format file editor content using Runic.jl. Returns true if formatting changed the code."""
+function _format_file_editor!(fev::FileEditorView)::Bool
+    original = Tachikoma.text(fev.editor)
+    formatted = format_code(original)
+    formatted == original && return false
+    old_row = fev.editor.cursor_row
+    old_col = fev.editor.cursor_col
+    Tachikoma.set_text!(fev.editor, formatted)
+    new_nlines = length(fev.editor.lines)
+    fev.editor.cursor_row = clamp(old_row, 1, max(1, new_nlines))
+    fev.editor.cursor_col = clamp(old_col, 0, length(fev.editor.lines[fev.editor.cursor_row]))
+    true
+end
+
 function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     fev = app.file_editor_view
 
@@ -2422,10 +2463,15 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Ctrl+S: save file
+    # Ctrl+S: format + save file
     if evt.key == :ctrl && evt.char == 's'
+        did_format = _format_file_editor!(fev)
         save_file!(fev)
-        app.message = "Saved: $(fev.path)"
+        if did_format
+            app.message = "Formatted + Saved: $(fev.path)"
+        else
+            app.message = "Saved: $(fev.path)"
+        end
         return
     end
 
