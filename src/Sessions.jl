@@ -37,6 +37,9 @@ export Workspace, execute_cell!, execute_notebook!, execute_changed!
 export classify_output, text_representation
 export format_error, format_cell_error
 
+include("png_decoder.jl")
+export decode_png
+
 include("run.jl")
 
 include("session.jl")

@@ -33,4 +33,5 @@ using Sessions
     include("test_rename.jl")
     include("test_e2e_editing.jl")
     include("test_image_pipeline.jl")
+    include("test_png_decoder.jl")
 end
