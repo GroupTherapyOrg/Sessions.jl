@@ -19,7 +19,7 @@ function FileEditorView(path::String)
     editor = Tachikoma.CodeEditor(;
         show_line_numbers=true,
         focused=true,
-        mode=:normal,
+        mode=:insert,
         style=Tachikoma.Style(; fg=Theme.FG, bg=Theme.CANVAS_BG),
         gutter_style=Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG),
         cursor_style=Tachikoma.Style(; fg=Theme.BG, bg=Theme.ACCENT),

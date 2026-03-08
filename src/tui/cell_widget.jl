@@ -617,10 +617,16 @@ function _handle_shared_editor_key!(editor, sel::SelectionState, evt)
         return (true, true)
     end
 
-    # ── Ctrl+C / Cmd+C: copy selection ──
-    if evt.key == :ctrl && evt.char == 'c' && sel.active
-        text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
-        _clipboard_copy!(text)
+    # ── Ctrl+C / Cmd+C: copy selection (or current line if no selection) ──
+    if evt.key == :ctrl && evt.char == 'c'
+        if sel.active
+            text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
+            _clipboard_copy!(text)
+        else
+            # No selection — copy current line (VS Code behavior)
+            line = String(editor.lines[editor.cursor_row])
+            _clipboard_copy!(line)
+        end
         return (true, false)
     end
 

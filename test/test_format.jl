@@ -204,9 +204,9 @@ end
         tmp = tempname() * ".jl"
         Base.write(tmp, "println(\"hi\")\n")
         fev = Sessions.FileEditorView(tmp)
-        @test Sessions.editor_mode(fev) == :normal
-        fev.editor.mode = :insert
         @test Sessions.editor_mode(fev) == :insert
+        fev.editor.mode = :normal
+        @test Sessions.editor_mode(fev) == :normal
         rm(tmp; force=true)
     end
 

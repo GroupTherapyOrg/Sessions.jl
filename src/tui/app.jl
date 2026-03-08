@@ -3345,8 +3345,8 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
 
     # ── File-specific shortcuts (before shared editing) ──
 
-    # Ctrl+Q / Ctrl+C: quit (force quit if dirty warning already shown)
-    if evt.key == :ctrl && (evt.char == 'q' || (evt.char == 'c' && !sel.active))
+    # Ctrl+Q: quit (force quit if dirty warning already shown)
+    if evt.key == :ctrl && evt.char == 'q'
         if fev.dirty && !startswith(app.message, "Unsaved")
             app.message = "Unsaved changes! Ctrl+Q again or Ctrl+S to save"
         else
