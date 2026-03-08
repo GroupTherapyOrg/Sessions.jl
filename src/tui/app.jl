@@ -361,6 +361,7 @@ function _quit_app!(app::SessionsApp)
     app.watcher = nothing
     stop_repl!(app.repl_panel)
     stop_lsp!(app.lsp)
+    _cleanup_virtual_notebook!(app.nb)
     app.quit = true
 end
 

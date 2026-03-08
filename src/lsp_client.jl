@@ -254,6 +254,23 @@ function _handle_diagnostics!(client::LspClient, params)
     uri = get(params, "uri", "")
     raw_diags = get(params, "diagnostics", [])
 
+    # Debug: log all incoming diagnostics to help diagnose missing warnings
+    try
+        Base.open("/tmp/sessions_lsp_debug.log", "a") do io
+            println(io, "─── publishDiagnostics uri=$(uri) count=$(length(raw_diags)) ───")
+            for (i, d) in enumerate(raw_diags)
+                sev = get(d, "severity", "?")
+                msg = get(d, "message", "")
+                src = get(d, "source", "")
+                code = get(d, "code", "")
+                range = get(d, "range", Dict())
+                start = get(range, "start", Dict())
+                line = get(start, "line", -1)
+                println(io, "  [$i] sev=$sev line=$line src=$src code=$code msg=$(first(msg, 120))")
+            end
+        end
+    catch; end
+
     diags = LspDiagnostic[]
     for d in raw_diags
         range = get(d, "range", Dict())
@@ -957,12 +974,13 @@ function cell_uri(nb::Notebook, cell_id::UUID)::String
     "file://$(abspath(nb.path))#cell-$(cell_id)"
 end
 
-"""Generate a virtual URI for the whole notebook (all cells concatenated).
-Uses a non-existent .jl path inside the project root so JETLS treats it as a
-virtual document within scope, avoiding conflicts with the file scanner."""
+"""Generate a URI for the notebook virtual document (all cells concatenated).
+
+Creates a real `.jl` file inside the project root so JETLS treats it as a
+genuine source file and runs full analysis (lowering checks, JET inference).
+The file is written to disk by `lsp_sync_notebook!` and cleaned up on exit.
+"""
 function notebook_uri(nb::Notebook)::String
-    # Must be inside the Julia project root (where Project.toml lives) for JETLS to analyze.
-    # Must NOT match a real file to avoid the scanner overwriting our content.
     root = _find_project_root(nb.path)
     "file://$(root)/.sessions-virtual-notebook.jl"
 end
@@ -1048,11 +1066,25 @@ function document_line_to_cell(nb::Notebook, doc_line::Int)::Union{Nothing, Tupl
     nothing
 end
 
-"""Sync the entire notebook to the LSP server."""
+"""Sync the entire notebook to the LSP server.
+
+Writes the concatenated document to a real file on disk so JETLS can
+perform full analysis (lowering checks + JET inference). The file is
+gitignored (dot-prefixed) and cleaned up on exit.
+"""
 function lsp_sync_notebook!(client::LspClient, nb::Notebook, version::Int)
     client.status != lsp_ready && return
     uri = notebook_uri(nb)
     text = notebook_as_document(nb)
+
+    # Write to disk so JETLS treats it as a real source file
+    file_path = _uri_to_path(uri)
+    try
+        Base.open(file_path, "w") do io
+            write(io, text)
+        end
+    catch; end
+
     if version == 1
         lsp_did_open!(client, uri, text)
     else
@@ -1060,6 +1092,19 @@ function lsp_sync_notebook!(client::LspClient, nb::Notebook, version::Int)
     end
     # Send didSave to trigger JETLS deep analysis (JET inference pass)
     lsp_did_save!(client, uri, text)
+end
+
+"""Convert a file:// URI to a local path."""
+function _uri_to_path(uri::String)::String
+    replace(uri, r"^file://" => "")
+end
+
+"""Clean up the virtual notebook file from disk."""
+function _cleanup_virtual_notebook!(nb::Notebook)
+    try
+        path = _uri_to_path(notebook_uri(nb))
+        isfile(path) && rm(path)
+    catch; end
 end
 
 """Get LSP diagnostics mapped back to notebook cells."""
