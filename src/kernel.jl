@@ -296,16 +296,29 @@ function execute_cell!(workspace::Workspace, cell::Cell)
 
     try
         expr = Meta.parse("begin\n$(cell.code)\nend")
-        # Use a Pipe for stdout capture (IOBuffer doesn't work with redirect_stdout)
+        # Try stdout capture via redirect_stdout (uses dup internally).
+        # Under Tachikoma TUI, dup can fail with EBADF — fall back to
+        # executing without stdout capture rather than erroring the cell.
         old_stdout = stdout
-        rd, wr = redirect_stdout()
+        stdout_captured = false
+        local rd, wr
+        try
+            rd, wr = redirect_stdout()
+            stdout_captured = true
+        catch
+            # redirect_stdout failed (fd invalid under TUI) — continue without capture
+        end
         try
             result = Base.eval(workspace.mod, expr)
         finally
-            redirect_stdout(old_stdout)
-            close(wr)
+            if stdout_captured
+                redirect_stdout(old_stdout)
+                close(wr)
+            end
         end
-        captured_stdout = String(read(rd))
+        if stdout_captured
+            captured_stdout = String(read(rd))
+        end
     catch e
         err = CapturedException(e, catch_backtrace())
     end
