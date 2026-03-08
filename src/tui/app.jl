@@ -480,7 +480,7 @@ function SessionsApp(nb::Notebook)
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(),
-        LspClient(; enabled=false), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
+        LspClient(; enabled=true), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
         nothing,
@@ -506,7 +506,7 @@ function SessionsApp(fev::FileEditorView)
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(),
-        LspClient(; enabled=false), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
+        LspClient(; enabled=true), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
         nothing,
@@ -1565,7 +1565,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 app.sidebar_open = is_active(app.activity_bar, :explorer)
             elseif btn_id == :terminal
                 _toggle_repl!(app)
-            # diagnostics button removed while JETLS is off
+            elseif btn_id == :diagnostics
+                toggle!(app.activity_bar, btn_id)
+                app.diagnostics_open = is_active(app.activity_bar, :diagnostics)
             end
         elseif evt.action == Tachikoma.mouse_move
             app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)

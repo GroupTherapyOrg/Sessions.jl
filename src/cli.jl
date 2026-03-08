@@ -19,8 +19,7 @@ function (@main)(args::Vector{String})::Cint
         ENV["TACHIKOMA_GFX"] = sgp
     end
 
-    # JETLS disabled for now — skip auto-install
-    # _ensure_jetls()
+    _ensure_jetls()
 
     if isempty(args)
         # No args → open new notebook
