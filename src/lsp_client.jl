@@ -981,9 +981,27 @@ function _find_project_root(path::String)::String
     pwd()
 end
 
-"""Concatenate all cell code into a single virtual document for LSP analysis."""
+"""Concatenate all cell code into a single virtual document for LSP analysis.
+
+Pluto notebooks use `@bind var Widget(...)` to create reactive variables.
+Since JETLS can't expand our custom `@bind` macro, it reports false positives
+like "`n` is not defined". We scan for `@bind` patterns and prepend stub
+declarations so JETLS knows these variables exist.
+"""
 function notebook_as_document(nb::Notebook)::String
     parts = String[]
+    # Collect @bind variable names across all cells for stub declarations
+    bind_vars = String[]
+    for id in nb.cell_order
+        cell = get(nb.cells, id, nothing)
+        cell === nothing && continue
+        _collect_bind_vars!(bind_vars, cell.code)
+    end
+    # Prepend stub declarations for bound variables
+    if !isempty(bind_vars)
+        stubs = join(["$v = nothing" for v in bind_vars], "; ")
+        push!(parts, "# @bind variable stubs for JETLS\n$stubs")
+    end
     for id in nb.cell_order
         cell = get(nb.cells, id, nothing)
         cell === nothing && continue
@@ -992,9 +1010,32 @@ function notebook_as_document(nb::Notebook)::String
     join(parts, "\n\n")
 end
 
-"""Map a line number in the concatenated document back to (cell_id, cell_line)."""
+"""Extract variable names from `@bind var expr` patterns in cell code."""
+function _collect_bind_vars!(vars::Vector{String}, code::String)
+    # Match @bind followed by a Julia identifier
+    for m in eachmatch(r"@bind\s+([a-zA-Z_]\w*)", code)
+        name = m.captures[1]
+        name ∉ vars && push!(vars, name)
+    end
+end
+
+"""Map a line number in the concatenated document back to (cell_id, cell_line).
+
+Accounts for the @bind stub preamble prepended by `notebook_as_document`.
+"""
 function document_line_to_cell(nb::Notebook, doc_line::Int)::Union{Nothing, Tuple{UUID, Int}}
+    # Calculate preamble offset (same logic as notebook_as_document)
+    bind_vars = String[]
+    for id in nb.cell_order
+        cell = get(nb.cells, id, nothing)
+        cell === nothing && continue
+        _collect_bind_vars!(bind_vars, cell.code)
+    end
     current_line = 1
+    if !isempty(bind_vars)
+        # Preamble: "# comment\nvar1 = nothing; var2 = nothing" = 2 lines + 1 blank separator
+        current_line += 3
+    end
     for id in nb.cell_order
         cell = get(nb.cells, id, nothing)
         cell === nothing && continue
