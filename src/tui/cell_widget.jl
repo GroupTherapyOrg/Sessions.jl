@@ -13,28 +13,23 @@ SelectionState() = SelectionState(false, 1, 0)
 # ── Clipboard ────────────────────────────────────────────────────────
 
 const _CLIPBOARD = Ref("")
-const _CLIPBOARD_DIRTY = Ref(false)  # true after internal copy (pbcopy may have failed)
 
 function _clipboard_copy!(text::String)
     _CLIPBOARD[] = text
-    _CLIPBOARD_DIRTY[] = true
-    # Try pbcopy (may fail silently inside TUI — that's OK, we have _CLIPBOARD)
+    # OSC 52: set system clipboard via terminal escape sequence.
+    # Works in iTerm2, Kitty, WezTerm, Terminal.app (macOS 13+), and most modern terminals.
+    # This is the ONLY reliable way to set the clipboard from inside a TUI — pbcopy fails
+    # because stdout is redirected by Tachikoma.
     try
-        if Sys.isapple()
-            open(`pbcopy`, "w") do io
-                write(io, text)
-            end
-        end
+        b64 = base64encode(text)
+        tty = open("/dev/tty", "w")
+        write(tty, "\e]52;c;$(b64)\e\\")
+        close(tty)
     catch; end
 end
 
 function _clipboard_paste()::String
-    if _CLIPBOARD_DIRTY[]
-        # Last copy was internal — use our buffer (pbcopy may have failed)
-        _CLIPBOARD_DIRTY[] = false
-        return _CLIPBOARD[]
-    end
-    # No pending internal copy — try system clipboard (for external copies)
+    # Try system clipboard via pbpaste (reads macOS pasteboard, not stdin — works in TUI)
     try
         if Sys.isapple()
             sys = read(`pbpaste`, String)

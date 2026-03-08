@@ -3400,6 +3400,16 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         Tachikoma.handle_key!(editor, evt)
     end
 
+    # Status messages for clipboard operations (match notebook feedback)
+    if evt.key == :ctrl && evt.char == 'c'
+        n = length(_CLIPBOARD[])
+        app.message = sel.active ? "Copied $(n) chars" : "Copied line"
+    elseif evt.key == :ctrl && evt.char == 'v' && modified
+        app.message = "Pasted $(length(_CLIPBOARD[])) chars"
+    elseif evt.key == :ctrl && evt.char == 'x' && modified
+        app.message = "Cut $(length(_CLIPBOARD[])) chars"
+    end
+
     # Sync mode: CodeEditor's mode ↔ app.mode
     ce_mode = editor.mode
     if ce_mode == :insert

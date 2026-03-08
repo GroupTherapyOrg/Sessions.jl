@@ -4,6 +4,7 @@ version = "2.0.0-dev"
 authors = ["TherapeuticJulia"]
 
 [deps]
+Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CommonMark = "a80b9123-70ca-4bc0-993e-6e3bcb318db6"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
