@@ -312,12 +312,14 @@ function execute_cell!(workspace::Workspace, cell::Cell)
             result = Base.eval(workspace.mod, expr)
         finally
             if stdout_captured
-                redirect_stdout(old_stdout)
-                close(wr)
+                try redirect_stdout(old_stdout) catch; end
+                try close(wr) catch; end
             end
         end
         if stdout_captured
-            captured_stdout = String(read(rd))
+            try
+                captured_stdout = String(read(rd))
+            catch; end
         end
     catch e
         err = CapturedException(e, catch_backtrace())

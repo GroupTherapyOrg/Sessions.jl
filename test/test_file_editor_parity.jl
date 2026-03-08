@@ -227,7 +227,7 @@
         rm(path; force=true)
     end
 
-    @testset "_fev_delete_selection! removes selected text" begin
+    @testset "_delete_selection! removes selected text (shared)" begin
         path = tempname() * ".jl"
         write(path, "ABCDEF\n")
         fev = Sessions.FileEditorView(path)
@@ -237,7 +237,7 @@
         fev.selection.anchor_col = 0
         fev.editor.cursor_col = 3
 
-        Sessions._fev_delete_selection!(fev)
+        Sessions._delete_selection!(fev.editor, fev.selection)
         @test String(fev.editor.lines[1]) == "DEF"
         @test !fev.selection.active
         @test fev.editor.cursor_col == 0

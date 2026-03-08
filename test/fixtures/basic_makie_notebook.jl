@@ -4,6 +4,11 @@
 # ╔═╡ 53b310fb-2274-4c2f-949f-3cf6b964e26e
 using Markdown
 
+# ╔═╡ 09436f68-3867-4be6-955d-63003d78e2af
+import Sessions: @bind, Slider
+
+# ╔═╡ 076b1881-2363-4e4c-8015-4f5e12969675
+
 # ╔═╡ b2c3d4e5-6f7a-8b9c-0d1e-f2a3b4c5d6e7
 using CairoMakie
 
@@ -109,6 +114,8 @@ end
 
 # ╔═╡ Cell order:
 # ╠═53b310fb-2274-4c2f-949f-3cf6b964e26e
+# ╠═09436f68-3867-4be6-955d-63003d78e2af
+# ╠═076b1881-2363-4e4c-8015-4f5e12969675
 # ╠═b2c3d4e5-6f7a-8b9c-0d1e-f2a3b4c5d6e7
 # ╟─a1b2c3d4-5e6f-7a8b-9c0d-e1f2a3b4c5d6
 # ╟─c3d4e5f6-7a8b-9c0d-1e2f-a3b4c5d6e7f8

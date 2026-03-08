@@ -317,43 +317,17 @@ function _selected_text(lines, sel::SelectionState, cursor_row::Int, cursor_col:
 end
 
 """Copy current selection to system clipboard if active."""
-function _auto_copy_selection!(cw::CellWidget)
-    sel = cw.selection
+function _auto_copy_selection!(editor, sel::SelectionState)
     !sel.active && return
-    text = _selected_text(cw.editor.lines, sel, cw.editor.cursor_row, cw.editor.cursor_col)
+    text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
     !isempty(text) && _clipboard_copy!(text)
 end
 
 """Delete the selected text and position cursor at selection start."""
-function _delete_selection!(cw::CellWidget)
-    sel = cw.selection
+function _delete_selection!(editor, sel::SelectionState)
     !sel.active && return
-    editor = cw.editor
     Tachikoma._push_undo!(editor; force=true)
-    sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
-
-    if sr == er
-        line = editor.lines[sr]
-        to_del = min(ec, length(line))
-        from_del = sc + 1
-        if from_del <= to_del
-            deleteat!(line, from_del:to_del)
-        end
-    else
-        first_part = editor.lines[sr][1:sc]
-        last_line = editor.lines[er]
-        last_part = ec < length(last_line) ? last_line[ec+1:end] : Char[]
-        editor.lines[sr] = vcat(first_part, last_part)
-        if er > sr
-            deleteat!(editor.lines, sr+1:er)
-        end
-    end
-
-    editor.cursor_row = sr
-    editor.cursor_col = sc
-    sel.active = false
-    editor.token_cache = [Tachikoma.tokenize_line(l) for l in editor.lines]
-    empty!(editor.dirty_lines)
+    _delete_selection_raw!(editor, sel)
 end
 
 # ── Word motion (matching REPL.LineEdit char_move_word_left/right) ───
@@ -432,43 +406,32 @@ function _word_right!(editor)
 end
 
 """Delete previous word (REPL edit_delete_prev_word / Meta+Backspace)."""
-function _delete_prev_word!(cw::CellWidget)
-    editor = cw.editor
+function _delete_prev_word!(editor, sel::SelectionState)
     Tachikoma._push_undo!(editor; force=true)
     start_row = editor.cursor_row
     start_col = editor.cursor_col
     _word_left!(editor)
-    end_row = editor.cursor_row
-    end_col = editor.cursor_col
-    # Temporarily set up selection to delete the range
-    cw.selection.active = true
-    cw.selection.anchor_row = start_row
-    cw.selection.anchor_col = start_col
-    # cursor is already at the word boundary (start of deleted range)
-    _delete_selection_no_undo!(cw)  # we already pushed undo
+    sel.active = true
+    sel.anchor_row = start_row
+    sel.anchor_col = start_col
+    _delete_selection_raw!(editor, sel)
 end
 
 """Delete next word (REPL edit_delete_next_word / Meta+D)."""
-function _delete_next_word!(cw::CellWidget)
-    editor = cw.editor
+function _delete_next_word!(editor, sel::SelectionState)
     Tachikoma._push_undo!(editor; force=true)
     start_row = editor.cursor_row
     start_col = editor.cursor_col
     _word_right!(editor)
-    end_row = editor.cursor_row
-    end_col = editor.cursor_col
-    # Set up selection to delete
-    cw.selection.active = true
-    cw.selection.anchor_row = start_row
-    cw.selection.anchor_col = start_col
-    _delete_selection_no_undo!(cw)
+    sel.active = true
+    sel.anchor_row = start_row
+    sel.anchor_col = start_col
+    _delete_selection_raw!(editor, sel)
 end
 
-"""Delete selection without pushing undo (caller already did)."""
-function _delete_selection_no_undo!(cw::CellWidget)
-    sel = cw.selection
+"""Delete selection without pushing undo (caller already did). Shared by all delete helpers."""
+function _delete_selection_raw!(editor, sel::SelectionState)
     !sel.active && return
-    editor = cw.editor
     sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
     if sr == er
         line = editor.lines[sr]
@@ -578,24 +541,30 @@ function click_to_editor_pos(editor::Tachikoma.CodeEditor, area::Tachikoma.Rect,
     return (row, col)
 end
 
-# ── Key handling (selection-aware, REPL-matching keybindings) ────────
+# ── Shared editor key handling ────────────────────────────────────────
+# Used by BOTH CellWidget and FileEditorView so editing capabilities stay in sync.
 
-function Tachikoma.handle_key!(cw::CellWidget, evt)
-    sel = cw.selection
-    editor = cw.editor
+"""Handle all shared editing keys (selection, clipboard, word ops, auto-close).
+
+Returns `(handled::Bool, modified::Bool)`:
+- `(true, true)` — event consumed, text was modified
+- `(true, false)` — event consumed, no text change (cursor/selection move)
+- `(false, false)` — event not handled, caller should pass to Tachikoma.handle_key!
+"""
+function _handle_shared_editor_key!(editor, sel::SelectionState, evt)
 
     # ── Ctrl+A: move to line start (REPL ^A) ──
     if evt.key == :ctrl && evt.char == 'a'
         sel.active = false
         editor.cursor_col = 0
-        return true
+        return (true, false)
     end
 
     # ── Ctrl+E: move to line end (REPL ^E) ──
     if evt.key == :ctrl && evt.char == 'e'
         sel.active = false
         editor.cursor_col = length(editor.lines[editor.cursor_row])
-        return true
+        return (true, false)
     end
 
     # ── Ctrl+K: kill line forward (REPL ^K) ──
@@ -613,8 +582,7 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
             Tachikoma._mark_dirty!(editor, editor.cursor_row)
         end
         Tachikoma._ensure_tokens!(editor)
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
     # ── Ctrl+U: kill line backward (REPL ^U) ──
@@ -629,58 +597,50 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
             Tachikoma._mark_dirty!(editor, editor.cursor_row)
         end
         Tachikoma._ensure_tokens!(editor)
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
-    # ── Ctrl+W: delete word backward (whitespace-delimited, REPL ^W) ──
+    # ── Ctrl+W: delete word backward (REPL ^W) ──
     if evt.key == :ctrl && evt.char == 'w'
-        _delete_prev_word!(cw)
-        sync_to_cell!(cw)
-        return true
+        _delete_prev_word!(editor, sel)
+        return (true, true)
     end
 
     # ── Ctrl+Y: yank/paste (REPL ^Y) ──
     if evt.key == :ctrl && evt.char == 'y'
         clip = _clipboard_paste()
-        isempty(clip) && return true
+        isempty(clip) && return (true, false)
         if sel.active
-            _delete_selection!(cw)
+            _delete_selection!(editor, sel)
         end
         _insert_text!(editor, clip)
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
     # ── Ctrl+C / Cmd+C: copy selection ──
-    # On Kitty-protocol terminals: Cmd+C produces :ctrl + 'c' (bypasses Tachikoma quit)
-    # On legacy terminals: Ctrl+C produces :ctrl_c (intercepted by Tachikoma for quit)
-    # So this handler works on Kitty terminals with Cmd+C; legacy terminals use auto-copy
     if evt.key == :ctrl && evt.char == 'c' && sel.active
         text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
         _clipboard_copy!(text)
-        return true
+        return (true, false)
     end
 
     # ── Ctrl+X / Cmd+X: cut selection ──
     if evt.key == :ctrl && evt.char == 'x' && sel.active
         text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
         _clipboard_copy!(text)
-        _delete_selection!(cw)
-        sync_to_cell!(cw)
-        return true
+        _delete_selection!(editor, sel)
+        return (true, true)
     end
 
     # ── Ctrl+V / Cmd+V: paste ──
     if evt.key == :ctrl && evt.char == 'v'
         clip = _clipboard_paste()
-        isempty(clip) && return true
+        isempty(clip) && return (true, false)
         if sel.active
-            _delete_selection!(cw)
+            _delete_selection!(editor, sel)
         end
         _insert_text!(editor, clip)
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
     # ── Shift+Arrow: extend selection ──
@@ -691,8 +651,8 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
             sel.anchor_col = editor.cursor_col
         end
         _move_cursor_for_shift!(editor, evt.key)
-        _auto_copy_selection!(cw)
-        return true
+        _auto_copy_selection!(editor, sel)
+        return (true, false)
     end
 
     # ── Ctrl+Shift+Arrow: word selection ──
@@ -702,13 +662,9 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
             sel.anchor_row = editor.cursor_row
             sel.anchor_col = editor.cursor_col
         end
-        if evt.key == :ctrl_shift_left
-            _word_left!(editor)
-        else
-            _word_right!(editor)
-        end
-        _auto_copy_selection!(cw)
-        return true
+        evt.key == :ctrl_shift_left ? _word_left!(editor) : _word_right!(editor)
+        _auto_copy_selection!(editor, sel)
+        return (true, false)
     end
 
     # ── Alt+Shift+Arrow (Option+Shift+Arrow): word selection (macOS standard) ──
@@ -718,59 +674,53 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
             sel.anchor_row = editor.cursor_row
             sel.anchor_col = editor.cursor_col
         end
-        if evt.key == :alt_shift_left
-            _word_left!(editor)
-        else
-            _word_right!(editor)
-        end
-        _auto_copy_selection!(cw)
-        return true
+        evt.key == :alt_shift_left ? _word_left!(editor) : _word_right!(editor)
+        _auto_copy_selection!(editor, sel)
+        return (true, false)
     end
 
     # ── Ctrl+Arrow: word jump (clear selection) ──
     if evt.key == :ctrl_left
         sel.active = false
         _word_left!(editor)
-        return true
+        return (true, false)
     end
     if evt.key == :ctrl_right
         sel.active = false
         _word_right!(editor)
-        return true
+        return (true, false)
     end
 
     # ── Alt+Arrow (Option+Arrow): word jump (macOS standard) ──
-    if evt.key == :alt_left
+    if evt.key == :alt_left || (evt.key == :alt && evt.char == 'b')
         sel.active = false
         _word_left!(editor)
-        return true
+        return (true, false)
     end
-    if evt.key == :alt_right
+    if evt.key == :alt_right || (evt.key == :alt && evt.char == 'f')
         sel.active = false
         _word_right!(editor)
-        return true
+        return (true, false)
     end
 
-    # ── Alt+Backspace (Option+Backspace): delete word backward (macOS standard) ──
+    # ── Alt+Backspace (Option+Backspace): delete word backward ──
     if evt.key == :alt_backspace
         if sel.active
-            _delete_selection!(cw)
+            _delete_selection!(editor, sel)
         else
-            _delete_prev_word!(cw)
+            _delete_prev_word!(editor, sel)
         end
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
-    # ── Alt+Delete (Option+D): delete word forward (macOS standard) ──
+    # ── Alt+Delete (Option+D): delete word forward ──
     if evt.key == :alt_delete
         if sel.active
-            _delete_selection!(cw)
+            _delete_selection!(editor, sel)
         else
-            _delete_next_word!(cw)
+            _delete_next_word!(editor, sel)
         end
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
     # ── Arrow keys with active selection: collapse to edge ──
@@ -784,38 +734,45 @@ function Tachikoma.handle_key!(cw::CellWidget, evt)
             editor.cursor_row = er
             editor.cursor_col = ec
         end
-        return true
+        return (true, false)
     end
 
     # ── Backspace/Delete with active selection: delete selection ──
     if sel.active && (evt.key == :backspace || evt.key == :delete)
-        _delete_selection!(cw)
-        sync_to_cell!(cw)
-        return true
+        _delete_selection!(editor, sel)
+        return (true, true)
     end
 
     # ── Typing with active selection: replace selection ──
     if sel.active && (evt.key == :char || evt.key == :enter || evt.key == :tab)
-        _delete_selection!(cw)
-        sync_to_cell!(cw)
-        # Fall through to editor for the actual character insertion
+        _delete_selection!(editor, sel)
+        # Fall through — caller must pass to Tachikoma.handle_key! for the character
+        return (false, true)
     end
 
-    # ── Plain movement clears selection ──
-    if !sel.active
-        # nothing to clear
-    elseif evt.key == :escape
+    # ── Escape clears selection ──
+    if sel.active && evt.key == :escape
         sel.active = false
-        # let escape propagate
     end
 
     # Auto-close brackets (before passing to editor)
     if _handle_auto_close!(editor, evt)
-        sync_to_cell!(cw)
-        return true
+        return (true, true)
     end
 
-    # Pass to editor
+    return (false, false)
+end
+
+# ── CellWidget key handling ──────────────────────────────────────────
+
+function Tachikoma.handle_key!(cw::CellWidget, evt)
+    handled, modified = _handle_shared_editor_key!(cw.editor, cw.selection, evt)
+    if modified
+        sync_to_cell!(cw)
+    end
+    handled && return true
+
+    # Pass to Tachikoma CodeEditor (vim keybindings, undo, search, etc.)
     handled = Tachikoma.handle_key!(cw.editor, evt)
     if handled
         sync_to_cell!(cw)

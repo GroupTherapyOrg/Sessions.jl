@@ -51,7 +51,8 @@ mutable struct LspClient
     stdout_pipe::Union{Nothing, IO}
     request_id::Int
     pending::Dict{Int, Channel{Any}}    # request_id -> response channel
-    diagnostics::Dict{String, Vector{LspDiagnostic}}  # uri -> diagnostics
+    diagnostics::Dict{String, Vector{LspDiagnostic}}      # push diagnostics (publishDiagnostics)
+    pull_diagnostics::Dict{String, Vector{LspDiagnostic}}  # pull diagnostics (textDocument/diagnostic)
     server_capabilities::Dict{String, Any}
     reader_task::Union{Nothing, Task}
     error_message::String
@@ -65,6 +66,7 @@ function LspClient(; enabled::Bool=true)
         nothing, nothing, nothing,
         0,
         Dict{Int, Channel{Any}}(),
+        Dict{String, Vector{LspDiagnostic}}(),
         Dict{String, Vector{LspDiagnostic}}(),
         Dict{String, Any}(),
         nothing,
@@ -254,23 +256,6 @@ function _handle_diagnostics!(client::LspClient, params)
     uri = get(params, "uri", "")
     raw_diags = get(params, "diagnostics", [])
 
-    # Debug: log all incoming diagnostics to help diagnose missing warnings
-    try
-        Base.open("/tmp/sessions_lsp_debug.log", "a") do io
-            println(io, "─── publishDiagnostics uri=$(uri) count=$(length(raw_diags)) ───")
-            for (i, d) in enumerate(raw_diags)
-                sev = get(d, "severity", "?")
-                msg = get(d, "message", "")
-                src = get(d, "source", "")
-                code = get(d, "code", "")
-                range = get(d, "range", Dict())
-                start = get(range, "start", Dict())
-                line = get(start, "line", -1)
-                println(io, "  [$i] sev=$sev line=$line src=$src code=$code msg=$(first(msg, 120))")
-            end
-        end
-    catch; end
-
     diags = LspDiagnostic[]
     for d in raw_diags
         range = get(d, "range", Dict())
@@ -307,6 +292,9 @@ function _send_initialize!(client::LspClient, project_dir::String)
             "textDocument" => Dict{String,Any}(
                 "publishDiagnostics" => Dict{String,Any}(
                     "relatedInformation" => true
+                ),
+                "diagnostic" => Dict{String,Any}(
+                    "dynamicRegistration" => false
                 ),
                 "completion" => Dict{String,Any}(
                     "completionItem" => Dict{String,Any}(
@@ -403,6 +391,70 @@ function lsp_did_close!(client::LspClient, uri::String)
     _send_notification!(client, "textDocument/didClose", Dict{String,Any}(
         "textDocument" => Dict{String,Any}("uri" => uri)
     ))
+end
+
+# ── Pull Diagnostics (textDocument/diagnostic) ────────────────────
+
+"""Request pull diagnostics from the LSP server (lowering checks like undef-local-var).
+
+JETLS uses two diagnostic channels:
+- **Push** (`publishDiagnostics`): inference checks (MethodError, undef-global-var) — sent by server
+- **Pull** (`textDocument/diagnostic`): lowering checks (undef-local-var, unused-local) — must be requested
+
+This sends the pull request asynchronously and merges results into `client.diagnostics`.
+"""
+function lsp_request_diagnostics!(client::LspClient, uri::String)
+    client.status != lsp_ready && return
+    ch = _send_request!(client, "textDocument/diagnostic", Dict{String,Any}(
+        "textDocument" => Dict{String,Any}("uri" => uri)
+    ))
+
+    @async begin
+        try
+            result = timedwait(() -> isready(ch), 10.0)
+            if result == :ok
+                response = take!(ch)
+                if response isa Dict && !haskey(response, "error")
+                    _merge_pull_diagnostics!(client, uri, response)
+                end
+            end
+        catch; end
+    end
+end
+
+"""Store pull diagnostic results separately from push diagnostics.
+
+Pull diagnostics return `{kind: "full", items: [...]}`. Stored in
+`client.pull_diagnostics` to avoid race conditions with push diagnostics
+(publishDiagnostics), which replace `client.diagnostics` entirely.
+Both are combined when reading via `lsp_cell_diagnostics`.
+"""
+function _merge_pull_diagnostics!(client::LspClient, uri::String, response::Dict)
+    raw_items = get(response, "items", [])
+
+    pull_diags = LspDiagnostic[]
+    for d in raw_items
+        range = get(d, "range", Dict())
+        start = get(range, "start", Dict())
+        finish = get(range, "end", Dict())
+        severity_num = get(d, "severity", 1)
+        severity = severity_num == 1 ? :error :
+                   severity_num == 2 ? :warning :
+                   severity_num == 3 ? :info : :hint
+
+        push!(pull_diags, LspDiagnostic(
+            get(start, "line", 0) + 1,
+            get(start, "character", 0),
+            get(finish, "line", 0) + 1,
+            get(finish, "character", 0),
+            severity,
+            get(d, "message", ""),
+            get(d, "source", "JETLS"),
+            string(get(d, "code", ""))
+        ))
+    end
+
+    client.pull_diagnostics[uri] = pull_diags
 end
 
 # ── Completion ─────────────────────────────────────────────────────
@@ -974,12 +1026,9 @@ function cell_uri(nb::Notebook, cell_id::UUID)::String
     "file://$(abspath(nb.path))#cell-$(cell_id)"
 end
 
-"""Generate a URI for the notebook virtual document (all cells concatenated).
-
-Creates a real `.jl` file inside the project root so JETLS treats it as a
-genuine source file and runs full analysis (lowering checks, JET inference).
-The file is written to disk by `lsp_sync_notebook!` and cleaned up on exit.
-"""
+"""Generate a virtual URI for the whole notebook (all cells concatenated).
+Uses a non-existent .jl path inside the project root so JETLS treats it as a
+virtual document within scope, avoiding conflicts with the file scanner."""
 function notebook_uri(nb::Notebook)::String
     root = _find_project_root(nb.path)
     "file://$(root)/.sessions-virtual-notebook.jl"
@@ -1001,26 +1050,37 @@ end
 
 """Concatenate all cell code into a single virtual document for LSP analysis.
 
-Pluto notebooks use `@bind var Widget(...)` to create reactive variables.
-Since JETLS can't expand our custom `@bind` macro, it reports false positives
-like "`n` is not defined". We scan for `@bind` patterns and prepend stub
-declarations so JETLS knows these variables exist.
+Cells are sorted in topological (dependency) order, matching how
+`execute_notebook!` actually runs them. Without this, JETLS reports false
+"undefined variable" warnings when a cell uses a variable defined in a cell
+below it in display order.
+
+Notebooks should explicitly import what they need (e.g.
+`using Sessions: @bind, Slider`). Missing imports produce legitimate JETLS
+warnings. However, `@bind` variable stubs ARE prepended because JETLS cannot
+expand custom macros — without stubs, `@bind n Slider(1:10)` would produce
+a false "`n` is not defined" warning even though the macro defines `n`.
 """
 function notebook_as_document(nb::Notebook)::String
+    ordered_ids = _lsp_cell_order(nb)
+
     parts = String[]
-    # Collect @bind variable names across all cells for stub declarations
+
+    # Collect @bind variable names and prepend stubs. JETLS can't expand custom
+    # macros, so it doesn't know `@bind n Slider(...)` defines `n`. The stubs
+    # suppress false "not defined" warnings for bound variables while still
+    # allowing JETLS to warn if `@bind` itself isn't imported.
     bind_vars = String[]
-    for id in nb.cell_order
+    for id in ordered_ids
         cell = get(nb.cells, id, nothing)
         cell === nothing && continue
         _collect_bind_vars!(bind_vars, cell.code)
     end
-    # Prepend stub declarations for bound variables
     if !isempty(bind_vars)
-        stubs = join(["$v = nothing" for v in bind_vars], "; ")
-        push!(parts, "# @bind variable stubs for JETLS\n$stubs")
+        push!(parts, join(["$v = nothing" for v in bind_vars], "; "))
     end
-    for id in nb.cell_order
+
+    for id in ordered_ids
         cell = get(nb.cells, id, nothing)
         cell === nothing && continue
         push!(parts, cell.code)
@@ -1030,31 +1090,61 @@ end
 
 """Extract variable names from `@bind var expr` patterns in cell code."""
 function _collect_bind_vars!(vars::Vector{String}, code::String)
-    # Match @bind followed by a Julia identifier
     for m in eachmatch(r"@bind\s+([a-zA-Z_]\w*)", code)
         name = m.captures[1]
         name ∉ vars && push!(vars, name)
     end
 end
 
+"""Get cell UUIDs in topological (execution) order for LSP analysis.
+
+Uses `execution_order()` to sort cells so definitions come before references,
+matching runtime behavior. Errable cells (cycles, multiple defs) are appended
+at the end so JETLS can still analyze them.
+"""
+function _lsp_cell_order(nb::Notebook)::Vector{UUID}
+    try
+        order = execution_order(nb)
+        ordered_ids = UUID[c.id for c in order.runnable]
+        # Include errable cells at the end (still want diagnostics for them)
+        for (cell, _) in order.errable
+            push!(ordered_ids, cell.id)
+        end
+        # Include any cells not covered (e.g. disabled cells missed by topology)
+        seen = Set(ordered_ids)
+        for id in nb.cell_order
+            if id ∉ seen && haskey(nb.cells, id)
+                push!(ordered_ids, id)
+            end
+        end
+        ordered_ids
+    catch
+        # Fallback to display order if topology fails
+        nb.cell_order
+    end
+end
+
 """Map a line number in the concatenated document back to (cell_id, cell_line).
 
-Accounts for the @bind stub preamble prepended by `notebook_as_document`.
+Uses the same topological ordering and preamble layout as `notebook_as_document`.
 """
 function document_line_to_cell(nb::Notebook, doc_line::Int)::Union{Nothing, Tuple{UUID, Int}}
-    # Calculate preamble offset (same logic as notebook_as_document)
+    ordered_ids = _lsp_cell_order(nb)
+
+    # Account for @bind stub preamble (must match notebook_as_document)
+    current_line = 1
     bind_vars = String[]
-    for id in nb.cell_order
+    for id in ordered_ids
         cell = get(nb.cells, id, nothing)
         cell === nothing && continue
         _collect_bind_vars!(bind_vars, cell.code)
     end
-    current_line = 1
     if !isempty(bind_vars)
-        # Preamble: "# comment\nvar1 = nothing; var2 = nothing" = 2 lines + 1 blank separator
-        current_line += 3
+        # "var1 = nothing; var2 = nothing" = 1 line + 1 blank separator
+        current_line += 2
     end
-    for id in nb.cell_order
+
+    for id in ordered_ids
         cell = get(nb.cells, id, nothing)
         cell === nothing && continue
         n_lines = count(==('\n'), cell.code) + 1
@@ -1068,52 +1158,56 @@ end
 
 """Sync the entire notebook to the LSP server.
 
-Writes the concatenated document to a real file on disk so JETLS can
-perform full analysis (lowering checks + JET inference). The file is
-gitignored (dot-prefixed) and cleaned up on exit.
+Sends didOpen/didChange + didSave to push diagnostics (inference checks),
+then requests pull diagnostics (lowering checks like undef-local-var).
 """
 function lsp_sync_notebook!(client::LspClient, nb::Notebook, version::Int)
     client.status != lsp_ready && return
     uri = notebook_uri(nb)
     text = notebook_as_document(nb)
 
-    # Write to disk so JETLS treats it as a real source file
-    file_path = _uri_to_path(uri)
-    try
-        Base.open(file_path, "w") do io
-            write(io, text)
-        end
-    catch; end
-
     if version == 1
         lsp_did_open!(client, uri, text)
     else
         lsp_did_change!(client, uri, text, version)
     end
-    # Send didSave to trigger JETLS deep analysis (JET inference pass)
+    # Send didSave to trigger JETLS deep analysis (JET inference pass — push model)
     lsp_did_save!(client, uri, text)
+    # Request pull diagnostics (lowering checks — pull model)
+    lsp_request_diagnostics!(client, uri)
 end
 
-"""Convert a file:// URI to a local path."""
-function _uri_to_path(uri::String)::String
-    replace(uri, r"^file://" => "")
-end
+"""Get LSP diagnostics mapped back to notebook cells.
 
-"""Clean up the virtual notebook file from disk."""
-function _cleanup_virtual_notebook!(nb::Notebook)
-    try
-        path = _uri_to_path(notebook_uri(nb))
-        isfile(path) && rm(path)
-    catch; end
-end
-
-"""Get LSP diagnostics mapped back to notebook cells."""
+Combines push diagnostics (inference: MethodError, undef-global-var) and
+pull diagnostics (lowering: undef-local-var, unused-local), deduplicating
+by line+message.
+"""
 function lsp_cell_diagnostics(client::LspClient, nb::Notebook)::Dict{UUID, Vector{Diagnostic}}
     result = Dict{UUID, Vector{Diagnostic}}()
     uri = notebook_uri(nb)
-    lsp_diags = get(client.diagnostics, uri, LspDiagnostic[])
 
-    for ld in lsp_diags
+    # Combine push + pull diagnostics, deduplicating
+    push_diags = get(client.diagnostics, uri, LspDiagnostic[])
+    pull_diags = get(client.pull_diagnostics, uri, LspDiagnostic[])
+    seen = Set{Tuple{Int,String}}()
+    all_diags = LspDiagnostic[]
+    for d in push_diags
+        key = (d.line, d.message)
+        if key ∉ seen
+            push!(all_diags, d)
+            push!(seen, key)
+        end
+    end
+    for d in pull_diags
+        key = (d.line, d.message)
+        if key ∉ seen
+            push!(all_diags, d)
+            push!(seen, key)
+        end
+    end
+
+    for ld in all_diags
         mapping = document_line_to_cell(nb, ld.line)
         mapping === nothing && continue
         cell_id, cell_line = mapping

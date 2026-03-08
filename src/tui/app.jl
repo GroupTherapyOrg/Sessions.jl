@@ -361,7 +361,6 @@ function _quit_app!(app::SessionsApp)
     app.watcher = nothing
     stop_repl!(app.repl_panel)
     stop_lsp!(app.lsp)
-    _cleanup_virtual_notebook!(app.nb)
     app.quit = true
 end
 
@@ -3291,36 +3290,6 @@ end
 
 # ── File Editor Mode ─────────────────────────────────────────────────
 
-"""Delete the selected text in file editor and position cursor at selection start."""
-function _fev_delete_selection!(fev::FileEditorView)
-    sel = fev.selection
-    !sel.active && return
-    editor = fev.editor
-    Tachikoma._push_undo!(editor; force=true)
-    sr, sc, er, ec = _selection_range(sel, editor.cursor_row, editor.cursor_col)
-    if sr == er
-        line = editor.lines[sr]
-        to_del = min(ec, length(line))
-        from_del = sc + 1
-        if from_del <= to_del
-            deleteat!(line, from_del:to_del)
-        end
-    else
-        first_part = editor.lines[sr][1:sc]
-        last_line = editor.lines[er]
-        last_part = ec < length(last_line) ? last_line[ec+1:end] : Char[]
-        editor.lines[sr] = vcat(first_part, last_part)
-        if er > sr
-            deleteat!(editor.lines, sr+1:er)
-        end
-    end
-    editor.cursor_row = sr
-    editor.cursor_col = sc
-    sel.active = false
-    editor.token_cache = [Tachikoma.tokenize_line(l) for l in editor.lines]
-    empty!(editor.dirty_lines)
-end
-
 function _format_file_editor!(fev::FileEditorView)::Bool
     original = Tachikoma.text(fev.editor)
     formatted = format_code(original)
@@ -3336,10 +3305,13 @@ end
 
 function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     fev = app.file_editor_view
+    editor = fev.editor
+    sel = fev.selection
+
+    # ── File-specific shortcuts (before shared editing) ──
 
     # Ctrl+Q / Ctrl+C: quit (force quit if dirty warning already shown)
-    # When selection is active, Ctrl+C copies instead of quitting
-    if evt.key == :ctrl && (evt.char == 'q' || (evt.char == 'c' && !fev.selection.active))
+    if evt.key == :ctrl && (evt.char == 'q' || (evt.char == 'c' && !sel.active))
         if fev.dirty && !startswith(app.message, "Unsaved")
             app.message = "Unsaved changes! Ctrl+Q again or Ctrl+S to save"
         else
@@ -3352,15 +3324,10 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if evt.key == :ctrl && evt.char == 's'
         did_format = _format_file_editor!(fev)
         save_file!(fev)
-        # Notify LSP of save (triggers deep analysis)
         if app.lsp.status == lsp_ready
-            lsp_did_save!(app.lsp, "file://" * abspath(fev.path), Tachikoma.text(fev.editor))
+            lsp_did_save!(app.lsp, "file://" * abspath(fev.path), Tachikoma.text(editor))
         end
-        if did_format
-            app.message = "Formatted + Saved: $(fev.path)"
-        else
-            app.message = "Saved: $(fev.path)"
-        end
+        app.message = did_format ? "Formatted + Saved: $(fev.path)" : "Saved: $(fev.path)"
         return
     end
 
@@ -3388,175 +3355,34 @@ function _handle_file_editor_key!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    editor = fev.editor
-    sel = fev.selection
+    # ── Shared editing (same code path as CellWidget) ──
 
-    # ── Ctrl+A: move to line start (REPL ^A) ──
-    if evt.key == :ctrl && evt.char == 'a'
-        sel.active = false
-        editor.cursor_col = 0
-        return
+    old_text_hash = hash(Tachikoma.text(editor))
+
+    handled, modified = _handle_shared_editor_key!(editor, sel, evt)
+    if !handled
+        # Pass unhandled keys to Tachikoma CodeEditor (vim keybindings, undo, search)
+        Tachikoma.handle_key!(editor, evt)
     end
-
-    # ── Ctrl+E: move to line end (REPL ^E) ──
-    if evt.key == :ctrl && evt.char == 'e'
-        sel.active = false
-        editor.cursor_col = length(editor.lines[editor.cursor_row])
-        return
-    end
-
-    # ── Ctrl+K: kill line forward (REPL ^K) ──
-    if evt.key == :ctrl && evt.char == 'k'
-        Tachikoma._push_undo!(editor; force=true)
-        line = editor.lines[editor.cursor_row]
-        if editor.cursor_col < length(line)
-            killed = String(line[editor.cursor_col+1:end])
-            deleteat!(line, editor.cursor_col+1:length(line))
-            _clipboard_copy!(killed)
-            Tachikoma._mark_dirty!(editor, editor.cursor_row)
-        elseif editor.cursor_row < length(editor.lines)
-            append!(editor.lines[editor.cursor_row], editor.lines[editor.cursor_row + 1])
-            deleteat!(editor.lines, editor.cursor_row + 1)
-            Tachikoma._mark_dirty!(editor, editor.cursor_row)
-        end
-        Tachikoma._ensure_tokens!(editor)
-        fev.dirty = true
-        return
-    end
-
-    # ── Ctrl+U: kill line backward (REPL ^U) ──
-    if evt.key == :ctrl && evt.char == 'u'
-        Tachikoma._push_undo!(editor; force=true)
-        line = editor.lines[editor.cursor_row]
-        if editor.cursor_col > 0
-            killed = String(line[1:editor.cursor_col])
-            deleteat!(line, 1:editor.cursor_col)
-            editor.cursor_col = 0
-            _clipboard_copy!(killed)
-            Tachikoma._mark_dirty!(editor, editor.cursor_row)
-        end
-        Tachikoma._ensure_tokens!(editor)
-        fev.dirty = true
-        return
-    end
-
-    # ── Ctrl+W: delete word backward (REPL ^W) ──
-    if evt.key == :ctrl && evt.char == 'w'
-        Tachikoma._push_undo!(editor; force=true)
-        start_row = editor.cursor_row
-        start_col = editor.cursor_col
-        _word_left!(editor)
-        sel.active = true
-        sel.anchor_row = start_row
-        sel.anchor_col = start_col
-        _fev_delete_selection!(fev)
-        fev.dirty = true
-        return
-    end
-
-    # ── Ctrl+Y: yank/paste (REPL ^Y) ──
-    if evt.key == :ctrl && evt.char == 'y'
-        clip = _clipboard_paste()
-        isempty(clip) && return
-        if sel.active
-            _fev_delete_selection!(fev)
-        end
-        _insert_text!(editor, clip)
-        fev.dirty = true
-        return
-    end
-
-    # ── Ctrl+C / Cmd+C: copy selection ──
-    if evt.key == :ctrl && evt.char == 'c' && sel.active
-        text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
-        _clipboard_copy!(text)
-        return
-    end
-
-    # ── Ctrl+X / Cmd+X: cut selection ──
-    if evt.key == :ctrl && evt.char == 'x' && sel.active
-        text = _selected_text(editor.lines, sel, editor.cursor_row, editor.cursor_col)
-        _clipboard_copy!(text)
-        _fev_delete_selection!(fev)
-        fev.dirty = true
-        return
-    end
-
-    # ── Ctrl+V / Cmd+V: paste ──
-    if evt.key == :ctrl && evt.char == 'v'
-        clip = _clipboard_paste()
-        isempty(clip) && return
-        if sel.active
-            _fev_delete_selection!(fev)
-        end
-        _insert_text!(editor, clip)
-        fev.dirty = true
-        return
-    end
-
-    # ── Shift+Arrow: extend selection ──
-    if evt.key in (:shift_left, :shift_right, :shift_up, :shift_down, :shift_home, :shift_end)
-        if !sel.active
-            sel.active = true
-            sel.anchor_row = editor.cursor_row
-            sel.anchor_col = editor.cursor_col
-        end
-        _move_cursor_for_shift!(editor, evt.key)
-        return
-    end
-
-    # ── Alt+Arrow: word jump ──
-    if evt.key == :alt_left || (evt.key == :alt && evt.char == 'b')
-        sel.active = false
-        _word_left!(editor)
-        return
-    end
-    if evt.key == :alt_right || (evt.key == :alt && evt.char == 'f')
-        sel.active = false
-        _word_right!(editor)
-        return
-    end
-
-    # Clear selection on any non-selection key
-    if sel.active && !(evt.key in (:shift_left, :shift_right, :shift_up, :shift_down,
-                                    :shift_home, :shift_end, :ctrl_shift_left, :ctrl_shift_right))
-        sel.active = false
-    end
-
-    # Track dirty state — any key that modifies the buffer marks dirty
-    old_lines = length(fev.editor.lines)
-    old_text_hash = hash(Tachikoma.text(fev.editor))
-
-    # Auto-close brackets (before passing to editor)
-    if _handle_auto_close!(fev.editor, evt)
-        # Skip Tachikoma.handle_key! — auto-close handled the event
-        @goto fev_post_edit
-    end
-
-    # Delegate all other keys to the CodeEditor (vim keybindings, undo, search, etc.)
-    Tachikoma.handle_key!(fev.editor, evt)
-
-    @label fev_post_edit
 
     # Sync mode: CodeEditor's mode ↔ app.mode
-    ce_mode = fev.editor.mode
+    ce_mode = editor.mode
     if ce_mode == :insert
         app.mode = :insert
     elseif ce_mode == :normal
         app.mode = :normal
     elseif ce_mode == :search
-        app.mode = :insert  # search is still "active editing"
+        app.mode = :insert
     end
 
-    # Check if text changed
-    new_text_hash = hash(Tachikoma.text(fev.editor))
+    # Check if text changed (covers both shared handler and Tachikoma handler)
+    new_text_hash = hash(Tachikoma.text(editor))
     if new_text_hash != old_text_hash
         fev.dirty = true
-        # Debounced LSP sync for file editor
         if app.lsp.status == lsp_ready
             fev.lsp_doc_version += 1
             lsp_did_change!(app.lsp, "file://" * abspath(fev.path),
-                Tachikoma.text(fev.editor), fev.lsp_doc_version)
+                Tachikoma.text(editor), fev.lsp_doc_version)
         end
     end
 

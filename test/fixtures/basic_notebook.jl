@@ -23,6 +23,9 @@ Try editing a cell and pressing `Ctrl+R` to run it!
 # ╔═╡ 66ef225a-dd9b-4b36-880c-5e777688f37a
 using Markdown
 
+# ╔═╡ 5ea37984-1433-4bb8-bff0-1784bbf52986
+import Sessions: @bind, Slider
+
 # ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
 using UnicodePlots
 
@@ -119,6 +122,7 @@ end
 # ╔═╡ Cell order:
 # ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 # ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
+# ╠═5ea37984-1433-4bb8-bff0-1784bbf52986
 # ╠═9c606da0-915a-4cfb-91fc-cdc93a454b8e
 # ╟─0b7a9ca3-5430-4e6a-9894-cd2339447be5
 # ╟─1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
