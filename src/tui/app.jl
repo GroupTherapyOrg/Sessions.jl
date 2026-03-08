@@ -1656,7 +1656,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             return
         end
 
-        # Click to position cursor
+        # Click to position cursor + start drag tracking
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
             vp = fev.viewport
             if vp.width > 0 && evt.x >= vp.x && evt.x < vp.x + vp.width &&
@@ -1665,7 +1665,6 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 vi = Theme.CELL_V_INSET
                 inner_x = vp.x + hi + 1
                 inner_y = vp.y + vi + 1
-                # Account for line number gutter
                 gw = ndigits(n_lines) + 1
                 code_x = inner_x + gw
                 row = (evt.y - inner_y) + 1 + ce.scroll_offset
@@ -1674,10 +1673,45 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 col = clamp(col, 0, length(ce.lines[row]))
                 ce.cursor_row = row
                 ce.cursor_col = col
-                # Enter insert mode on click
+                fev.selection.active = false
                 ce.mode = :insert
                 app.mode = :insert
+                app.drag_active = true
             end
+            return
+        end
+
+        # Drag to select text
+        if evt.action == Tachikoma.mouse_drag && app.drag_active
+            vp = fev.viewport
+            if vp.width > 0
+                hi = Theme.CELL_H_INSET
+                vi = Theme.CELL_V_INSET
+                inner_x = vp.x + hi + 1
+                inner_y = vp.y + vi + 1
+                gw = ndigits(n_lines) + 1
+                code_x = inner_x + gw
+                row = (evt.y - inner_y) + 1 + ce.scroll_offset
+                col = evt.x - code_x
+                row = clamp(row, 1, n_lines)
+                col = clamp(col, 0, length(ce.lines[row]))
+                if !fev.selection.active
+                    fev.selection.active = true
+                    fev.selection.anchor_row = ce.cursor_row
+                    fev.selection.anchor_col = ce.cursor_col
+                end
+                ce.cursor_row = row
+                ce.cursor_col = col
+            end
+            return
+        end
+
+        # Mouse release: auto-copy selection, stop drag
+        if evt.action == Tachikoma.mouse_release
+            if app.drag_active && fev.selection.active
+                _auto_copy_selection!(ce, fev.selection)
+            end
+            app.drag_active = false
             return
         end
 
@@ -1892,7 +1926,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         if app.drag_active && app.drag_cell_idx >= 1
             idx = app.drag_cell_idx
             if idx <= length(nv.cell_widgets)
-                _auto_copy_selection!(nv.cell_widgets[idx])
+                cw = nv.cell_widgets[idx]
+                _auto_copy_selection!(cw.editor, cw.selection)
             end
         end
         app.drag_active = false
