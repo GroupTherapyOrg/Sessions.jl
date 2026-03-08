@@ -651,28 +651,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         nv.save_rect = Tachikoma.Rect()
     end
 
-    # ── LSP status indicator in top-left border ──
-    lsp_label, lsp_fg = if nv.lsp_status == lsp_ready
-        n_diags = sum(length(ds) for ds in values(nv.cell_diags); init=0)
-        if n_diags > 0
-            (" ⚠ $(n_diags) ", Theme.ORANGE)
-        else
-            (" ✓ JET ", Theme.GREEN)
-        end
-    elseif nv.lsp_status == lsp_starting
-        (" ◌ JET ", Theme.FG_MUTED)
-    elseif nv.lsp_status == lsp_error
-        (" ✕ JET ", Theme.RED)
-    else
-        ("", Theme.FG_MUTED)
-    end
-    if !isempty(lsp_label)
-        lsp_x = bx + 2
-        if lsp_x + length(lsp_label) < save_x
-            Tachikoma.set_string!(buf, lsp_x, top_border_y, lsp_label,
-                Tachikoma.Style(; fg=lsp_fg, bg=Theme.CANVAS_BG))
-        end
-    end
+    # LSP status indicator disabled (JETLS off for now)
 end
 
 """Lightweight placeholder for image output during scroll/clip — just blank space."""

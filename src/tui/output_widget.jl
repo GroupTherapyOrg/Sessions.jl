@@ -27,13 +27,14 @@ mutable struct OutputWidget
     _cached_encoded_rect::Tachikoma.Rect                    # rect used for encoding
     _cached_encoded_image_hash::UInt64                      # objectid(image_data) when encoded
     _cached_encoded_protocol::Tachikoma.GraphicsProtocol    # protocol used for encoding
+    _cached_kitty_id::UInt32                                 # Kitty image ID for re-placement (0 = none)
     # Image interaction: viewport transform (pan/zoom)
     _img_offset_x::Int
     _img_offset_y::Int
     _img_zoom::Float64
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, 0, 0, 1.0)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 0, 0, 1.0)
 
 """Format cell output as displayable lines.
 
@@ -699,6 +700,7 @@ end
 function _invalidate_image_caches!(ow::OutputWidget)
     ow._cached_pixel_image = nothing
     ow._cached_encoded_data = nothing
+    ow._cached_kitty_id = UInt32(0)
 end
 
 """Check if a cell has an image output."""
@@ -738,6 +740,36 @@ function _apply_viewport_transform(pixels::Matrix{Tachikoma.ColorRGB},
     pixels[y1:y2, x1:x2]
 end
 
+# --- Kitty image ID helpers (transmit once, re-place cheaply) ---
+
+# Monotonic counter for Kitty image IDs (unique per session)
+const _KITTY_ID_COUNTER = Ref(UInt32(0))
+_next_kitty_id() = (_KITTY_ID_COUNTER[] += UInt32(1))
+
+"""Inject `i=<id>` into a Kitty APC escape returned by encode_kitty.
+
+encode_kitty output starts with `\\e_Ga=T,...` — we insert `i=<id>,` right
+after the `G` so the terminal stores the image data under that ID.
+"""
+function _inject_kitty_id(data::Vector{UInt8}, id::UInt32)
+    # Find \e_G (0x1b 0x5f 0x47) and insert after position of 'G'
+    id_bytes = Vector{UInt8}(codeunits("i=$(id),"))
+    for i in 1:length(data)-2
+        if data[i] == 0x1b && data[i+1] == UInt8('_') && data[i+2] == UInt8('G')
+            return vcat(view(data, 1:i+2), id_bytes, view(data, i+3:length(data)))
+        end
+    end
+    data  # fallback: return unmodified
+end
+
+"""Build a tiny Kitty re-placement escape: `a=p` references a previously
+transmitted image by ID. ~50 bytes vs ~535KB for a full SHM transmission."""
+function _kitty_placement_bytes(id::UInt32, cols::Int, rows::Int)
+    io = IOBuffer(; sizehint=64)
+    write(io, "\e_Ga=p,i=", string(id), ",c=", string(cols), ",r=", string(rows), ",q=2\e\\")
+    take!(io)
+end
+
 # --- Image rendering (PixelImage with decode cache) ---
 
 """Render image output via PixelImage (sixel/kitty raster or braille fallback).
@@ -745,7 +777,8 @@ end
 Caching strategy (three layers):
 1. Pixel decode cache: _cached_pixels (invalidated on image_data objectid change)
 2. PixelImage cache: _cached_pixel_image (invalidated on rect size change)
-3. Encoded raster cache: _cached_encoded_data (invalidated on image/rect/protocol change)
+3. Encoded raster cache: _cached_encoded_data (encode once, reuse across frames)
+On the hot path, we call render_graphics! directly with cached bytes — no per-frame encoding.
 """
 function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     img_data = ow.cell.output.image_data
@@ -758,7 +791,6 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     img_id = objectid(img_data)
     pixels_changed = img_id != ow._cached_image_hash || ow._cached_pixels === nothing
     if pixels_changed
-        # Try PNG first, then JPEG
         pixels = decode_png(img_data)
         if pixels === nothing
             pixels = decode_jpeg(img_data)
@@ -771,6 +803,7 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         ow._cached_image_hash = img_id
         ow._cached_pixel_image = nothing  # force PixelImage rebuild
         ow._cached_encoded_data = nothing  # force re-encode
+        ow._cached_kitty_id = UInt32(0)    # invalidate Kitty image ID
     end
 
     # Layer 2: PixelImage cache — rebuild when rect dimensions change
@@ -780,6 +813,7 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         pi = Tachikoma.PixelImage(rect.width, rect.height)
         ow._cached_pixel_image = pi
         ow._cached_encoded_data = nothing  # force re-encode on size change
+        ow._cached_kitty_id = UInt32(0)    # invalidate Kitty image ID
     end
 
     # Only reload pixels when data changed or PixelImage was rebuilt
@@ -790,13 +824,49 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     end
 
     # Render: prefer Frame (raster) when available, else Buffer (braille).
-    # current_frame is set to nothing during slider drag to avoid escape
-    # sequence corruption from interleaving with mouse events.
-    # Always use Tachikoma.render() — it handles braille buffer background +
-    # gfx overlay + frame-to-frame sixel persistence correctly.
     frame = ow.current_frame
-    if frame !== nothing && Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
-        Tachikoma.render(pi, rect, frame)
+    gfx = Tachikoma.GRAPHICS_PROTOCOL[]
+    if frame !== nothing && gfx != Tachikoma.gfx_none
+        if gfx == Tachikoma.gfx_kitty
+            # Kitty image ID strategy: Tachikoma sends "delete all placements"
+            # (d=a) every frame, but image DATA persists in terminal memory.
+            # First render: transmit via SHM with i=<id> → terminal stores data.
+            # Subsequent frames: send tiny a=p,i=<id> re-placement (~50 bytes).
+            needs_fresh = pixels_changed || needs_rebuild ||
+                          ow._cached_kitty_id == UInt32(0) ||
+                          ow._cached_encoded_data === nothing ||
+                          ow._cached_encoded_rect != rect
+            if needs_fresh
+                data = Tachikoma.encode_kitty(pi.pixels; decay=pi.decay,
+                            cols=rect.width, rows=rect.height)
+                if !isempty(data)
+                    kid = _next_kitty_id()
+                    data = _inject_kitty_id(data, kid)
+                    ow._cached_kitty_id = kid
+                    ow._cached_encoded_rect = rect
+                    # Cache the tiny re-placement escape for subsequent frames
+                    ow._cached_encoded_data = _kitty_placement_bytes(kid, rect.width, rect.height)
+                    ow._cached_encoded_protocol = Tachikoma.gfx_kitty
+                    Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
+                end
+            else
+                # Re-place by image ID — ~50 bytes, no SHM, no encoding
+                Tachikoma.render_graphics!(frame, ow._cached_encoded_data, rect;
+                    pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
+            end
+        else
+            # Sixel: inline data (no SHM), safe to cache. Encoding is expensive
+            # (color quantization + RLE), so encode once and reuse across frames.
+            if ow._cached_encoded_data === nothing || ow._cached_encoded_protocol != gfx
+                data = Tachikoma.encode_sixel(pi.pixels; decay=pi.decay)
+                ow._cached_encoded_data = data
+                ow._cached_encoded_protocol = Tachikoma.gfx_sixel
+            end
+            data = ow._cached_encoded_data
+            if !isempty(data)
+                Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_sixel)
+            end
+        end
     else
         Tachikoma.render(pi, rect, buf)
     end
@@ -991,3 +1061,4 @@ function _render_select_widget(bond::Bond, rect::Tachikoma.Rect, buf::Tachikoma.
     x += 2
     Tachikoma.set_string!(buf, x, y, display_label, val_s)
 end
+

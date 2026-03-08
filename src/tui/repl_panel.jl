@@ -36,7 +36,7 @@ mutable struct ReplPanel
     tab_rects::Vector{Tachikoma.Rect}
     close_rects::Vector{Tachikoma.Rect}
     plus_rect::Tachikoma.Rect            # + (Julia) button
-    shell_rect::Tachikoma.Rect           # $ (Shell) button
+    shell_rect::Tachikoma.Rect           # (unused — shell tabs disabled)
     next_julia_num::Int
     next_shell_num::Int
 end
@@ -575,13 +575,6 @@ function handle_repl_click!(panel::ReplPanel, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Check $ (Shell) button
-    sr = panel.shell_rect
-    if sr.width > 0 && evt.x >= sr.x && evt.x < sr.x + sr.width && evt.y == sr.y
-        add_shell_tab!(panel, pwd())
-        return
-    end
-
     # Check × close buttons
     for (i, cr) in enumerate(panel.close_rects)
         if cr.width > 0 && evt.x >= cr.x && evt.x < cr.x + cr.width && evt.y == cr.y
@@ -798,19 +791,12 @@ function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Ta
         end
     end
 
-    # + (Julia) and $ (Shell) buttons
-    if cx + 5 <= max_x
+    # + button for new Julia tab
+    if cx + 3 <= max_x
         cx += 1
-        # + button for Julia
         Tachikoma.set_string!(buf, cx, y, "+",
             Tachikoma.Style(; fg=Theme.REPL_PROMPT_FG, bg=Theme.REPL_BG))
         panel.plus_rect = Tachikoma.Rect(cx, y, 1, 1)
-        cx += 2
-
-        # $ button for Shell
-        Tachikoma.set_string!(buf, cx, y, "\$",
-            Tachikoma.Style(; fg=Theme.REPL_SHELL_FG, bg=Theme.REPL_BG))
-        panel.shell_rect = Tachikoma.Rect(cx, y, 1, 1)
     end
 end
 

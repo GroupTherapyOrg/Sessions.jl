@@ -391,6 +391,7 @@ function __init__()
         Tachikoma._log_unknown_csi(params, final)
         return Tachikoma.KeyEvent(:unknown)
     end
+
 end
 
 end # module

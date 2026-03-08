@@ -480,7 +480,7 @@ function SessionsApp(nb::Notebook)
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(),
-        LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
+        LspClient(; enabled=false), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
         nothing,
@@ -506,7 +506,7 @@ function SessionsApp(fev::FileEditorView)
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(),
-        LspClient(), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
+        LspClient(; enabled=false), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
         nothing,
@@ -1051,7 +1051,10 @@ function reset_to_folder!(app::SessionsApp, dir::String)
 end
 
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
-    app.last_interaction_time = time()
+    # Only suppress raster during rapid navigation that scrolls content
+    if evt.key in (:up, :down, :pageup, :pagedown)
+        app.last_interaction_time = time()
+    end
     app.message = ""  # Clear status message on any key
     # Dismiss hover tooltip on any keypress
     app.hover_tooltip = nothing
@@ -1322,12 +1325,6 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Ctrl+J: toggle diagnostics panel
-    if evt.key == :ctrl && evt.char == 'j'
-        _toggle_diagnostics!(app)
-        return
-    end
-
     # Ctrl+G: go to definition (LSP)
     if evt.key == :ctrl && evt.char == 'g'
         _goto_definition!(app)
@@ -1459,8 +1456,8 @@ end
 
 """Handle mouse events — Pluto-style click zones for cell controls."""
 function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
-    # Only debounce raster on actual interaction (clicks, scrolls, drags) — not hover
-    if evt.action != Tachikoma.mouse_move
+    # Only debounce raster during scroll events — clicks/hover don't move images
+    if evt.button in (Tachikoma.mouse_scroll_up, Tachikoma.mouse_scroll_down)
         app.last_interaction_time = time()
     end
     nv = app.notebook_view
@@ -1568,8 +1565,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 app.sidebar_open = is_active(app.activity_bar, :explorer)
             elseif btn_id == :terminal
                 _toggle_repl!(app)
-            elseif btn_id == :diagnostics
-                _toggle_diagnostics!(app)
+            # diagnostics button removed while JETLS is off
             end
         elseif evt.action == Tachikoma.mouse_move
             app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)
