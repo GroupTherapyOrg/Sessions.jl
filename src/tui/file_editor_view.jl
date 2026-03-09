@@ -25,7 +25,7 @@ function FileEditorView(path::String)
         cursor_style=Tachikoma.Style(; fg=Theme.BG, bg=Theme.ACCENT),
     )
     if isfile(path)
-        content = replace(read(path, String), '\t' => "    ")
+        content = read(path, String)
         Tachikoma.set_text!(editor, content)
         # Reset cursor to top of file (set_text! leaves cursor at end)
         editor.cursor_row = 1
@@ -49,7 +49,7 @@ end
 """Reload file from disk (discards unsaved changes)."""
 function reload_file!(fev::FileEditorView)
     if isfile(fev.path)
-        content = replace(read(fev.path, String), '\t' => "    ")
+        content = read(fev.path, String)
         Tachikoma.set_text!(fev.editor, content)
         fev.dirty = false
     end

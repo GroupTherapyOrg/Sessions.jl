@@ -28,16 +28,16 @@ function _clipboard_paste()::String
     # After internal copy, return our buffer (pbcopy may race with pbpaste)
     if _CLIPBOARD_DIRTY[]
         _CLIPBOARD_DIRTY[] = false
-        return replace(_CLIPBOARD[], '\t' => "    ")
+        return _CLIPBOARD[]
     end
     # No pending internal copy — try system clipboard for external copies
     try
         if Sys.isapple()
             sys = read(`pbpaste`, String)
-            !isempty(sys) && return replace(sys, '\t' => "    ")
+            !isempty(sys) && return sys
         end
     catch; end
-    return replace(_CLIPBOARD[], '\t' => "    ")
+    return _CLIPBOARD[]
 end
 
 # ── Word boundary (matching Julia REPL.LineEdit is_non_word_char) ────
