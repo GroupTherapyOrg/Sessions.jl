@@ -1046,16 +1046,7 @@ function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
     # to get the number of CODE lines that should be scrolled off.
     vi = Theme.CELL_V_INSET
     overhead = vi + 1          # vi padding rows + 1 border top row
-    desired_scroll = max(0, cw._v_clip_top - overhead)
-
-    # Save/restore cursor_row: CodeEditor's auto-scroll resets scroll_offset to
-    # keep the cursor visible.  Temporarily move cursor_row so auto-scroll doesn't
-    # fight our desired offset.
-    saved_row = cw.editor.cursor_row
-    cw.editor.scroll_offset = desired_scroll
-    if desired_scroll > 0
-        cw.editor.cursor_row = desired_scroll + 1
-    end
+    cw.editor.scroll_offset = max(0, cw._v_clip_top - overhead)
 
     if cw.focused
         # Suppress built-in block cursor; we draw our own cursor after
@@ -1066,8 +1057,6 @@ function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
     else
         Tachikoma.render(cw.editor, inner, buf)
     end
-
-    cw.editor.cursor_row = saved_row
 end
 
 """Render ⋯ pill button inside cell, top-right corner."""
