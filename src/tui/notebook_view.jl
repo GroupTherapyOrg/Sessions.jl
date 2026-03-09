@@ -473,29 +473,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     # Pre-sync diagnostics for focused cell (affects its height via diag_lines)
     if nv.focused_idx >= 1 && nv.focused_idx <= n_cells
         fcw = nv.cell_widgets[nv.focused_idx]
-        old_diags = fcw.diagnostics
-        new_diags = get(nv.cell_diags, fcw.cell.id, Diagnostic[])
-        fcw.diagnostics = new_diags
-        # If diagnostics changed, prefix sums for focused cell may be stale
-        if length(old_diags) != length(new_diags) && !nv._prefix_dirty
-            _rebuild_prefix_sums!(nv)
-        end
+        fcw.diagnostics = get(nv.cell_diags, fcw.cell.id, Diagnostic[])
     end
 
-    # Binary search: find first cell whose slot overlaps the visible area.
-    # scroll_content = how far into content we've scrolled (in cell content space).
-    scroll_content = nv.scroll_offset - Theme.TOP_MARGIN
-    first_visible = if scroll_content <= 0
-        1
-    else
-        idx = searchsortedfirst(nv._cumulative_heights, scroll_content)
-        clamp(idx, 1, n_cells)
-    end
-
-    # Compute y position for the first visible cell using prefix sums (O(1))
-    y = inner_y + Theme.TOP_MARGIN - nv.scroll_offset + _cell_y_offset(nv, first_visible)
-
-    for i in first_visible:n_cells
+    for i in eachindex(nv.cell_widgets)
         cw = nv.cell_widgets[i]
         ow = nv.output_widgets[i]
 
@@ -508,7 +489,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             break
         end
 
+        # Fast skip: if this cell's entire slot is above the viewport, just advance y
         slot_h = ch + oh + Theme.CELL_GAP
+        if y + slot_h < visible_start
+            y += slot_h
+            continue
+        end
 
         # Sync diagnostics only for visible/near-visible cells
         cw.diagnostics = get(nv.cell_diags, cw.cell.id, Diagnostic[])
