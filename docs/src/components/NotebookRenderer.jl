@@ -251,8 +251,7 @@ function _render_plotly_output(cell::Main.Sessions.Cell, prerendered)
                 :data_plotly_default => string(gallery.slider.default),
                 :class => "w-full rounded-lg",
                 :style => "min-height:400px;"),
-            scripts...,
-            Noscript(_render_png_gallery_fallback(gallery))
+            scripts...
         )
     end
 
