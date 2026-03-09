@@ -10,7 +10,7 @@ import Sessions: @bind, Slider
 # ╔═╡ 076b1881-2363-4e4c-8015-4f5e12969675
 
 # ╔═╡ b2c3d4e5-6f7a-8b9c-0d1e-f2a3b4c5d6e7
-using CairoMakie
+import CairoMakie as Mke
 
 # ╔═╡ a1b2c3d4-5e6f-7a8b-9c0d-e1f2a3b4c5d6
 md"""
@@ -39,9 +39,9 @@ let
     ys = -2:0.05:2
     zs = [cos(w / 3 * sqrt(x^2 + y^2)) * exp(-0.3 * sqrt(x^2 + y^2)) for x in xs, y in ys]
 
-    fig = Figure(size = (400, 200))
-    ax = Axis3(fig[1, 1]; title = "$(w)-fold ripple", xlabel = "x", ylabel = "y", zlabel = "z")
-    surface!(ax, xs, ys, zs; colormap = :viridis)
+    fig = Mke.Figure(size = (400, 200))
+    ax = Mke.Axis3(fig[1, 1]; title = "$(w)-fold ripple", xlabel = "x", ylabel = "y", zlabel = "z")
+    Mke.surface!(ax, xs, ys, zs; colormap = :viridis)
     fig
 end
 
@@ -59,11 +59,11 @@ Slider controls the number of visible periods.
 let
     x = range(0, periods * 2pi; length = 200)
 
-    fig = Figure(size = (600, 300))
-    ax = Axis(fig[1, 1]; title = "$(periods) period(s)", xlabel = "x", ylabel = "y")
-    lines!(ax, x, sin.(x); label = "sin(x)")
-    lines!(ax, x, cos.(x); label = "cos(x)", linestyle = :dash)
-    axislegend(ax)
+    fig = Mke.Figure(size = (600, 300))
+    ax = Mke.Axis(fig[1, 1]; title = "$(periods) period(s)", xlabel = "x", ylabel = "y")
+    Mke.lines!(ax, x, sin.(x); label = "sin(x)")
+    Mke.lines!(ax, x, cos.(x); label = "cos(x)", linestyle = :dash)
+    Mke.axislegend(ax)
     fig
 end
 
@@ -83,10 +83,10 @@ let
     ys = range(-pi, pi; length = 100)
     zs = [sin(k * x) * cos(k * y) for x in xs, y in ys]
 
-    fig = Figure(size = (500, 400))
-    ax = Axis(fig[1, 1]; title = "sin($(k)x) * cos($(k)y)", xlabel = "x", ylabel = "y")
-    heatmap!(ax, xs, ys, zs; colormap = :inferno)
-    Colorbar(fig[1, 2]; colormap = :inferno, limits = (-1, 1))
+    fig = Mke.Figure(size = (500, 400))
+    ax = Mke.Axis(fig[1, 1]; title = "sin($(k)x) * cos($(k)y)", xlabel = "x", ylabel = "y")
+    Mke.heatmap!(ax, xs, ys, zs; colormap = :inferno)
+    Mke.Colorbar(fig[1, 2]; colormap = :inferno, limits = (-1, 1))
     fig
 end
 
@@ -106,9 +106,9 @@ let
     y = randn(n_pts)
     c = sqrt.(x .^ 2 .+ y .^ 2)
 
-    fig = Figure(size = (500, 400))
-    ax = Axis(fig[1, 1]; title = "Scatter (n=$(n_pts))", xlabel = "x", ylabel = "y")
-    scatter!(ax, x, y; color = c, colormap = :plasma, markersize = 8)
+    fig = Mke.Figure(size = (500, 400))
+    ax = Mke.Axis(fig[1, 1]; title = "Scatter (n=$(n_pts))", xlabel = "x", ylabel = "y")
+    Mke.scatter!(ax, x, y; color = c, colormap = :plasma, markersize = 8)
     fig
 end
 
