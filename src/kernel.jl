@@ -314,6 +314,42 @@ let workspace_counter = Ref(0)
     end
 end
 
+"""
+    _ends_with_semicolon(code) -> Bool
+
+Check if the last non-whitespace, non-comment token in `code` is a semicolon.
+Mirrors Pluto/REPL convention: trailing `;` suppresses cell output display.
+"""
+function _ends_with_semicolon(code::AbstractString)::Bool
+    # Split into lines, walk backwards, skip blank/comment-only lines
+    lines = split(code, '\n')
+    for i in length(lines):-1:1
+        line = rstrip(lines[i])
+        isempty(line) && continue
+        # Strip trailing comment (everything after unquoted #)
+        code_part = _strip_comment(line)
+        code_part = rstrip(code_part)
+        isempty(code_part) && continue  # line was only a comment
+        return endswith(code_part, ';')
+    end
+    false
+end
+
+"""Strip trailing `# comment` from a line, respecting string literals."""
+function _strip_comment(line::AbstractString)
+    in_string = false
+    prev_backslash = false
+    for (pos, c) in pairs(line)
+        if !in_string && c == '#'
+            return pos == 1 ? "" : SubString(line, 1, prevind(line, pos))
+        elseif c == '"' && !prev_backslash
+            in_string = !in_string
+        end
+        prev_backslash = c == '\\' && in_string
+    end
+    line
+end
+
 """Execute a single cell in the workspace, capturing output and timing."""
 function execute_cell!(workspace::Workspace, cell::Cell)
     cell.state = cell_running
@@ -373,17 +409,27 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     out.error = err
     out.runtime_ns = t_end - t_start
 
+    # Trailing semicolon suppresses result display (Pluto/REPL convention).
+    # Errors and stdout are always shown regardless.
+    suppress = err === nothing && _ends_with_semicolon(cell.code)
+
     if err === nothing
-        out.output_type = classify_output(result)
-        out.text_representation = text_representation(result)
-        if out.output_type == :image_png
-            out.image_data = _capture_png_bytes(result)
-        elseif out.output_type == :image_jpeg
-            out.image_data = _capture_jpeg_bytes(result)
-        elseif out.output_type == :image_svg
-            svg_src = _capture_svg_source(result)
-            if svg_src !== nothing
-                out.text_representation = svg_src
+        if suppress
+            out.output_type = :nothing
+            out.text_representation = ""
+            out.result = nothing
+        else
+            out.output_type = classify_output(result)
+            out.text_representation = text_representation(result)
+            if out.output_type == :image_png
+                out.image_data = _capture_png_bytes(result)
+            elseif out.output_type == :image_jpeg
+                out.image_data = _capture_jpeg_bytes(result)
+            elseif out.output_type == :image_svg
+                svg_src = _capture_svg_source(result)
+                if svg_src !== nothing
+                    out.text_representation = svg_src
+                end
             end
         end
         cell.output = out
