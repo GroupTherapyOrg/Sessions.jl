@@ -1,6 +1,9 @@
 ### A Pluto.jl notebook ###
 # v0.19.0
 
+# ╔═╡ 00000001-0000-0000-0000-000000000001
+using Markdown
+
 # ╔═╡ a1b2c3d4-e5f6-7890-abcd-ef1234567890
 md"""
 # Hello, Sessions.jl
@@ -44,6 +47,7 @@ fibonacci(10)
 fib_sequence = [fibonacci(i) for i in 1:10]
 
 # ╔═╡ Cell order:
+# ╠═00000001-0000-0000-0000-000000000001
 # ╟─a1b2c3d4-e5f6-7890-abcd-ef1234567890
 # ╠═b2c3d4e5-f6a7-8901-bcde-f12345678901
 # ╠═c3d4e5f6-a7b8-9012-cdef-123456789012

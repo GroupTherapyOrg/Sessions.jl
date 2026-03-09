@@ -1,6 +1,9 @@
 ### A Pluto.jl notebook ###
 # v0.19.0
 
+# ╔═╡ 00000002-0000-0000-0000-000000000001
+using Markdown
+
 # ╔═╡ 11223344-5566-7788-99aa-bbccddeeff00
 md"""
 # Data Exploration
@@ -44,6 +47,7 @@ The solar system has **$(length(planets))** planets with a total of **$(total_mo
 sorted_by_size = sort(planets, by=p -> p.diameter_km, rev=true)
 
 # ╔═╡ Cell order:
+# ╠═00000002-0000-0000-0000-000000000001
 # ╟─11223344-5566-7788-99aa-bbccddeeff00
 # ╠═22334455-6677-8899-aabb-ccddeeff0011
 # ╟─33445566-7788-99aa-bbcc-ddeeff001122
