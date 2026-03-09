@@ -403,12 +403,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     rect.width < 4 && return
     rect.height < 4 && return
 
-    # Rebuild prefix sums once per frame (O(N) but only when something changed).
-    # This replaces the old blanket invalidate_height! + O(N) content_height recompute,
-    # and enables O(log N) hit testing and O(1) content_height for the rest of the frame.
-    if nv._prefix_dirty
-        _rebuild_prefix_sums!(nv)
-    end
+    # Rebuild prefix sums once per frame. Cell heights can change implicitly (focus
+    # changes add/remove diagnostic lines, execution changes output, CodeEditor scroll).
+    # One O(N) rebuild replaces the old pattern of 4-5 separate O(N) passes per frame
+    # (content_height, cell_at_y, ensure_visible, render loop scan). All subsequent
+    # lookups are O(1) or O(log N) using the prefix sum arrays.
+    _rebuild_prefix_sums!(nv)
 
     # ── Rounded border for notebook pane (inset to match cell island style) ──
     hi = Theme.CELL_H_INSET

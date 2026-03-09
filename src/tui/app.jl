@@ -653,7 +653,6 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     if app.lsp.status == lsp_ready && app.lsp._diag_version != app._lsp_diag_version
         app._lsp_diag_version = app.lsp._diag_version
         app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
-        app.notebook_view._prefix_dirty = true  # diagnostics can change cell heights
         # Update diagnostics panel entries if panel is open
         if app.diagnostics_open
             jet_cache = Dict{UUID, CellDiagnostics}()
@@ -1502,9 +1501,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if cw !== nothing
         Tachikoma.handle_key!(cw, evt)
     end
-    # Invalidate caches: any key event may have edited cells or changed focus
+    # Dirty cache invalidation — any key event may have edited cells
     app._dirty_cache_valid = false
-    app.notebook_view._prefix_dirty = true
 end
 
 """Handle mouse events — Pluto-style click zones for cell controls."""
@@ -2078,9 +2076,6 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         _enter_panel_mode!(app)
         return
     end
-    # Mouse events can change focus, add cells, etc. — invalidate caches
-    app._dirty_cache_valid = false
-    app.notebook_view._prefix_dirty = true
 end
 
 """Update ellipsis and run button hover states during mouse move."""
@@ -2320,8 +2315,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.TaskEvent)
             app.message = "Ran all cells"
         end
     end
-    # Execution changed outputs — invalidate prefix sums and dirty cache
-    app.notebook_view._prefix_dirty = true
+    # Execution changed outputs — invalidate dirty cache
     app._dirty_cache_valid = false
     app.notebook_view.any_running = true  # will be corrected by progress bar scan
 end
