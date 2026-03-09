@@ -46,9 +46,9 @@ function NotebookPage(nb::Main.Sessions.Notebook; title::String="", description:
         push!(content_parts, _slider_interaction_script())
     end
 
-    Fragment(
+    NotebooksLayout(
         PageHeader(title, description),
-        Div(:class => "max-w-4xl mx-auto py-8 space-y-6",
+        Div(:class => "py-8 space-y-6",
             content_parts...
         )
     )

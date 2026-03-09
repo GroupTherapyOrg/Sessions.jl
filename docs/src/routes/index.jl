@@ -254,20 +254,6 @@ sessions run my_notebook.jl""")
             ),
         ),
 
-        # Architecture Section
-        Div(:class => "py-16",
-            H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-12",
-                "Three-layer architecture"
-            ),
-            Div(:class => "grid md:grid-cols-3 gap-8 max-w-5xl mx-auto px-4",
-                _ArchCard("Layer 1: Engine", "Pure Julia, no UI",
-                    "types.jl, format.jl, analysis.jl, kernel.jl, run.jl, bind.jl, session.jl, watcher.jl"),
-                _ArchCard("Layer 2: TUI", "Tachikoma.jl terminal interface",
-                    "app.jl, notebook_view.jl, cell_widget.jl, output_widget.jl, file_panel.jl, repl_panel.jl, diagnostics_panel.jl"),
-                _ArchCard("Layer 3: CLI", "Entry points & integration",
-                    "cli.jl (ARGS parsing), JETLS LSP client, JET.jl batch analysis")
-            )
-        )
     )
 end
 
@@ -282,20 +268,6 @@ function _FeatureCard(title, description, icon_path)
         ),
         H3(:class => "text-lg font-serif font-semibold text-warm-800 dark:text-warm-300 mb-3", title),
         P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed text-sm", description)
-    )
-end
-
-function _ArchCard(title, subtitle, components)
-    Main.Card(class="bg-warm-100/50 dark:bg-warm-900/50",
-        Main.CardHeader(
-            Main.CardTitle(title),
-            Main.CardDescription(
-                Span(:class => "text-sm font-medium text-accent-600 dark:text-accent-400", subtitle)
-            )
-        ),
-        Main.CardContent(
-            P(:class => "text-sm text-warm-600 dark:text-warm-400", components)
-        )
     )
 end
 

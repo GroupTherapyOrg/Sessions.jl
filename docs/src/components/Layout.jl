@@ -110,7 +110,9 @@ function Layout(children...; title="Sessions.jl")
                               :target => "_blank",
                               _GITHUB_SVG
                             ),
-                            Main.ThemeToggle(),
+                            Div(:class => "h-9 w-9 inline-flex items-center justify-center",
+                                Main.ThemeToggle(),
+                            ),
                         ),
                     ),
 
