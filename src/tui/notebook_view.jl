@@ -26,13 +26,16 @@ mutable struct NotebookView
     current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
     last_scroll_time::Float64  # time() of last scroll event — skip image rendering during active scroll
     _last_viewport_size::Tuple{Int, Int}  # (width, height) for resize detection
+    # --- Height cache (avoids redundant O(N) loops within same frame) ---
+    _cached_content_height::Int    # cached total content height (-1 = stale)
+    _height_dirty::Bool            # set true when cells change or at start of render
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0))
+    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0), -1, true)
 end
 
 """Flush image-related caches on all OutputWidgets (encoded data, PixelImage, height).
@@ -76,6 +79,7 @@ function rebuild_widgets!(nv::NotebookView)
 
     nv.cell_widgets = [CellWidget(c) for c in cells]
     nv.output_widgets = [OutputWidget(c) for c in cells]
+    invalidate_height!(nv)
 
     nv.focused_idx = 1
     if old_focused_id !== nothing
@@ -372,6 +376,10 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     rect.width < 4 && return
     rect.height < 4 && return
 
+    # Invalidate content height once per frame so it recomputes at most once.
+    # Subsequent calls (scrollbar, clamp_scroll!) reuse the cached value.
+    invalidate_height!(nv)
+
     # ── Rounded border for notebook pane (inset to match cell island style) ──
     hi = Theme.CELL_H_INSET
     vi = Theme.CELL_V_INSET
@@ -432,15 +440,34 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     n_cells = length(nv.cell_widgets)
     gap_mid = div(Theme.CELL_GAP, 2)  # center row offset within gap
 
+    # Pre-sync diagnostics for focused cell (affects its height via diag_lines)
+    if nv.focused_idx >= 1 && nv.focused_idx <= n_cells
+        fcw = nv.cell_widgets[nv.focused_idx]
+        fcw.diagnostics = get(nv.cell_diags, fcw.cell.id, Diagnostic[])
+    end
+
     for i in eachindex(nv.cell_widgets)
         cw = nv.cell_widgets[i]
         ow = nv.output_widgets[i]
 
-        # Sync diagnostics into cell widget for inline rendering
-        cw.diagnostics = get(nv.cell_diags, cw.cell.id, Diagnostic[])
-
         oh = output_height(ow)
         ch = cell_height(cw; has_output=oh > 0)
+
+        # Early exit: if this cell starts below the visible area, all subsequent
+        # cells are also below viewport — skip rendering them entirely.
+        if y > visible_end
+            break
+        end
+
+        # Fast skip: if this cell's entire slot is above the viewport, just advance y
+        slot_h = ch + oh + Theme.CELL_GAP
+        if y + slot_h < visible_start
+            y += slot_h
+            continue
+        end
+
+        # Sync diagnostics only for visible/near-visible cells
+        cw.diagnostics = get(nv.cell_diags, cw.cell.id, Diagnostic[])
         is_focused = (i == nv.focused_idx)
         is_hovered = (i == nv.hovered_idx)
         show_controls = is_focused || is_hovered
@@ -683,9 +710,16 @@ function _render_image_scroll_placeholder(rect::Tachikoma.Rect, buf::Tachikoma.B
     end
 end
 
-"""Total content height including all cells, outputs, gaps, and margins."""
+"""Total content height including all cells, outputs, gaps, and margins.
+
+Cached to avoid redundant O(N) loops within the same frame. The render function
+calls `invalidate_height!` once at the start of each frame so heights are recomputed
+at most once per frame. Subsequent calls (scrollbar, clamp) reuse the cached value."""
 function content_height(nv::NotebookView)
     isempty(nv.cell_widgets) && return 0
+    if !nv._height_dirty && nv._cached_content_height >= 0
+        return nv._cached_content_height
+    end
     h = Theme.TOP_MARGIN
     for i in eachindex(nv.cell_widgets)
         oh = output_height(nv.output_widgets[i])
@@ -693,7 +727,14 @@ function content_height(nv::NotebookView)
         h += oh
         h += Theme.CELL_GAP
     end
+    nv._cached_content_height = h
+    nv._height_dirty = false
     h
+end
+
+"""Mark content height cache as stale. Call at start of render or after structural changes."""
+function invalidate_height!(nv::NotebookView)
+    nv._height_dirty = true
 end
 
 """Clamp scroll_offset to valid range."""

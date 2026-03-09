@@ -199,13 +199,15 @@ mutable struct CellWidget
     ellipsis_hovered::Bool  # Mouse hovering over ⋯ button
     selection::SelectionState
     diagnostics::Vector{Diagnostic}  # inline diagnostics (populated from LSP/JET)
+    _cached_line_count::Int          # cached count of newlines in cell.code (-1 = stale)
+    _cached_code_id::UInt64          # objectid of code string when line count was cached
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
     editor.focused = false  # cursor hidden by default; app sets true only in insert mode
-    CellWidget(cell, editor, focused, false, false, false, false, SelectionState(), Diagnostic[])
+    CellWidget(cell, editor, focused, false, false, false, false, SelectionState(), Diagnostic[], -1, UInt64(0))
 end
 
 """Sync editor text back to cell."""
@@ -271,7 +273,13 @@ function cell_height(cw::CellWidget; has_output::Bool=false)
     if cw.cell.disabled
         return 3 + 2 * vi
     end
-    n_lines = count(==('\n'), cw.cell.code) + 1
+    # Cached line count — avoids scanning full code string every frame
+    code_id = objectid(cw.cell.code)
+    if cw._cached_line_count < 0 || cw._cached_code_id != code_id
+        cw._cached_line_count = count(==('\n'), cw.cell.code) + 1
+        cw._cached_code_id = code_id
+    end
+    n_lines = cw._cached_line_count
     diag_lines = (cw.focused && !isempty(cw.diagnostics)) ? length(cw.diagnostics) : 0
     n_lines + diag_lines + 2 + 2 * vi  # +2 for border, +2*vi for vertical padding
 end
