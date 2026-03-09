@@ -130,13 +130,17 @@ function parse_notebook(content::String; path::String="Untitled.jl")
     nb
 end
 
-"""Strip trailing empty lines and join into a single string."""
+"""Strip trailing empty lines, expand tabs, and join into a single string."""
 function _strip_trailing_empty(lines::Vector{String})
     # Remove trailing empty lines
     while !isempty(lines) && isempty(strip(lines[end]))
         pop!(lines)
     end
-    join(lines, '\n')
+    # Expand tab characters to spaces (Pluto uses tabs for indentation in its file
+    # format, but literal \t in the terminal buffer causes cursor-jump artifacts
+    # because the terminal interprets \t as "advance to next tab stop")
+    code = join(lines, '\n')
+    replace(code, '\t' => "    ")
 end
 
 """Save a Notebook to a Pluto-compatible .jl file."""
