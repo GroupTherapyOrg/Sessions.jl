@@ -547,8 +547,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         # outside the terminal.  The notebook border re-draw after this loop
         # seals any overflow into the inset/border area.
         if y + ch > visible_start && y <= visible_end
-            cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
-                            ch - max(0, rect.y - y))
+            cell_rect = Tachikoma.Rect(cx, y, cw_width, ch)
             Tachikoma.render(cw, cell_rect, buf)
 
             # --- Diagnostic gutter markers (colored dots on lines with issues) ---
