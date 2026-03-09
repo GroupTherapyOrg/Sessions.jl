@@ -107,11 +107,151 @@ sessions run my_notebook.jl""")
         # Stats bar
         Div(:class => "py-12 border-y border-warm-200 dark:border-warm-700",
             Div(:class => "grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto text-center",
-                _StatItem("2600+", "Tests"),
+                _StatItem("3600+", "Tests"),
                 _StatItem("5+", "Widgets"),
                 _StatItem("20+", "TUI Components"),
                 _StatItem("3", "Layers")
             )
+        ),
+
+        # Code/State Separation Section
+        Div(:class => "py-16",
+            H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-4",
+                "Agent-ready architecture"
+            ),
+            P(:class => "text-center text-warm-600 dark:text-warm-400 mb-12 max-w-2xl mx-auto",
+                "Sessions.jl separates code from execution state. Your notebook is two files, not one."
+            ),
+
+            # Two-file diagram
+            Div(:class => "grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-12",
+                Main.Card(class="border-accent-200 dark:border-accent-800",
+                    Main.CardHeader(
+                        Div(:class => "flex items-center gap-3",
+                            Div(:class => "w-8 h-8 bg-accent-100 dark:bg-accent-900/30 rounded-md flex items-center justify-center",
+                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono text-xs font-bold", ".jl")
+                            ),
+                            Div(
+                                Main.CardTitle("notebook.jl"),
+                                Main.CardDescription("Source of truth"),
+                            ),
+                        ),
+                    ),
+                    Main.CardContent(
+                        Div(:class => "space-y-2 text-sm text-warm-600 dark:text-warm-400",
+                            P("Cell code, cell order, fold/disabled metadata"),
+                            P(:class => "font-medium text-warm-800 dark:text-warm-300",
+                                "Safe for agents, LLMs, IDEs, and scripts to modify directly."
+                            ),
+                            P("Pluto-compatible format. Version-controlled."),
+                        ),
+                    ),
+                ),
+                Main.Card(class="border-warm-300 dark:border-warm-700",
+                    Main.CardHeader(
+                        Div(:class => "flex items-center gap-3",
+                            Div(:class => "w-8 h-8 bg-warm-200 dark:bg-warm-800 rounded-md flex items-center justify-center",
+                                Span(:class => "text-warm-600 dark:text-warm-400 font-mono text-xs font-bold", ".toml")
+                            ),
+                            Div(
+                                Main.CardTitle("notebook.session.toml"),
+                                Main.CardDescription("Execution cache"),
+                            ),
+                        ),
+                    ),
+                    Main.CardContent(
+                        Div(:class => "space-y-2 text-sm text-warm-600 dark:text-warm-400",
+                            P("Cached outputs, stdout, runtimes, error messages"),
+                            P(:class => "font-medium text-warm-800 dark:text-warm-300",
+                                "Optional, gitignored, auto-generated. Delete it anytime."
+                            ),
+                            P("Outputs restored instantly on restart. No re-execution needed."),
+                        ),
+                    ),
+                ),
+            ),
+
+            # Agent workflow
+            Div(:class => "max-w-3xl mx-auto",
+                Main.Card(class="bg-warm-100/50 dark:bg-warm-900/50",
+                    Main.CardHeader(
+                        Main.CardTitle("How agent-driven development works"),
+                    ),
+                    Main.CardContent(
+                        Div(:class => "space-y-4 text-sm text-warm-600 dark:text-warm-400",
+                            Div(:class => "flex gap-3",
+                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "1."),
+                                P("An external tool (LLM agent, IDE, script) modifies cell code in the .jl file."),
+                            ),
+                            Div(:class => "flex gap-3",
+                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "2."),
+                                P("The built-in file watcher detects the change within ~0.5 seconds."),
+                            ),
+                            Div(:class => "flex gap-3",
+                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "3."),
+                                P("Changed cells are marked stale — old outputs remain visible for reference."),
+                            ),
+                            Div(:class => "flex gap-3",
+                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "4."),
+                                P("You re-run stale cells. New outputs are cached to .session.toml."),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+
+        # Coming from Pluto section
+        Div(:class => "py-16 border-t border-warm-200 dark:border-warm-700",
+            H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-12",
+                "Coming from Pluto?"
+            ),
+            Div(:class => "max-w-4xl mx-auto overflow-x-auto",
+                Main.Table(
+                    Main.TableHeader(Main.TableRow(
+                        Main.TableHead(""),
+                        Main.TableHead("Sessions.jl"),
+                        Main.TableHead("Pluto"),
+                    )),
+                    Main.TableBody(
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "Code storage"),
+                            Main.TableCell(".jl (cell code + order)"),
+                            Main.TableCell(".jl (code + order + embedded pkg state)"),
+                        ),
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "Output storage"),
+                            Main.TableCell(".session.toml (separate file)"),
+                            Main.TableCell("In-memory only (recomputed on open)"),
+                        ),
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "External edits"),
+                            Main.TableCell("Safe — file watcher auto-detects changes"),
+                            Main.TableCell("Risky — may break embedded metadata"),
+                        ),
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "Startup"),
+                            Main.TableCell("Instant — outputs restored from cache"),
+                            Main.TableCell("Full re-execution on every open"),
+                        ),
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "Reactivity"),
+                            Main.TableCell("Same model (ExpressionExplorer.jl)"),
+                            Main.TableCell("Same model"),
+                        ),
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "File format"),
+                            Main.TableCell("Pluto-compatible .jl files"),
+                            Main.TableCell("Pluto .jl files"),
+                        ),
+                        Main.TableRow(
+                            Main.TableCell(:class => "font-medium text-warm-800 dark:text-warm-300", "Interface"),
+                            Main.TableCell("Terminal TUI (Tachikoma.jl)"),
+                            Main.TableCell("Browser (HTTP server)"),
+                        ),
+                    ),
+                ),
+            ),
         ),
 
         # Architecture Section

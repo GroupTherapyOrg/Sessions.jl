@@ -10,7 +10,8 @@ A terminal-native reactive Julia notebook. Pluto-compatible file format with a f
 - **Real-time Diagnostics** -- JETLS (JET.jl LSP) integration catches type errors and undefined variables as you type
 - **@bind Widgets** -- Slider, TextField, CheckBox, Select, NumberField (PlutoUI protocol)
 - **Vim-style Editing** -- Normal/insert mode, visual selection, word motions, clipboard integration
-- **Session Persistence** -- Cell outputs, scroll position, and fold state saved across restarts
+- **Session Persistence** -- Cell outputs cached in `.session.toml`, restored across restarts with stale detection
+- **Agent-Friendly Architecture** -- Code/state separation lets external tools (LLMs, IDEs, scripts) safely modify notebooks while the TUI watches and reacts
 - **Full Keyboard Control** -- Kitty protocol support, macOS Cmd/Option handling, legacy terminal fallbacks
 
 ## Installation
@@ -93,6 +94,73 @@ Sessions.main("my_notebook.jl")
 |  run.jl, bind.jl, session.jl, watcher.jl          |
 +--------------------------------------------------+
 ```
+
+## Code/State Separation: `.jl` + `.session.toml`
+
+Sessions.jl splits your notebook into two files:
+
+| File | Contains | Role |
+|------|----------|------|
+| `notebook.jl` | Cell code, cell order, fold/disabled metadata | **Source of truth** -- safe for agents and tools to modify |
+| `notebook.session.toml` | Cached outputs, stdout, runtime, error messages | **Execution cache** -- optional, can be deleted and regenerated |
+
+This is the key architectural difference from Pluto. In Pluto, the `.jl` file contains code, package state, and notebook metadata interleaved with Pluto-specific formatting. External tools modifying a Pluto file risk corrupting that interleaved state.
+
+In Sessions.jl, the `.jl` file is pure code. An LLM agent, an IDE, or a shell script can modify cell code freely -- the cached outputs live separately in `.session.toml` and are never corrupted by code edits.
+
+### How It Works
+
+```
+Agent/IDE modifies notebook.jl
+          |
+File Watcher (0.5s debounce)
+          |
+merge_external_changes!()
+  - Diffs disk vs in-memory notebook
+  - Applies only disk changes
+  - Preserves unsaved local edits
+          |
+Stale detection: source_hash(cell) != produced_by_hash
+  - Changed cells get visual indicator
+  - Old outputs remain visible until re-execution
+          |
+User runs stale cells (Ctrl+R / Ctrl+Shift+Enter)
+          |
+save_session!() -- outputs cached to .session.toml
+```
+
+### Agent-Driven Workflow Example
+
+```bash
+# Terminal 1: User has notebook open in Sessions TUI
+sessions analysis.jl
+
+# Terminal 2: LLM agent modifies a cell
+# (or any tool -- sed, python script, another editor)
+#
+# Sessions TUI detects the change in <1 second:
+#   - Modified cells marked as stale (visual indicator)
+#   - Old outputs still visible for reference
+#   - User presses Ctrl+Shift+Enter to re-run
+#   - New outputs saved to .session.toml
+```
+
+The `.session.toml` file is:
+- **Atomic** -- written via temp file + rename, never half-written
+- **Bounded** -- text output truncated to 50KB, stdout to 20KB
+- **Optional** -- delete it and all cells revert to "never run" state
+- **Gitignored** -- cached outputs are local, not version-controlled
+
+### Comparison with Pluto
+
+| | Sessions.jl | Pluto |
+|-|-------------|-------|
+| **Code storage** | `.jl` (cell code + order) | `.jl` (code + order + embedded pkg state) |
+| **Output storage** | `.session.toml` (separate) | In-memory only (recomputed on open) |
+| **External tool safety** | Safe -- agents modify `.jl`, outputs are separate | Risky -- agents may break embedded metadata |
+| **Startup with cached state** | Instant -- outputs restored from cache | Full re-execution on every open |
+| **Stale detection** | Hash-based -- shows which cells changed since last run | Hash-based (same mechanism) |
+| **File watcher** | Built-in -- auto-detects external edits | Not built-in |
 
 ## @bind Widgets
 
