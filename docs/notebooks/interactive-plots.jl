@@ -4,14 +4,11 @@
 # ╔═╡ 00000001-0000-0000-0000-000000000001
 using Markdown
 
-# ╔═╡ 10000001-0000-0000-0000-000000000001
-import CairoMakie as Mke
-
 # ╔═╡ a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4
 md"""
 # Interactive Plots
 
-This notebook demonstrates **pre-rendered reactivity**: slider widgets with CairoMakie plots, all computed at build time. Drag the sliders to swap between pre-rendered images — no server required.
+This notebook demonstrates **interactive Plotly.js plots** with slider widgets. Julia computes the data at build time, and Plotly.js renders interactive charts in the browser — zoom, pan, and orbit with no server required.
 """
 
 # ╔═╡ b0b0b0b0-b1b1-c2c2-d3d3-e4e4e4e4e4e4
@@ -26,13 +23,24 @@ Adjust the **wavelength** parameter to change the ripple frequency of a 3D surfa
 
 # ╔═╡ d0d0d0d0-b1b1-c2c2-d3d3-e4e4e4e4e4e4
 let
-	fig = Mke.Figure(size=(400, 250))
-	ax = Mke.Axis3(fig[1,1], title="w = $w")
-	xs = range(-2, 2, length=40)
-	ys = range(-2, 2, length=40)
+	xs = collect(range(-2, 2, length=40))
+	ys = collect(range(-2, 2, length=40))
 	zs = [sin(w * sqrt(x^2 + y^2)) * exp(-0.3 * (x^2 + y^2)) for x in xs, y in ys]
-	Mke.surface!(ax, xs, ys, zs, colormap=:viridis)
-	fig
+	Dict(
+		"data" => [Dict(
+			"type" => "surface",
+			"x" => xs,
+			"y" => ys,
+			"z" => [collect(zs[i, :]) for i in 1:size(zs, 1)],
+			"colorscale" => "Viridis"
+		)],
+		"layout" => Dict(
+			"title" => "w = $w",
+			"width" => 600,
+			"height" => 400,
+			"margin" => Dict("l" => 0, "r" => 0, "t" => 40, "b" => 0)
+		)
+	)
 end
 
 # ╔═╡ e0e0e0e0-b1b1-c2c2-d3d3-e4e4e4e4e4e4
@@ -47,18 +55,25 @@ Adjust the number of **periods** to see more or fewer oscillations of sin and co
 
 # ╔═╡ a1a1a1a1-b1b1-c2c2-d3d3-e4e4e4e4e4e4
 let
-	fig = Mke.Figure(size=(400, 250))
-	ax = Mke.Axis(fig[1,1], title="periods = $periods", xlabel="x", ylabel="y")
-	xs = range(0, 2π * periods, length=200)
-	Mke.lines!(ax, xs, sin.(xs), label="sin(x)")
-	Mke.lines!(ax, xs, cos.(xs), label="cos(x)", linestyle=:dash)
-	Mke.axislegend(ax, position=:rt)
-	fig
+	xs = collect(range(0, 2π * periods, length=200))
+	Dict(
+		"data" => [
+			Dict("type" => "scatter", "x" => xs, "y" => sin.(xs), "name" => "sin(x)"),
+			Dict("type" => "scatter", "x" => xs, "y" => cos.(xs), "name" => "cos(x)",
+				"line" => Dict("dash" => "dash"))
+		],
+		"layout" => Dict(
+			"title" => "periods = $periods",
+			"xaxis" => Dict("title" => "x"),
+			"yaxis" => Dict("title" => "y"),
+			"width" => 600,
+			"height" => 400
+		)
+	)
 end
 
 # ╔═╡ Cell order:
 # ╠═00000001-0000-0000-0000-000000000001
-# ╠═10000001-0000-0000-0000-000000000001
 # ╟─a0a0a0a0-b1b1-c2c2-d3d3-e4e4e4e4e4e4
 # ╟─b0b0b0b0-b1b1-c2c2-d3d3-e4e4e4e4e4e4
 # ╠═c0c0c0c0-b1b1-c2c2-d3d3-e4e4e4e4e4e4

@@ -157,6 +157,11 @@
   .notebook-slider .slider-value { @apply text-sm font-mono text-accent-600 dark:text-accent-400 min-w-[2rem] text-right; }
 }
 
+/* Notebook Plotly plot containers */
+@layer components {
+  .notebook-plotly { @apply rounded-lg overflow-hidden; }
+}
+
 /* Notebook prose styles — rendered markdown content */
 @layer components {
   .notebook-prose h1 { @apply text-3xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-4 mt-2; }

@@ -26,6 +26,7 @@ using Sessions
 using Markdown
 using UUIDs
 using Base64
+using JSON3
 
 # Resolve name conflicts: Suite components take precedence over Therapy HTML elements
 import Suite: Button, Input, Label, P, H1, H2, H3, H4, CodeBlock, Table, Kbd
@@ -50,12 +51,13 @@ app = App(
 # Pre-rendered Gallery Types
 # =============================================================================
 
-"""Pre-rendered image gallery for a plot cell driven by a slider."""
+"""Pre-rendered gallery for a plot cell driven by a slider."""
 struct PrerenderedGallery
     slider_cell_id::UUID
     var_name::Symbol
     slider::Sessions.Slider
-    images::Dict{Any, Vector{UInt8}}  # slider_value => PNG bytes
+    images::Dict{Any, Vector{UInt8}}    # slider_value => PNG bytes (fallback)
+    plotly_data::Dict{Any, String}      # slider_value => Plotly JSON string
 end
 
 # =============================================================================
@@ -109,6 +111,19 @@ function execute_notebook_for_web(path; verbose=false)
         end
     end
 
+    # 2b. Classify Plotly JSON outputs (Dict with "data" + "layout" keys)
+    for cell in Sessions.ordered_cells(nb)
+        if cell.output.output_type == :text && cell.output.result isa Dict
+            r = cell.output.result
+            if haskey(r, "data") && haskey(r, "layout")
+                cell.output.output_type = :plotly_json
+                if verbose
+                    println("    Classified cell $(cell.id) as :plotly_json")
+                end
+            end
+        end
+    end
+
     # 3. Pre-render slider values
     prerendered = Dict{UUID, PrerenderedGallery}()
     for cell in Sessions.ordered_cells(nb)
@@ -120,15 +135,16 @@ function execute_notebook_for_web(path; verbose=false)
 
         var_name = bond.defines
         deps = Sessions.downstream_dependents(nb, [cell])
-        image_deps = filter(d -> d.output.output_type == :image_png, deps)
-        isempty(image_deps) && continue
+        plot_deps = filter(d -> d.output.output_type in (:image_png, :plotly_json), deps)
+        isempty(plot_deps) && continue
 
         if verbose
-            println("    Pre-rendering :$(var_name) slider ($(length(slider.values)) values × $(length(image_deps)) plots)")
+            println("    Pre-rendering :$(var_name) slider ($(length(slider.values)) values × $(length(plot_deps)) plots)")
         end
 
-        for dep in image_deps
+        for dep in plot_deps
             images = Dict{Any, Vector{UInt8}}()
+            plotly_data = Dict{Any, String}()
             for val in slider.values
                 Sessions.set_bond_value!(var_name, val)
                 Core.eval(ws.mod, :($var_name = $val))
@@ -142,6 +158,13 @@ function execute_notebook_for_web(path; verbose=false)
                     end
                 end
 
+                # Capture Plotly JSON if result is a Dict with data+layout
+                if dep.output.result isa Dict && haskey(dep.output.result, "data") && haskey(dep.output.result, "layout")
+                    dep.output.output_type = :plotly_json
+                    plotly_data[val] = JSON3.write(dep.output.result)
+                end
+
+                # Capture PNG fallback
                 if dep.output.image_data !== nothing
                     images[val] = copy(dep.output.image_data)
                 end
@@ -159,13 +182,18 @@ function execute_notebook_for_web(path; verbose=false)
                     dep.output.image_data = Sessions._capture_png_bytes(dep.output.result)
                 end
             end
+            if dep.output.result isa Dict && haskey(dep.output.result, "data") && haskey(dep.output.result, "layout")
+                dep.output.output_type = :plotly_json
+            end
 
             prerendered[dep.id] = PrerenderedGallery(
-                cell.id, var_name, slider, images
+                cell.id, var_name, slider, images, plotly_data
             )
 
             if verbose
-                println("      Plot $(dep.id): $(length(images)) images captured")
+                n_img = length(images)
+                n_plotly = length(plotly_data)
+                println("      Plot $(dep.id): $(n_img) images, $(n_plotly) plotly datasets captured")
             end
         end
     end

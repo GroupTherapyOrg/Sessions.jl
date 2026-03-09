@@ -37,11 +37,12 @@ function NotebookPage(nb::Main.Sessions.Notebook; title::String="", description:
         end
     end
 
-    # Add inline JS for slider interactivity (only if we have sliders)
+    # Add inline JS for slider/plotly interactivity
     has_sliders = any(c -> c.output.output_type == :bond && c.output.result isa Main.Sessions.Bond && c.output.result.element isa Main.Sessions.Slider, cells)
+    has_plotly = any(c -> c.output.output_type == :plotly_json, cells)
 
     content_parts = rendered
-    if has_sliders
+    if has_sliders || has_plotly
         push!(content_parts, _slider_interaction_script())
     end
 
@@ -169,6 +170,10 @@ function _render_output(cell::Main.Sessions.Cell, prerendered=Dict{Main.UUID, Ma
         # Interactive bond rendering (slider with HTML input, others as badge)
         return _render_bond_output(result, cell, prerendered)
 
+    elseif output.output_type == :plotly_json
+        # Plotly.js interactive plot
+        return _render_plotly_output(cell, prerendered)
+
     elseif output.output_type == :image_png
         # Image output — may be pre-rendered gallery or single image
         return _render_image_output(cell, prerendered)
@@ -227,6 +232,51 @@ function _render_image_output(cell::Main.Sessions.Cell, prerendered)
 end
 
 """
+Render a Plotly.js plot. If the cell has a pre-rendered gallery, embed JSON
+per slider value. Otherwise render a single standalone plot.
+"""
+function _render_plotly_output(cell::Main.Sessions.Cell, prerendered)
+    gallery = get(prerendered, cell.id, nothing)
+    plot_id = "plotly-" * string(cell.id)[1:8]
+
+    if gallery !== nothing && !isempty(gallery.plotly_data)
+        slider_id = string(gallery.slider_cell_id)
+        scripts = [
+            RawHtml("""<script type="application/json" data-plotly-for="$plot_id" data-plotly-value="$val">$(gallery.plotly_data[val])</script>""")
+            for val in gallery.slider.values if haskey(gallery.plotly_data, val)
+        ]
+        return Div(:class => "notebook-plotly",
+            Div(:id => plot_id,
+                :data_plotly_plot => slider_id,
+                :data_plotly_default => string(gallery.slider.default),
+                :class => "w-full rounded-lg",
+                :style => "min-height:400px;"),
+            scripts...,
+            Noscript(_render_png_gallery_fallback(gallery))
+        )
+    end
+
+    # Standalone plot (no slider)
+    json_str = Main.JSON3.write(cell.output.result)
+    return Div(:class => "notebook-plotly",
+        Div(:id => plot_id, :class => "w-full rounded-lg", :style => "min-height:400px;"),
+        RawHtml("""<script type="application/json" data-plotly-for="$plot_id">$json_str</script>"""),
+        RawHtml("""<script>(function(){var el=document.getElementById('$plot_id');var s=document.querySelector('[data-plotly-for="$plot_id"]');if(el&&s&&window.Plotly){var d=JSON.parse(s.textContent);Plotly.newPlot(el,d.data,d.layout,{responsive:true})}})();</script>""")
+    )
+end
+
+"""PNG fallback for <noscript> when Plotly.js is unavailable."""
+function _render_png_gallery_fallback(gallery)
+    bytes = get(gallery.images, gallery.slider.default, nothing)
+    if bytes !== nothing
+        b64 = Main.Base64.base64encode(bytes)
+        return Img(:src => "data:image/png;base64,$b64",
+            :alt => "Plot (JS disabled)", :class => "rounded-lg max-w-full")
+    end
+    Span("Plot requires JavaScript")
+end
+
+"""
 Render a Bond output. Sliders become interactive HTML range inputs.
 Other widget types render as static badges.
 """
@@ -268,16 +318,37 @@ function _render_bond_output(result, cell::Main.Sessions.Cell, prerendered)
     nothing
 end
 
-"""Inline JavaScript for slider interactivity — swaps pre-rendered images."""
+"""Inline JavaScript for slider interactivity — Plotly init + swap + PNG fallback."""
 function _slider_interaction_script()
     RawHtml("""<script>
 (function() {
+  // Init Plotly plots from embedded JSON
+  document.querySelectorAll('[data-plotly-plot]').forEach(function(el) {
+    var plotId = el.id;
+    var def = el.dataset.plotlyDefault;
+    var scripts = document.querySelectorAll('[data-plotly-for="' + plotId + '"]');
+    el._plotlyDatasets = {};
+    scripts.forEach(function(s) {
+      var val = s.dataset.plotlyValue || 'default';
+      el._plotlyDatasets[val] = JSON.parse(s.textContent);
+    });
+    if (el._plotlyDatasets[def] && window.Plotly) {
+      var d = el._plotlyDatasets[def];
+      Plotly.newPlot(el, d.data, d.layout, {responsive:true});
+    }
+  });
+  // Slider interaction — update label + swap Plotly or PNG
   document.querySelectorAll('[data-notebook-slider]').forEach(function(slider) {
     slider.addEventListener('input', function() {
       var id = slider.dataset.notebookSlider;
       var val = slider.value;
       var display = document.querySelector('[data-slider-display="' + id + '"]');
       if (display) display.textContent = val;
+      var plotEl = document.querySelector('[data-plotly-plot="' + id + '"]');
+      if (plotEl && plotEl._plotlyDatasets && plotEl._plotlyDatasets[val] && window.Plotly) {
+        var d = plotEl._plotlyDatasets[val];
+        Plotly.react(plotEl, d.data, d.layout);
+      }
       document.querySelectorAll('[data-slider-images="' + id + '"] img').forEach(function(img) {
         img.style.display = img.dataset.sliderValue === val ? 'block' : 'none';
       });
