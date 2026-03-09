@@ -9,7 +9,7 @@ A terminal-native reactive Julia notebook. Pluto-compatible file format with a f
 - **Terminal IDE** -- File browser, REPL panel, diagnostics panel, tab bar, activity bar, status bar
 - **Real-time Diagnostics** -- JETLS (JET.jl LSP) integration catches type errors and undefined variables as you type
 - **@bind Widgets** -- Slider, TextField, CheckBox, Select, NumberField (PlutoUI protocol)
-- **Vim-style Editing** -- Normal/insert mode, visual selection, word motions, clipboard integration
+- **Agent-first Notebook** -- Code/state separation lets LLMs, IDEs, and scripts safely modify notebooks while the TUI watches and reacts
 - **Session Persistence** -- Cell outputs cached in `.session.toml`, restored across restarts with stale detection
 - **Agent-Friendly Architecture** -- Code/state separation lets external tools (LLMs, IDEs, scripts) safely modify notebooks while the TUI watches and reacts
 - **Full Keyboard Control** -- Kitty protocol support, macOS Cmd/Option handling, legacy terminal fallbacks

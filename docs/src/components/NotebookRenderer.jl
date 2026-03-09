@@ -3,14 +3,20 @@
 # Renders Main.Sessions.jl notebooks as static HTML pages using Suite.jl components.
 # Each cell becomes a Card (code) or prose section (markdown), with outputs rendered
 # inline below the code.
+#
+# Supports pre-rendered reactivity: slider widgets with CairoMakie plots rendered
+# as image galleries, swapped via inline JavaScript.
 
 # Markdown is loaded in app.jl (Main module) — reference as Main.Markdown
 
 """
 Top-level notebook page wrapper. Renders an executed Notebook as a full page
 with header, prose sections, code cells, and outputs.
+
+Pass `prerendered` dict (UUID → PrerenderedGallery) from execute_notebook_for_web
+to enable interactive slider+plot galleries.
 """
-function NotebookPage(nb::Main.Sessions.Notebook; title::String="", description::String="")
+function NotebookPage(nb::Main.Sessions.Notebook; title::String="", description::String="", prerendered=Dict{Main.UUID, Main.PrerenderedGallery}())
     # Extract title from first H1 markdown cell if not provided
     if isempty(title)
         title = String(_extract_notebook_title(nb))
@@ -24,17 +30,25 @@ function NotebookPage(nb::Main.Sessions.Notebook; title::String="", description:
     cell_index = 0
 
     for cell in cells
-        node = _render_cell(cell, cell_index)
+        node = _render_cell(cell, cell_index, prerendered)
         if node !== nothing
             push!(rendered, node)
             cell_index += 1
         end
     end
 
+    # Add inline JS for slider interactivity (only if we have sliders)
+    has_sliders = any(c -> c.output.output_type == :bond && c.output.result isa Main.Sessions.Bond && c.output.result.element isa Main.Sessions.Slider, cells)
+
+    content_parts = rendered
+    if has_sliders
+        push!(content_parts, _slider_interaction_script())
+    end
+
     Fragment(
         PageHeader(title, description),
         Div(:class => "max-w-4xl mx-auto py-8 space-y-6",
-            rendered...
+            content_parts...
         )
     )
 end
@@ -42,7 +56,7 @@ end
 """
 Dispatch cell rendering by type: folded markdown → prose, visible code → Card, skip others.
 """
-function _render_cell(cell::Main.Sessions.Cell, index::Int)
+function _render_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
     # Skip disabled cells
     cell.disabled && return nothing
 
@@ -65,13 +79,13 @@ function _render_cell(cell::Main.Sessions.Cell, index::Int)
     cell.folded && return nothing
 
     # Visible code cell → Card with code + output
-    _render_code_cell(cell, index)
+    _render_code_cell(cell, index, prerendered)
 end
 
 """
 Render a visible code cell as a Card with CodeBlock and output.
 """
-function _render_code_cell(cell::Main.Sessions.Cell, index::Int)
+function _render_code_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
     code = strip(cell.code)
     output = cell.output
 
@@ -101,7 +115,7 @@ function _render_code_cell(cell::Main.Sessions.Cell, index::Int)
     end
 
     # Output rendering
-    output_node = _render_output(cell)
+    output_node = _render_output(cell, prerendered)
     if output_node !== nothing
         push!(parts, Div(:class => "mt-3 px-4 py-3", output_node))
     end
@@ -126,7 +140,7 @@ end
 """
 Render cell output based on output_type.
 """
-function _render_output(cell::Main.Sessions.Cell)
+function _render_output(cell::Main.Sessions.Cell, prerendered=Dict{Main.UUID, Main.PrerenderedGallery}())
     output = cell.output
     result = output.result
 
@@ -152,8 +166,12 @@ function _render_output(cell::Main.Sessions.Cell)
         return _render_table_output(result)
 
     elseif output.output_type == :bond
-        # Static bond placeholder
-        return _render_bond_output(result)
+        # Interactive bond rendering (slider with HTML input, others as badge)
+        return _render_bond_output(result, cell, prerendered)
+
+    elseif output.output_type == :image_png
+        # Image output — may be pre-rendered gallery or single image
+        return _render_image_output(cell, prerendered)
 
     elseif output.output_type == :text
         # Plain text output
@@ -165,6 +183,108 @@ function _render_output(cell::Main.Sessions.Cell)
     end
 
     nothing
+end
+
+"""
+Render an image output. If the cell has a pre-rendered gallery, render all images
+as hidden <img> tags with the default visible. Otherwise render a single base64 image.
+"""
+function _render_image_output(cell::Main.Sessions.Cell, prerendered)
+    gallery = get(prerendered, cell.id, nothing)
+
+    if gallery !== nothing
+        # Pre-rendered gallery — one <img> per slider value, default visible
+        slider_id = string(gallery.slider_cell_id)
+        img_tags = []
+        for val in gallery.slider.values
+            bytes = get(gallery.images, val, nothing)
+            bytes === nothing && continue
+            b64 = Main.Base64.base64encode(bytes)
+            is_default = val == gallery.slider.default
+            push!(img_tags,
+                Img(:src => "data:image/png;base64,$b64",
+                    :alt => "Plot for $(gallery.var_name) = $val",
+                    :data_slider_value => string(val),
+                    :style => is_default ? "display:block" : "display:none",
+                    :class => "rounded-lg max-w-full")
+            )
+        end
+        return Div(:class => "notebook-plot-gallery",
+            :data_slider_images => slider_id,
+            img_tags...
+        )
+    end
+
+    # Single image — base64 inline
+    if cell.output.image_data !== nothing
+        b64 = Main.Base64.base64encode(cell.output.image_data)
+        return Img(:src => "data:image/png;base64,$b64",
+            :alt => "Plot output",
+            :class => "rounded-lg max-w-full")
+    end
+
+    nothing
+end
+
+"""
+Render a Bond output. Sliders become interactive HTML range inputs.
+Other widget types render as static badges.
+"""
+function _render_bond_output(result, cell::Main.Sessions.Cell, prerendered)
+    if result isa Main.Sessions.Bond
+        widget = result.element
+        var_name = result.defines
+
+        # Sliders → interactive <input type="range">
+        if widget isa Main.Sessions.Slider
+            slider_id = string(cell.id)
+            vals = widget.values
+            min_val = first(vals)
+            max_val = last(vals)
+            step_val = length(vals) > 1 ? vals[2] - vals[1] : 1
+
+            return Div(:class => "notebook-slider",
+                Span(:class => "slider-label", string(var_name)),
+                Input(:type => "range",
+                    :min => string(min_val),
+                    :max => string(max_val),
+                    :value => string(widget.default),
+                    :step => string(step_val),
+                    :data_notebook_slider => slider_id,
+                    :data_slider_var => string(var_name)),
+                Span(:class => "slider-value",
+                    :data_slider_display => slider_id,
+                    string(widget.default))
+            )
+        end
+
+        # Other widgets → static badge
+        widget_type = nameof(typeof(widget))
+        val = Main.Sessions.initial_value(widget)
+        return Main.Badge(variant="outline",
+            "$(widget_type) → :$(var_name) = $(val)"
+        )
+    end
+    nothing
+end
+
+"""Inline JavaScript for slider interactivity — swaps pre-rendered images."""
+function _slider_interaction_script()
+    RawHtml("""<script>
+(function() {
+  document.querySelectorAll('[data-notebook-slider]').forEach(function(slider) {
+    slider.addEventListener('input', function() {
+      var id = slider.dataset.notebookSlider;
+      var val = slider.value;
+      var display = document.querySelector('[data-slider-display="' + id + '"]');
+      if (display) display.textContent = val;
+      document.querySelectorAll('[data-slider-images="' + id + '"] img').forEach(function(img) {
+        img.style.display = img.dataset.sliderValue === val ? 'block' : 'none';
+      });
+    });
+  });
+})();
+</script>""")
 end
 
 """
@@ -199,22 +319,6 @@ function _render_table_output(result)
     Pre(:class => "text-sm font-mono text-warm-700 dark:text-warm-300",
         Code(sprint(show, result))
     )
-end
-
-"""
-Render a Bond as a static placeholder badge.
-"""
-function _render_bond_output(result)
-    if result isa Main.Sessions.Bond
-        widget = result.element
-        widget_type = nameof(typeof(widget))
-        var_name = result.defines
-        val = Main.Sessions.initial_value(widget)
-        return Main.Badge(variant="outline",
-            "$(widget_type) → :$(var_name) = $(val)"
-        )
-    end
-    nothing
 end
 
 # --- Helpers ---

@@ -357,6 +357,14 @@
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Notebook slider widget styles */
+@layer components {
+  .notebook-slider { @apply flex items-center gap-3 py-2; }
+  .notebook-slider .slider-label { @apply text-sm font-mono font-medium text-warm-700 dark:text-warm-300 min-w-[2rem]; }
+  .notebook-slider input[type="range"] { @apply flex-1 h-2 bg-warm-200 dark:bg-warm-700 rounded-lg appearance-none cursor-pointer accent-accent-500; }
+  .notebook-slider .slider-value { @apply text-sm font-mono text-accent-600 dark:text-accent-400 min-w-[2rem] text-right; }
+}
+
 /* Notebook prose styles — rendered markdown content */
 @layer components {
   .notebook-prose h1 { @apply text-3xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-4 mt-2; }
