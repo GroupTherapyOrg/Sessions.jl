@@ -2,6 +2,7 @@
 
 /* Configure content sources for v4 */
 @source "./src/**/*.jl";
+@source "../../Suite.jl/src/**/*.jl";
 
 /* Enable class-based dark mode (toggle via .dark class on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -149,10 +150,16 @@
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ThemeToggle island wrapper — prevent block expansion, pass through cursor */
+/* ThemeToggle island wrapper — make therapy-island transparent to flex layout */
 [dark-mode] {
-  display: inline-flex;
-  cursor: pointer;
+  display: contents;
+}
+
+/* Override Prism.js styles on CodeBlock pre/code elements */
+[data-codeblock] pre,
+[data-codeblock] code {
+  margin: 0 !important;
+  background: transparent !important;
 }
 
 /* Notebook slider widget styles */
