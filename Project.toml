@@ -5,27 +5,21 @@ authors = ["TherapeuticJulia"]
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
-CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
-CommonMark = "a80b9123-70ca-4bc0-993e-6e3bcb318db6"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 ExpressionExplorer = "21656369-7473-754a-2065-74616d696c43"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
-OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PlutoDependencyExplorer = "72656b73-756c-7461-726b-72656b6b696b"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Tachikoma = "468859d6-42d8-48b7-8ad9-1d312e0e3b0a"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
-UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
 CairoMakie = "0.15.9"
-CommonMark = "1.0.1"
 Dates = "1.11.0"
 ExpressionExplorer = "1"
 Markdown = "1.11.0"
-OrderedCollections = "1"
 PlutoDependencyExplorer = "1"
 PrecompileTools = "1.3.3"
 TOML = "1.0.3"
@@ -37,7 +31,9 @@ julia = "1.10"
 julia_flags = ["--startup-file=no", "--history-file=no", "--threads=auto"]
 
 [extras]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [targets]
-test = ["Test"]
+test = ["CairoMakie", "Test", "UnicodePlots"]
