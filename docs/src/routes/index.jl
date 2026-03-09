@@ -127,9 +127,9 @@ sessions run my_notebook.jl""")
             Div(:class => "grid md:grid-cols-2 gap-8 max-w-4xl mx-auto px-4 mb-12",
                 Main.Card(class="border-accent-200 dark:border-accent-800",
                     Main.CardHeader(
-                        Div(:class => "flex items-center gap-3",
-                            Div(:class => "w-8 h-8 bg-accent-100 dark:bg-accent-900/30 rounded-md flex items-center justify-center",
-                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono text-xs font-bold", ".jl")
+                        Div(:class => "flex items-center gap-4",
+                            Div(:class => "w-11 h-11 bg-accent-100 dark:bg-accent-900/30 rounded-lg flex items-center justify-center shrink-0",
+                                Span(:class => "text-accent-600 dark:text-accent-400 font-mono text-sm font-bold", ".jl")
                             ),
                             Div(
                                 Main.CardTitle("notebook.jl"),
@@ -149,9 +149,9 @@ sessions run my_notebook.jl""")
                 ),
                 Main.Card(class="border-warm-300 dark:border-warm-700",
                     Main.CardHeader(
-                        Div(:class => "flex items-center gap-3",
-                            Div(:class => "w-8 h-8 bg-warm-200 dark:bg-warm-800 rounded-md flex items-center justify-center",
-                                Span(:class => "text-warm-600 dark:text-warm-400 font-mono text-xs font-bold", ".toml")
+                        Div(:class => "flex items-center gap-4",
+                            Div(:class => "w-11 h-11 bg-warm-200 dark:bg-warm-800 rounded-lg flex items-center justify-center shrink-0",
+                                Span(:class => "text-warm-600 dark:text-warm-400 font-mono text-sm font-bold", ".toml")
                             ),
                             Div(
                                 Main.CardTitle("notebook.session.toml"),
