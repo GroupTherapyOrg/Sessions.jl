@@ -106,14 +106,14 @@ function _render_code_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
 
     # Code block with scan-line time reveal on hover
     push!(parts,
-        Div(:class => "group relative rounded-lg bg-[#141414] ring-1 ring-[#252525] overflow-hidden",
+        Div(:class => "group relative rounded-lg bg-warm-950 ring-1 ring-warm-800 overflow-hidden",
             Symbol("data-codeblock") => "",
             Pre(:class => "overflow-x-auto p-5 font-mono text-sm leading-6 text-warm-200",
                 Code(:class => "block", code)),
             # Scan line (hover reveal)
-            Div(:class => "absolute bottom-[10px] left-3 right-3 h-px bg-[#1e293b] opacity-0 group-hover:opacity-100 transition-opacity duration-150"),
+            Div(:class => "absolute bottom-[10px] left-3 right-3 h-px bg-warm-700/30 opacity-0 group-hover:opacity-100 transition-opacity duration-150"),
             # Time text (hover reveal, slightly delayed)
-            Span(:class => "absolute bottom-3 right-3 text-[10px] font-mono text-[#475569] opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100",
+            Span(:class => "absolute bottom-3 right-3 text-[10px] font-mono text-warm-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100",
                 runtime_str)))
 
     # Stdout (if non-empty)
@@ -177,7 +177,7 @@ function _render_output(cell::Main.Sessions.Cell, prerendered=Dict{Main.UUID, Ma
         # Plain text output — bare dim text below the code block
         text = output.text_representation
         isempty(text) && return nothing
-        return Pre(:class => "text-sm font-mono text-[#52525b] whitespace-pre-wrap",
+        return Pre(:class => "text-sm font-mono text-warm-600 dark:text-warm-500 whitespace-pre-wrap",
             Code(text))
     end
 
