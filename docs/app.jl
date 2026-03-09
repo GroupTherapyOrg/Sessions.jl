@@ -22,6 +22,8 @@ push!(LOAD_PATH, dirname(@__DIR__))
 
 using Therapy
 using Suite
+using Sessions
+using Markdown
 
 # Resolve name conflicts: Suite components take precedence over Therapy HTML elements
 import Suite: Button, Input, Label, P, H1, H2, H3, H4, CodeBlock, Table, Kbd
@@ -41,6 +43,32 @@ app = App(
     base_path = "/Sessions.jl",
     layout = :Layout
 )
+
+# =============================================================================
+# Notebook Execution Pipeline
+# =============================================================================
+
+# Load file-based routes + components first
+Therapy.load_app!(app)
+
+# Execute notebooks and inject as additional routes
+notebooks_dir = joinpath(@__DIR__, "notebooks")
+const EXECUTED_NOTEBOOKS = Dict{String, Sessions.Notebook}()
+
+if isdir(notebooks_dir)
+    println("\nExecuting notebooks...")
+    for file in sort(readdir(notebooks_dir))
+        endswith(file, ".jl") || continue
+        slug = replace(file, ".jl" => "")
+        path = joinpath(notebooks_dir, file)
+        println("  $file")
+        nb = Sessions.run(path; verbose=true)
+        EXECUTED_NOTEBOOKS[slug] = nb
+        # NotebookPage is defined in Therapy's module (via load_app! include)
+        push!(app.routes, "/notebooks/$slug" => let nb=nb; () -> Therapy.NotebookPage(nb); end)
+    end
+    println("  $(length(EXECUTED_NOTEBOOKS)) notebooks ready")
+end
 
 # =============================================================================
 # Run - dev or build based on args

@@ -275,6 +275,8 @@ let workspace_counter = Ref(0)
         mod = Module(ns)
         # Pre-populate the workspace with Base
         Core.eval(mod, :(using Base))
+        # Pre-import Markdown (Pluto parity — md"..." strings need @md_str)
+        Core.eval(mod, :(using Markdown))
         # Inject @bind and widget types so cells can use them directly
         Core.eval(mod, :(import Sessions: @bind, Slider, TextField, CheckBox, Select, NumberField, Button, CounterButton))
         Workspace(mod, ns)
