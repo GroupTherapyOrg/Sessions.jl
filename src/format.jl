@@ -156,7 +156,12 @@ function save_notebook(nb::Notebook, path::String)
     path
 end
 
-"""Serialize a Notebook to a Pluto-compatible .jl string."""
+"""Serialize a Notebook to a Pluto-compatible .jl string.
+
+Cell bodies are written in **topological** (dependency) order so the file
+can be run as a plain Julia script (`julia my_notebook.jl`).  The
+`Cell order` section at the bottom preserves the **visual** order the
+user sees in the editor.  This matches Pluto's behavior."""
 function serialize_notebook(nb::Notebook)
     io = IOBuffer()
 
@@ -164,8 +169,9 @@ function serialize_notebook(nb::Notebook)
     println(io, PLUTO_HEADER)
     println(io, PLUTO_VERSION)
 
-    # Cell bodies
-    for id in nb.cell_order
+    # Cell bodies in topological order (so `julia file.jl` works)
+    body_order = _topological_cell_ids(nb)
+    for id in body_order
         cell = nb.cells[id]
         println(io)
         println(io, CELL_MARKER, cell.id)
@@ -177,7 +183,7 @@ function serialize_notebook(nb::Notebook)
         end
     end
 
-    # Cell order section
+    # Cell order section — visual order (what the user sees in the editor)
     println(io)
     println(io, CELL_ORDER_MARKER)
     for id in nb.cell_order
@@ -190,4 +196,37 @@ function serialize_notebook(nb::Notebook)
     end
 
     String(take!(io))
+end
+
+"""Compute cell IDs in topological order for file serialization.
+Falls back to visual order if topology computation fails."""
+function _topological_cell_ids(nb::Notebook)::Vector{UUID}
+    try
+        order = execution_order(nb)
+        # Start with runnable cells in dependency order
+        seen = Set{UUID}()
+        result = UUID[]
+        for cell in order.runnable
+            push!(result, cell.id)
+            push!(seen, cell.id)
+        end
+        # Append errable cells (dependency errors — still need to be in the file)
+        for (cell, _) in order.errable
+            if cell.id ∉ seen
+                push!(result, cell.id)
+                push!(seen, cell.id)
+            end
+        end
+        # Append any remaining cells not captured by topology (disabled, etc.)
+        for id in nb.cell_order
+            if id ∉ seen
+                push!(result, id)
+                push!(seen, id)
+            end
+        end
+        result
+    catch
+        # If topology fails, fall back to visual order (safe default)
+        copy(nb.cell_order)
+    end
 end
