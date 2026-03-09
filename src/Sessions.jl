@@ -13,7 +13,6 @@ module Sessions
 # - OrderedCollections (ordered cell storage)
 
 using UUIDs
-using Base64: base64encode
 import Tachikoma
 
 # Layer 1: Engine
