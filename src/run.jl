@@ -18,7 +18,7 @@ Execute an already-loaded notebook headlessly.
 Returns the notebook with all cell outputs populated.
 """
 function run(nb::Notebook; verbose::Bool=false)
-    ws = Workspace()
+    ws = Workspace(; notebook_path=nb.path)
 
     if verbose
         println("Sessions.run: $(nb.path)")

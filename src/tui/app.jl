@@ -465,7 +465,7 @@ function _request_close_tab!(app::SessionsApp, idx::Int)
 end
 
 function SessionsApp(nb::Notebook)
-    ws = Workspace()
+    ws = Workspace(; notebook_path=nb.path)
     nv = NotebookView(nb)
     dir = isempty(nb.path) ? pwd() : dirname(abspath(nb.path))
     fp = FilePanel(dir)
@@ -492,7 +492,7 @@ end
 function SessionsApp(fev::FileEditorView)
     # File editor mode: create a dummy notebook for compatibility
     nb = Notebook(; path=fev.path)
-    ws = Workspace()
+    ws = Workspace(; notebook_path=fev.path)
     nv = NotebookView(nb)
     dir = dirname(abspath(fev.path))
     fp = FilePanel(dir)

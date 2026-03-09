@@ -42,7 +42,7 @@ end
 """Create a notebook tab."""
 function EditorTab(nb::Notebook)
     nv = NotebookView(nb)
-    ws = Workspace()
+    ws = Workspace(; notebook_path=nb.path)
     snap = _snapshot_notebook(nb)
     EditorTab(uuid4(), basename(nb.path), nb.path, :notebook,
         nb, ws, nv, snap, nothing, 0.0,
@@ -55,7 +55,7 @@ function EditorTab(fev::FileEditorView)
     # Dummy notebook for compatibility
     nb = Notebook(; path=fev.path)
     nv = NotebookView(nb)
-    ws = Workspace()
+    ws = Workspace(; notebook_path=fev.path)
     EditorTab(uuid4(), basename(fev.path), fev.path, :file,
         nb, ws, nv, nothing, nothing, 0.0,
         fev,

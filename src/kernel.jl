@@ -262,24 +262,55 @@ end
 """
 The Workspace holds all cell-evaluated state in a dedicated module.
 Each notebook gets its own workspace module so variables don't leak.
+
+When `notebook_path` is provided:
+- `@__DIR__` resolves to the notebook's directory (via `include_string`)
+- The nearest `Project.toml` environment is auto-activated in LOAD_PATH
 """
 mutable struct Workspace
     mod::Module
     ns::Symbol
+    notebook_path::String  # absolute path to notebook file (for @__DIR__)
+end
+
+"""Walk up from `path` to find the nearest directory containing Project.toml."""
+function _find_workspace_project(path::String)::Union{String, Nothing}
+    dir = isempty(path) ? pwd() : dirname(abspath(path))
+    for _ in 1:20
+        isfile(joinpath(dir, "Project.toml")) && return dir
+        parent = dirname(dir)
+        parent == dir && break
+        dir = parent
+    end
+    nothing
 end
 
 let workspace_counter = Ref(0)
-    global function Workspace()
+    global function Workspace(; notebook_path::String="")
         workspace_counter[] += 1
         ns = Symbol("SessionsWorkspace_", workspace_counter[])
         mod = Module(ns)
+        nb_abspath = isempty(notebook_path) ? "" : abspath(notebook_path)
+
         # Pre-populate the workspace with Base
         Core.eval(mod, :(using Base))
+
+        # Auto-activate nearest Project.toml environment so `using X` works
+        # for any package in the notebook's project — like running a .jl file
+        # from that project directory.
+        project_dir = _find_workspace_project(notebook_path)
+        if project_dir !== nothing
+            lp = "$project_dir"
+            if lp ∉ LOAD_PATH
+                pushfirst!(LOAD_PATH, lp)
+            end
+        end
+
         # Pre-import Markdown (Pluto parity — md"..." strings need @md_str)
         Core.eval(mod, :(using Markdown))
         # Inject @bind and widget types so cells can use them directly
         Core.eval(mod, :(import Sessions: @bind, Slider, TextField, CheckBox, Select, NumberField, Button, CounterButton))
-        Workspace(mod, ns)
+        Workspace(mod, ns, nb_abspath)
     end
 end
 
@@ -297,7 +328,7 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     t_start = time_ns()
 
     try
-        expr = Meta.parse("begin\n$(cell.code)\nend")
+        code = "begin\n$(cell.code)\nend"
         # Try stdout capture via redirect_stdout (uses dup internally).
         # Under Tachikoma TUI, dup can fail with EBADF — fall back to
         # executing without stdout capture rather than erroring the cell.
@@ -311,7 +342,13 @@ function execute_cell!(workspace::Workspace, cell::Cell)
             # redirect_stdout failed (fd invalid under TUI) — continue without capture
         end
         try
-            result = Base.eval(workspace.mod, expr)
+            # Use include_string with the notebook path so @__DIR__ resolves
+            # to the notebook's directory (like running a normal .jl file).
+            if !isempty(workspace.notebook_path)
+                result = Base.include_string(workspace.mod, code, workspace.notebook_path)
+            else
+                result = Base.eval(workspace.mod, Meta.parse(code))
+            end
         finally
             if stdout_captured
                 try redirect_stdout(old_stdout) catch; end
