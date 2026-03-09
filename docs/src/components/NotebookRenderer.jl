@@ -1,6 +1,6 @@
 # NotebookRenderer.jl — Convert executed Notebook → Therapy.jl VNodes
 #
-# Renders Main.Sessions.jl notebooks as static HTML pages using Suite.jl components.
+# Renders Sessions.jl notebooks as static HTML pages using local components.
 # Each cell becomes a Card (code) or prose section (markdown), with outputs rendered
 # inline below the code.
 #
@@ -104,7 +104,7 @@ function _render_code_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
     parts = []
 
     # Code block
-    push!(parts, Main.CodeBlock(String(code), language="julia"))
+    push!(parts, CodeBlock(String(code), language="julia"))
 
     # Stdout (if non-empty)
     if !isempty(output.stdout)
@@ -122,20 +122,14 @@ function _render_code_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
     end
 
     Div(:data_cell_id => string(cell.id),
-        Main.Card(class="overflow-hidden",
-            Main.CardHeader(class="py-2 px-4 flex items-center justify-between",
+        Card(class="overflow-hidden",
+            CardHeader(class="py-2 px-4 flex items-center justify-between",
                 Span(:class => "text-xs font-mono text-warm-500 dark:text-warm-500",
-                    "Cell $(index + 1)"
-                ),
+                    "Cell $(index + 1)"),
                 Span(:class => "text-xs font-mono text-warm-400 dark:text-warm-600 runtime-badge",
-                    runtime_str
-                ),
-            ),
-            Main.CardContent(class="p-0",
-                parts...
-            ),
-        )
-    )
+                    runtime_str)),
+            CardContent(class="p-0",
+                parts...)))
 end
 
 """
@@ -310,9 +304,8 @@ function _render_bond_output(result, cell::Main.Sessions.Cell, prerendered)
         # Other widgets → static badge
         widget_type = nameof(typeof(widget))
         val = Main.Sessions.initial_value(widget)
-        return Main.Badge(variant="outline",
-            "$(widget_type) → :$(var_name) = $(val)"
-        )
+        return Badge(variant="outline",
+            "$(widget_type) → :$(var_name) = $(val)")
     end
     nothing
 end
@@ -358,31 +351,26 @@ function _slider_interaction_script()
 end
 
 """
-Render a NamedTuple vector as a Suite.jl Table.
+Render a NamedTuple vector as a styled table.
 """
 function _render_table_output(result)
     # Handle Vector{<:NamedTuple}
     if result isa AbstractVector && !isempty(result) && first(result) isa NamedTuple
         cols = keys(first(result))
 
-        header = Main.TableHeader(
-            Main.TableRow(
-                [Main.TableHead(string(col)) for col in cols]...
-            )
-        )
+        header = Thead(
+            Tr([Th(:class => _TH_CLS, string(col)) for col in cols]...))
 
         rows = [
-            Main.TableRow(
-                [Main.TableCell(string(getfield(row, col))) for col in cols]...
-            )
+            Tr(:class => _TR_CLS,
+                [Td(:class => _TD_CLS, string(getfield(row, col))) for col in cols]...)
             for row in result
         ]
 
-        body = Main.TableBody(rows...)
+        body = Tbody(rows...)
 
         return Div(:class => "overflow-x-auto",
-            Main.Table(header, body)
-        )
+            Table(:class => "w-full text-sm", header, body))
     end
 
     # Fallback to text representation

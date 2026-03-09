@@ -11,24 +11,14 @@ if isdir(local_therapy)
     push!(LOAD_PATH, local_therapy)
 end
 
-# Use local Suite.jl if available (sibling directory)
-local_suite = joinpath(dirname(@__DIR__), "..", "Suite.jl")
-if isdir(local_suite)
-    push!(LOAD_PATH, local_suite)
-end
-
 # Use local Sessions.jl package
 push!(LOAD_PATH, dirname(@__DIR__))
 
 using Therapy
-using Suite
 using Sessions
 using Markdown
 using UUIDs
 using Base64
-
-# Resolve name conflicts: Suite components take precedence over Therapy HTML elements
-import Suite: Button, Input, Label, P, H1, H2, H3, H4, CodeBlock, Table, Kbd
 
 # Change to docs directory for relative paths
 cd(@__DIR__)

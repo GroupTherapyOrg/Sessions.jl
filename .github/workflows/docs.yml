@@ -34,17 +34,13 @@ jobs:
           path: Therapy.jl
           token: ${{ secrets.ORG_PAT }}
 
-      - name: Checkout Suite.jl
-        uses: actions/checkout@v4
-        with:
-          repository: GroupTherapyOrg/Suite.jl
-          path: Suite.jl
-          token: ${{ secrets.ORG_PAT }}
-
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
         with:
           version: '1.12'
+
+      - name: Cache Julia packages
+        uses: julia-actions/cache@v2
 
       - name: Install dependencies
         run: |
@@ -53,7 +49,6 @@ jobs:
             Pkg.develop([
               PackageSpec(path="WasmTarget.jl"),
               PackageSpec(path="Therapy.jl"),
-              PackageSpec(path="Suite.jl"),
             ])
             Pkg.instantiate()
           '

@@ -1,6 +1,7 @@
 # Getting Started — Sessions.jl
 #
 # Installation, quick start, keyboard shortcuts, architecture overview.
+# Uses local components from PageComponents.jl (no Suite.jl).
 
 function GettingStartedIndex()
     Fragment(
@@ -16,11 +17,11 @@ function GettingStartedIndex()
                     "Sessions.jl requires Julia 1.12+. Install it as a Julia app:"
                 ),
                 Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-4 overflow-x-auto",
-                    Main.CodeBlock(language="julia", """using Pkg
+                    CodeBlock(language="julia", """using Pkg
 Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")""")
                 ),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "This installs the ", Main.Kbd("sessions"), " command to ", Main.Kbd("~/.julia/bin/"),
+                    "This installs the ", Kbd("sessions"), " command to ", Kbd("~/.julia/bin/"),
                     ". On first launch, JETLS (real-time diagnostics) is auto-installed."
                 ),
             ),
@@ -34,7 +35,7 @@ Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")""")
 
                 SectionH3("CLI (recommended)"),
                 Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    Main.CodeBlock(language="bash", """# Open a notebook
+                    CodeBlock(language="bash", """# Open a notebook
 sessions my_notebook.jl
 
 # Create a new notebook
@@ -46,7 +47,7 @@ sessions run my_notebook.jl""")
 
                 SectionH3("Julia REPL"),
                 Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    Main.CodeBlock(language="julia", """using Sessions
+                    CodeBlock(language="julia", """using Sessions
 Sessions.main("my_notebook.jl")""")
                 ),
 
@@ -55,7 +56,7 @@ Sessions.main("my_notebook.jl")""")
                     "Run all cells in a notebook without the TUI. Useful for CI pipelines and batch processing."
                 ),
                 Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    Main.CodeBlock(language="bash", "sessions run my_notebook.jl")
+                    CodeBlock(language="bash", "sessions run my_notebook.jl")
                 ),
             ),
 
@@ -109,11 +110,11 @@ Sessions.main("my_notebook.jl")""")
             Div(
                 SectionH2("@bind Widgets"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "Sessions.jl implements the AbstractPlutoDingetjes ", Main.Kbd("@bind"),
+                    "Sessions.jl implements the AbstractPlutoDingetjes ", Kbd("@bind"),
                     " protocol. Use widgets to create interactive controls in your notebooks:"
                 ),
                 Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    Main.CodeBlock(language="julia", """@bind x Slider(1:100)
+                    CodeBlock(language="julia", """@bind x Slider(1:100)
 @bind name TextField()
 @bind flag CheckBox()
 @bind choice Select(["A", "B", "C"])
@@ -143,15 +144,12 @@ end
 # --- Helpers ---
 
 function _ArchBox(title, description, files)
-    Main.Card(class="bg-warm-100/50 dark:bg-warm-900/50",
-        Main.CardHeader(
-            Main.CardTitle(:class => "text-base", title),
-        ),
-        Main.CardContent(
+    Card(class="bg-warm-100/50 dark:bg-warm-900/50",
+        CardHeader(
+            CardTitle(class="text-base", title)),
+        CardContent(
             P(:class => "text-sm text-warm-600 dark:text-warm-400 mb-3", description),
-            P(:class => "text-xs font-mono text-warm-500 dark:text-warm-500", files),
-        )
-    )
+            P(:class => "text-xs font-mono text-warm-500 dark:text-warm-500", files)))
 end
 
 GettingStartedIndex
