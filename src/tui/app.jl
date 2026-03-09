@@ -1337,6 +1337,24 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Ctrl+Z: undo — cell deletion (normal mode with undo buffer) or text undo
+    if evt.key == :ctrl && evt.char == 'z'
+        if app.mode != :insert && !isempty(app.undo_buffer)
+            undo_delete!(app)
+            return
+        end
+        # In insert mode or no deleted cells: fall through to CodeEditor text undo
+    end
+
+    # Ctrl+Y: text redo (Ctrl+R is taken by run-cell, so Ctrl+Y is the redo binding)
+    if evt.key == :ctrl && evt.char == 'y'
+        cw = focused_widget(app.notebook_view)
+        if cw !== nothing
+            Tachikoma._redo!(cw.editor)
+        end
+        return
+    end
+
     # Escape: insert → normal → panel (progressive de-focus)
     if evt.key == :escape
         if app.mode == :insert
