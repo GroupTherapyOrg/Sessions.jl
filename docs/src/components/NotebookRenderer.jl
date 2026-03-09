@@ -257,7 +257,7 @@ function _render_plotly_output(cell::Main.Sessions.Cell, prerendered)
     end
 
     # Standalone plot (no slider)
-    json_str = Main.JSON3.write(cell.output.result)
+    json_str = Main._to_json(cell.output.result)
     return Div(:class => "notebook-plotly",
         Div(:id => plot_id, :class => "w-full rounded-lg", :style => "min-height:400px;"),
         RawHtml("""<script type="application/json" data-plotly-for="$plot_id">$json_str</script>"""),

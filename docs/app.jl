@@ -26,13 +26,40 @@ using Sessions
 using Markdown
 using UUIDs
 using Base64
-using JSON3
 
 # Resolve name conflicts: Suite components take precedence over Therapy HTML elements
 import Suite: Button, Input, Label, P, H1, H2, H3, H4, CodeBlock, Table, Kbd
 
 # Change to docs directory for relative paths
 cd(@__DIR__)
+
+# =============================================================================
+# Minimal JSON serializer (avoids JSON3 dependency)
+# =============================================================================
+
+"""Serialize a value to JSON string. Supports Dict, Array, String, Number, Bool, Nothing."""
+function _to_json(x::AbstractDict)
+    pairs = [string('"', _json_escape(string(k)), '"', ':', _to_json(v)) for (k, v) in x]
+    "{" * join(pairs, ",") * "}"
+end
+_to_json(x::AbstractVector) = "[" * join((_to_json(v) for v in x), ",") * "]"
+_to_json(x::AbstractString) = "\"" * _json_escape(x) * "\""
+_to_json(x::Symbol) = "\"" * _json_escape(string(x)) * "\""
+_to_json(x::Integer) = string(x)
+_to_json(x::AbstractFloat) = isfinite(x) ? string(x) : "null"
+_to_json(x::Bool) = x ? "true" : "false"
+_to_json(::Nothing) = "null"
+_to_json(x::AbstractRange) = _to_json(collect(x))
+_to_json(x) = "\"" * _json_escape(string(x)) * "\""
+
+function _json_escape(s::AbstractString)
+    s = replace(s, '\\' => "\\\\")
+    s = replace(s, '"' => "\\\"")
+    s = replace(s, '\n' => "\\n")
+    s = replace(s, '\r' => "\\r")
+    s = replace(s, '\t' => "\\t")
+    s
+end
 
 # =============================================================================
 # App Configuration
@@ -161,7 +188,7 @@ function execute_notebook_for_web(path; verbose=false)
                 # Capture Plotly JSON if result is a Dict with data+layout
                 if dep.output.result isa Dict && haskey(dep.output.result, "data") && haskey(dep.output.result, "layout")
                     dep.output.output_type = :plotly_json
-                    plotly_data[val] = JSON3.write(dep.output.result)
+                    plotly_data[val] = _to_json(dep.output.result)
                 end
 
                 # Capture PNG fallback
