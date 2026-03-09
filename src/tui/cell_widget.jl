@@ -199,13 +199,14 @@ mutable struct CellWidget
     ellipsis_hovered::Bool  # Mouse hovering over ⋯ button
     selection::SelectionState
     diagnostics::Vector{Diagnostic}  # inline diagnostics (populated from LSP/JET)
+    _v_clip_top::Int  # rows clipped above viewport (set by notebook_view before render)
 end
 
 function CellWidget(cell::Cell; focused::Bool=false)
     editor = Tachikoma.CodeEditor()
     Tachikoma.set_text!(editor, cell.code)
     editor.focused = false  # cursor hidden by default; app sets true only in insert mode
-    CellWidget(cell, editor, focused, false, false, false, false, SelectionState(), Diagnostic[])
+    CellWidget(cell, editor, focused, false, false, false, false, SelectionState(), Diagnostic[], 0)
 end
 
 """Sync editor text back to cell."""
@@ -1040,7 +1041,12 @@ end
 """Render code editor (folded cells are handled before this is called)."""
 function _render_code!(cw::CellWidget, inner::Tachikoma.Rect,
                         buf::Tachikoma.Buffer, surface_bg)
-    cw.editor.scroll_offset = 0
+    # When the cell is partially scrolled above the viewport, _v_clip_top tells us
+    # how many rows of the cell rect are hidden.  Subtract the overhead (vi + border)
+    # to get the number of CODE lines that should be scrolled off.
+    vi = Theme.CELL_V_INSET
+    overhead = vi + 1          # vi padding rows + 1 border top row
+    cw.editor.scroll_offset = max(0, cw._v_clip_top - overhead)
 
     if cw.focused
         # Suppress built-in block cursor; we draw our own cursor after

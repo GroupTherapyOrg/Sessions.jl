@@ -486,9 +486,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
 
         # --- Cell rendering ---
         if y + ch > visible_start && y <= visible_end
-            # Clamp to inner content area (not outer rect) to prevent border overflow
+            # Clamp to inner content area to prevent rendering into border/tab bar
             clip_y = max(y, visible_start)
             clip_h = min(y + ch, visible_end + 1) - clip_y
+            # Tell the cell how many rows are clipped above the viewport so it can
+            # scroll the CodeEditor to show the correct lines (not always line 1)
+            cw._v_clip_top = clip_y - y
             cell_rect = Tachikoma.Rect(cx, clip_y, cw_width, max(1, clip_h))
             Tachikoma.render(cw, cell_rect, buf)
 
