@@ -13,7 +13,7 @@ function NotebooksIndex()
             prose_count = _count_prose_sections(nb)
 
             push!(cards,
-                A(:href => "./$(slug)/", :class => "block group",
+                A(:href => "./notebooks/$(slug)/", :class => "block group",
                     Main.Card(class="transition-colors hover:border-accent-400 dark:hover:border-accent-600",
                         Main.CardHeader(
                             Main.CardTitle(title),
