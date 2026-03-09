@@ -1,0 +1,82 @@
+name: Build and Deploy Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Sessions.jl
+        uses: actions/checkout@v4
+
+      - name: Checkout WasmTarget.jl
+        uses: actions/checkout@v4
+        with:
+          repository: GroupTherapyOrg/WasmTarget.jl
+          path: WasmTarget.jl
+
+      - name: Checkout Therapy.jl
+        uses: actions/checkout@v4
+        with:
+          repository: GroupTherapyOrg/Therapy.jl
+          path: Therapy.jl
+          token: ${{ secrets.ORG_PAT }}
+
+      - name: Checkout Suite.jl
+        uses: actions/checkout@v4
+        with:
+          repository: GroupTherapyOrg/Suite.jl
+          path: Suite.jl
+          token: ${{ secrets.ORG_PAT }}
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+
+      - name: Install dependencies
+        run: |
+          julia --project=. -e '
+            using Pkg
+            Pkg.develop([
+              PackageSpec(path="WasmTarget.jl"),
+              PackageSpec(path="Therapy.jl"),
+              PackageSpec(path="Suite.jl"),
+            ])
+            Pkg.instantiate()
+          '
+
+      - name: Build docs
+        run: |
+          julia --project=. docs/app.jl build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
