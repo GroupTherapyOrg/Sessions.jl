@@ -157,6 +157,7 @@ mutable struct SessionsApp <: Tachikoma.Model
     _dirty_cached::Bool                 # cached _is_notebook_dirty result
     _dirty_cache_valid::Bool            # false when dirty cache needs recompute
     _lsp_diag_version::Int              # tracks LSP diagnostic version to skip redundant fetches
+    _pointer_active::Bool               # true when mouse pointer is in "hand" shape (over clickable zone)
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -366,6 +367,8 @@ function _quit_app!(app::SessionsApp)
     app.watcher = nothing
     stop_repl!(app.repl_panel)
     stop_lsp!(app.lsp)
+    # Reset mouse pointer to default before exit
+    isa(stdout, Base.TTY) && print(stdout, _POINTER_DEFAULT)
     app.quit = true
 end
 
@@ -492,7 +495,7 @@ function SessionsApp(nb::Notebook)
         0, 0, 0,
         nothing,
         0.0,
-        1, false, false, 0)
+        1, false, false, 0, false)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -519,7 +522,7 @@ function SessionsApp(fev::FileEditorView)
         0, 0, 0,
         nothing,
         0.0,
-        1, false, false, 0)
+        1, false, false, 0, false)
 end
 
 function SessionsApp(path::String)
@@ -890,6 +893,9 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         end
         Tachikoma.set_string!(buf, area.x, msg_y, display_msg, msg_style)
     end
+
+    # Update mouse pointer shape based on hover state (once per frame)
+    _update_pointer!(app)
 end
 
 """Update progress tracking state and render the progress bar on the notebook top border."""
@@ -1503,6 +1509,44 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     end
     # Dirty cache invalidation — any key event may have edited cells
     app._dirty_cache_valid = false
+end
+
+# ── Mouse pointer shape (hand cursor for clickable zones) ─────────────
+# Uses XTerm OSC 22 — supported by iTerm2, Kitty, WezTerm, foot, xterm.
+const _POINTER_HAND = "\e]22;pointer\e\\"
+const _POINTER_DEFAULT = "\e]22;default\e\\"
+
+"""Update the terminal mouse pointer shape based on hover state."""
+function _update_pointer!(app::SessionsApp)
+    isa(stdout, Base.TTY) || return  # only emit when connected to a real terminal
+    nv = app.notebook_view
+    want_pointer = nv.save_hovered ||
+                   nv.run_all_hovered ||
+                   nv.hovered_control != :none ||
+                   app.activity_bar.hovered != :none ||
+                   app.file_panel.hovered_idx > 0 ||
+                   _any_cell_control_hovered(nv)
+    # Dropdown items and confirm dialog buttons
+    if !want_pointer && app.cell_dropdown !== nothing
+        want_pointer = app.cell_dropdown.hovered_idx > 0
+    end
+    if !want_pointer && app.confirm_dialog !== nothing
+        want_pointer = app.confirm_dialog.yes_hovered || app.confirm_dialog.no_hovered
+    end
+    if want_pointer != app._pointer_active
+        app._pointer_active = want_pointer
+        print(stdout, want_pointer ? _POINTER_HAND : _POINTER_DEFAULT)
+    end
+end
+
+"""Check if any cell-level control (ellipsis, bond widget) is hovered."""
+function _any_cell_control_hovered(nv::NotebookView)::Bool
+    nv.hovered_bond_idx > 0 && return true
+    for idx in (nv.focused_idx, nv.hovered_idx)
+        (idx < 1 || idx > length(nv.cell_widgets)) && continue
+        nv.cell_widgets[idx].ellipsis_hovered && return true
+    end
+    false
 end
 
 """Handle mouse events — Pluto-style click zones for cell controls."""
