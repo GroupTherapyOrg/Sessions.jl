@@ -35,7 +35,7 @@ function NotebooksIndex()
         PageHeader("Notebooks", "Interactive notebook gallery — export and share your Sessions.jl notebooks on the web."),
 
         if !isempty(cards)
-            Div(:class => "max-w-4xl mx-auto py-8 grid gap-6 sm:grid-cols-2",
+            Div(:class => "max-w-4xl mx-auto py-8 px-4 grid gap-8 sm:grid-cols-2",
                 cards...
             )
         else

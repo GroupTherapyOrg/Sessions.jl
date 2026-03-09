@@ -173,17 +173,6 @@ function execute_notebook_for_web(path; verbose=false)
     return nb, prerendered
 end
 
-"""
-Swap CairoMakie → WGLMakie in notebook code (future live server mode).
-Not used yet — documents the future path for browser-interactive Makie.
-"""
-function _swap_makie_backend(code; target=:cairo)
-    target == :wgl || return code
-    replace(replace(code,
-        "import CairoMakie as Mke" => "import WGLMakie as Mke"),
-        "using CairoMakie" => "using WGLMakie")
-end
-
 # =============================================================================
 # Load file-based routes + components first
 # =============================================================================

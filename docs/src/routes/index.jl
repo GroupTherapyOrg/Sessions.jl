@@ -70,7 +70,7 @@ sessions run my_notebook.jl""")
             H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-12",
                 "Everything you need"
             ),
-            Div(:class => "grid md:grid-cols-3 gap-10 max-w-5xl mx-auto px-4",
+            Div(:class => "grid md:grid-cols-3 gap-8 max-w-5xl mx-auto px-4",
                 _FeatureCard(
                     "Reactive Notebooks",
                     "Cells auto-re-run when dependencies change. Pluto-style reactivity powered by ExpressionExplorer.jl.",
@@ -124,7 +124,7 @@ sessions run my_notebook.jl""")
             ),
 
             # Two-file diagram
-            Div(:class => "grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-12",
+            Div(:class => "grid md:grid-cols-2 gap-8 max-w-4xl mx-auto px-4 mb-12",
                 Main.Card(class="border-accent-200 dark:border-accent-800",
                     Main.CardHeader(
                         Div(:class => "flex items-center gap-3",
@@ -259,7 +259,7 @@ sessions run my_notebook.jl""")
             H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-12",
                 "Three-layer architecture"
             ),
-            Div(:class => "grid md:grid-cols-3 gap-6 max-w-5xl mx-auto",
+            Div(:class => "grid md:grid-cols-3 gap-8 max-w-5xl mx-auto px-4",
                 _ArchCard("Layer 1: Engine", "Pure Julia, no UI",
                     "types.jl, format.jl, analysis.jl, kernel.jl, run.jl, bind.jl, session.jl, watcher.jl"),
                 _ArchCard("Layer 2: TUI", "Tachikoma.jl terminal interface",

@@ -1,7 +1,7 @@
 # Layout.jl - Sessions.jl documentation layout
 #
-# Uses Suite.jl components: Sheet (mobile), SiteFooter, Separator, ThemeToggle, ThemeSwitcher.
-# Uses Sessions.jl green accent and warm neutrals.
+# Uses Suite.jl components: Sheet (mobile), SiteFooter, Separator, ThemeToggle.
+# Uses Sessions.jl green accent and blue-gray neutrals.
 
 # --- Shared SVGs ---
 
@@ -72,7 +72,6 @@ function MobileNav()
                       :target => "_blank",
                       _GITHUB_SVG
                     ),
-                    Main.ThemeSwitcher(),
                     Main.ThemeToggle(),
                 ),
             ),
@@ -90,8 +89,6 @@ end
 
 function Layout(children...; title="Sessions.jl")
     Div(:class => "min-h-screen flex flex-col bg-warm-50 dark:bg-warm-950 transition-colors duration-200",
-        # Theme init: restore saved theme from localStorage
-        Therapy.Script("""(function(){try{var bp=document.documentElement.getAttribute('data-base-path')||'';var tk=bp?'suite-active-theme:'+bp:'suite-active-theme';var t=localStorage.getItem(tk);if(t){document.documentElement.setAttribute('data-theme',t)}else if(!document.documentElement.getAttribute('data-theme')){document.documentElement.setAttribute('data-theme','islands')}document.addEventListener('click',function(e){var b=e.target.closest('[data-theme-option]');if(!b)return;var th=b.getAttribute('data-theme-option');document.documentElement.setAttribute('data-theme',th);localStorage.setItem(tk,th)})}catch(e){}})();"""),
         # Navigation bar
         Header(:class => "bg-warm-100 dark:bg-warm-900 border-b border-warm-200 dark:border-warm-700 transition-colors duration-200",
             Div(:class => "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
@@ -104,14 +101,13 @@ function Layout(children...; title="Sessions.jl")
                     # Desktop: Nav + utilities
                     Div(:class => "hidden md:flex md:items-center md:gap-2",
                         DesktopNav(),
-                        # GitHub + Theme switcher + Theme toggle
+                        # GitHub + Theme toggle
                         Div(:class => "flex items-center gap-2 ml-4",
                             A(:href => "https://github.com/GroupTherapyOrg/Sessions.jl",
-                              :class => "text-warm-600 hover:text-warm-800 dark:text-warm-400 dark:hover:text-warm-200 transition-colors",
+                              :class => "text-warm-600 hover:text-warm-800 dark:text-warm-400 dark:hover:text-warm-200 transition-colors h-9 w-9 inline-flex items-center justify-center",
                               :target => "_blank",
                               _GITHUB_SVG
                             ),
-                            Main.ThemeSwitcher(),
                             Main.ThemeToggle(),
                         ),
                     ),
