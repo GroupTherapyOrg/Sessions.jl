@@ -106,13 +106,11 @@ function Layout(children...; title="Sessions.jl")
                         # GitHub + Theme toggle
                         Div(:class => "flex items-center gap-2 ml-4",
                             A(:href => "https://github.com/GroupTherapyOrg/Sessions.jl",
-                              :class => "text-warm-600 hover:text-warm-800 dark:text-warm-400 dark:hover:text-warm-200 transition-colors h-9 w-9 inline-flex items-center justify-center",
+                              :class => "text-warm-600 hover:text-warm-800 dark:text-warm-400 dark:hover:text-warm-200 transition-colors",
                               :target => "_blank",
                               _GITHUB_SVG
                             ),
-                            Div(:class => "h-9 w-9 inline-flex items-center justify-center",
-                                Main.ThemeToggle(),
-                            ),
+                            Main.ThemeToggle(),
                         ),
                     ),
 

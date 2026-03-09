@@ -149,6 +149,12 @@
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ThemeToggle island wrapper — prevent block expansion, pass through cursor */
+[dark-mode] {
+  display: inline-flex;
+  cursor: pointer;
+}
+
 /* Notebook slider widget styles */
 @layer components {
   .notebook-slider { @apply flex items-center gap-3 py-2; }

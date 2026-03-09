@@ -56,10 +56,29 @@ end
 # Notebooks Layout — sidebar + content (mirrors Suite.jl ComponentsLayout)
 # =============================================================================
 
+# Notebooks that contain interactive plots (sliders + CairoMakie/Plotly)
+# are disabled for now — shown but not clickable.
+const _INTERACTIVE_SLUGS = Set(["interactive-plots", "cairomakie-plots"])
+
+# Preferred display order — unlisted slugs go at the end alphabetically
+const _NOTEBOOK_ORDER = ["hello-sessions", "data-exploration", "interactive-plots", "cairomakie-plots"]
+
+"""Order notebook slugs: preferred order first, then alphabetical remainder."""
+function _ordered_notebook_slugs(slugs)
+    ordered = String[]
+    for s in _NOTEBOOK_ORDER
+        s in slugs && push!(ordered, s)
+    end
+    for s in sort(collect(slugs))
+        s in ordered || push!(ordered, s)
+    end
+    ordered
+end
+
 """Sidebar for notebooks section — lists all executed notebooks."""
 function NotebooksSidebar()
     items = if isdefined(Main, :EXECUTED_NOTEBOOKS) && !isempty(Main.EXECUTED_NOTEBOOKS)
-        sort(collect(keys(Main.EXECUTED_NOTEBOOKS)))
+        _ordered_notebook_slugs(keys(Main.EXECUTED_NOTEBOOKS))
     else
         String[]
     end
@@ -76,16 +95,23 @@ function NotebooksSidebar()
                 inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
                 exact = true
             ),
-            # Each notebook
+            # Each notebook — interactive ones are disabled (not clickable)
             map(items) do slug
                 nb = Main.EXECUTED_NOTEBOOKS[slug]
                 title = _extract_notebook_title(nb)
-                NavLink("./notebooks/$(slug)/", title;
-                    class = "block px-3 py-1.5 text-sm rounded transition-colors",
-                    active_class = "text-accent-700 dark:text-accent-400 bg-warm-100 dark:bg-warm-900 border-l-2 border-accent-600 -ml-0.5 pl-[calc(0.75rem+2px)]",
-                    inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
-                    exact = true
-                )
+                is_interactive = slug in _INTERACTIVE_SLUGS
+                if is_interactive
+                    Span(:class => "block px-3 py-1.5 text-sm rounded text-warm-400 dark:text-warm-600 cursor-default",
+                        title
+                    )
+                else
+                    NavLink("./notebooks/$(slug)/", title;
+                        class = "block px-3 py-1.5 text-sm rounded transition-colors",
+                        active_class = "text-accent-700 dark:text-accent-400 bg-warm-100 dark:bg-warm-900 border-l-2 border-accent-600 -ml-0.5 pl-[calc(0.75rem+2px)]",
+                        inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
+                        exact = true
+                    )
+                end
             end...
         )
     )

@@ -2,14 +2,10 @@
 #
 # Dynamic listing of executed notebooks with sidebar layout.
 
-# Notebooks that contain interactive plots (sliders + CairoMakie/Plotly)
-# are disabled for now — shown but not clickable.
-const _INTERACTIVE_SLUGS = Set(["interactive-plots", "cairomakie-plots"])
-
 function NotebooksIndex()
     cards = []
     if isdefined(Main, :EXECUTED_NOTEBOOKS) && !isempty(Main.EXECUTED_NOTEBOOKS)
-        for slug in sort(collect(keys(Main.EXECUTED_NOTEBOOKS)))
+        for slug in _ordered_notebook_slugs(keys(Main.EXECUTED_NOTEBOOKS))
             nb = Main.EXECUTED_NOTEBOOKS[slug]
             title = _extract_notebook_title(nb)
             code_count = _count_code_cells(nb)
