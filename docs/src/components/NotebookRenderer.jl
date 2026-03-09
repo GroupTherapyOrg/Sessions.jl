@@ -84,13 +84,15 @@ function _render_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
 end
 
 """
-Render a visible code cell as a Card with CodeBlock and output.
+Render a visible code cell — scan-line design.
+Clean code block (no header, no card chrome). Execution time revealed
+on hover via a thin scan line at the bottom of the code area.
 """
 function _render_code_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
     code = strip(cell.code)
     output = cell.output
 
-    # Runtime badge
+    # Runtime string
     runtime_ms = output.runtime_ns / 1_000_000
     runtime_str = if runtime_ms < 1
         "$(round(output.runtime_ns / 1000, digits=1)) μs"
@@ -100,36 +102,35 @@ function _render_code_cell(cell::Main.Sessions.Cell, index::Int, prerendered)
         "$(round(runtime_ms / 1000, digits=2)) s"
     end
 
-    # Build cell content
     parts = []
 
-    # Code block
-    push!(parts, CodeBlock(String(code), language="julia"))
+    # Code block with scan-line time reveal on hover
+    push!(parts,
+        Div(:class => "group relative rounded-lg bg-[#141414] ring-1 ring-[#252525] overflow-hidden",
+            Symbol("data-codeblock") => "",
+            Pre(:class => "overflow-x-auto p-5 font-mono text-sm leading-6 text-warm-200",
+                Code(:class => "block", code)),
+            # Scan line (hover reveal)
+            Div(:class => "absolute bottom-[10px] left-3 right-3 h-px bg-[#1e293b] opacity-0 group-hover:opacity-100 transition-opacity duration-150"),
+            # Time text (hover reveal, slightly delayed)
+            Span(:class => "absolute bottom-3 right-3 text-[10px] font-mono text-[#475569] opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100",
+                runtime_str)))
 
     # Stdout (if non-empty)
     if !isempty(output.stdout)
         push!(parts,
-            Div(:class => "mt-2 px-3 py-2 bg-warm-100 dark:bg-warm-900 rounded text-xs font-mono text-warm-600 dark:text-warm-400 whitespace-pre-wrap",
-                output.stdout
-            )
-        )
+            Pre(:class => "mt-3 pl-5 text-xs font-mono text-warm-500 whitespace-pre-wrap",
+                output.stdout))
     end
 
     # Output rendering
     output_node = _render_output(cell, prerendered)
     if output_node !== nothing
-        push!(parts, Div(:class => "mt-3 px-4 py-3", output_node))
+        push!(parts, Div(:class => "mt-3 pl-5", output_node))
     end
 
     Div(:data_cell_id => string(cell.id),
-        Card(class="overflow-hidden",
-            CardHeader(class="py-2 px-4 flex items-center justify-between",
-                Span(:class => "text-xs font-mono text-warm-500 dark:text-warm-500",
-                    "Cell $(index + 1)"),
-                Span(:class => "text-xs font-mono text-warm-400 dark:text-warm-600 runtime-badge",
-                    runtime_str)),
-            CardContent(class="p-0",
-                parts...)))
+        parts...)
 end
 
 """
@@ -173,12 +174,11 @@ function _render_output(cell::Main.Sessions.Cell, prerendered=Dict{Main.UUID, Ma
         return _render_image_output(cell, prerendered)
 
     elseif output.output_type == :text
-        # Plain text output
+        # Plain text output — bare dim text below the code block
         text = output.text_representation
         isempty(text) && return nothing
-        return Pre(:class => "text-sm font-mono text-warm-700 dark:text-warm-300 bg-warm-50 dark:bg-warm-900 rounded px-3 py-2",
-            Code(text)
-        )
+        return Pre(:class => "text-sm font-mono text-[#52525b] whitespace-pre-wrap",
+            Code(text))
     end
 
     nothing
