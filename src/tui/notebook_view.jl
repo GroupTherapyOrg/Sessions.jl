@@ -380,14 +380,17 @@ function move_selected_down!(nv::NotebookView)
     end
 end
 
-"""Focus a cell by index directly (for mouse click)."""
-function focus_cell!(nv::NotebookView, idx::Int)
+"""Focus a cell by index directly (for mouse click or keyboard navigation).
+Set `scroll=false` for mouse clicks where the target is already visible."""
+function focus_cell!(nv::NotebookView, idx::Int; scroll::Bool=true)
     (idx < 1 || idx > length(nv.cell_widgets)) && return
     nv.focused_idx = idx
-    nv.user_scrolling = false  # auto-scroll to show newly focused cell
+    if scroll
+        nv.user_scrolling = false  # auto-scroll to show newly focused cell
+    end
     update_focus!(nv)
-    # Scroll to show focused cell if viewport is known
-    if nv.viewport.width > 0
+    # Scroll to show focused cell if viewport is known (skip for mouse clicks)
+    if scroll && nv.viewport.width > 0
         ensure_visible!(nv, nv.viewport)
     end
 end

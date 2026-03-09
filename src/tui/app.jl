@@ -1833,7 +1833,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             idx = cell_at_y(nv, evt.y)
             if idx !== nothing
                 nv.cell_widgets[idx].selected = !nv.cell_widgets[idx].selected
-                focus_cell!(nv, idx)
+                focus_cell!(nv, idx; scroll=false)
                 _exit_insert_mode!(app)
             end
             return
@@ -1892,7 +1892,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         idx = cell_at_y(nv, evt.y)
         if idx !== nothing
             clear_selection!(nv)
-            focus_cell!(nv, idx)
+            focus_cell!(nv, idx; scroll=false)
             if evt.x >= cell_left && evt.x < cell_right
                 _enter_insert_mode!(app)
                 # Position cursor at click location
@@ -2279,7 +2279,7 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
         ellipsis_x_start = border_right - 4
         if click_y >= ellipsis_y - 1 && click_y <= ellipsis_y + 1 &&
            click_x >= ellipsis_x_start - 2 && click_x <= border_right
-            focus_cell!(nv, target_idx)
+            focus_cell!(nv, target_idx; scroll=false)
             open_dropdown!(app, target_idx, border_right - 1, ellipsis_y + 1)
             return true
         end
@@ -2291,7 +2291,7 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
         run_x = cell_right - length(run_text)
         if click_y >= run_gap_y - 1 && click_y <= run_gap_y + 1 &&
            click_x >= run_x - 2 && click_x <= cell_right + 2
-            focus_cell!(nv, target_idx)
+            focus_cell!(nv, target_idx; scroll=false)
             run_cell_at_index!(app, target_idx)
             return true
         end
