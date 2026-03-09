@@ -58,6 +58,7 @@ mutable struct LspClient
     error_message::String
     enabled::Bool       # opt-out flag
     completion_cache::Vector{LspCompletionItem}  # last completion results
+    _diag_version::Int  # incremented when diagnostics/pull_diagnostics change (avoids per-frame re-fetch)
 end
 
 function LspClient(; enabled::Bool=true)
@@ -72,7 +73,8 @@ function LspClient(; enabled::Bool=true)
         nothing,
         "",
         enabled,
-        LspCompletionItem[]
+        LspCompletionItem[],
+        0
     )
 end
 
@@ -279,6 +281,7 @@ function _handle_diagnostics!(client::LspClient, params)
     end
 
     client.diagnostics[uri] = diags
+    client._diag_version += 1
 end
 
 # ── LSP Lifecycle ──────────────────────────────────────────────────
@@ -455,6 +458,7 @@ function _merge_pull_diagnostics!(client::LspClient, uri::String, response::Dict
     end
 
     client.pull_diagnostics[uri] = pull_diags
+    client._diag_version += 1
 end
 
 # ── Completion ─────────────────────────────────────────────────────

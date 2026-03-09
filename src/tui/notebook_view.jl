@@ -26,16 +26,21 @@ mutable struct NotebookView
     current_frame::Union{Nothing, Tachikoma.Frame}  # set before render for image output
     last_scroll_time::Float64  # time() of last scroll event — skip image rendering during active scroll
     _last_viewport_size::Tuple{Int, Int}  # (width, height) for resize detection
-    # --- Height cache (avoids redundant O(N) loops within same frame) ---
-    _cached_content_height::Int    # cached total content height (-1 = stale)
-    _height_dirty::Bool            # set true when cells change or at start of render
+    # --- Prefix sum height arrays (O(1) content_height, O(log N) hit testing) ---
+    _slot_heights::Vector{Int}        # per-cell: cell_height + output_height + CELL_GAP
+    _cumulative_heights::Vector{Int}  # prefix sums: cumulative[i] = sum(slot_heights[1:i])
+    _prefix_dirty::Bool               # true when prefix sums need rebuild
+    any_running::Bool                  # any cell running/queued (set by app, avoids O(N) scan in render)
 end
 
 function NotebookView(nb::Notebook)
     cells = ordered_cells(nb)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
-    NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0), -1, true)
+    n = length(cells)
+    nv = NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0), zeros(Int, n), zeros(Int, n), true, false)
+    _rebuild_prefix_sums!(nv)
+    nv
 end
 
 """Flush image-related caches on all OutputWidgets (encoded data, PixelImage, height).
@@ -68,6 +73,48 @@ function detect_viewport_resize!(nv::NotebookView, width::Int, height::Int)
     end
 end
 
+"""Rebuild prefix sum arrays from scratch. O(N) — called once after structural changes
+or once per frame when _prefix_dirty is set."""
+function _rebuild_prefix_sums!(nv::NotebookView)
+    n = length(nv.cell_widgets)
+    resize!(nv._slot_heights, n)
+    resize!(nv._cumulative_heights, n)
+    cum = 0
+    for i in 1:n
+        oh = output_height(nv.output_widgets[i])
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        sh = ch + oh + Theme.CELL_GAP
+        nv._slot_heights[i] = sh
+        cum += sh
+        nv._cumulative_heights[i] = cum
+    end
+    nv._prefix_dirty = false
+end
+
+"""Mark prefix sums as needing rebuild. Cheap O(1) call."""
+function invalidate_prefix!(nv::NotebookView)
+    nv._prefix_dirty = true
+end
+
+"""Get the y-offset (relative to content start, after TOP_MARGIN) for the start of cell i.
+Returns 0 for i=1, cumulative_heights[i-1] for i>1."""
+function _cell_y_offset(nv::NotebookView, i::Int)
+    i <= 1 ? 0 : nv._cumulative_heights[i - 1]
+end
+
+"""Binary search: find the cell index containing content_y (0-based, relative to first cell top).
+Returns the 1-based cell index, or nothing if beyond all cells.
+Negative content_y maps to cell 1 (matches old linear scan behavior where the first cell
+always "catches" any y above the content area)."""
+function _cell_index_at_content_y(nv::NotebookView, content_y::Int)
+    n = length(nv._cumulative_heights)
+    n == 0 && return nothing
+    content_y < 0 && return 1  # above content → first cell (backward-compat)
+    # searchsortedfirst: first index where cumulative_heights[i] > content_y
+    idx = searchsortedfirst(nv._cumulative_heights, content_y + 1)
+    idx > n ? nothing : idx
+end
+
 """Rebuild widgets when cells change."""
 function rebuild_widgets!(nv::NotebookView)
     cells = ordered_cells(nv.nb)
@@ -79,7 +126,7 @@ function rebuild_widgets!(nv::NotebookView)
 
     nv.cell_widgets = [CellWidget(c) for c in cells]
     nv.output_widgets = [OutputWidget(c) for c in cells]
-    invalidate_height!(nv)
+    _rebuild_prefix_sums!(nv)
 
     nv.focused_idx = 1
     if old_focused_id !== nothing
@@ -169,7 +216,8 @@ function delete_focused_cell!(nv::NotebookView)
     rebuild_widgets!(nv)
 end
 
-"""Map a screen y-coordinate to a cell index, or nothing if outside cells."""
+"""Map a screen y-coordinate to a cell index, or nothing if outside cells.
+Uses binary search on prefix sums — O(log N) instead of O(N)."""
 function cell_at_y(nv::NotebookView, screen_y::Int)
     isempty(nv.cell_widgets) && return nothing
     vp = nv.viewport
@@ -179,23 +227,12 @@ function cell_at_y(nv::NotebookView, screen_y::Int)
     vi = Theme.CELL_V_INSET
     content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
 
-    y = 0
-    for i in eachindex(nv.cell_widgets)
-        oh = output_height(nv.output_widgets[i])
-        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
-        slot_h = ch + oh + Theme.CELL_GAP
-
-        if content_y < y + slot_h
-            return i
-        end
-        y += slot_h
-    end
-
-    nothing
+    _cell_index_at_content_y(nv, content_y)
 end
 
 """Map a screen y-coordinate to a gap insertion index, or nothing if inside a cell.
-Returns the 1-based index where a new cell should be inserted."""
+Returns the 1-based index where a new cell should be inserted.
+Uses binary search to find the cell slot, then checks sub-position within the slot."""
 function gap_at_y(nv::NotebookView, screen_y::Int)
     isempty(nv.cell_widgets) && return nothing
     vp = nv.viewport
@@ -206,28 +243,18 @@ function gap_at_y(nv::NotebookView, screen_y::Int)
 
     content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
 
-    y = 0
-    for i in eachindex(nv.cell_widgets)
-        oh = output_height(nv.output_widgets[i])
-        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+    idx = _cell_index_at_content_y(nv, content_y)
+    idx === nothing && return nothing
 
-        if content_y < y + ch
-            return nothing
-        end
-        y += ch
+    # Decompose position within the slot
+    slot_start = _cell_y_offset(nv, idx)
+    local_y = content_y - slot_start
+    oh = output_height(nv.output_widgets[idx])
+    ch = cell_height(nv.cell_widgets[idx]; has_output=oh > 0)
 
-        if oh > 0 && content_y < y + oh
-            return nothing
-        end
-        y += oh
-
-        if content_y < y + Theme.CELL_GAP
-            return nothing  # in the gap — not a clickable zone
-        end
-        y += Theme.CELL_GAP
-    end
-
-    return nothing
+    local_y < ch && return nothing       # inside cell body
+    local_y < ch + oh && return nothing   # inside output
+    return nothing                        # in the gap — not a clickable zone
 end
 
 """Insert a new cell at a gap position and focus it."""
@@ -376,9 +403,12 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     rect.width < 4 && return
     rect.height < 4 && return
 
-    # Invalidate content height once per frame so it recomputes at most once.
-    # Subsequent calls (scrollbar, clamp_scroll!) reuse the cached value.
-    invalidate_height!(nv)
+    # Rebuild prefix sums once per frame (O(N) but only when something changed).
+    # This replaces the old blanket invalidate_height! + O(N) content_height recompute,
+    # and enables O(log N) hit testing and O(1) content_height for the rest of the frame.
+    if nv._prefix_dirty
+        _rebuild_prefix_sums!(nv)
+    end
 
     # ── Rounded border for notebook pane (inset to match cell island style) ──
     hi = Theme.CELL_H_INSET
@@ -443,10 +473,29 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     # Pre-sync diagnostics for focused cell (affects its height via diag_lines)
     if nv.focused_idx >= 1 && nv.focused_idx <= n_cells
         fcw = nv.cell_widgets[nv.focused_idx]
-        fcw.diagnostics = get(nv.cell_diags, fcw.cell.id, Diagnostic[])
+        old_diags = fcw.diagnostics
+        new_diags = get(nv.cell_diags, fcw.cell.id, Diagnostic[])
+        fcw.diagnostics = new_diags
+        # If diagnostics changed, prefix sums for focused cell may be stale
+        if length(old_diags) != length(new_diags) && !nv._prefix_dirty
+            _rebuild_prefix_sums!(nv)
+        end
     end
 
-    for i in eachindex(nv.cell_widgets)
+    # Binary search: find first cell whose slot overlaps the visible area.
+    # scroll_content = how far into content we've scrolled (in cell content space).
+    scroll_content = nv.scroll_offset - Theme.TOP_MARGIN
+    first_visible = if scroll_content <= 0
+        1
+    else
+        idx = searchsortedfirst(nv._cumulative_heights, scroll_content)
+        clamp(idx, 1, n_cells)
+    end
+
+    # Compute y position for the first visible cell using prefix sums (O(1))
+    y = inner_y + Theme.TOP_MARGIN - nv.scroll_offset + _cell_y_offset(nv, first_visible)
+
+    for i in first_visible:n_cells
         cw = nv.cell_widgets[i]
         ow = nv.output_widgets[i]
 
@@ -459,12 +508,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             break
         end
 
-        # Fast skip: if this cell's entire slot is above the viewport, just advance y
         slot_h = ch + oh + Theme.CELL_GAP
-        if y + slot_h < visible_start
-            y += slot_h
-            continue
-        end
 
         # Sync diagnostics only for visible/near-visible cells
         cw.diagnostics = get(nv.cell_diags, cw.cell.id, Diagnostic[])
@@ -638,7 +682,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     run_x = bx + bw - 1 - run_len - 1  # 1 char inside right border
     bot_border_y = by + bh - 1          # bottom border row
     if run_x > bx + 2
-        is_busy = any(c -> c.state == cell_running || c.state == cell_queued, values(nv.nb.cells))
+        is_busy = nv.any_running
         run_fg = if is_busy
             Theme.ORANGE
         elseif nv.run_all_hovered
@@ -711,30 +755,15 @@ function _render_image_scroll_placeholder(rect::Tachikoma.Rect, buf::Tachikoma.B
 end
 
 """Total content height including all cells, outputs, gaps, and margins.
-
-Cached to avoid redundant O(N) loops within the same frame. The render function
-calls `invalidate_height!` once at the start of each frame so heights are recomputed
-at most once per frame. Subsequent calls (scrollbar, clamp) reuse the cached value."""
+O(1) lookup using prefix sum array."""
 function content_height(nv::NotebookView)
-    isempty(nv.cell_widgets) && return 0
-    if !nv._height_dirty && nv._cached_content_height >= 0
-        return nv._cached_content_height
-    end
-    h = Theme.TOP_MARGIN
-    for i in eachindex(nv.cell_widgets)
-        oh = output_height(nv.output_widgets[i])
-        h += cell_height(nv.cell_widgets[i]; has_output=oh > 0)
-        h += oh
-        h += Theme.CELL_GAP
-    end
-    nv._cached_content_height = h
-    nv._height_dirty = false
-    h
+    isempty(nv._cumulative_heights) && return 0
+    Theme.TOP_MARGIN + nv._cumulative_heights[end]
 end
 
-"""Mark content height cache as stale. Call at start of render or after structural changes."""
+"""Mark prefix sums as stale. Backward-compatible alias."""
 function invalidate_height!(nv::NotebookView)
-    nv._height_dirty = true
+    nv._prefix_dirty = true
 end
 
 """Clamp scroll_offset to valid range."""
@@ -746,19 +775,15 @@ function clamp_scroll!(nv::NotebookView, rect::Tachikoma.Rect)
     nv.scroll_offset = clamp(nv.scroll_offset, 0, max_scroll)
 end
 
-"""Scroll to make the focused cell visible. Called on focus change, not every frame."""
+"""Scroll to make the focused cell visible. Called on focus change, not every frame.
+Uses prefix sums for O(1) y-offset lookup instead of O(focused_idx) scan."""
 function ensure_visible!(nv::NotebookView, rect::Tachikoma.Rect)
     isempty(nv.cell_widgets) && return
     vi = Theme.CELL_V_INSET
     inner_h = max(1, rect.height - 2 * vi - 2)  # subtract inset + border
 
-    y = Theme.TOP_MARGIN
-    for i in 1:nv.focused_idx-1
-        oh = output_height(nv.output_widgets[i])
-        y += cell_height(nv.cell_widgets[i]; has_output=oh > 0)
-        y += oh
-        y += Theme.CELL_GAP
-    end
+    # O(1) lookup via prefix sums
+    y = Theme.TOP_MARGIN + _cell_y_offset(nv, nv.focused_idx)
 
     focused_oh = output_height(nv.output_widgets[nv.focused_idx])
     focused_h = cell_height(nv.cell_widgets[nv.focused_idx]; has_output=focused_oh > 0)

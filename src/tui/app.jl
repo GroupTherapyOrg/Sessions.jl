@@ -152,6 +152,11 @@ mutable struct SessionsApp <: Tachikoma.Model
     rename_prompt::Union{Nothing, RenamePrompt}
     # Raster debounce: suppress sixel/kitty re-encoding during active interaction
     last_interaction_time::Float64
+    # --- Performance: avoid per-frame O(N) scans ---
+    _prev_focused_idx::Int              # previous focused cell index (O(1) focus update)
+    _dirty_cached::Bool                 # cached _is_notebook_dirty result
+    _dirty_cache_valid::Bool            # false when dirty cache needs recompute
+    _lsp_diag_version::Int              # tracks LSP diagnostic version to skip redundant fetches
 end
 
 """Check if notebook differs from the last saved snapshot."""
@@ -486,7 +491,8 @@ function SessionsApp(nb::Notebook)
         nothing,
         0, 0, 0,
         nothing,
-        0.0)
+        0.0,
+        1, false, false, 0)
 end
 
 function SessionsApp(fev::FileEditorView)
@@ -512,7 +518,8 @@ function SessionsApp(fev::FileEditorView)
         nothing,
         0, 0, 0,
         nothing,
-        0.0)
+        0.0,
+        1, false, false, 0)
 end
 
 function SessionsApp(path::String)
@@ -642,9 +649,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         end
     end
 
-    # Poll LSP diagnostics (async notifications arrive on reader task)
-    if app.lsp.status == lsp_ready
+    # Poll LSP diagnostics — only re-fetch when LSP has new data (version changed)
+    if app.lsp.status == lsp_ready && app.lsp._diag_version != app._lsp_diag_version
+        app._lsp_diag_version = app.lsp._diag_version
         app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
+        app.notebook_view._prefix_dirty = true  # diagnostics can change cell heights
         # Update diagnostics panel entries if panel is open
         if app.diagnostics_open
             jet_cache = Dict{UUID, CellDiagnostics}()
@@ -768,13 +777,36 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         app.scrollbar_y = sb_y
         app.scrollbar_h = sb_h
     else
-        for (i, cw) in enumerate(app.notebook_view.cell_widgets)
-            cw.editor.focused = (i == app.notebook_view.focused_idx && app.mode == :insert)
-            if app.mode == :panel
-                cw.focused = false
+        # O(1) focus update: only touch the old and new focused cells
+        nv_focus = app.notebook_view
+        cur_idx = nv_focus.focused_idx
+        prev_idx = app._prev_focused_idx
+        widgets = nv_focus.cell_widgets
+        is_insert = app.mode == :insert
+        is_panel = app.mode == :panel
+        if prev_idx != cur_idx || is_panel
+            # Unfocus old cell
+            if prev_idx >= 1 && prev_idx <= length(widgets)
+                widgets[prev_idx].editor.focused = false
+                if is_panel
+                    widgets[prev_idx].focused = false
+                end
+            end
+            app._prev_focused_idx = cur_idx
+        end
+        # Set current cell focus
+        if cur_idx >= 1 && cur_idx <= length(widgets)
+            widgets[cur_idx].editor.focused = is_insert && !is_panel
+            if is_panel
+                widgets[cur_idx].focused = false
             end
         end
-        app.notebook_view.dirty = _is_notebook_dirty(app)
+        # Dirty check: use cached result when valid
+        if !app._dirty_cache_valid
+            app._dirty_cached = _is_notebook_dirty(app)
+            app._dirty_cache_valid = true
+        end
+        app.notebook_view.dirty = app._dirty_cached
         app.notebook_view.cell_diags = app.cell_diagnostics_cache
         app.notebook_view.lsp_status = app.lsp.status
         # Thread Frame for image rendering — suppress during ALL active interaction.
@@ -863,16 +895,16 @@ end
 
 """Update progress tracking state and render the progress bar on the notebook top border."""
 function _update_and_render_progress!(app::SessionsApp, notebook_rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
-    # Scan cell states — build current active set
-    currently_active = Set{UUID}()
-    for cell in ordered_cells(app.nb)
+    # Scan cell states — use values() directly to avoid allocation from ordered_cells().
+    n_active = 0
+    for cell in values(app.nb.cells)
         if cell.state == cell_running || cell.state == cell_queued
-            push!(currently_active, cell.id)
+            n_active += 1
             push!(app.progress_recently, cell.id)
         end
     end
+    app.notebook_view.any_running = n_active > 0
 
-    n_active = length(currently_active)
     n_recent = length(app.progress_recently)
 
     if n_recent == 0
@@ -1470,6 +1502,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if cw !== nothing
         Tachikoma.handle_key!(cw, evt)
     end
+    # Invalidate caches: any key event may have edited cells or changed focus
+    app._dirty_cache_valid = false
+    app.notebook_view._prefix_dirty = true
 end
 
 """Handle mouse events — Pluto-style click zones for cell controls."""
@@ -1984,9 +2019,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
 
     # Mouse move: update hover state only within notebook
     if evt.action == Tachikoma.mouse_move
-        # Clear ellipsis hover on all cells
-        for cw in nv.cell_widgets
-            cw.ellipsis_hovered = false
+        # Clear ellipsis hover on previously hovered cell only (O(1) instead of O(N))
+        prev_hover = nv.hovered_idx
+        if prev_hover >= 1 && prev_hover <= length(nv.cell_widgets)
+            nv.cell_widgets[prev_hover].ellipsis_hovered = false
         end
 
         if in_notebook
@@ -2042,6 +2078,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         _enter_panel_mode!(app)
         return
     end
+    # Mouse events can change focus, add cells, etc. — invalidate caches
+    app._dirty_cache_valid = false
+    app.notebook_view._prefix_dirty = true
 end
 
 """Update ellipsis and run button hover states during mouse move."""
@@ -2281,6 +2320,10 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.TaskEvent)
             app.message = "Ran all cells"
         end
     end
+    # Execution changed outputs — invalidate prefix sums and dirty cache
+    app.notebook_view._prefix_dirty = true
+    app._dirty_cache_valid = false
+    app.notebook_view.any_running = true  # will be corrected by progress bar scan
 end
 
 """Map an x-coordinate to a slider value. Returns (new_value, hit) or (nothing, false)."""
