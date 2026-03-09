@@ -485,11 +485,13 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         end
 
         # --- Cell rendering ---
+        # Pass full virtual rect so CellWidget draws its border/code at the
+        # correct virtual position.  Buffer in_bounds silently clips writes
+        # outside the terminal.  The notebook border re-draw after this loop
+        # seals any overflow into the inset/border area.
         if y + ch > visible_start && y <= visible_end
-            # Clamp to inner content area (not outer rect) to prevent border overflow
-            clip_y = max(y, visible_start)
-            clip_h = min(y + ch, visible_end + 1) - clip_y
-            cell_rect = Tachikoma.Rect(cx, clip_y, cw_width, max(1, clip_h))
+            cell_rect = Tachikoma.Rect(cx, max(y, rect.y), cw_width,
+                            ch - max(0, rect.y - y))
             Tachikoma.render(cw, cell_rect, buf)
 
             # --- Diagnostic gutter markers (colored dots on lines with issues) ---
@@ -527,13 +529,8 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             ow.hovered = (i == nv.hovered_bond_idx)
             ow.current_frame = nv.current_frame  # thread Frame for image rendering
             if y + oh > visible_start && y <= visible_end
-                # Clamp output to inner content area
-                out_clip_y = max(y, visible_start)
-                out_clip_h = min(y + oh, visible_end + 1) - out_clip_y
-                out_rect = Tachikoma.Rect(cx, out_clip_y, cw_width, max(1, out_clip_h))
-                # Render output (all types including images).
-                # Raster suppression is handled by app.jl's interaction debounce
-                # (sets current_frame=nothing during active interaction).
+                # Full virtual rect — buffer in_bounds clips, overpaint seals border
+                out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
                 Tachikoma.render(ow, out_rect, buf)
             end
             y += oh
