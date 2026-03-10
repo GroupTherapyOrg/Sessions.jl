@@ -131,6 +131,12 @@ end
 # Must live in __init__ because Julia 1.12 forbids method overwriting
 # during precompilation.
 function __init__()
+    # Re-register CellToggle island into Therapy's ISLAND_REGISTRY at runtime
+    # (precompilation doesn't persist cross-module Dict mutations)
+    if isdefined(@__MODULE__, :CellToggle) && CellToggle isa Therapy.IslandDef
+        Therapy.ISLAND_REGISTRY[CellToggle.name] = CellToggle
+    end
+
     # Patch read_event — convert Ctrl+C (byte 0x03) from :ctrl_c to :ctrl+'c'
     # so it reaches our app's update! instead of being intercepted by Tachikoma's
     # hardcoded quit handler. Our app uses Ctrl+Q for quit and Ctrl+C for copy.
