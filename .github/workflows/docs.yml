@@ -21,19 +21,6 @@ jobs:
       - name: Checkout Sessions.jl
         uses: actions/checkout@v4
 
-      - name: Checkout WasmTarget.jl
-        uses: actions/checkout@v4
-        with:
-          repository: GroupTherapyOrg/WasmTarget.jl
-          path: WasmTarget.jl
-
-      - name: Checkout Therapy.jl
-        uses: actions/checkout@v4
-        with:
-          repository: GroupTherapyOrg/Therapy.jl
-          path: Therapy.jl
-          token: ${{ secrets.ORG_PAT }}
-
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
         with:
@@ -46,10 +33,6 @@ jobs:
         run: |
           julia --project=. -e '
             using Pkg
-            Pkg.develop([
-              PackageSpec(path="WasmTarget.jl"),
-              PackageSpec(path="Therapy.jl"),
-            ])
             Pkg.instantiate()
           '
 
