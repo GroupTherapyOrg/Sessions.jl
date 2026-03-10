@@ -7,7 +7,7 @@
     <img alt="Sessions.jl" src="logo/sessions_light.svg" height="60">
   </picture>
 
-  **A terminal-native reactive Julia notebook built on [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s reactive engine and [Tachikoma.jl](https://github.com/GroupTherapyOrg/Tachikoma.jl).**
+  **A terminal-native reactive Julia notebook built on [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s reactive engine and [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl).**
 
   [![Docs](https://img.shields.io/badge/docs-stable-blue)](https://grouptherapyorg.github.io/Sessions.jl/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
@@ -23,15 +23,16 @@ Over the past couple of months I've been shifting more and more toward agent-dri
 
 The problem is that Pluto (understandably) isn't optimized for agents editing notebook files externally. The `.jl` file interleaves code with package state and metadata, so an LLM modifying cells risks corrupting that state. Sessions.jl splits the notebook into two files -- pure code in `.jl`, cached outputs in `.session.toml` -- so agents, scripts, and editors can freely modify cells without breaking anything.
 
+I've also missed Pluto in cluster and HPC environments -- headless servers where you SSH in and there's no browser to speak of. A terminal-native notebook that works over a plain SSH session could make reactive notebooks accessible in places they currently aren't. Whether Sessions.jl actually gets there is another question, but the idea is worth chasing.
+
 The other motivation is having a playground for ideas that are too experimental for Pluto itself. Pluto is a widely-used, carefully-maintained package -- it's not the place to test half-baked integrations with bleeding-edge tools. Sessions.jl is small enough and unimportant enough that it can be a testing ground for things like:
 
 - **JETLS integration** -- Real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP, catching type errors as you write
 - **Runic.jl formatting** -- Auto-format cells on save
-- **WebAssembly notebook export** -- Compile notebook interactivity to WASM via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl), no running Julia server needed
 
 None of these are production-ready. They might not work. But it's fun to try, and if something turns out well, maybe it can inform upstream work in the Pluto ecosystem.
 
-Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine, the WASM compilation pipeline. No JavaScript, no Electron, no browser. Just Julia in a terminal.
+Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine. No JavaScript, no Electron, no browser. Just Julia in a terminal.
 
 ## Standing on Shoulders
 
@@ -97,6 +98,16 @@ Sessions.jl implements the AbstractPlutoDingetjes `@bind` protocol:
 @bind choice Select(["A", "B", "C"])
 @bind n NumberField(1:10)
 ```
+
+## A Long Shot: WebAssembly Notebook Export
+
+This is aspirational and may never happen, but it's something we've been quietly exploring.
+
+The idea: what if you could compile a notebook's interactivity to WebAssembly, so the exported HTML works without a running Julia server? Not shipping an entire language runtime to the browser (like Pyodide or webR), but ahead-of-time compiling the specific Julia code in your notebook into small, fast WASM modules using [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl).
+
+Today, WasmTarget.jl can compile a narrow subset of Julia -- enough for simple interactive widgets like sliders and reactive value displays. Everything else still falls back to server-rendered HTML. Getting from "sliders work" to "notebooks work" is an enormous gap that may prove impractical. Julia's runtime is vast and complex, and compiling meaningful amounts of it to WASM is a research problem, not an engineering one.
+
+But it's fun to poke at, and if it ever gets somewhere interesting, we'll share what we learn.
 
 ## License
 
