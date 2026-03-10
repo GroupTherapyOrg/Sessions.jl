@@ -25,12 +25,7 @@ The problem is that Pluto (understandably) isn't optimized for agents editing no
 
 I've also missed Pluto in cluster and HPC environments -- headless servers where you SSH in and there's no browser to speak of. A terminal-native notebook that works over a plain SSH session could make reactive notebooks accessible in places they currently aren't. Whether Sessions.jl actually gets there is another question, but the idea is worth chasing.
 
-The other motivation is having a playground for ideas that are too experimental for Pluto itself. Pluto is a widely-used, carefully-maintained package -- it's not the place to test half-baked integrations with bleeding-edge tools. Sessions.jl is small enough and unimportant enough that it can be a testing ground for things like:
-
-- **JETLS integration** -- Real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP, catching type errors as you write
-- **Runic.jl formatting** -- Auto-format cells on save
-
-None of these are production-ready. They might not work. But it's fun to try, and if something turns out well, maybe it can inform upstream work in the Pluto ecosystem.
+The other motivation is having a playground for ideas that are too experimental for Pluto itself. Pluto is a widely-used, carefully-maintained package -- it's not the place to test half-baked integrations with bleeding-edge tools. Sessions.jl is small enough and unimportant enough to be a testing ground. If something turns out well, maybe it can inform upstream work in the Pluto ecosystem.
 
 Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine. No JavaScript, no Electron, no browser. Just Julia in a terminal.
 
@@ -99,9 +94,14 @@ Sessions.jl implements the AbstractPlutoDingetjes `@bind` protocol:
 @bind n NumberField(1:10)
 ```
 
-## Maybe Someday: WebAssembly
+## Other Experiments
 
-We've been experimenting with compiling notebook interactivity to WASM via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl) so exported notebooks don't need a running Julia server. Right now it barely works for sliders. Compiling real Julia to WASM is really hard and this will probably not go anywhere, but it's fun to try.
+Things baked in or being explored -- none production-ready, all subject to being ripped out:
+
+- **JETLS integration** -- Real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP, catching type errors as you write
+- **Runic.jl formatting** -- Auto-format cells on save
+- **WebAssembly export** -- Compiling notebook interactivity to WASM via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl) so exported notebooks don't need a running Julia server. Right now it barely works for sliders. Compiling real Julia to WASM is really hard and this will probably not go anywhere, but it's fun to try.
+- etc.
 
 ## License
 
