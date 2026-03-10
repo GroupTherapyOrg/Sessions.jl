@@ -899,8 +899,12 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     frame = ow.current_frame
     gfx = Tachikoma.GRAPHICS_PROTOCOL[]
     if pixels_changed || needs_rebuild
+        # Count non-black pixels for diagnostics
+        nblack = count(p -> p == Tachikoma.ColorRGB(0,0,0), pi.pixels)
+        ntotal = length(pi.pixels)
         dlog("image", "render path"; gfx=gfx, has_frame=frame !== nothing,
-            pi_w=pi.pixel_w, pi_h=pi.pixel_h, rect_w=rect.width, rect_h=rect.height)
+            pi_w=pi.pixel_w, pi_h=pi.pixel_h, rect_w=rect.width, rect_h=rect.height,
+            black_pct=round(100 * nblack / max(1, ntotal), digits=1))
     end
     if frame !== nothing && gfx != Tachikoma.gfx_none
         if gfx == Tachikoma.gfx_kitty
@@ -935,7 +939,12 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
             end
         end
     else
+        # Braille fallback path — render pixel image as unicode braille dots
         Tachikoma.render(pi, rect, buf)
+        # Debug: show render path indicator in top-left corner
+        path_label = gfx == Tachikoma.gfx_none ? "[braille]" : "[gfx:$(gfx)]"
+        Tachikoma.set_string!(buf, rect.x, rect.y, path_label,
+            Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG))
     end
 end
 
