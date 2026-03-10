@@ -29,13 +29,13 @@ end
 # CellToggle @island — wasm-compiled code visibility toggle
 # =============================================================================
 
-@island function CellToggle()
-    is_open, set_is_open = create_signal(Int32(1))
+@island function CellToggle(; initial_open=1)
+    is_open, set_is_open = create_signal(initial_open)
 
     Div(:class => "flex items-start gap-2",
-        # Left gutter — eye icon, vertically centered with code block
+        # Left gutter — eye icon toggle
         Div(:class => "flex items-center pt-4 shrink-0",
-            Therapy.Button(:class => "group/eye p-1 rounded hover:bg-warm-800/50 transition-colors cursor-pointer",
+            Therapy.Button(:class => "group/eye p-1 rounded hover:bg-warm-800/50 transition-colors cursor-pointer opacity-0 group-hover/cell:opacity-100",
                 :on_click => () -> begin
                     if is_open() == Int32(1)
                         set_is_open(Int32(0))
@@ -43,16 +43,30 @@ end
                         set_is_open(Int32(1))
                     end
                 end,
-                # Eye icon (toggle visibility)
-                Svg(:class => "w-3.5 h-3.5 text-warm-500 group-hover/eye:text-warm-300 transition-colors",
-                    :viewBox => "0 0 24 24",
-                    :fill => "none",
-                    :stroke => "currentColor",
-                    :stroke_width => "2",
-                    :stroke_linecap => "round",
-                    :stroke_linejoin => "round",
-                    Path(:d => "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"),
-                    Circle(:cx => "12", :cy => "12", :r => "3")))),
+                # Stacked eye icons — closed eye always rendered, open eye layered on top via Show
+                Div(:class => "relative w-3.5 h-3.5",
+                    # Closed eye (always in DOM, visible when open eye is hidden)
+                    Svg(:class => "w-3.5 h-3.5 text-warm-600 group-hover/eye:text-warm-400 transition-colors",
+                        :viewBox => "0 0 24 24",
+                        :fill => "none",
+                        :stroke => "currentColor",
+                        :stroke_width => "2",
+                        :stroke_linecap => "round",
+                        :stroke_linejoin => "round",
+                        Path(:d => "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"),
+                        Path(:d => "M1 1L23 23")),
+                    # Open eye (layered on top, hidden when code is folded)
+                    Show(is_open) do
+                        Svg(:class => "absolute inset-0 w-3.5 h-3.5 text-warm-500 group-hover/eye:text-warm-300 transition-colors bg-warm-950",
+                            :viewBox => "0 0 24 24",
+                            :fill => "none",
+                            :stroke => "currentColor",
+                            :stroke_width => "2",
+                            :stroke_linecap => "round",
+                            :stroke_linejoin => "round",
+                            Path(:d => "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"),
+                            Circle(:cx => "12", :cy => "12", :r => "3"))
+                    end))),
         # Code block — takes remaining width, visibility controlled by signal
         Div(:class => "flex-1 min-w-0",
             Show(is_open) do
@@ -200,13 +214,7 @@ end
 function _render_cell(cell::Cell, index::Int, prerendered)
     cell.disabled && return nothing
     isempty(strip(cell.code)) && return nothing
-    code = strip(cell.code)
-
-    # Folded non-markdown cells → skip (hidden helper code)
-    if cell.folded && !_is_markdown_cell(code)
-        return nothing
-    end
-
+    # All cells (code + markdown) get CellToggle — initial state from cell.folded
     _render_code_cell(cell, index, prerendered)
 end
 
@@ -236,9 +244,16 @@ function _render_code_cell(cell::Cell, index::Int, prerendered)
         Span(:class => "absolute bottom-3 right-3 text-[10px] font-mono text-warm-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100",
             runtime_str))
 
-    push!(parts, CellToggle() do
-        code_block
-    end)
+    # Pass folded state to CellToggle island — determines initial visibility
+    if cell.folded
+        push!(parts, CellToggle(; initial_open=0) do
+            code_block
+        end)
+    else
+        push!(parts, CellToggle() do
+            code_block
+        end)
+    end
 
     # Stdout — indented to align with code block (past the gutter)
     if !isempty(output.stdout)
@@ -253,7 +268,7 @@ function _render_code_cell(cell::Cell, index::Int, prerendered)
         push!(parts, Div(:class => "mt-3 ml-7 pl-5", output_node))
     end
 
-    Div(:data_cell_id => string(cell.id), parts...)
+    Div(:data_cell_id => string(cell.id), :class => "group/cell", parts...)
 end
 
 """Render cell output based on output_type."""
