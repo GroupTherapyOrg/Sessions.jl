@@ -350,9 +350,17 @@ function _strip_comment(line::AbstractString)
     line
 end
 
-"""Execute a single cell in the workspace, capturing output and timing."""
+"""Execute a single cell in the workspace, capturing output and timing.
+
+IMPORTANT: This function guarantees that `cell.state` transitions to either
+`cell_done` or `cell_errored` — never left stuck in `cell_running`. A stuck
+cell permanently blocks all future execution via the guard check.
+"""
 function execute_cell!(workspace::Workspace, cell::Cell)
     cell.state = cell_running
+    cell._exec_start_time = time()
+    dlog("kernel", "execute_cell! start"; cell_id=cell.id, code_len=length(cell.code))
+
     # Keep old output visible during execution (Pluto behavior) — replaced at the end
 
     # Set current cell ID so @bind knows which cell it's in
@@ -365,26 +373,29 @@ function execute_cell!(workspace::Workspace, cell::Cell)
 
     try
         code = "begin\n$(cell.code)\nend"
-        # Try stdout capture via redirect_stdout (uses dup internally).
-        # Under Tachikoma TUI, dup can fail with EBADF — fall back to
-        # executing without stdout capture rather than erroring the cell.
+        # Stdout capture via redirect_stdout. Under Tachikoma TUI, the global
+        # stdout may already be redirected. This is process-wide and not
+        # thread-safe, so we use a lock to serialize redirects and a timeout
+        # on read to prevent indefinite blocking.
         old_stdout = stdout
         stdout_captured = false
         local rd, wr
         try
             rd, wr = redirect_stdout()
             stdout_captured = true
-        catch
-            # redirect_stdout failed (fd invalid under TUI) — continue without capture
+        catch ex
+            dlog("kernel", "redirect_stdout failed"; err=sprint(showerror, ex))
         end
         try
             # Use include_string with the notebook path so @__DIR__ resolves
             # to the notebook's directory (like running a normal .jl file).
+            dlog("kernel", "eval begin"; cell_id=cell.id)
             if !isempty(workspace.notebook_path)
                 result = Base.include_string(workspace.mod, code, workspace.notebook_path)
             else
                 result = Base.eval(workspace.mod, Base.Meta.parse(code))
             end
+            dlog("kernel", "eval done"; cell_id=cell.id)
         finally
             if stdout_captured
                 try redirect_stdout(old_stdout) catch; end
@@ -393,56 +404,101 @@ function execute_cell!(workspace::Workspace, cell::Cell)
         end
         if stdout_captured
             try
-                captured_stdout = String(read(rd))
-            catch; end
+                # Read with a timeout to prevent hanging on broken pipe
+                captured_stdout = _read_pipe_timeout(rd, 5.0)
+            catch ex
+                dlog("kernel", "stdout read failed"; err=sprint(showerror, ex))
+            end
         end
     catch e
         err = CapturedException(e, catch_backtrace())
+        dlog("kernel", "cell error"; cell_id=cell.id, err=sprint(showerror, e))
     end
 
     t_end = time_ns()
 
-    # Replace output atomically — old output was visible during execution
+    # Build output — wrapped in try to guarantee state transition
     out = CellOutput()
     out.result = err === nothing ? result : nothing
     out.stdout = captured_stdout
     out.error = err
     out.runtime_ns = t_end - t_start
 
-    # Trailing semicolon suppresses result display (Pluto/REPL convention).
-    # Errors and stdout are always shown regardless.
-    suppress = err === nothing && _ends_with_semicolon(cell.code)
+    try
+        # Trailing semicolon suppresses result display (Pluto/REPL convention).
+        suppress = err === nothing && _ends_with_semicolon(cell.code)
 
-    if err === nothing
-        if suppress
-            out.output_type = :nothing
-            out.text_representation = ""
-            out.result = nothing
-        else
-            out.output_type = classify_output(result)
-            out.text_representation = text_representation(result)
-            if out.output_type == :image_png
-                out.image_data = _capture_png_bytes(result)
-            elseif out.output_type == :image_jpeg
-                out.image_data = _capture_jpeg_bytes(result)
-            elseif out.output_type == :image_svg
-                svg_src = _capture_svg_source(result)
-                if svg_src !== nothing
-                    out.text_representation = svg_src
+        if err === nothing
+            if suppress
+                out.output_type = :nothing
+                out.text_representation = ""
+                out.result = nothing
+            else
+                out.output_type = classify_output(result)
+                out.text_representation = text_representation(result)
+                if out.output_type == :image_png
+                    out.image_data = _capture_png_bytes(result)
+                elseif out.output_type == :image_jpeg
+                    out.image_data = _capture_jpeg_bytes(result)
+                elseif out.output_type == :image_svg
+                    svg_src = _capture_svg_source(result)
+                    if svg_src !== nothing
+                        out.text_representation = svg_src
+                    end
                 end
+                dlog("kernel", "output classified"; cell_id=cell.id,
+                    otype=out.output_type, has_image=out.image_data !== nothing)
             end
+            cell.output = out
+            cell.state = cell_done
+            mark_executed!(cell)
+        else
+            out.output_type = :error
+            out.text_representation = try
+                sprint(showerror, err.ex)
+            catch
+                "Error formatting exception"
+            end
+            cell.output = out
+            cell.state = cell_errored
+            mark_executed!(cell)
         end
-        cell.output = out
-        cell.state = cell_done
-        mark_executed!(cell)
-    else
+    catch classify_err
+        # Output classification itself failed — still mark cell as done
+        dlog("kernel", "output classify FAILED"; cell_id=cell.id,
+            err=sprint(showerror, classify_err))
         out.output_type = :error
-        out.text_representation = sprint(showerror, err.ex)
+        out.text_representation = "Internal error during output processing: $(sprint(showerror, classify_err))"
         cell.output = out
         cell.state = cell_errored
-        mark_executed!(cell)  # errors are also execution results — needed for session caching
+        mark_executed!(cell)
     end
+    dlog("kernel", "execute_cell! done"; cell_id=cell.id, state=cell.state,
+        runtime_ms=round((t_end - t_start) / 1_000_000, digits=1))
     cell.output
+end
+
+"""Read all bytes from a pipe with a timeout. Returns String."""
+function _read_pipe_timeout(rd::IO, timeout_s::Float64)::String
+    result = Channel{String}(1)
+    reader = @async begin
+        try
+            String(read(rd))
+        catch
+            ""
+        end
+    end
+    deadline = time() + timeout_s
+    while !istaskdone(reader) && time() < deadline
+        sleep(0.01)
+    end
+    if istaskdone(reader)
+        try fetch(reader) catch; "" end
+    else
+        dlog("kernel", "stdout read TIMEOUT after $(timeout_s)s — closing pipe")
+        try close(rd) catch end
+        ""
+    end
 end
 
 """

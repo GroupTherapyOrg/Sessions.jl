@@ -378,19 +378,28 @@ function _render_repl_tab_bar!(panel::ReplPanel, x::Int, y::Int, w::Int, buf::Ta
         end
     end
 
-    # + button for new Julia tab
-    if cx + 3 <= max_x
+    # Separator before new-tab buttons
+    if cx + 2 <= max_x
         cx += 1
-        Tachikoma.set_string!(buf, cx, y, "+",
-            Tachikoma.Style(; fg=Theme.REPL_PROMPT_FG, bg=Theme.REPL_BG))
-        panel.plus_rect = Tachikoma.Rect(cx, y, 1, 1)
+        Tachikoma.set_string!(buf, cx, y, "│", sep_style)
+        cx += 1
     end
 
-    # $ button for new Shell tab
-    if cx + 3 <= max_x
-        cx += 2
-        Tachikoma.set_string!(buf, cx, y, "\$",
+    # [+ Julia] button
+    julia_label = " + Julia "
+    if cx + length(julia_label) + 1 <= max_x
+        Tachikoma.set_string!(buf, cx, y, julia_label,
+            Tachikoma.Style(; fg=Theme.REPL_PROMPT_FG, bg=Theme.REPL_BG))
+        panel.plus_rect = Tachikoma.Rect(cx, y, length(julia_label), 1)
+        cx += length(julia_label)
+    end
+
+    # [+ Shell] button
+    shell_label = " + Shell "
+    if cx + length(shell_label) + 1 <= max_x
+        cx += 1
+        Tachikoma.set_string!(buf, cx, y, shell_label,
             Tachikoma.Style(; fg=Theme.REPL_SHELL_FG, bg=Theme.REPL_BG))
-        panel.shell_rect = Tachikoma.Rect(cx, y, 1, 1)
+        panel.shell_rect = Tachikoma.Rect(cx, y, length(shell_label), 1)
     end
 end

@@ -128,6 +128,9 @@ mutable struct SessionsApp <: Tachikoma.Model
     repl_panel::ReplPanel
     repl_open::Bool                       # whether REPL panel is visible
     repl_rect::Tachikoma.Rect            # cached for mouse hit testing
+    repl_split_pct::Int                   # % of vertical space for REPL (draggable)
+    repl_divider_y::Int                   # y coord of the resize divider (for drag detection)
+    repl_resizing::Bool                   # true while dragging the divider
     # JETLS / Diagnostics
     lsp::LspClient                        # LSP client for JETLS
     diagnostics_panel::DiagnosticsPanel   # diagnostics sidebar panel
@@ -358,6 +361,7 @@ end
 
 """Quit the app, cleaning up all resources."""
 function _quit_app!(app::SessionsApp)
+    dlog("app", "quit")
     for tab in app.tabs
         if tab.watcher !== nothing
             stop_watching!(tab.watcher)
@@ -369,6 +373,7 @@ function _quit_app!(app::SessionsApp)
     stop_lsp!(app.lsp)
     # Reset mouse pointer to default before exit
     isa(stdout, Base.TTY) && print(stdout, _POINTER_DEFAULT)
+    _debug_close!()
     app.quit = true
 end
 
@@ -487,7 +492,7 @@ function SessionsApp(nb::Notebook)
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
-        ReplPanel(), false, Tachikoma.Rect(),
+        ReplPanel(), false, Tachikoma.Rect(), Theme.REPL_PCT, 0, false,
         LspClient(; enabled=true), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
@@ -514,7 +519,7 @@ function SessionsApp(fev::FileEditorView)
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
         false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
-        ReplPanel(), false, Tachikoma.Rect(),
+        ReplPanel(), false, Tachikoma.Rect(), Theme.REPL_PCT, 0, false,
         LspClient(; enabled=true), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
         Dict{UUID, CellDiagnostics}(), 0.0,
         nothing, 0, 0, 0.0, false,
@@ -551,6 +556,9 @@ end
 Also loads CommonMark.jl extension for markdown rendering.
 Starts file watcher if notebook has a valid path."""
 function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
+    _debug_init!()
+    dlog("app", "init! start"; gfx=Tachikoma.GRAPHICS_PROTOCOL[],
+        terminal_size=Tachikoma.terminal_size())
     print(t.io, "\e[?1003h")  # upgrade to any-event tracking
     try; Tachikoma.enable_markdown(); catch; end  # load CommonMark extension
     _start_watcher!(app)
@@ -758,17 +766,20 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
 
     # ── REPL panel layout (calculate rects, but render AFTER notebook) ──
     if app.repl_open
-        repl_h = max(5, div(editor_rect.height * Theme.REPL_PCT, 100))
-        main_h = max(3, editor_rect.height - repl_h - 1)  # -1 for gap
+        repl_h = max(5, div(editor_rect.height * app.repl_split_pct, 100))
+        main_h = max(3, editor_rect.height - repl_h - 1)  # -1 for divider
         main_rect = Tachikoma.Rect(editor_rect.x, editor_rect.y,
             editor_rect.width, main_h)
-        repl_rect = Tachikoma.Rect(editor_rect.x, editor_rect.y + main_h + 1,
+        divider_y = editor_rect.y + main_h
+        repl_rect = Tachikoma.Rect(editor_rect.x, divider_y + 1,
             editor_rect.width, repl_h)
         app.repl_rect = repl_rect
+        app.repl_divider_y = divider_y
         app.repl_panel.focused = (app.mode == :repl)
         editor_rect = main_rect
     else
         app.repl_rect = Tachikoma.Rect()
+        app.repl_divider_y = 0
     end
 
     # ── Render editor (notebook or file) ──
@@ -865,8 +876,20 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
             tab_bar_rect, buf)
     end
 
-    # ── Render REPL panel AFTER overflow cleanup (so it's never overwritten) ──
-    if app.repl_open
+    # ── Render REPL divider and panel AFTER overflow cleanup ──
+    if app.repl_open && app.repl_divider_y > 0
+        # Draggable divider line
+        div_fg = app.repl_resizing ? Theme.REPL_INDICATOR : Theme.BORDER_DIM
+        div_style = Tachikoma.Style(; fg=div_fg, bg=Theme.BG)
+        rr = app.repl_rect
+        for cx in rr.x:(rr.x + rr.width - 1)
+            Tachikoma.set_char!(buf, cx, app.repl_divider_y, '─', div_style)
+        end
+        # Drag handle in center
+        mid = rr.x + div(rr.width, 2)
+        handle_style = Tachikoma.Style(; fg=app.repl_resizing ? Theme.REPL_INDICATOR : Theme.FG_MUTED, bg=Theme.BG)
+        Tachikoma.set_string!(buf, mid - 2, app.repl_divider_y, "┄╌╌┄", handle_style)
+
         Tachikoma.render(app.repl_panel, app.repl_rect, buf)
     end
 
@@ -1641,6 +1664,28 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 return
             end
         end
+    end
+
+    # ── REPL divider drag (resize) ──
+    if app.repl_resizing
+        if evt.action == Tachikoma.mouse_release
+            app.repl_resizing = false
+            return
+        elseif evt.action == Tachikoma.mouse_drag
+            # Compute new split percentage from mouse y
+            rr = app.repl_rect
+            total_h = (rr.y + rr.height) - app.screen_area.y
+            repl_h = (rr.y + rr.height) - evt.y
+            new_pct = clamp(div(repl_h * 100, max(1, total_h)), 15, 70)
+            app.repl_split_pct = new_pct
+            return
+        end
+    end
+    if app.repl_open && app.repl_divider_y > 0 &&
+       evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press &&
+       abs(evt.y - app.repl_divider_y) <= 1
+        app.repl_resizing = true
+        return
     end
 
     # ── REPL panel clicks ──
@@ -2570,6 +2615,9 @@ function run_focused_cell_async!(app::SessionsApp)
     cell === nothing && return
 
     # Guard: skip if any cell is already executing (prevents concurrent workspace access)
+    # But recover stuck cells after 5 minutes to prevent permanent lockout
+    stuck_recovered = _recover_stuck_cells!(app.nb)
+    stuck_recovered > 0 && dlog("app", "recovered $stuck_recovered stuck cells")
     if any(c -> c.state == cell_running || c.state == cell_queued, values(app.nb.cells))
         app.message = "Already executing…"
         return
@@ -2627,7 +2675,8 @@ end
 
 """Execute all cells in the notebook in the background."""
 function run_all_cells_async!(app::SessionsApp)
-    # Guard: skip if already executing
+    # Guard: skip if already executing (with stuck-cell recovery)
+    _recover_stuck_cells!(app.nb)
     if any(c -> c.state == cell_running || c.state == cell_queued, values(app.nb.cells))
         app.message = "Already executing…"
         return
@@ -2658,6 +2707,32 @@ function run_all_cells!(app::SessionsApp)
     execute_notebook!(app.nb; workspace=app.workspace)
     save_session!(app.nb)
     app.message = "Ran all cells"
+end
+
+"""Recover cells stuck in cell_running for more than 5 minutes.
+Returns the count of recovered cells."""
+function _recover_stuck_cells!(nb::Notebook)::Int
+    now = time()
+    timeout = 300.0  # 5 minutes
+    count = 0
+    for cell in values(nb.cells)
+        if cell.state == cell_running && cell._exec_start_time > 0.0
+            elapsed = now - cell._exec_start_time
+            if elapsed > timeout
+                dlog("app", "STUCK CELL recovered after $(round(elapsed, digits=1))s";
+                    cell_id=cell.id)
+                cell.state = cell_errored
+                cell.output = CellOutput()
+                cell.output.output_type = :error
+                cell.output.text_representation =
+                    "Cell execution timed out ($(round(Int, elapsed))s). " *
+                    "This may indicate a hang in stdout capture or cell code."
+                cell._exec_start_time = 0.0
+                count += 1
+            end
+        end
+    end
+    count
 end
 
 """Check if any background tasks are running."""

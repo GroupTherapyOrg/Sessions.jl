@@ -15,6 +15,9 @@ module Sessions
 using UUIDs
 import Tachikoma
 
+# Debug logging (enable with SESSIONS_DEBUG=1)
+include("debug_log.jl")
+
 # Layer 1: Engine
 include("types.jl")
 include("format.jl")

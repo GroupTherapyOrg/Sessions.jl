@@ -31,10 +31,11 @@ mutable struct Cell
     folded::Bool              # Hidden/folded in UI (╟─ vs ╠═ in Pluto format)
     disabled::Bool            # Disabled cells are skipped during execution
     produced_by_hash::String  # Hash of source code that produced the current output ("" = never executed)
+    _exec_start_time::Float64 # monotonic time() when execution started (for stuck-cell detection)
 end
 
 function Cell(; id::UUID=uuid4(), code::String="", folded::Bool=false, disabled::Bool=false)
-    Cell(id, code, CellOutput(), cell_idle, folded, disabled, "")
+    Cell(id, code, CellOutput(), cell_idle, folded, disabled, "", 0.0)
 end
 
 Cell(code::String) = Cell(; code)
