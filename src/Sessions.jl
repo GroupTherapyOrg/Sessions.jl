@@ -133,7 +133,7 @@ end
 function __init__()
     # Re-register islands into Therapy's ISLAND_REGISTRY at runtime
     # (precompilation doesn't persist cross-module Dict mutations)
-    for name in (:CellToggle, :WebSlider)
+    for name in (:CellToggle, :WebSlider, :BoundValue)
         if isdefined(@__MODULE__, name)
             island = getfield(@__MODULE__, name)
             if island isa Therapy.IslandDef

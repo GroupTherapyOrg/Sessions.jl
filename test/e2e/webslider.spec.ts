@@ -110,118 +110,122 @@ test.describe('WebSlider island — interactive @bind slider', () => {
   });
 });
 
-test.describe('WebSlider @bind reactivity — downstream cell updates', () => {
+test.describe('BoundValue — live WASM reactive cell (no pre-rendering)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(NOTEBOOK_URL);
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(3000);
   });
 
-  test('pre-rendered HTML galleries are embedded in the page', async ({ page }) => {
-    // Two dependent cells should have gallery containers
-    const galleries = page.locator('.notebook-html-gallery[data-slider-html]');
-    const count = await galleries.count();
-    expect(count).toBeGreaterThanOrEqual(2); // n cell + planets[1:n] cell
+  test('n cell renders as BoundValue island, not pre-rendered gallery', async ({ page }) => {
+    // BoundValue island should exist for the "n" cell
+    const boundValue = page.locator('[data-bound-to] therapy-island[data-component="boundvalue"]');
+    await expect(boundValue).toBeAttached({ timeout: 5000 });
+
+    // Should NOT be a pre-rendered gallery (only the table cell uses gallery)
+    const galleries = page.locator('.notebook-html-gallery');
+    expect(await galleries.count()).toBe(1); // only planets[1:n] table
   });
 
-  test('each gallery has 8 pre-rendered variants', async ({ page }) => {
-    const galleries = page.locator('.notebook-html-gallery[data-slider-html]');
-    const count = await galleries.count();
+  test('BoundValue island hydrates and shows initial value', async ({ page }) => {
+    const island = page.locator('therapy-island[data-component="boundvalue"]').first();
+    await expect(island).toBeAttached({ timeout: 5000 });
 
-    for (let i = 0; i < count; i++) {
-      const gallery = galleries.nth(i);
-      const variants = gallery.locator('> [data-slider-value]');
-      expect(await variants.count()).toBe(8);
-    }
+    // Wait for hydration
+    const hydrated = page.locator('therapy-island[data-component="boundvalue"][data-hydrated]');
+    await expect(hydrated.first()).toBeAttached({ timeout: 10000 });
+
+    // Should show default value 8
+    const span = island.locator('span').first();
+    await expect(span).toHaveText('8', { timeout: 3000 });
   });
 
-  test('default value variant is visible, others hidden', async ({ page }) => {
-    const gallery = page.locator('.notebook-html-gallery').first();
-    const visible = gallery.locator('> [data-slider-value]:not([style*="display:none"])');
-    const hidden = gallery.locator('> [data-slider-value][style*="display:none"]');
-
-    expect(await visible.count()).toBe(1);
-    expect(await hidden.count()).toBe(7);
-
-    // Default variant should be value 8
-    const visibleValue = await visible.first().getAttribute('data-slider-value');
-    expect(visibleValue).toBe('8');
-  });
-
-  test('moving slider swaps visible variant for n cell', async ({ page }) => {
+  test('moving slider updates BoundValue via WASM signal (no gallery swap)', async ({ page }) => {
     const slider = page.locator('[data-bind-slider-id] therapy-island input[type="range"]').first();
     await expect(slider).toBeAttached({ timeout: 5000 });
 
-    const galleries = page.locator('.notebook-html-gallery[data-slider-html]');
+    // Wait for BoundValue hydration
+    const boundIsland = page.locator('therapy-island[data-component="boundvalue"][data-hydrated]');
+    await expect(boundIsland.first()).toBeAttached({ timeout: 10000 });
 
-    // Move slider to 3
+    const valueSpan = boundIsland.first().locator('span').first();
+    await expect(valueSpan).toHaveText('8', { timeout: 3000 });
+
+    // Move slider — BoundValue updates via WASM, not gallery swap
     await slider.fill('3');
-    await page.waitForTimeout(300);
-
-    // Check that variant "3" is now visible in at least one gallery
-    let found = false;
-    const count = await galleries.count();
-    for (let i = 0; i < count; i++) {
-      const gallery = galleries.nth(i);
-      const variant3 = gallery.locator('> [data-slider-value="3"]');
-      const isVisible = await variant3.evaluate(el => el.style.display !== 'none');
-      if (isVisible) {
-        found = true;
-        break;
-      }
-    }
-    expect(found).toBe(true);
+    await expect(valueSpan).toHaveText('3', { timeout: 3000 });
   });
 
-  test('moving slider hides old variant and shows new one', async ({ page }) => {
+  test('BoundValue responds to multiple slider changes', async ({ page }) => {
+    const slider = page.locator('[data-bind-slider-id] therapy-island input[type="range"]').first();
+    const boundIsland = page.locator('therapy-island[data-component="boundvalue"][data-hydrated]');
+    await expect(boundIsland.first()).toBeAttached({ timeout: 10000 });
+    const valueSpan = boundIsland.first().locator('span').first();
+
+    await slider.fill('1');
+    await expect(valueSpan).toHaveText('1', { timeout: 3000 });
+
+    await slider.fill('5');
+    await expect(valueSpan).toHaveText('5', { timeout: 3000 });
+
+    await slider.fill('8');
+    await expect(valueSpan).toHaveText('8', { timeout: 3000 });
+  });
+
+  test('boundvalue.wasm file is accessible', async ({ page }) => {
+    const response = await page.request.get(`${BASE_URL}/boundvalue.wasm`);
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toBe('application/wasm');
+  });
+});
+
+test.describe('Pre-rendered gallery — planets table (fallback for complex outputs)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(NOTEBOOK_URL);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(3000);
+  });
+
+  test('planets table uses pre-rendered gallery with 8 variants', async ({ page }) => {
+    const gallery = page.locator('.notebook-html-gallery:has(table)');
+    await expect(gallery).toBeAttached({ timeout: 3000 });
+
+    const variants = gallery.locator('> [data-slider-value]');
+    expect(await variants.count()).toBe(8);
+  });
+
+  test('default table shows 8 rows, others hidden', async ({ page }) => {
+    const gallery = page.locator('.notebook-html-gallery:has(table)');
+    const visible = gallery.locator('> [data-slider-value="8"]');
+    const visibleStyle = await visible.evaluate(el => el.style.display);
+    expect(visibleStyle).not.toBe('none');
+
+    const hidden = gallery.locator('> [data-slider-value="1"]');
+    expect(await hidden.evaluate(el => el.style.display)).toBe('none');
+  });
+
+  test('moving slider swaps planets table', async ({ page }) => {
     const slider = page.locator('[data-bind-slider-id] therapy-island input[type="range"]').first();
     await expect(slider).toBeAttached({ timeout: 5000 });
 
-    const gallery = page.locator('.notebook-html-gallery').first();
+    const gallery = page.locator('.notebook-html-gallery:has(table)');
 
-    // Initially value 8 visible
-    const variant8 = gallery.locator('> [data-slider-value="8"]');
-    const initial8 = await variant8.evaluate(el => el.style.display);
-    expect(initial8).not.toBe('none');
-
-    // Move to 3
     await slider.fill('3');
     await page.waitForTimeout(300);
 
-    // Value 8 should now be hidden, value 3 visible
+    // 3-row table should be visible
     const variant3 = gallery.locator('> [data-slider-value="3"]');
-    expect(await variant8.evaluate(el => el.style.display)).toBe('none');
     expect(await variant3.evaluate(el => el.style.display)).not.toBe('none');
-  });
+    expect(await variant3.locator('tbody tr').count()).toBe(3);
 
-  test('planets table updates when slider changes', async ({ page }) => {
-    const slider = page.locator('[data-bind-slider-id] therapy-island input[type="range"]').first();
-    await expect(slider).toBeAttached({ timeout: 5000 });
-
-    // Find the table gallery (the one containing <table> elements)
-    const tableGallery = page.locator('.notebook-html-gallery:has(table)');
-    await expect(tableGallery).toBeAttached({ timeout: 3000 });
-
-    // Default: 8 planets → 8 data rows
-    const defaultVariant = tableGallery.locator('> [data-slider-value="8"]');
-    const defaultRows = defaultVariant.locator('tbody tr');
-    expect(await defaultRows.count()).toBe(8);
-
-    // Move to 3 → should show 3 data rows
-    await slider.fill('3');
-    await page.waitForTimeout(300);
-
-    const variant3 = tableGallery.locator('> [data-slider-value="3"]');
-    const variant3Rows = variant3.locator('tbody tr');
-    expect(await variant3.getAttribute('style')).not.toContain('display:none');
-    expect(await variant3Rows.count()).toBe(3);
+    // 8-row table should be hidden
+    const variant8 = gallery.locator('> [data-slider-value="8"]');
+    expect(await variant8.evaluate(el => el.style.display)).toBe('none');
   });
 
   test('bond container has data-bind-var and data-bind-slider-id', async ({ page }) => {
     const bondContainer = page.locator('[data-bind-var="n"]');
     await expect(bondContainer).toBeAttached({ timeout: 3000 });
-
-    const sliderId = await bondContainer.getAttribute('data-bind-slider-id');
-    expect(sliderId).toBeTruthy();
+    expect(await bondContainer.getAttribute('data-bind-slider-id')).toBeTruthy();
   });
 });

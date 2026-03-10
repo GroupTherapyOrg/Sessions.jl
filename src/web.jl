@@ -96,6 +96,28 @@ end
 end
 
 # =============================================================================
+# BoundValue @island — live WASM display for a bound variable
+#
+# First step toward true WASM-compiled notebook cells: instead of pre-rendering
+# all slider values at build time, the value updates live via a WASM signal.
+# A hidden input acts as the bridge — the interaction script dispatches events
+# to it, and the WASM handler updates the signal.
+#
+# Future: replace the hidden-input bridge with direct cross-island signal
+# sharing or compile the entire cell logic to WASM.
+# =============================================================================
+
+@island function BoundValue(; value=0)
+    current, set_current = create_signal(value)
+
+    Div(:class => "inline-flex items-baseline",
+        Input(:type => "hidden", :value => string(value),
+            :on_input => () -> set_current(unsafe_trunc(Int32, get_target_value_f64()))),
+        Span(:class => "text-sm font-mono text-warm-600 dark:text-warm-500",
+            current))
+end
+
+# =============================================================================
 # Julia Syntax Highlighting (build-time tokenizer)
 # =============================================================================
 
@@ -348,6 +370,15 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
         return _render_image_output(cell, prerendered)
 
     elseif output.output_type == :text
+        # Live WASM binding for trivial numeric cells downstream of a slider
+        gallery = get(prerendered, cell.id, nothing)
+        if gallery !== nothing && result isa Integer
+            slider_id = string(gallery.slider_cell_id)
+            return Div(:class => "notebook-bound-value",
+                :data_bound_to => slider_id,
+                BoundValue(value=Int(result)))
+        end
+        # Pre-rendered gallery fallback for non-numeric text
         gallery_node = _render_html_gallery(cell, prerendered)
         gallery_node !== nothing && return gallery_node
         text = output.text_representation
@@ -504,6 +535,14 @@ function _slider_interaction_script()
       // Swap pre-rendered HTML variants (text, dataframe, etc.)
       document.querySelectorAll('[data-slider-html="' + sliderId + '"] > [data-slider-value]').forEach(function(div) {
         div.style.display = div.dataset.sliderValue === val ? 'block' : 'none';
+      });
+
+      // Live WASM bridge: dispatch input event to BoundValue islands
+      // The hidden input inside each BoundValue island receives the value,
+      // triggering the WASM handler which updates the signal → DOM binding.
+      document.querySelectorAll('[data-bound-to="' + sliderId + '"] therapy-island input[type="hidden"]').forEach(function(hidden) {
+        hidden.value = val;
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
       });
     });
   });
