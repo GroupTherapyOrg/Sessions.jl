@@ -76,6 +76,25 @@ end
 end
 
 # =============================================================================
+# WebSlider @island — wasm-compiled interactive slider for @bind
+# =============================================================================
+
+@island function WebSlider(; min_val=0, max_val=100, value=50, step_val=1)
+    current, set_current = create_signal(value)
+
+    Div(:class => "flex items-center gap-3",
+        Input(:type => "range",
+            :min => string(min_val),
+            :max => string(max_val),
+            :value => string(value),
+            :step => string(step_val),
+            :class => "w-48 accent-accent-600 cursor-pointer",
+            :on_input => () -> set_current(unsafe_trunc(Int32, get_target_value_f64()))),
+        Span(:class => "text-sm font-mono text-warm-600 dark:text-warm-400 min-w-[3ch] text-right",
+            current))
+end
+
+# =============================================================================
 # Julia Syntax Highlighting (build-time tokenizer)
 # =============================================================================
 
@@ -144,7 +163,7 @@ function _highlight_julia(code::String)
             push!(parts, Span(:class => cls, text))
         end
     end
-    Fragment(parts...)
+    Fragment(Any[parts...])
 end
 
 # =============================================================================
@@ -369,24 +388,16 @@ function _render_bond_output(result, cell::Cell, prerendered)
         var_name = result.defines
 
         if widget isa Slider
-            slider_id = string(cell.id)
             vals = widget.values
-            min_val = first(vals)
-            max_val = last(vals)
-            step_val = length(vals) > 1 ? vals[2] - vals[1] : 1
+            min_v = Int(first(vals))
+            max_v = Int(last(vals))
+            step_v = length(vals) > 1 ? Int(vals[2] - vals[1]) : 1
+            def_v = Int(widget.default)
 
-            return Div(:class => "notebook-slider",
-                Span(:class => "slider-label", string(var_name)),
-                Input(:type => "range",
-                    :min => string(min_val),
-                    :max => string(max_val),
-                    :value => string(widget.default),
-                    :step => string(step_val),
-                    :data_notebook_slider => slider_id,
-                    :data_slider_var => string(var_name)),
-                Span(:class => "slider-value",
-                    :data_slider_display => slider_id,
-                    string(widget.default)))
+            return Div(:class => "notebook-slider flex items-center gap-3 py-2",
+                Span(:class => "text-sm font-mono text-warm-500 dark:text-warm-400",
+                    string(var_name), " = "),
+                WebSlider(min_val=min_v, max_val=max_v, value=def_v, step_val=step_v))
         end
 
         widget_type = nameof(typeof(widget))

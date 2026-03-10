@@ -13,15 +13,31 @@ This notebook demonstrates working with tabular data using Julia's built-in type
 
 # ╔═╡ 22334455-6677-8899-aabb-ccddeeff0011
 planets = [
-	(name="Mercury", diameter_km=4879, distance_au=0.39, moons=0, has_rings=false),
-	(name="Venus", diameter_km=12104, distance_au=0.72, moons=0, has_rings=false),
-	(name="Earth", diameter_km=12756, distance_au=1.00, moons=1, has_rings=false),
-	(name="Mars", diameter_km=6792, distance_au=1.52, moons=2, has_rings=false),
-	(name="Jupiter", diameter_km=142984, distance_au=5.20, moons=95, has_rings=true),
-	(name="Saturn", diameter_km=120536, distance_au=9.54, moons=146, has_rings=true),
-	(name="Uranus", diameter_km=51118, distance_au=19.19, moons=28, has_rings=true),
-	(name="Neptune", diameter_km=49528, distance_au=30.07, moons=16, has_rings=true),
+    (name="Mercury", diameter_km=4879, distance_au=0.39, moons=0, has_rings=false),
+    (name="Venus", diameter_km=12104, distance_au=0.72, moons=0, has_rings=false),
+    (name="Earth", diameter_km=12756, distance_au=1.00, moons=1, has_rings=false),
+    (name="Mars", diameter_km=6792, distance_au=1.52, moons=2, has_rings=false),
+    (name="Jupiter", diameter_km=142984, distance_au=5.20, moons=95, has_rings=true),
+    (name="Saturn", diameter_km=120536, distance_au=9.54, moons=146, has_rings=true),
+    (name="Uranus", diameter_km=51118, distance_au=19.19, moons=28, has_rings=true),
+    (name="Neptune", diameter_km=49528, distance_au=30.07, moons=16, has_rings=true),
 ]
+
+# ╔═╡ aabb0011-2233-4455-6677-8899aabbcc01
+md"""
+## Interactive Slider
+
+Move the slider to select how many planets to show:
+"""
+
+# ╔═╡ aabb0011-2233-4455-6677-8899aabbcc02
+@bind n Slider(1:8, default=8)
+
+# ╔═╡ 71db0b27-9617-425e-8f2a-42295ba69b11
+n
+
+# ╔═╡ aabb0011-2233-4455-6677-8899aabbcc03
+planets[1:n]
 
 # ╔═╡ 33445566-7788-99aa-bbcc-ddeeff001122
 md"""
@@ -50,6 +66,10 @@ sorted_by_size = sort(planets, by=p -> p.diameter_km, rev=true)
 # ╠═00000002-0000-0000-0000-000000000001
 # ╟─11223344-5566-7788-99aa-bbccddeeff00
 # ╠═22334455-6677-8899-aabb-ccddeeff0011
+# ╟─aabb0011-2233-4455-6677-8899aabbcc01
+# ╠═aabb0011-2233-4455-6677-8899aabbcc02
+# ╠═71db0b27-9617-425e-8f2a-42295ba69b11
+# ╠═aabb0011-2233-4455-6677-8899aabbcc03
 # ╟─33445566-7788-99aa-bbcc-ddeeff001122
 # ╠═44556677-8899-aabb-ccdd-eeff00112233
 # ╠═55667788-99aa-bbcc-ddee-ff0011223344

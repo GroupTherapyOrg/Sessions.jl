@@ -131,10 +131,15 @@ end
 # Must live in __init__ because Julia 1.12 forbids method overwriting
 # during precompilation.
 function __init__()
-    # Re-register CellToggle island into Therapy's ISLAND_REGISTRY at runtime
+    # Re-register islands into Therapy's ISLAND_REGISTRY at runtime
     # (precompilation doesn't persist cross-module Dict mutations)
-    if isdefined(@__MODULE__, :CellToggle) && CellToggle isa Therapy.IslandDef
-        Therapy.ISLAND_REGISTRY[CellToggle.name] = CellToggle
+    for name in (:CellToggle, :WebSlider)
+        if isdefined(@__MODULE__, name)
+            island = getfield(@__MODULE__, name)
+            if island isa Therapy.IslandDef
+                Therapy.ISLAND_REGISTRY[island.name] = island
+            end
+        end
     end
 
     # Patch read_event — convert Ctrl+C (byte 0x03) from :ctrl_c to :ctrl+'c'
