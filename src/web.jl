@@ -12,10 +12,10 @@ import Base64
 # =============================================================================
 
 """
-Pre-rendered gallery for a plot cell driven by a slider.
+Pre-rendered variants for a cell driven by a slider.
 
-Used by `execute_notebook_for_web` to capture images/Plotly data
-for each slider value, enabling pre-rendered interactive galleries.
+Used by `execute_notebook_for_web` to capture output variants
+for each slider value, enabling client-side switching without server roundtrips.
 """
 struct PrerenderedGallery
     slider_cell_id::UUID
@@ -23,6 +23,7 @@ struct PrerenderedGallery
     slider::Slider
     images::Dict{Any, Vector{UInt8}}    # slider_value → PNG bytes (fallback)
     plotly_data::Dict{Any, String}      # slider_value → Plotly JSON string
+    html_variants::Dict{Any, String}    # slider_value → rendered HTML string (text/dataframe/etc.)
 end
 
 # =============================================================================
@@ -285,6 +286,35 @@ function _render_code_cell(cell::Cell, index::Int, prerendered)
     Div(:data_cell_id => string(cell.id), :class => "group/cell", parts...)
 end
 
+"""
+Render pre-rendered HTML variants for a slider-dependent cell.
+
+Returns a container with all slider value variants embedded as hidden/shown divs.
+The interaction script toggles visibility client-side when the slider moves.
+"""
+function _render_html_gallery(cell::Cell, prerendered)
+    gallery = get(prerendered, cell.id, nothing)
+    gallery === nothing && return nothing
+    isempty(gallery.html_variants) && return nothing
+
+    slider_id = string(gallery.slider_cell_id)
+    variant_divs = []
+    for val in gallery.slider.values
+        html_str = get(gallery.html_variants, val, nothing)
+        html_str === nothing && continue
+        is_default = val == gallery.slider.default
+        push!(variant_divs,
+            Div(:data_slider_value => string(val),
+                :style => is_default ? "display:block" : "display:none",
+                RawHtml(html_str)))
+    end
+    isempty(variant_divs) && return nothing
+
+    Div(:class => "notebook-html-gallery",
+        :data_slider_html => slider_id,
+        variant_divs...)
+end
+
 """Render cell output based on output_type."""
 function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}())
     output = cell.output
@@ -304,6 +334,8 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
                 Code(err_msg)))
 
     elseif output.output_type == :dataframe
+        gallery_node = _render_html_gallery(cell, prerendered)
+        gallery_node !== nothing && return gallery_node
         return _render_table_output(result)
 
     elseif output.output_type == :bond
@@ -316,6 +348,8 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
         return _render_image_output(cell, prerendered)
 
     elseif output.output_type == :text
+        gallery_node = _render_html_gallery(cell, prerendered)
+        gallery_node !== nothing && return gallery_node
         text = output.text_representation
         isempty(text) && return nothing
         return Pre(:class => "text-sm font-mono text-warm-600 dark:text-warm-500 whitespace-pre-wrap",
@@ -394,7 +428,10 @@ function _render_bond_output(result, cell::Cell, prerendered)
             step_v = length(vals) > 1 ? Int(vals[2] - vals[1]) : 1
             def_v = Int(widget.default)
 
+            slider_id = string(cell.id)
             return Div(:class => "notebook-slider flex items-center gap-3 py-2",
+                :data_bind_var => string(var_name),
+                :data_bind_slider_id => slider_id,
                 Span(:class => "text-sm font-mono text-warm-500 dark:text-warm-400",
                     string(var_name), " = "),
                 WebSlider(min_val=min_v, max_val=max_v, value=def_v, step_val=step_v))
@@ -427,6 +464,7 @@ end
 function _slider_interaction_script()
     RawHtml("""<script>
 (function() {
+  // Initialize Plotly datasets
   document.querySelectorAll('[data-plotly-plot]').forEach(function(el) {
     var plotId = el.id;
     var def = el.dataset.plotlyDefault;
@@ -441,19 +479,31 @@ function _slider_interaction_script()
       Plotly.newPlot(el, d.data, d.layout, {responsive:true});
     }
   });
-  document.querySelectorAll('[data-notebook-slider]').forEach(function(slider) {
-    slider.addEventListener('input', function() {
-      var id = slider.dataset.notebookSlider;
-      var val = slider.value;
-      var display = document.querySelector('[data-slider-display="' + id + '"]');
-      if (display) display.textContent = val;
-      var plotEl = document.querySelector('[data-plotly-plot="' + id + '"]');
-      if (plotEl && plotEl._plotlyDatasets && plotEl._plotlyDatasets[val] && window.Plotly) {
-        var d = plotEl._plotlyDatasets[val];
-        Plotly.react(plotEl, d.data, d.layout);
-      }
-      document.querySelectorAll('[data-slider-images="' + id + '"] img').forEach(function(img) {
+
+  // Bind slider interactions — works with WASM island sliders
+  document.querySelectorAll('[data-bind-slider-id]').forEach(function(bondEl) {
+    var sliderId = bondEl.dataset.bindSliderId;
+    var rangeInput = bondEl.querySelector('therapy-island input[type="range"]');
+    if (!rangeInput) rangeInput = bondEl.querySelector('input[type="range"]');
+    if (!rangeInput) return;
+
+    rangeInput.addEventListener('input', function() {
+      var val = rangeInput.value;
+
+      // Swap image galleries
+      document.querySelectorAll('[data-slider-images="' + sliderId + '"] img').forEach(function(img) {
         img.style.display = img.dataset.sliderValue === val ? 'block' : 'none';
+      });
+
+      // Swap Plotly plots
+      var plotEl = document.querySelector('[data-plotly-plot="' + sliderId + '"]');
+      if (plotEl && plotEl._plotlyDatasets && plotEl._plotlyDatasets[val] && window.Plotly) {
+        Plotly.react(plotEl, plotEl._plotlyDatasets[val].data, plotEl._plotlyDatasets[val].layout);
+      }
+
+      // Swap pre-rendered HTML variants (text, dataframe, etc.)
+      document.querySelectorAll('[data-slider-html="' + sliderId + '"] > [data-slider-value]').forEach(function(div) {
+        div.style.display = div.dataset.sliderValue === val ? 'block' : 'none';
       });
     });
   });
@@ -521,7 +571,9 @@ function execute_notebook_for_web(path; verbose=false)
         end
     end
 
-    # 3. Pre-render slider values
+    # 3. Pre-render slider-dependent cell outputs for all values
+    #    This enables client-side switching of text, tables, images, and plots
+    #    without server roundtrips — the foundation for interactive notebooks.
     prerendered = Dict{UUID, PrerenderedGallery}()
     for cell in ordered_cells(nb)
         cell.output.output_type == :bond || continue
@@ -532,22 +584,27 @@ function execute_notebook_for_web(path; verbose=false)
 
         var_name = bond.defines
         deps = downstream_dependents(nb, [cell])
-        plot_deps = filter(d -> d.output.output_type in (:image_png, :plotly_json), deps)
-        isempty(plot_deps) && continue
+        # Include ALL dependent cells with visible output, not just plots
+        reactive_deps = filter(d -> d.output.output_type in (
+            :image_png, :plotly_json, :text, :dataframe
+        ), deps)
+        isempty(reactive_deps) && continue
 
         if verbose
-            println("    Pre-rendering :$(var_name) slider ($(length(slider.values)) values × $(length(plot_deps)) plots)")
+            println("    Pre-rendering :$(var_name) slider ($(length(slider.values)) values × $(length(reactive_deps)) deps)")
         end
 
-        for dep in plot_deps
+        for dep in reactive_deps
             images = Dict{Any, Vector{UInt8}}()
             plotly_data = Dict{Any, String}()
+            html_variants = Dict{Any, String}()
+
             for val in slider.values
                 set_bond_value!(var_name, val)
                 Core.eval(ws.mod, :($var_name = $val))
                 execute_cell!(ws, dep)
 
-                # Reclassify if needed (same headless issue)
+                # Reclassify if needed (headless mode lacks graphics protocol)
                 if dep.output.output_type == :text && dep.output.result !== nothing
                     if Base.invokelatest(showable, MIME"image/png"(), dep.output.result)
                         dep.output.output_type = :image_png
@@ -564,6 +621,14 @@ function execute_notebook_for_web(path; verbose=false)
                 # Capture PNG fallback
                 if dep.output.image_data !== nothing
                     images[val] = copy(dep.output.image_data)
+                end
+
+                # Capture rendered HTML for text/dataframe outputs
+                if dep.output.output_type in (:text, :dataframe)
+                    vnode = _render_output(dep)  # no prerendered arg → plain render
+                    if vnode !== nothing
+                        html_variants[val] = render_to_string(vnode)
+                    end
                 end
             end
 
@@ -584,13 +649,14 @@ function execute_notebook_for_web(path; verbose=false)
             end
 
             prerendered[dep.id] = PrerenderedGallery(
-                cell.id, var_name, slider, images, plotly_data
+                cell.id, var_name, slider, images, plotly_data, html_variants
             )
 
             if verbose
                 n_img = length(images)
                 n_plotly = length(plotly_data)
-                println("      Plot $(dep.id): $(n_img) images, $(n_plotly) plotly datasets captured")
+                n_html = length(html_variants)
+                println("      Dep $(dep.id): $(n_img) images, $(n_plotly) plotly, $(n_html) html variants")
             end
         end
     end
