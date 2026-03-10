@@ -245,15 +245,10 @@ function _render_code_cell(cell::Cell, index::Int, prerendered)
             runtime_str))
 
     # Pass folded state to CellToggle island — determines initial visibility
-    if cell.folded
-        push!(parts, CellToggle(; initial_open=0) do
-            code_block
-        end)
-    else
-        push!(parts, CellToggle() do
-            code_block
-        end)
-    end
+    # Always pass initial_open explicitly so the wasm prop hydration receives the value
+    push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
+        code_block
+    end)
 
     # Stdout — indented to align with code block (past the gutter)
     if !isempty(output.stdout)

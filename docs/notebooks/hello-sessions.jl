@@ -30,14 +30,14 @@ Try thinking of each cell as a node in a dependency graph — upstream changes f
 
 # ╔═╡ e5f6a7b8-c9d0-1234-efab-345678901234
 function fibonacci(n)
-	if n <= 1
-		return n
-	end
-	a, b = 0, 1
-	for _ in 2:n
-		a, b = b, a + b
-	end
-	return b
+    if n <= 1
+        return n
+    end
+    a, b = 0, 1
+    for _ in 2:n
+        a, b = b, a + b
+    end
+    return b
 end
 
 # ╔═╡ f6a7b8c9-d0e1-2345-fabc-456789012345
