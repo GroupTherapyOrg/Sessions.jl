@@ -2,9 +2,9 @@
 
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="logo/sessions_dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="logo/sessions_light.svg">
-    <img alt="Sessions.jl" src="logo/sessions_light.svg" height="60">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/sessions_dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/sessions_light.svg">
+    <img alt="Sessions.jl" src="assets/sessions_light.svg" height="60">
   </picture>
 
   **A terminal-native reactive Julia notebook built on [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s reactive engine and [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl).**
@@ -16,6 +16,12 @@
 ---
 
 > **Warning: This is an experimental, alpha-quality project.** It is largely untested outside of its own test suite, has rough edges everywhere, and may never reach the goals described below. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl) -- it's excellent. This exists because building it is fun and the ideas are worth exploring.
+
+<div align="center">
+  <img src="assets/screenshot-w-plots.png" alt="Sessions.jl with interactive plots" width="700">
+  <br><br>
+  <img src="assets/screenshot-w-repl.png" alt="Sessions.jl with REPL panel" width="700">
+</div>
 
 ## Why This Exists
 
