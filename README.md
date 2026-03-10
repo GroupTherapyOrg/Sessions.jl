@@ -99,15 +99,9 @@ Sessions.jl implements the AbstractPlutoDingetjes `@bind` protocol:
 @bind n NumberField(1:10)
 ```
 
-## A Long Shot: WebAssembly Notebook Export
+## Maybe Someday: WebAssembly
 
-This is aspirational and may never happen, but it's something we've been quietly exploring.
-
-The idea: what if you could compile a notebook's interactivity to WebAssembly, so the exported HTML works without a running Julia server? Not shipping an entire language runtime to the browser (like Pyodide or webR), but ahead-of-time compiling the specific Julia code in your notebook into small, fast WASM modules using [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl).
-
-Today, WasmTarget.jl can compile a narrow subset of Julia -- enough for simple interactive widgets like sliders and reactive value displays. Everything else still falls back to server-rendered HTML. Getting from "sliders work" to "notebooks work" is an enormous gap that may prove impractical. Julia's runtime is vast and complex, and compiling meaningful amounts of it to WASM is a research problem, not an engineering one.
-
-But it's fun to poke at, and if it ever gets somewhere interesting, we'll share what we learn.
+We've been experimenting with compiling notebook interactivity to WASM via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl) so exported notebooks don't need a running Julia server. Right now it barely works for sliders. Compiling real Julia to WASM is really hard and this will probably not go anywhere, but it's fun to try.
 
 ## License
 
