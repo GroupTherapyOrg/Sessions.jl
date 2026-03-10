@@ -8,9 +8,10 @@ function NotebooksIndex()
     if isdefined(Main, :EXECUTED_NOTEBOOKS) && !isempty(Main.EXECUTED_NOTEBOOKS)
         for slug in _ordered_notebook_slugs(keys(Main.EXECUTED_NOTEBOOKS))
             nb = Main.EXECUTED_NOTEBOOKS[slug]
-            title = _extract_notebook_title(nb)
-            code_count = _count_code_cells(nb)
-            prose_count = _count_prose_sections(nb)
+            title = Main.Sessions.notebook_title(nb)
+            cells = Main.Sessions.ordered_cells(nb)
+            code_count = count(c -> !Main.Sessions._is_markdown_cell(strip(c.code)), cells)
+            prose_count = count(c -> Main.Sessions._is_markdown_cell(strip(c.code)), cells)
             is_interactive = slug in _INTERACTIVE_SLUGS
 
             card_content = Card(
