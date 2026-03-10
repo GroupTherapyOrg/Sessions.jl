@@ -342,6 +342,12 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         return
     end
 
+    # Log why image rendering was skipped (once per state change)
+    if (otype == :image_png || otype == :image_jpeg)
+        dlog("image", "render SKIPPED"; otype=otype, stale=stale,
+            has_data=ow.cell.output.image_data !== nothing, state=ow.cell.state)
+    end
+
     # Default: Pluto-style borderless output on canvas bg (cached to avoid per-frame sprint)
     lines = cached_output_lines(ow)
     isempty(lines) && return
@@ -802,6 +808,7 @@ On the hot path, we call render_graphics! directly with cached bytes — no per-
 function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     img_data = ow.cell.output.image_data
     if img_data === nothing || isempty(img_data)
+        dlog("image", "render: no image_data")
         _render_image_fallback(rect, buf)
         return
     end
@@ -811,6 +818,7 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     pixels_changed = img_id != ow._cached_image_hash || ow._cached_pixels === nothing
 
     if pixels_changed
+        dlog("image", "decode start"; bytes=length(img_data), rect_w=rect.width, rect_h=rect.height)
         # Small images (<50KB): decode synchronously (fast, avoids async overhead for tests)
         # Large images (≥50KB): decode in background to avoid blocking the render loop
         if length(img_data) < _ASYNC_DECODE_THRESHOLD
@@ -819,9 +827,11 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
                 pixels = decode_jpeg(img_data)
             end
             if pixels === nothing
+                dlog("image", "decode FAILED — neither PNG nor JPEG")
                 _render_image_fallback(rect, buf)
                 return
             end
+            dlog("image", "decoded"; px_w=size(pixels, 2), px_h=size(pixels, 1))
             ow._cached_pixels = pixels
             ow._cached_image_hash = img_id
             ow._cached_pixel_image = nothing
@@ -888,6 +898,10 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     # Render: prefer Frame (raster) when available, else Buffer (braille).
     frame = ow.current_frame
     gfx = Tachikoma.GRAPHICS_PROTOCOL[]
+    if pixels_changed || needs_rebuild
+        dlog("image", "render path"; gfx=gfx, has_frame=frame !== nothing,
+            pi_w=pi.pixel_w, pi_h=pi.pixel_h, rect_w=rect.width, rect_h=rect.height)
+    end
     if frame !== nothing && gfx != Tachikoma.gfx_none
         if gfx == Tachikoma.gfx_kitty
             needs_fresh = ow._cached_kitty_id == UInt32(0) ||
