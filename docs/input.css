@@ -2,6 +2,7 @@
 
 /* Configure content sources for v4 */
 @source "./src/**/*.jl";
+@source "../src/web.jl";
 
 /* Enable class-based dark mode (toggle via .dark class on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -185,16 +186,15 @@
   .notebook-prose a { @apply text-accent-600 dark:text-accent-400 hover:underline; }
 }
 
-/* Julia syntax highlighting for CodeBlock */
+/* Julia syntax highlighting */
 @layer components {
-  .suite-hl-keyword { color: #c792ea; }
-  .suite-hl-string  { color: #c3e88d; }
-  .suite-hl-comment { color: #6b6560; font-style: italic; }
-  .suite-hl-number  { color: #f78c6c; }
-  .suite-hl-funcall { color: #82aaff; }
-  .suite-hl-type    { color: #ffcb6b; }
-  .suite-hl-symbol  { color: #ff5370; }
-  .suite-hl-macro   { color: #c792ea; font-weight: 600; }
-  .suite-hl-special { color: #f78c6c; font-style: italic; }
-  .suite-hl-operator { color: #89ddff; }
+  .hl-keyword  { color: #c792ea; }
+  .hl-string   { color: #c3e88d; }
+  .hl-comment  { color: #6b6560; font-style: italic; }
+  .hl-number   { color: #f78c6c; }
+  .hl-funcall  { color: #82aaff; }
+  .hl-type     { color: #ffcb6b; }
+  .hl-symbol   { color: #ff5370; }
+  .hl-macro    { color: #c792ea; font-weight: 600; }
+  .hl-operator { color: #89ddff; }
 }
