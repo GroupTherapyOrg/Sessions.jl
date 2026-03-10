@@ -2564,6 +2564,12 @@ function run_focused_cell_async!(app::SessionsApp)
     cell = focused_cell(app.notebook_view)
     cell === nothing && return
 
+    # Guard: skip if any cell is already executing (prevents concurrent workspace access)
+    if any(c -> c.state == cell_running || c.state == cell_queued, values(app.nb.cells))
+        app.message = "Already executing…"
+        return
+    end
+
     # Sync editor text to cell
     cw = focused_widget(app.notebook_view)
     cw !== nothing && sync_to_cell!(cw)
@@ -2616,6 +2622,12 @@ end
 
 """Execute all cells in the notebook in the background."""
 function run_all_cells_async!(app::SessionsApp)
+    # Guard: skip if already executing
+    if any(c -> c.state == cell_running || c.state == cell_queued, values(app.nb.cells))
+        app.message = "Already executing…"
+        return
+    end
+
     for cw in app.notebook_view.cell_widgets
         sync_to_cell!(cw)
     end

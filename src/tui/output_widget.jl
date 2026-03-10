@@ -31,13 +31,16 @@ mutable struct OutputWidget
     # Layout hints: set by NotebookView before prefix sum rebuild
     available_cols::Int    # actual cell content width (columns)
     viewport_rows::Int     # viewport height (rows) for max image cap
+    # Async image decode: background task for expensive PNG/JPEG decode + raster encode
+    _decode_task::Union{Nothing, Task}       # background decode task (nothing = idle)
+    _decode_target_hash::UInt64              # objectid of image_data being decoded
     # Image interaction: viewport transform (pan/zoom)
     _img_offset_x::Int
     _img_offset_y::Int
     _img_zoom::Float64
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, 0, 0, 1.0)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), 0, 0, 1.0)
 
 """Format cell output as displayable lines.
 
@@ -217,6 +220,7 @@ const _IMAGE_HEIGHT_HARD_MAX = 60   # absolute ceiling (safety)
 const _IMAGE_HEIGHT_MAX = 16        # legacy constant (kept for test compat)
 const _CELL_ASPECT_RATIO = 2.0      # terminal chars are ~2× taller than wide
 const _SVG_HEIGHT_MAX = 30          # max lines for SVG source display
+const _ASYNC_DECODE_THRESHOLD = 50_000  # bytes — images ≥50KB decoded in background thread
 
 """Effective max image rows — never exceeds 75% of viewport or hard max."""
 function _effective_image_max(viewport_rows::Int)
@@ -805,20 +809,61 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     # Layer 1: Pixel decode cache — only re-decode if image_data is a different object
     img_id = objectid(img_data)
     pixels_changed = img_id != ow._cached_image_hash || ow._cached_pixels === nothing
+
     if pixels_changed
-        pixels = decode_png(img_data)
-        if pixels === nothing
-            pixels = decode_jpeg(img_data)
-        end
-        if pixels === nothing
-            _render_image_fallback(rect, buf)
+        # Small images (<50KB): decode synchronously (fast, avoids async overhead for tests)
+        # Large images (≥50KB): decode in background to avoid blocking the render loop
+        if length(img_data) < _ASYNC_DECODE_THRESHOLD
+            pixels = decode_png(img_data)
+            if pixels === nothing
+                pixels = decode_jpeg(img_data)
+            end
+            if pixels === nothing
+                _render_image_fallback(rect, buf)
+                return
+            end
+            ow._cached_pixels = pixels
+            ow._cached_image_hash = img_id
+            ow._cached_pixel_image = nothing
+            ow._cached_encoded_data = nothing
+            ow._cached_kitty_id = UInt32(0)
+        elseif ow._decode_task !== nothing && ow._decode_target_hash == img_id
+            # Background decode already running for this image
+            if istaskdone(ow._decode_task)
+                result = try fetch(ow._decode_task) catch; nothing end
+                ow._decode_task = nothing
+                ow._decode_target_hash = UInt64(0)
+                if result !== nothing
+                    ow._cached_pixels = result
+                    ow._cached_image_hash = img_id
+                    ow._cached_pixel_image = nothing
+                    ow._cached_encoded_data = nothing
+                    ow._cached_kitty_id = UInt32(0)
+                    pixels_changed = false
+                else
+                    _render_image_fallback(rect, buf)
+                    return
+                end
+            else
+                # Still decoding — show braille from stale cache or placeholder
+                _render_image_stale_or_placeholder(ow, rect, buf)
+                return
+            end
+        else
+            # Start background decode for large image
+            ow._decode_task = nothing
+            data_copy = img_data
+            ow._decode_target_hash = img_id
+            ow._decode_task = Threads.@spawn begin
+                pixels = decode_png(data_copy)
+                if pixels === nothing
+                    pixels = decode_jpeg(data_copy)
+                end
+                pixels
+            end
+            _render_image_stale_or_placeholder(ow, rect, buf)
             return
         end
-        ow._cached_pixels = pixels
-        ow._cached_image_hash = img_id
-        ow._cached_pixel_image = nothing  # force PixelImage rebuild
-        ow._cached_encoded_data = nothing  # force re-encode
-        ow._cached_kitty_id = UInt32(0)    # invalidate Kitty image ID
     end
 
     # Layer 2: PixelImage cache — rebuild when rect dimensions change
@@ -836,6 +881,8 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         visible = _apply_viewport_transform(ow._cached_pixels,
                                              ow._img_offset_x, ow._img_offset_y, ow._img_zoom)
         Tachikoma.load_pixels!(pi, visible)
+        ow._cached_encoded_data = nothing  # force re-encode after pixel reload
+        ow._cached_kitty_id = UInt32(0)
     end
 
     # Render: prefer Frame (raster) when available, else Buffer (braille).
@@ -843,12 +890,7 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     gfx = Tachikoma.GRAPHICS_PROTOCOL[]
     if frame !== nothing && gfx != Tachikoma.gfx_none
         if gfx == Tachikoma.gfx_kitty
-            # Kitty image ID strategy: Tachikoma sends "delete all placements"
-            # (d=a) every frame, but image DATA persists in terminal memory.
-            # First render: transmit via SHM with i=<id> → terminal stores data.
-            # Subsequent frames: send tiny a=p,i=<id> re-placement (~50 bytes).
-            needs_fresh = pixels_changed || needs_rebuild ||
-                          ow._cached_kitty_id == UInt32(0) ||
+            needs_fresh = ow._cached_kitty_id == UInt32(0) ||
                           ow._cached_encoded_data === nothing ||
                           ow._cached_encoded_rect != rect
             if needs_fresh
@@ -859,19 +901,15 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
                     data = _inject_kitty_id(data, kid)
                     ow._cached_kitty_id = kid
                     ow._cached_encoded_rect = rect
-                    # Cache the tiny re-placement escape for subsequent frames
                     ow._cached_encoded_data = _kitty_placement_bytes(kid, rect.width, rect.height)
                     ow._cached_encoded_protocol = Tachikoma.gfx_kitty
                     Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
                 end
             else
-                # Re-place by image ID — ~50 bytes, no SHM, no encoding
                 Tachikoma.render_graphics!(frame, ow._cached_encoded_data, rect;
                     pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
             end
         else
-            # Sixel: inline data (no SHM), safe to cache. Encoding is expensive
-            # (color quantization + RLE), so encode once and reuse across frames.
             if ow._cached_encoded_data === nothing || ow._cached_encoded_protocol != gfx
                 data = Tachikoma.encode_sixel(pi.pixels; decay=pi.decay)
                 ow._cached_encoded_data = data
@@ -884,6 +922,18 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         end
     else
         Tachikoma.render(pi, rect, buf)
+    end
+end
+
+"""Show stale cached braille image or placeholder while background decode runs."""
+function _render_image_stale_or_placeholder(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    # If we have stale pixels from a previous image, show them as braille
+    if ow._cached_pixel_image !== nothing
+        Tachikoma.render(ow._cached_pixel_image, rect, buf)
+    else
+        Tachikoma.set_string!(buf, rect.x + 2, rect.y,
+            "[Decoding image...]",
+            Tachikoma.Style(; fg=Theme.FG_MUTED))
     end
 end
 
