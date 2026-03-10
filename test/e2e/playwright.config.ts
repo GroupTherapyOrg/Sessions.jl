@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './test/e2e',
+  testDir: '.',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
@@ -21,7 +21,7 @@ export default defineConfig({
   ...(!process.env.BASE_URL ? {
     webServer: {
       // Create Sessions.jl symlink so /Sessions.jl/* resolves (matches GitHub Pages path)
-      command: 'cd docs/dist && ln -sf . Sessions.jl 2>/dev/null; cd ../.. && npx serve docs/dist -l 3457',
+      command: 'cd ../../docs/dist && ln -sf . Sessions.jl 2>/dev/null; cd ../.. && npx --prefix test/e2e serve docs/dist -l 3457',
       port: 3457,
       reuseExistingServer: !process.env.CI,
     },
