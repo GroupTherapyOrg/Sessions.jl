@@ -7,7 +7,7 @@
     <img alt="Sessions.jl" src="assets/sessions_light.svg" height="60">
   </picture>
 
-  **A terminal-native reactive Julia notebook built on [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s reactive engine and [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl).**
+  **A terminal-native Julia notebook built on [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s reactive engine and [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl).**
 
   [![Docs](https://img.shields.io/badge/docs-stable-blue)](https://grouptherapyorg.github.io/Sessions.jl/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
