@@ -29,16 +29,9 @@ The other motivation is having a playground for ideas that are too experimental 
 
 Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine. No JavaScript, no Electron, no browser. Just Julia in a terminal.
 
-## Standing on Shoulders
+## Built On
 
-This project wouldn't exist without the incredible work of the Pluto ecosystem:
-
-- [Pluto.jl](https://github.com/fonsp/Pluto.jl) by Fons van der Plas and contributors -- the reactive notebook that started it all. Sessions.jl uses the same `.jl` file format and the same reactive model.
-- [ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl) -- the reactive analysis engine that figures out which cells depend on which variables. Sessions.jl uses this directly.
-- [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl) -- the topological sort that determines cell execution order. Sessions.jl uses this directly.
-- [AbstractPlutoDingetjes.jl](https://github.com/JuliaPluto/AbstractPlutoDingetjes.jl) -- the `@bind` widget protocol. Sessions.jl implements the same interface.
-
-The reactivity engine in Sessions.jl *is* Pluto's reactivity engine. The file format *is* Pluto's file format. The notebook you write in Sessions.jl can be opened in Pluto and vice versa. This is a different frontend for the same foundational ideas.
+Sessions.jl uses [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s file format, [ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl) for reactive analysis, [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl) for cell ordering, and [AbstractPlutoDingetjes.jl](https://github.com/JuliaPluto/AbstractPlutoDingetjes.jl) for the `@bind` protocol. The TUI is built on [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl). Notebooks are compatible with Pluto -- you can open the same `.jl` file in either.
 
 ## Installation
 
