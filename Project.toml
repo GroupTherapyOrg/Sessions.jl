@@ -45,6 +45,7 @@ julia_flags = ["--startup-file=no", "--history-file=no", "--threads=auto"]
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+WasmTarget = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 [targets]
 test = ["Test"]
