@@ -15,17 +15,34 @@
 
 ---
 
-## Features
+> **Warning: This is an experimental, alpha-quality project.** It is largely untested outside of its own test suite, has rough edges everywhere, and may never reach the goals described below. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl) -- it's excellent. This exists because building it is fun and the ideas are worth exploring.
 
-- **Reactive Notebooks** -- Cells auto-re-run when dependencies change (Pluto-style reactivity)
-- **Pluto Compatibility** -- Load, edit, and save Pluto `.jl` notebooks natively
-- **Terminal IDE** -- File browser, REPL panel, diagnostics panel, tab bar, activity bar, status bar
-- **Real-time Diagnostics** -- JETLS (JET.jl LSP) integration catches type errors and undefined variables as you type
-- **@bind Widgets** -- Slider, TextField, CheckBox, Select, NumberField (PlutoUI protocol)
-- **Agent-first Notebook** -- Code/state separation lets LLMs, IDEs, and scripts safely modify notebooks while the TUI watches and reacts
-- **Session Persistence** -- Cell outputs cached in `.session.toml`, restored across restarts with stale detection
-- **Agent-Friendly Architecture** -- Code/state separation lets external tools (LLMs, IDEs, scripts) safely modify notebooks while the TUI watches and reacts
-- **Full Keyboard Control** -- Kitty protocol support, macOS Cmd/Option handling, legacy terminal fallbacks
+## Why This Exists
+
+Over the past couple of months I've been shifting more and more toward agent-driven development -- LLMs writing code, running tests, iterating in the terminal. The terminal has become the center of my workflow, but I miss Pluto deeply. Pluto's reactive model is one of the best ideas in scientific computing, and I wanted it in my terminal.
+
+The problem is that Pluto (understandably) isn't optimized for agents editing notebook files externally. The `.jl` file interleaves code with package state and metadata, so an LLM modifying cells risks corrupting that state. Sessions.jl splits the notebook into two files -- pure code in `.jl`, cached outputs in `.session.toml` -- so agents, scripts, and editors can freely modify cells without breaking anything.
+
+The other motivation is having a playground for ideas that are too experimental for Pluto itself. Pluto is a widely-used, carefully-maintained package -- it's not the place to test half-baked integrations with bleeding-edge tools. Sessions.jl is small enough and unimportant enough that it can be a testing ground for things like:
+
+- **JETLS integration** -- Real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP, catching type errors as you write
+- **Runic.jl formatting** -- Auto-format cells on save
+- **WebAssembly notebook export** -- Compile notebook interactivity to WASM via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl), no running Julia server needed
+
+None of these are production-ready. They might not work. But it's fun to try, and if something turns out well, maybe it can inform upstream work in the Pluto ecosystem.
+
+Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine, the WASM compilation pipeline. No JavaScript, no Electron, no browser. Just Julia in a terminal.
+
+## Standing on Shoulders
+
+This project wouldn't exist without the incredible work of the Pluto ecosystem:
+
+- [Pluto.jl](https://github.com/fonsp/Pluto.jl) by Fons van der Plas and contributors -- the reactive notebook that started it all. Sessions.jl uses the same `.jl` file format and the same reactive model.
+- [ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl) -- the reactive analysis engine that figures out which cells depend on which variables. Sessions.jl uses this directly.
+- [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl) -- the topological sort that determines cell execution order. Sessions.jl uses this directly.
+- [AbstractPlutoDingetjes.jl](https://github.com/JuliaPluto/AbstractPlutoDingetjes.jl) -- the `@bind` widget protocol. Sessions.jl implements the same interface.
+
+The reactivity engine in Sessions.jl *is* Pluto's reactivity engine. The file format *is* Pluto's file format. The notebook you write in Sessions.jl can be opened in Pluto and vice versa. This is a different frontend for the same foundational ideas.
 
 ## Installation
 
@@ -58,56 +75,6 @@ using Sessions
 Sessions.main("my_notebook.jl")
 ```
 
-## Keyboard Shortcuts
-
-### Normal Mode
-
-| Shortcut | Action |
-|----------|--------|
-| `j` / `k` | Navigate cells down/up |
-| `i` / `Enter` | Enter insert mode (edit cell) |
-| `Ctrl+R` | Run current cell |
-| `Shift+Enter` | Run cell and move to next |
-| `Ctrl+Shift+Enter` | Run all cells |
-| `o` / `O` | Add cell below/above |
-| `dd` | Delete cell |
-| `J` / `K` | Move cell down/up |
-| `Ctrl+S` | Save notebook |
-| `Ctrl+Q` | Quit |
-| `1`-`4` | Toggle sidebar panels (files, REPL, diagnostics, search) |
-
-### Insert Mode
-
-| Shortcut | Action |
-|----------|--------|
-| `Escape` | Return to normal mode |
-| `Ctrl+R` | Run cell |
-| `Ctrl+S` | Save notebook |
-| `Cmd+Left/Right` | Home/End (macOS) |
-| `Option+Left/Right` | Word jump (macOS) |
-
-## Architecture
-
-```
-+--------------------------------------------------+
-|  Layer 3: CLI                                     |
-|  cli.jl (entry points, ARGS parsing)              |
-+--------------------------------------------------+
-|  Layer 2: TUI (Tachikoma.jl)                      |
-|  app.jl, notebook_view.jl, cell_widget.jl,        |
-|  output_widget.jl, file_panel.jl, repl_panel.jl,  |
-|  diagnostics_panel.jl, status_bar.jl, tab_bar.jl  |
-+--------------------------------------------------+
-|  Layer 1.5: Static Analysis                       |
-|  jet_analysis.jl (JET.jl batch analysis)          |
-|  lsp_client.jl (JETLS LSP client)                 |
-+--------------------------------------------------+
-|  Layer 1: Engine (pure Julia, no UI)              |
-|  types.jl, format.jl, analysis.jl, kernel.jl,     |
-|  run.jl, bind.jl, session.jl, watcher.jl          |
-+--------------------------------------------------+
-```
-
 ## Code/State Separation: `.jl` + `.session.toml`
 
 Sessions.jl splits your notebook into two files:
@@ -117,63 +84,7 @@ Sessions.jl splits your notebook into two files:
 | `notebook.jl` | Cell code, cell order, fold/disabled metadata | **Source of truth** -- safe for agents and tools to modify |
 | `notebook.session.toml` | Cached outputs, stdout, runtime, error messages | **Execution cache** -- optional, can be deleted and regenerated |
 
-This is the key architectural difference from Pluto. In Pluto, the `.jl` file contains code, package state, and notebook metadata interleaved with Pluto-specific formatting. External tools modifying a Pluto file risk corrupting that interleaved state.
-
-In Sessions.jl, the `.jl` file is pure code. An LLM agent, an IDE, or a shell script can modify cell code freely -- the cached outputs live separately in `.session.toml` and are never corrupted by code edits.
-
-### How It Works
-
-```
-Agent/IDE modifies notebook.jl
-          |
-File Watcher (0.5s debounce)
-          |
-merge_external_changes!()
-  - Diffs disk vs in-memory notebook
-  - Applies only disk changes
-  - Preserves unsaved local edits
-          |
-Stale detection: source_hash(cell) != produced_by_hash
-  - Changed cells get visual indicator
-  - Old outputs remain visible until re-execution
-          |
-User runs stale cells (Ctrl+R / Ctrl+Shift+Enter)
-          |
-save_session!() -- outputs cached to .session.toml
-```
-
-### Agent-Driven Workflow Example
-
-```bash
-# Terminal 1: User has notebook open in Sessions TUI
-sessions analysis.jl
-
-# Terminal 2: LLM agent modifies a cell
-# (or any tool -- sed, python script, another editor)
-#
-# Sessions TUI detects the change in <1 second:
-#   - Modified cells marked as stale (visual indicator)
-#   - Old outputs still visible for reference
-#   - User presses Ctrl+Shift+Enter to re-run
-#   - New outputs saved to .session.toml
-```
-
-The `.session.toml` file is:
-- **Atomic** -- written via temp file + rename, never half-written
-- **Bounded** -- text output truncated to 50KB, stdout to 20KB
-- **Optional** -- delete it and all cells revert to "never run" state
-- **Gitignored** -- cached outputs are local, not version-controlled
-
-### Comparison with Pluto
-
-| | Sessions.jl | Pluto |
-|-|-------------|-------|
-| **Code storage** | `.jl` (cell code + order) | `.jl` (code + order + embedded pkg state) |
-| **Output storage** | `.session.toml` (separate) | In-memory only (recomputed on open) |
-| **External tool safety** | Safe -- agents modify `.jl`, outputs are separate | Risky -- agents may break embedded metadata |
-| **Startup with cached state** | Instant -- outputs restored from cache | Full re-execution on every open |
-| **Stale detection** | Hash-based -- shows which cells changed since last run | Hash-based (same mechanism) |
-| **File watcher** | Built-in -- auto-detects external edits | Not built-in |
+The `.jl` file is pure code. An LLM agent, an IDE, or a shell script can modify cell code freely -- the cached outputs live separately in `.session.toml` and are never corrupted by code edits. A file watcher detects external changes within a second, marks modified cells as stale, and lets you re-run when ready.
 
 ## @bind Widgets
 
@@ -186,18 +97,6 @@ Sessions.jl implements the AbstractPlutoDingetjes `@bind` protocol:
 @bind choice Select(["A", "B", "C"])
 @bind n NumberField(1:10)
 ```
-
-## Testing
-
-```bash
-julia +1.12 --project=. test/runtests.jl
-```
-
-## Dependencies
-
-- [Tachikoma.jl](https://github.com/GroupTherapyOrg/Tachikoma.jl) -- Terminal UI framework
-- [ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl) -- Reactive analysis (Pluto ecosystem)
-- [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl) -- Topological sort (Pluto ecosystem)
 
 ## License
 
