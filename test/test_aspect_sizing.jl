@@ -65,7 +65,7 @@ end
         # a square image should use fewer rows than cols
         h = Sessions.image_output_height(100, 100, 80)
         @test h >= Sessions._IMAGE_HEIGHT_MIN
-        @test h <= Sessions._IMAGE_HEIGHT_MAX
+        @test h <= Sessions._IMAGE_HEIGHT_HARD_MAX
     end
 
     @testset "image_output_height — wide image" begin
@@ -81,13 +81,17 @@ end
     end
 
     @testset "image_output_height — clamped to [min, max]" begin
-        # Very tall image
+        # Very tall image — clamped to hard max (default max_rows)
         h_tall = Sessions.image_output_height(10, 10000, 80)
-        @test h_tall == Sessions._IMAGE_HEIGHT_MAX
+        @test h_tall == Sessions._IMAGE_HEIGHT_HARD_MAX
 
-        # Very wide image
+        # Very wide image — clamped to min
         h_wide = Sessions.image_output_height(10000, 10, 80)
         @test h_wide == Sessions._IMAGE_HEIGHT_MIN
+
+        # With explicit max_rows (viewport-relative)
+        h_capped = Sessions.image_output_height(10, 10000, 80; max_rows=20)
+        @test h_capped == 20
     end
 
     @testset "image_output_height — zero/negative handled" begin
@@ -103,9 +107,11 @@ end
         cell.output.image_data = copy(TINY_PNG_AS)  # 1x1
 
         ow = Sessions.OutputWidget(cell)
+        # Default available_cols=80, viewport_rows=40
+        # 1x1 image (square) → aspect=1.0, rows=80/2=40 → max=75% of 40=30
         h = Sessions.output_height(ow)
-        # 1x1 image (square) → aspect=1.0, rows=80/2=40 → clamped to max
-        @test h == Sessions._IMAGE_HEIGHT_MAX
+        expected_max = Sessions._effective_image_max(ow.viewport_rows)
+        @test h == expected_max
     end
 
     @testset "output_height falls back to default for corrupt PNG" begin

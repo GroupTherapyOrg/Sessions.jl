@@ -346,7 +346,7 @@ end
             # 4. OutputWidget renders (braille path via TestBackend, gfx_none for render)
             Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
             ow = Sessions.OutputWidget(c)
-            @test Sessions.output_height(ow) == Sessions._IMAGE_HEIGHT_MAX  # 1x1 square → aspect=1.0, rows=40 → clamped to max
+            @test Sessions.output_height(ow) == Sessions._effective_image_max(ow.viewport_rows)  # 1x1 square → aspect=1.0, rows=40 → clamped to viewport max
 
             tb = Tachikoma.TestBackend(40, 14)
             Tachikoma.render_widget!(tb, ow)

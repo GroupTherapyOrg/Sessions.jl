@@ -28,13 +28,16 @@ mutable struct OutputWidget
     _cached_encoded_image_hash::UInt64                      # objectid(image_data) when encoded
     _cached_encoded_protocol::Tachikoma.GraphicsProtocol    # protocol used for encoding
     _cached_kitty_id::UInt32                                 # Kitty image ID for re-placement (0 = none)
+    # Layout hints: set by NotebookView before prefix sum rebuild
+    available_cols::Int    # actual cell content width (columns)
+    viewport_rows::Int     # viewport height (rows) for max image cap
     # Image interaction: viewport transform (pan/zoom)
     _img_offset_x::Int
     _img_offset_y::Int
     _img_zoom::Float64
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 0, 0, 1.0)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, 0, 0, 1.0)
 
 """Format cell output as displayable lines.
 
@@ -210,22 +213,32 @@ end
 const _IMAGE_OUTPUT_HEIGHT = 12
 const _IMAGE_HEIGHT_DEFAULT = 12
 const _IMAGE_HEIGHT_MIN = 4
-const _IMAGE_HEIGHT_MAX = 16
-const _CELL_ASPECT_RATIO = 2.0  # terminal chars are ~2× taller than wide
-const _SVG_HEIGHT_MAX = 30  # max lines for SVG source display
+const _IMAGE_HEIGHT_HARD_MAX = 60   # absolute ceiling (safety)
+const _IMAGE_HEIGHT_MAX = 16        # legacy constant (kept for test compat)
+const _CELL_ASPECT_RATIO = 2.0      # terminal chars are ~2× taller than wide
+const _SVG_HEIGHT_MAX = 30          # max lines for SVG source display
+
+"""Effective max image rows — never exceeds 75% of viewport or hard max."""
+function _effective_image_max(viewport_rows::Int)
+    clamp(div(viewport_rows * 3, 4), _IMAGE_HEIGHT_MIN, _IMAGE_HEIGHT_HARD_MAX)
+end
 
 """Compute image output height from pixel dimensions and available terminal width.
 
 Terminal cells are approximately twice as tall as wide, so a square image
 needs half as many rows as columns. Formula:
   rows = (img_height / img_width) * available_cols / cell_aspect_ratio
-Clamped to [_IMAGE_HEIGHT_MIN, _IMAGE_HEIGHT_MAX].
+Clamped to [_IMAGE_HEIGHT_MIN, effective_max].
+
+The `max_rows` parameter defaults to `_IMAGE_HEIGHT_HARD_MAX` but callers
+should pass `_effective_image_max(viewport_rows)` for viewport-aware sizing.
 """
-function image_output_height(img_width::Int, img_height::Int, available_cols::Int)
+function image_output_height(img_width::Int, img_height::Int, available_cols::Int;
+                             max_rows::Int=_IMAGE_HEIGHT_HARD_MAX)
     (img_width <= 0 || img_height <= 0 || available_cols <= 0) && return _IMAGE_HEIGHT_MIN
     aspect = img_height / img_width
     rows = round(Int, aspect * available_cols / _CELL_ASPECT_RATIO)
-    clamp(rows, _IMAGE_HEIGHT_MIN, _IMAGE_HEIGHT_MAX)
+    clamp(rows, _IMAGE_HEIGHT_MIN, max_rows)
 end
 
 """Height needed for output display (borderless — just the lines + 1 for top padding).
@@ -237,7 +250,7 @@ function output_height(ow::OutputWidget)
     out_id = objectid(ow.cell.output)
     state = ow.cell.state
     collapsed = ow.collapsed
-    # Return cached value if nothing changed
+    # Return cached value if nothing changed (including layout dimensions)
     if ow._cached_height >= 0 &&
        ow._cached_height_output_id == out_id &&
        ow._cached_height_state == state &&
@@ -267,13 +280,15 @@ function _compute_output_height(ow::OutputWidget)
     elseif otype == :image_png && ow.cell.output.image_data !== nothing
         dims = decode_png_dimensions(ow.cell.output.image_data)
         if dims !== nothing
-            return image_output_height(dims[1], dims[2], 80)
+            max_r = _effective_image_max(ow.viewport_rows)
+            return image_output_height(dims[1], dims[2], ow.available_cols; max_rows=max_r)
         end
         return _IMAGE_HEIGHT_DEFAULT
     elseif otype == :image_jpeg && ow.cell.output.image_data !== nothing
         dims = decode_jpeg_dimensions(ow.cell.output.image_data)
         if dims !== nothing
-            return image_output_height(dims[1], dims[2], 80)
+            max_r = _effective_image_max(ow.viewport_rows)
+            return image_output_height(dims[1], dims[2], ow.available_cols; max_rows=max_r)
         end
         return _IMAGE_HEIGHT_DEFAULT
     elseif otype == :image_svg

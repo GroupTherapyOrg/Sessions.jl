@@ -406,6 +406,28 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     rect.width < 4 && return
     rect.height < 4 && return
 
+    # Propagate actual layout dimensions to output widgets before prefix rebuild.
+    # This lets image height calculations use real cell width instead of hardcoded 80.
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    _inner_w = max(rect.width - 2 * hi - 2, 4)  # inside border
+    _inner_h = max(rect.height - 2 * vi - 2, 4)
+    _pad = max(1, round(Int, _inner_w * Theme.CELL_PAD_FRACTION))
+    _pad = min(_pad, max(0, div(_inner_w - 10, 2)))
+    _cw_width = max(1, _inner_w - 2 * _pad)
+    _needs_resize = false
+    for ow in nv.output_widgets
+        if ow.available_cols != _cw_width || ow.viewport_rows != _inner_h
+            ow.available_cols = _cw_width
+            ow.viewport_rows = _inner_h
+            ow._cached_height = -1  # invalidate height cache
+            _needs_resize = true
+        end
+    end
+    if _needs_resize
+        nv._prefix_dirty = true
+    end
+
     # Rebuild prefix sums once per frame. Cell heights can change implicitly (focus
     # changes add/remove diagnostic lines, execution changes output, CodeEditor scroll).
     # One O(N) rebuild replaces the old pattern of 4-5 separate O(N) passes per frame
@@ -414,8 +436,6 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     _rebuild_prefix_sums!(nv)
 
     # ── Rounded border for notebook pane (inset to match cell island style) ──
-    hi = Theme.CELL_H_INSET
-    vi = Theme.CELL_V_INSET
     border_fg = nv.dirty ? Theme.DIRTY_BORDER_FG : Theme.BORDER_DIM
     border_style = Tachikoma.Style(; fg=border_fg, bg=Theme.CANVAS_BG)
 
