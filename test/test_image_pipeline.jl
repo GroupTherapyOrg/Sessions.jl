@@ -48,17 +48,18 @@ end
         @test Base.invokelatest(showable, MIME"image/png"(), mock) == true
         @test Base.invokelatest(showable, MIME"text/plain"(), mock) == true
 
-        # Without graphics protocol (gfx_none): text/plain wins
+        # Images always preferred over text/plain — braille fallback works
+        # even without a graphics protocol (gfx_none)
         old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
         try
             Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
-            @test classify_output(mock) == :text
+            @test classify_output(mock) == :image_png  # braille fallback
 
-            # With graphics protocol (gfx_kitty): image/png wins
+            # With graphics protocol (gfx_kitty): image/png (raster)
             Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_kitty
             @test classify_output(mock) == :image_png
 
-            # With graphics protocol (gfx_sixel): image/png wins
+            # With graphics protocol (gfx_sixel): image/png (raster)
             Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_sixel
             @test classify_output(mock) == :image_png
         finally
@@ -166,8 +167,8 @@ end
 
             c = Cell("TestImg2()")
             execute_cell!(ws, c)
-            @test c.output.output_type == :text  # text/plain wins when no graphics
-            @test c.output.image_data === nothing
+            @test c.output.output_type == :image_png  # images always preferred (braille fallback)
+            @test c.output.image_data !== nothing
         finally
             Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
         end
@@ -451,12 +452,12 @@ end
         end
     end
 
-    @testset "gfx_none — image-capable type falls back to text" begin
+    @testset "gfx_none — image-capable type still classified as image (braille fallback)" begin
         old_proto = Tachikoma.GRAPHICS_PROTOCOL[]
         try
             Tachikoma.GRAPHICS_PROTOCOL[] = Tachikoma.gfx_none
             mock = MockImageResult()
-            @test classify_output(mock) == :text  # text/plain wins
+            @test classify_output(mock) == :image_png  # braille fallback, not text
         finally
             Tachikoma.GRAPHICS_PROTOCOL[] = old_proto
         end

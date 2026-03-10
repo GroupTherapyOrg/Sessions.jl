@@ -68,14 +68,16 @@ function classify_output(value)::Symbol
     # 3. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
     value isa Markdown.MD && return :markdown
 
-    # 4. When graphics protocol available: check images BEFORE text/plain
-    if _has_graphics_protocol()
-        if _tui_showable(MIME"image/png"(), value)
-            return :image_png
-        end
-        if _tui_showable(MIME"image/jpeg"(), value)
-            return :image_jpeg
-        end
+    # 4. Images — always check BEFORE text/plain. With a graphics protocol
+    #    (Kitty/Sixel) images render as sharp raster. Without one, images
+    #    render as braille/unicode-block fallback — still far better than
+    #    showing "Figure()" text. This ensures CairoMakie, Plots.jl, etc.
+    #    always produce visual output.
+    if _tui_showable(MIME"image/png"(), value)
+        return :image_png
+    end
+    if _tui_showable(MIME"image/jpeg"(), value)
+        return :image_jpeg
     end
 
     # 5. SVG — text fallback (no rasterization needed, works without graphics protocol)
