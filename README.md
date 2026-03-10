@@ -25,15 +25,13 @@
 
 ## Why This Exists
 
-Over the past couple of months I've been shifting more and more toward agent-driven development -- LLMs writing code, running tests, iterating in the terminal. The terminal has become the center of my workflow, but I miss Pluto deeply. Pluto's reactive model is one of the best ideas in scientific computing, and I wanted it in my terminal.
-
-The problem is that Pluto (understandably) isn't optimized for agents editing notebook files externally. The `.jl` file interleaves code with package state and metadata, so an LLM modifying cells risks corrupting that state. Sessions.jl splits the notebook into two files -- pure code in `.jl`, cached outputs in `.session.toml` -- so agents, scripts, and editors can freely modify cells without breaking anything.
-
-I've also missed Pluto in cluster and HPC environments -- headless servers where you SSH in and there's no browser to speak of. A terminal-native notebook that works over a plain SSH session could make reactive notebooks accessible in places they currently aren't. Whether Sessions.jl actually gets there is another question, but the idea is worth chasing.
+Over the past couple of months I've been shifting more and more toward agent-driven development -- LLMs writing code, running tests, iterating in the terminal. The terminal has become the center of my workflow, and I wanted Pluto's reactive model there too. Pluto is great, but having an agent edit a notebook externally gets clunky -- restarts, lost changes, package state getting out of sync. Sessions.jl splits the notebook into two files -- pure code in `.jl`, cached outputs in `.session.toml` -- so agents, scripts, and editors can freely modify cells without breaking anything.
 
 The other motivation is having a playground for ideas that are too experimental for Pluto itself. Pluto is a widely-used, carefully-maintained package -- it's not the place to test half-baked integrations with bleeding-edge tools. Sessions.jl is small enough and unimportant enough to be a testing ground. If something turns out well, maybe it can inform upstream work in the Pluto ecosystem.
 
 Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine. No JavaScript, no Electron, no browser. Just Julia in a terminal.
+
+> **Note:** This could also be useful in cluster/HPC environments and headless servers -- anywhere you SSH in and there's no browser. Agents in a terminal, notebooks in a terminal, everything in a terminal. Whether it actually gets there is another question.
 
 ## Built On
 
