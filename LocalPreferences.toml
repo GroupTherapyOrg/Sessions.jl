@@ -1,9 +1,0 @@
-[Tachikoma]
-animations = true
-bg_brightness = 0.3
-bg_saturation = 0.5
-bg_speed = 0.5
-decay = 0.0
-decay_jitter = 0.0
-decay_noise_scale = 0.15
-decay_rot_prob = 0.0

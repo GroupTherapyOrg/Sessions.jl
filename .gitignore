@@ -1,4 +1,10 @@
 *.session.toml
+.DS_Store
+Manifest.toml
+LocalPreferences.toml
+ralph_loops/
+ralph_loop/
+@v1.12/
 node_modules/
 test-results/
 playwright-report/
