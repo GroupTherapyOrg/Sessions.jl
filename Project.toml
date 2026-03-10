@@ -19,6 +19,7 @@ Tachikoma = "468859d6-42d8-48b7-8ad9-1d312e0e3b0a"
 Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
+WasmTarget = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 [sources]
 Tachikoma = {url = "https://github.com/kahliburke/Tachikoma.jl.git"}
@@ -45,7 +46,6 @@ julia_flags = ["--startup-file=no", "--history-file=no", "--threads=auto"]
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-WasmTarget = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 [targets]
 test = ["Test"]
