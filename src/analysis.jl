@@ -13,7 +13,7 @@ function analyze_cell(cell::Cell)
     if isempty(strip(cell.code))
         return ExpressionExplorer.ReactiveNode()
     end
-    expr = Meta.parse("begin\n$(cell.code)\nend")
+    expr = Base.Meta.parse("begin\n$(cell.code)\nend")
     ExpressionExplorer.compute_reactive_node(expr)
 end
 
@@ -31,7 +31,7 @@ end
 """Parse cell code safely — returns a placeholder Expr on ParseError instead of crashing."""
 function _safe_parse(code::String)
     try
-        Meta.parse("begin\n$(code)\nend")
+        Base.Meta.parse("begin\n$(code)\nend")
     catch
         # Return an empty block so topology analysis can continue
         :(begin end)

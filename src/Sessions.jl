@@ -46,6 +46,11 @@ export decode_jpeg
 include("run.jl")
 
 include("session.jl")
+
+# Layer 1.5: Web Export (types, execution pipeline, stubs for rendering)
+# Rendering to VNodes is provided by ext/SessionsTherapyExt when Therapy.jl is loaded.
+include("web.jl")
+export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
 # Layer 1.5: Static Analysis (JET.jl + JETLS LSP)

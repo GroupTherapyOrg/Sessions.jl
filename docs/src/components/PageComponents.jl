@@ -176,7 +176,7 @@ function NotebooksSidebar()
                 exact = true),
             map(items) do slug
                 nb = Main.EXECUTED_NOTEBOOKS[slug]
-                title = _extract_notebook_title(nb)
+                title = Main.Sessions.notebook_title(nb)
                 is_interactive = slug in _INTERACTIVE_SLUGS
                 if is_interactive
                     Span(:class => "block px-3 py-1.5 text-sm rounded text-warm-400 dark:text-warm-600 cursor-default", title)

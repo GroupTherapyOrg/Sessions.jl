@@ -865,6 +865,7 @@ end
 _write_json(io::IO, v::Bool) = write(io, v ? "true" : "false")
 _write_json(io::IO, ::Nothing) = write(io, "null")
 _write_json(io::IO, v::Symbol) = _write_json(io, string(v))
+_write_json(io::IO, v::AbstractRange) = _write_json(io, collect(v))
 
 # Minimal JSON parser (handles LSP responses — objects, arrays, strings, numbers, bools, null)
 

@@ -212,7 +212,7 @@ function _format_error_message(ex::Exception)::String
         return "StackOverflowError: infinite recursion detected"
     elseif ex isa InterruptException
         return "Execution interrupted"
-    elseif ex isa Meta.ParseError
+    elseif ex isa Base.Meta.ParseError
         return "ParseError: $(ex.msg)"
     elseif ex isa ErrorException
         return string(ex.msg)
@@ -383,7 +383,7 @@ function execute_cell!(workspace::Workspace, cell::Cell)
             if !isempty(workspace.notebook_path)
                 result = Base.include_string(workspace.mod, code, workspace.notebook_path)
             else
-                result = Base.eval(workspace.mod, Meta.parse(code))
+                result = Base.eval(workspace.mod, Base.Meta.parse(code))
             end
         finally
             if stdout_captured
