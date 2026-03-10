@@ -356,8 +356,10 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
                 Code(err_msg)))
 
     elseif output.output_type == :dataframe
-        gallery_node = _render_html_gallery(cell, prerendered)
-        gallery_node !== nothing && return gallery_node
+        gallery = get(prerendered, cell.id, nothing)
+        if gallery !== nothing
+            return _render_reactive_table(result, gallery)
+        end
         return _render_table_output(result)
 
     elseif output.output_type == :bond
@@ -492,6 +494,36 @@ function _render_table_output(result)
         Code(sprint(show, result)))
 end
 
+"""
+Render a slider-bound table with all rows present and data-row-index attributes.
+
+Instead of pre-rendering N separate tables (one per slider value), render the
+full table once. JavaScript toggles row visibility: rows with index ≤ slider
+value are shown, others are hidden. This eliminates build-time pre-rendering
+for dataframe outputs.
+"""
+function _render_reactive_table(result, gallery::PrerenderedGallery)
+    slider_id = string(gallery.slider_cell_id)
+
+    if result isa AbstractVector && !isempty(result) && first(result) isa NamedTuple
+        cols = keys(first(result))
+        header = Thead(Tr([Th(:class => _WEB_TH_CLS, string(col)) for col in cols]...))
+        default_val = Int(gallery.slider.default)
+        rows = [
+            Tr(:class => _WEB_TR_CLS, :data_row_index => string(i),
+                :style => i <= default_val ? "" : "display:none",
+                [Td(:class => _WEB_TD_CLS, string(getfield(row, col))) for col in cols]...)
+            for (i, row) in enumerate(result)
+        ]
+        return Div(:class => "overflow-x-auto notebook-reactive-table",
+            :data_slider_table => slider_id,
+            Table(:class => "w-full text-sm", header, Tbody(rows...)))
+    end
+
+    # Fallback for non-NamedTuple dataframes — static render
+    _render_table_output(result)
+end
+
 function _slider_interaction_script()
     RawHtml("""<script>
 (function() {
@@ -532,9 +564,14 @@ function _slider_interaction_script()
         Plotly.react(plotEl, plotEl._plotlyDatasets[val].data, plotEl._plotlyDatasets[val].layout);
       }
 
-      // Swap pre-rendered HTML variants (text, dataframe, etc.)
+      // Swap pre-rendered HTML variants (text, etc.)
       document.querySelectorAll('[data-slider-html="' + sliderId + '"] > [data-slider-value]').forEach(function(div) {
         div.style.display = div.dataset.sliderValue === val ? 'block' : 'none';
+      });
+
+      // Toggle reactive table rows — show rows where index ≤ slider value
+      document.querySelectorAll('[data-slider-table="' + sliderId + '"] tbody tr[data-row-index]').forEach(function(tr) {
+        tr.style.display = parseInt(tr.dataset.rowIndex) <= parseInt(val) ? '' : 'none';
       });
 
       // Live WASM bridge: dispatch input event to BoundValue islands
@@ -634,6 +671,18 @@ function execute_notebook_for_web(path; verbose=false)
         end
 
         for dep in reactive_deps
+            # Dataframe deps use reactive table (SSR all rows + JS row toggling)
+            # instead of pre-rendering separate tables for each slider value.
+            # The cell was already executed at the default value, so result has all rows.
+            if dep.output.output_type == :dataframe
+                prerendered[dep.id] = PrerenderedGallery(
+                    cell.id, var_name, slider,
+                    Dict{Any,Vector{UInt8}}(), Dict{Any,String}(), Dict{Any,String}()
+                )
+                verbose && println("      Dep $(dep.id): reactive table (no pre-rendering)")
+                continue
+            end
+
             images = Dict{Any, Vector{UInt8}}()
             plotly_data = Dict{Any, String}()
             html_variants = Dict{Any, String}()

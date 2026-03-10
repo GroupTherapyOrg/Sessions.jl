@@ -122,9 +122,9 @@ test.describe('BoundValue — live WASM reactive cell (no pre-rendering)', () =>
     const boundValue = page.locator('[data-bound-to] therapy-island[data-component="boundvalue"]');
     await expect(boundValue).toBeAttached({ timeout: 5000 });
 
-    // Should NOT be a pre-rendered gallery (only the table cell uses gallery)
+    // Should NOT be any pre-rendered galleries (table uses reactive table, n uses BoundValue)
     const galleries = page.locator('.notebook-html-gallery');
-    expect(await galleries.count()).toBe(1); // only planets[1:n] table
+    expect(await galleries.count()).toBe(0);
   });
 
   test('BoundValue island hydrates and shows initial value', async ({ page }) => {
@@ -179,48 +179,97 @@ test.describe('BoundValue — live WASM reactive cell (no pre-rendering)', () =>
   });
 });
 
-test.describe('Pre-rendered gallery — planets table (fallback for complex outputs)', () => {
+test.describe('Reactive table — planets table (SSR all rows, JS row toggling)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(NOTEBOOK_URL);
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(3000);
   });
 
-  test('planets table uses pre-rendered gallery with 8 variants', async ({ page }) => {
-    const gallery = page.locator('.notebook-html-gallery:has(table)');
-    await expect(gallery).toBeAttached({ timeout: 3000 });
+  test('planets table renders as reactive table (not pre-rendered gallery)', async ({ page }) => {
+    const reactiveTable = page.locator('.notebook-reactive-table[data-slider-table]');
+    await expect(reactiveTable).toBeAttached({ timeout: 3000 });
 
-    const variants = gallery.locator('> [data-slider-value]');
-    expect(await variants.count()).toBe(8);
+    // Should NOT have a pre-rendered gallery for the table
+    const gallery = page.locator('.notebook-html-gallery:has(table)');
+    expect(await gallery.count()).toBe(0);
   });
 
-  test('default table shows 8 rows, others hidden', async ({ page }) => {
-    const gallery = page.locator('.notebook-html-gallery:has(table)');
-    const visible = gallery.locator('> [data-slider-value="8"]');
-    const visibleStyle = await visible.evaluate(el => el.style.display);
-    expect(visibleStyle).not.toBe('none');
+  test('table has all 8 rows with data-row-index attributes', async ({ page }) => {
+    const table = page.locator('.notebook-reactive-table table');
+    await expect(table).toBeAttached({ timeout: 3000 });
 
-    const hidden = gallery.locator('> [data-slider-value="1"]');
-    expect(await hidden.evaluate(el => el.style.display)).toBe('none');
+    const rows = table.locator('tbody tr[data-row-index]');
+    expect(await rows.count()).toBe(8);
+
+    // Verify indices are 1-8
+    for (let i = 1; i <= 8; i++) {
+      const row = table.locator(`tbody tr[data-row-index="${i}"]`);
+      expect(await row.count()).toBe(1);
+    }
   });
 
-  test('moving slider swaps planets table', async ({ page }) => {
+  test('default shows 8 rows visible, none hidden', async ({ page }) => {
+    const table = page.locator('.notebook-reactive-table table');
+    await expect(table).toBeAttached({ timeout: 3000 });
+
+    // All 8 rows should be visible at default (n=8)
+    for (let i = 1; i <= 8; i++) {
+      const row = table.locator(`tbody tr[data-row-index="${i}"]`);
+      const display = await row.evaluate(el => el.style.display);
+      expect(display).not.toBe('none');
+    }
+  });
+
+  test('moving slider hides rows beyond slider value', async ({ page }) => {
     const slider = page.locator('[data-bind-slider-id] therapy-island input[type="range"]').first();
     await expect(slider).toBeAttached({ timeout: 5000 });
 
-    const gallery = page.locator('.notebook-html-gallery:has(table)');
+    const table = page.locator('.notebook-reactive-table table');
 
     await slider.fill('3');
     await page.waitForTimeout(300);
 
-    // 3-row table should be visible
-    const variant3 = gallery.locator('> [data-slider-value="3"]');
-    expect(await variant3.evaluate(el => el.style.display)).not.toBe('none');
-    expect(await variant3.locator('tbody tr').count()).toBe(3);
+    // Rows 1-3 visible, rows 4-8 hidden
+    for (let i = 1; i <= 3; i++) {
+      const row = table.locator(`tbody tr[data-row-index="${i}"]`);
+      expect(await row.evaluate(el => el.style.display)).not.toBe('none');
+    }
+    for (let i = 4; i <= 8; i++) {
+      const row = table.locator(`tbody tr[data-row-index="${i}"]`);
+      expect(await row.evaluate(el => el.style.display)).toBe('none');
+    }
+  });
 
-    // 8-row table should be hidden
-    const variant8 = gallery.locator('> [data-slider-value="8"]');
-    expect(await variant8.evaluate(el => el.style.display)).toBe('none');
+  test('slider changes update visible row count', async ({ page }) => {
+    const slider = page.locator('[data-bind-slider-id] therapy-island input[type="range"]').first();
+    await expect(slider).toBeAttached({ timeout: 5000 });
+
+    const table = page.locator('.notebook-reactive-table table');
+
+    // Set to 1 — only first row visible
+    await slider.fill('1');
+    await page.waitForTimeout(300);
+    const visibleAt1 = await table.locator('tbody tr[data-row-index]').evaluateAll(
+      rows => rows.filter(r => r.style.display !== 'none').length
+    );
+    expect(visibleAt1).toBe(1);
+
+    // Set to 5 — five rows visible
+    await slider.fill('5');
+    await page.waitForTimeout(300);
+    const visibleAt5 = await table.locator('tbody tr[data-row-index]').evaluateAll(
+      rows => rows.filter(r => r.style.display !== 'none').length
+    );
+    expect(visibleAt5).toBe(5);
+
+    // Set back to 8 — all rows visible
+    await slider.fill('8');
+    await page.waitForTimeout(300);
+    const visibleAt8 = await table.locator('tbody tr[data-row-index]').evaluateAll(
+      rows => rows.filter(r => r.style.display !== 'none').length
+    );
+    expect(visibleAt8).toBe(8);
   });
 
   test('bond container has data-bind-var and data-bind-slider-id', async ({ page }) => {
