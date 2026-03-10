@@ -36,7 +36,7 @@ end
     Div(:class => "flex items-start gap-2",
         # Left gutter — eye icon toggle
         Div(:class => "flex items-center pt-4 shrink-0",
-            Therapy.Button(:class => "group/eye p-1 rounded hover:bg-warm-800/50 transition-colors cursor-pointer opacity-0 group-hover/cell:opacity-100",
+            Therapy.Button(:class => "group/eye p-1 rounded hover:bg-warm-200/50 dark:hover:bg-warm-800/50 transition-colors cursor-pointer opacity-0 group-hover/cell:opacity-100",
                 :on_click => () -> begin
                     if is_open() == Int32(1)
                         set_is_open(Int32(0))
@@ -58,7 +58,7 @@ end
                         Path(:d => "M1 1L23 23")),
                     # Open eye (layered on top, hidden when code is folded)
                     Show(is_open) do
-                        Svg(:class => "absolute inset-0 w-3.5 h-3.5 text-warm-500 group-hover/eye:text-warm-300 transition-colors bg-warm-950",
+                        Svg(:class => "absolute inset-0 w-3.5 h-3.5 text-warm-400 group-hover/eye:text-warm-600 dark:text-warm-500 dark:group-hover/eye:text-warm-300 transition-colors bg-warm-50 dark:bg-warm-950",
                             :viewBox => "0 0 24 24",
                             :fill => "none",
                             :stroke => "currentColor",

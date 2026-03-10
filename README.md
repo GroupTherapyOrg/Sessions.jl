@@ -1,6 +1,19 @@
 # Sessions.jl
 
-A terminal-native reactive Julia notebook. Pluto-compatible file format with a full TUI IDE built on [Tachikoma.jl](https://github.com/GroupTherapyOrg/Tachikoma.jl).
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo/sessions_dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="logo/sessions_light.svg">
+    <img alt="Sessions.jl" src="logo/sessions_light.svg" height="60">
+  </picture>
+
+  **A terminal-native reactive Julia notebook. Pluto-compatible file format with a full TUI IDE built on [Tachikoma.jl](https://github.com/GroupTherapyOrg/Tachikoma.jl).**
+
+  [![Docs](https://img.shields.io/badge/docs-stable-blue)](https://grouptherapyorg.github.io/Sessions.jl/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+</div>
+
+---
 
 ## Features
 
