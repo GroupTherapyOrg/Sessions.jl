@@ -1,6 +1,6 @@
 name = "Sessions"
 uuid = "c3d4e5f6-a7b8-9012-cdef-123456789012"
-version = "2.0.0-dev"
+version = "0.1.0"
 authors = ["TherapeuticJulia"]
 
 [deps]
@@ -23,6 +23,7 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 [sources]
 Tachikoma = {url = "https://github.com/kahliburke/Tachikoma.jl.git"}
 Therapy = {url = "https://github.com/GroupTherapyOrg/Therapy.jl.git"}
+WasmTarget = {url = "https://github.com/GroupTherapyOrg/WasmTarget.jl.git"}
 
 [compat]
 CairoMakie = "0.15.9"
