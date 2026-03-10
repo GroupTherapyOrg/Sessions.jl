@@ -728,16 +728,15 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         end
     end
 
-    # ── Tab bar (only when multiple tabs are open) ──
+    # ── Tab bar layout (compute rects now, render AFTER notebook to seal overflow) ──
     editor_rect = notebook_rect
+    tab_bar_rect = Tachikoma.Rect()
     if length(app.tabs) > 1
         tab_h = TAB_BAR_HEIGHT
         tab_bar_rect = Tachikoma.Rect(notebook_rect.x, notebook_rect.y,
             notebook_rect.width, tab_h)
         editor_rect = Tachikoma.Rect(notebook_rect.x, notebook_rect.y + tab_h,
             notebook_rect.width, max(1, notebook_rect.height - tab_h))
-        app.tab_rects, app.close_rects = render_tab_bar!(app.tabs, app.active_tab_idx,
-            tab_bar_rect, buf)
     else
         app.tab_rects = Tachikoma.Rect[]
         app.close_rects = Tachikoma.Rect[]
@@ -844,6 +843,12 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
     screen_bottom = area.y + area.height - 1
     for fy in nb_bottom:screen_bottom
         Tachikoma.set_string!(buf, ox, fy, " " ^ ow, Theme.S_BG)
+    end
+
+    # ── Tab bar rendered AFTER notebook so it seals any cell overflow ──
+    if length(app.tabs) > 1
+        app.tab_rects, app.close_rects = render_tab_bar!(app.tabs, app.active_tab_idx,
+            tab_bar_rect, buf)
     end
 
     # ── Render REPL panel AFTER overflow cleanup (so it's never overwritten) ──
