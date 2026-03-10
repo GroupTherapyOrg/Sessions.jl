@@ -22,7 +22,7 @@ UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 WasmTarget = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 [sources]
-Tachikoma = {url = "https://github.com/kahliburke/Tachikoma.jl.git"}
+Tachikoma = {rev = "release/1.1", url = "https://github.com/kahliburke/Tachikoma.jl.git"}
 Therapy = {url = "https://github.com/GroupTherapyOrg/Therapy.jl.git"}
 WasmTarget = {url = "https://github.com/GroupTherapyOrg/WasmTarget.jl.git"}
 

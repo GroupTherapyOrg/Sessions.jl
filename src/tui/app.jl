@@ -533,6 +533,20 @@ end
 Tachikoma.should_quit(app::SessionsApp) = app.quit
 Tachikoma.task_queue(app::SessionsApp) = app.tq
 
+function Tachikoma.set_wake!(app::SessionsApp, notify::Function)
+    app.repl_panel._wake_fn = notify
+    for tab in app.repl_panel.tabs
+        tab.tw !== nothing && Tachikoma.set_wake!(tab.tw, notify)
+    end
+end
+
+function Tachikoma.has_pending_output(app::SessionsApp)
+    for tab in app.repl_panel.tabs
+        tab.tw !== nothing && tab.tw.pty.alive && isready(tab.tw.pty.output) && return true
+    end
+    false
+end
+
 """Enable any-event mouse tracking (1003) for true hover support.
 Also loads CommonMark.jl extension for markdown rendering.
 Starts file watcher if notebook has a valid path."""
@@ -1263,13 +1277,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             _quit_app!(app)
             return
         end
-        # Escape exits REPL focus back to normal mode
-        repl_tab = active_tab(app.repl_panel)
-        if evt.key == :escape && (repl_tab === nothing || repl_tab.repl_mode == :julia)
-            app.mode = :normal
-            app.repl_panel.focused = false
-            return
-        end
+        # Ctrl+` toggles REPL off (Escape is consumed by the real REPL)
+        # Note: Escape goes to the subprocess for mode switching (], ?, ;)
         # Ctrl+` toggles REPL off
         if evt.key == :ctrl && evt.char == '`'
             _toggle_repl!(app)
@@ -1639,18 +1648,14 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     if app.repl_open && rr.width > 0 &&
        evt.x >= rr.x && evt.x < rr.x + rr.width &&
        evt.y >= rr.y && evt.y < rr.y + rr.height
-        # Scroll
-        if evt.button == Tachikoma.mouse_scroll_up || evt.button == Tachikoma.mouse_scroll_down
-            handle_repl_scroll!(app.repl_panel, evt)
-            return
-        end
         # Click — handle tab bar clicks, then focus
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
             handle_repl_click!(app.repl_panel, evt)
             app.mode = :repl
             app.repl_panel.focused = true
-            return
         end
+        # Forward all mouse events (scroll, drag, etc.) to TerminalWidget
+        handle_repl_mouse!(app.repl_panel, evt)
         return
     end
 
