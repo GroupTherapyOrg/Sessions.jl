@@ -902,10 +902,10 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     # Render: prefer Frame (raster) when available, else Buffer (braille).
     frame = ow.current_frame
     gfx = Tachikoma.GRAPHICS_PROTOCOL[]
-    if pixels_changed || needs_rebuild
-        dlog("image", "render path"; gfx=gfx, has_frame=frame !== nothing,
-            pi_w=pi.pixel_w, pi_h=pi.pixel_h, rect_w=rect.width, rect_h=rect.height)
-    end
+    dlog("image", "render"; gfx=gfx, has_frame=frame !== nothing,
+        rect="$(rect.x),$(rect.y),$(rect.width)×$(rect.height)",
+        clip="$(ow.content_clip.x),$(ow.content_clip.y),$(ow.content_clip.width)×$(ow.content_clip.height)",
+        pixels_changed=pixels_changed, needs_rebuild=needs_rebuild)
     if frame !== nothing && gfx != Tachikoma.gfx_none
         # Clip the graphics region to the visible content area.  The image rect
         # may extend past the notebook border (tall images), and the border
@@ -913,7 +913,9 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         # blanks them.  Tachikoma's _filter_visible_gfx rejects any region with
         # non-blank cells, causing the image to vanish.  Clipping prevents this.
         gfx_rect = _clip_to_content(rect, ow.content_clip)
+        dlog("image", "raster path"; gfx_rect="$(gfx_rect.x),$(gfx_rect.y),$(gfx_rect.width)×$(gfx_rect.height)")
         if gfx_rect.width < 1 || gfx_rect.height < 1
+            dlog("image", "FULLY CLIPPED — braille fallback")
             # Fully clipped — fall back to braille
             Tachikoma.render(pi, rect, buf)
         elseif gfx == Tachikoma.gfx_kitty
@@ -943,6 +945,7 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
                 ow._cached_encoded_protocol = Tachikoma.gfx_sixel
             end
             data = ow._cached_encoded_data
+            dlog("image", "sixel render_graphics!"; data_bytes=length(data), gfx_rect="$(gfx_rect.x),$(gfx_rect.y),$(gfx_rect.width)×$(gfx_rect.height)")
             if !isempty(data)
                 Tachikoma.render_graphics!(frame, data, gfx_rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_sixel)
             end
