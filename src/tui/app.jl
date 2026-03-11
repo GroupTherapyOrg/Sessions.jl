@@ -2750,15 +2750,30 @@ end
 
 """Launch the TUI app for a notebook."""
 function open(nb::Notebook)
+    _fix_gfx_detection!()
     a = SessionsApp(nb)
     Tachikoma.app(a; fps=30, default_bindings=false)
 end
 
 """Launch the TUI file editor for a plain .jl file."""
 function edit(path::String)
+    _fix_gfx_detection!()
     fev = FileEditorView(path)
     a = SessionsApp(fev)
     Tachikoma.app(a; fps=30, default_bindings=false)
+end
+
+"""Fix graphics protocol misdetection before Tachikoma starts.
+
+iTerm2 responds to the Kitty graphics probe but doesn't fully support
+Kitty SHM image transfer — images render blank.  Force sixel instead.
+"""
+function _fix_gfx_detection!()
+    haskey(ENV, "TACHIKOMA_GFX") && return
+    term = get(ENV, "TERM_PROGRAM", "")
+    if term == "iTerm.app"
+        ENV["TACHIKOMA_GFX"] = "sixel"
+    end
 end
 
 """Create a new empty notebook and open it."""

@@ -19,6 +19,12 @@ function (@main)(args::Vector{String})::Cint
         ENV["TACHIKOMA_GFX"] = sgp
     end
 
+    # iTerm2 responds to the Kitty graphics probe but doesn't fully support
+    # Kitty SHM image transfer — images render blank.  Force sixel instead.
+    if !haskey(ENV, "TACHIKOMA_GFX") && get(ENV, "TERM_PROGRAM", "") == "iTerm.app"
+        ENV["TACHIKOMA_GFX"] = "sixel"
+    end
+
     _ensure_jetls()
 
     if isempty(args)
