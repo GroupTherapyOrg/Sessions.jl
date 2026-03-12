@@ -34,17 +34,13 @@ mutable struct OutputWidget
     # Async image decode: background task for expensive PNG/JPEG decode + raster encode
     _decode_task::Union{Nothing, Task}       # background decode task (nothing = idle)
     _decode_target_hash::UInt64              # objectid of image_data being decoded
-    # Visible content clip: set by NotebookView to the inner content area.
-    # render_graphics! must clip to this rect so _filter_visible_gfx doesn't
-    # reject the graphics region when the image extends past the notebook border.
-    content_clip::Tachikoma.Rect
     # Image interaction: viewport transform (pan/zoom)
     _img_offset_x::Int
     _img_offset_y::Int
     _img_zoom::Float64
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), Tachikoma.Rect(), 0, 0, 1.0)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), 0, 0, 1.0)
 
 """Format cell output as displayable lines.
 
@@ -903,31 +899,25 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
     frame = ow.current_frame
     gfx = Tachikoma.GRAPHICS_PROTOCOL[]
     if frame !== nothing && gfx != Tachikoma.gfx_none
-        # Clip the graphics region to the visible content area.
-        gfx_rect = _clip_to_content(rect, ow.content_clip)
-        if gfx_rect.width < 1 || gfx_rect.height < 1
-            Tachikoma.render(pi, rect, buf)
-        elseif gfx == Tachikoma.gfx_kitty
+        if gfx == Tachikoma.gfx_kitty
             needs_fresh = ow._cached_kitty_id == UInt32(0) ||
                           ow._cached_encoded_data === nothing ||
-                          ow._cached_encoded_rect != gfx_rect
+                          ow._cached_encoded_rect != rect
             if needs_fresh
                 data = Tachikoma.encode_kitty(pi.pixels; decay=pi.decay,
-                            cols=gfx_rect.width, rows=gfx_rect.height)
+                            cols=rect.width, rows=rect.height)
                 if !isempty(data)
                     kid = _next_kitty_id()
                     data = _inject_kitty_id(data, kid)
                     ow._cached_kitty_id = kid
-                    ow._cached_encoded_rect = gfx_rect
-                    ow._cached_encoded_data = _kitty_placement_bytes(kid, gfx_rect.width, gfx_rect.height)
+                    ow._cached_encoded_rect = rect
+                    ow._cached_encoded_data = _kitty_placement_bytes(kid, rect.width, rect.height)
                     ow._cached_encoded_protocol = Tachikoma.gfx_kitty
-                    Tachikoma.render_graphics!(frame, data, gfx_rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
-                    _force_gfx_blank!(frame.buffer, gfx_rect)
+                    Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
                 end
             else
-                Tachikoma.render_graphics!(frame, ow._cached_encoded_data, gfx_rect;
+                Tachikoma.render_graphics!(frame, ow._cached_encoded_data, rect;
                     pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
-                _force_gfx_blank!(frame.buffer, gfx_rect)
             end
         else
             if ow._cached_encoded_data === nothing || ow._cached_encoded_protocol != gfx
@@ -937,50 +927,12 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
             end
             data = ow._cached_encoded_data
             if !isempty(data)
-                Tachikoma.render_graphics!(frame, data, gfx_rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_sixel)
-                _force_gfx_blank!(frame.buffer, gfx_rect)
+                Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_sixel)
             end
         end
     else
-        # Braille fallback path — render pixel image as unicode braille dots
         Tachikoma.render(pi, rect, buf)
     end
-end
-
-"""Force cells in a graphics region to _GFX_BLANK = Cell(' ', RESET).
-
-Tachikoma release/1.1 added bg-preserve logic to set_char!: when the new
-style has NoColor bg, the existing cell's bg is kept.  render_graphics!
-uses set_char! with RESET (NoColor bg), so the canvas background leaks
-through and _filter_visible_gfx rejects the region.  This function
-bypasses set_char! and writes _GFX_BLANK directly to the buffer array.
-"""
-function _force_gfx_blank!(buf::Tachikoma.Buffer, area::Tachikoma.Rect)
-    blank = Tachikoma.Cell(' ', Tachikoma.Style())
-    for row in area.y:(area.y + area.height - 1)
-        for col in area.x:(area.x + area.width - 1)
-            x_ok = col >= buf.area.x && col <= buf.area.x + buf.area.width - 1
-            y_ok = row >= buf.area.y && row <= buf.area.y + buf.area.height - 1
-            (x_ok && y_ok) || continue
-            @inbounds buf.content[(row - buf.area.y) * buf.area.width + (col - buf.area.x) + 1] = blank
-        end
-    end
-end
-
-"""Clip an image rect to the content area, preventing overlap with border cells."""
-function _clip_to_content(rect::Tachikoma.Rect, clip::Tachikoma.Rect)
-    clip.width < 1 && return rect  # no clip set — pass through
-    # Vertical clip: clamp top/bottom to clip bounds
-    top = max(rect.y, clip.y)
-    bot = min(rect.y + rect.height - 1, clip.y + clip.height - 1)
-    h = bot - top + 1
-    h < 1 && return Tachikoma.Rect(rect.x, rect.y, 0, 0)
-    # Horizontal clip: clamp left/right to clip bounds
-    left = max(rect.x, clip.x)
-    right = min(rect.x + rect.width - 1, clip.x + clip.width - 1)
-    w = right - left + 1
-    w < 1 && return Tachikoma.Rect(rect.x, rect.y, 0, 0)
-    Tachikoma.Rect(left, top, w, h)
 end
 
 """Show stale cached braille image or placeholder while background decode runs."""

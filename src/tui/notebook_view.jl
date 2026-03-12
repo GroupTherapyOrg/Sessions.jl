@@ -607,7 +607,6 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         if oh > 0
             ow.hovered = (i == nv.hovered_bond_idx)
             ow.current_frame = nv.current_frame  # thread Frame for image rendering
-            ow.content_clip = Tachikoma.Rect(cx, visible_start, cw_width, visible_end - visible_start + 1)
             if y + oh > visible_start && y <= visible_end
                 # Full virtual rect — buffer in_bounds clips, overpaint seals border
                 out_rect = Tachikoma.Rect(cx, y, cw_width, oh)
