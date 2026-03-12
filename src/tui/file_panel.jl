@@ -1,6 +1,7 @@
 # TUI: File explorer panel — superfile-inspired sidebar
 # Rounded borders, file type icons, cursor indicator, click navigation
 # Navigate directories inline: click folders to enter, .. to go up
+# Full point-and-click: toolbar buttons, inline rename/create, right-click context menu
 
 struct FileEntry
     name::String
@@ -10,6 +11,8 @@ struct FileEntry
     is_notebook::Bool  # cached: is this a Pluto/Sessions notebook?
     size::Int64
 end
+
+@enum FilePanelInputMode fp_idle fp_rename fp_new_file fp_new_folder
 
 mutable struct FilePanel
     root_dir::String
@@ -21,11 +24,23 @@ mutable struct FilePanel
     show_hidden::Bool
     hovered_idx::Int       # which entry the mouse is hovering (0 = none)
     last_refresh_tick::Int  # tick when entries were last refreshed
+    # Inline text input (rename / new file / new folder)
+    input_mode::FilePanelInputMode
+    input_target_idx::Int          # entry being renamed (0 for new file/folder)
+    input_buffer::Vector{Char}
+    input_cursor::Int              # cursor position within input_buffer
+    input_original_name::String    # original name for rename display
+    # Header toolbar hover
+    hovered_toolbar::Symbol        # :none, :new_file, :new_folder, :refresh, :toggle_hidden
+    # Per-entry action icon hover
+    hovered_rename_idx::Int        # which entry has rename icon hovered (0 = none)
 end
 
 function FilePanel(dir::String=".")
     dir = abspath(dir)
-    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false, 0, 0)
+    fp = FilePanel(dir, dir, FileEntry[], 1, 0, Tachikoma.Rect(), false, 0, 0,
+                   fp_idle, 0, Char[], 0, "",
+                   :none, 0)
     refresh_entries!(fp)
     fp
 end
@@ -126,6 +141,92 @@ function toggle_hidden!(fp::FilePanel)
     refresh_entries!(fp)
 end
 
+# ── Inline text input ────────────────────────────────────────────────
+
+"""Start inline rename for the entry at cursor_idx."""
+function start_rename!(fp::FilePanel)
+    isempty(fp.entries) && return false
+    entry = fp.entries[fp.cursor_idx]
+    entry.name == ".." && return false
+    fp.input_mode = fp_rename
+    fp.input_target_idx = fp.cursor_idx
+    fp.input_buffer = collect(entry.name)
+    fp.input_cursor = length(fp.input_buffer)
+    fp.input_original_name = entry.name
+    return true
+end
+
+"""Start inline new file creation."""
+function start_new_file!(fp::FilePanel)
+    fp.input_mode = fp_new_file
+    fp.input_target_idx = 0
+    fp.input_buffer = Char[]
+    fp.input_cursor = 0
+    fp.input_original_name = ""
+    return true
+end
+
+"""Start inline new folder creation."""
+function start_new_folder!(fp::FilePanel)
+    fp.input_mode = fp_new_folder
+    fp.input_target_idx = 0
+    fp.input_buffer = Char[]
+    fp.input_cursor = 0
+    fp.input_original_name = ""
+    return true
+end
+
+"""Cancel inline input."""
+function cancel_input!(fp::FilePanel)
+    fp.input_mode = fp_idle
+    fp.input_target_idx = 0
+    empty!(fp.input_buffer)
+    fp.input_cursor = 0
+    fp.input_original_name = ""
+end
+
+"""Commit inline input — returns (action, name) or nothing."""
+function commit_input!(fp::FilePanel)
+    name = String(fp.input_buffer)
+    isempty(strip(name)) && return nothing
+    mode = fp.input_mode
+    target = fp.input_target_idx
+    cancel_input!(fp)  # reset state
+    if mode == fp_rename
+        return (:rename, name, target)
+    elseif mode == fp_new_file
+        return (:new_file, name, 0)
+    elseif mode == fp_new_folder
+        return (:new_folder, name, 0)
+    end
+    return nothing
+end
+
+"""Handle a key event for inline text input."""
+function handle_input_key!(fp::FilePanel, evt)
+    if evt.key == :left
+        fp.input_cursor = max(0, fp.input_cursor - 1)
+    elseif evt.key == :right
+        fp.input_cursor = min(length(fp.input_buffer), fp.input_cursor + 1)
+    elseif evt.key == :home
+        fp.input_cursor = 0
+    elseif evt.key == :end_key
+        fp.input_cursor = length(fp.input_buffer)
+    elseif evt.key == :backspace
+        if fp.input_cursor > 0
+            deleteat!(fp.input_buffer, fp.input_cursor)
+            fp.input_cursor -= 1
+        end
+    elseif evt.key == :delete
+        if fp.input_cursor < length(fp.input_buffer)
+            deleteat!(fp.input_buffer, fp.input_cursor + 1)
+        end
+    elseif evt.key == :char
+        insert!(fp.input_buffer, fp.input_cursor + 1, evt.char)
+        fp.input_cursor += 1
+    end
+end
+
 # ── Icons & colors per file type ──────────────────────────────────────
 
 # Using simple Unicode that works without nerd fonts
@@ -208,7 +309,7 @@ function format_size(bytes::Int64)
     return "$(round(bytes / 1024^3; digits=1))G"
 end
 
-# ── Rendering ─────────────────────────────────────────────────────────
+# ── Hit testing ──────────────────────────────────────────────────────
 
 """Height needed for the content area (entries + header + divider)."""
 function panel_content_height(fp::FilePanel)
@@ -223,14 +324,71 @@ function entry_at_y(fp::FilePanel, screen_y::Int)
     # Content starts after v_inset + border(1) + header(1) + divider(1)
     vi = Theme.CELL_V_INSET
     content_start_y = vp.y + vi + 3
-    entry_y = screen_y - content_start_y + fp.scroll_offset
+    # Account for virtual new-file/folder row at the top
+    offset = fp.input_mode in (fp_new_file, fp_new_folder) ? 1 : 0
+    entry_y = screen_y - content_start_y - offset + fp.scroll_offset
 
     (entry_y < 0 || entry_y >= length(fp.entries)) && return nothing
     return entry_y + 1
 end
 
+"""Check if a click x-coordinate hits the trash icon for an entry row."""
+function is_trash_click(fp::FilePanel, screen_x::Int, screen_y::Int)
+    vp = fp.viewport
+    vp.width == 0 && return false
+    hi = Theme.CELL_H_INSET
+    bx = vp.x + hi
+    bw = max(vp.width - 2 * hi, 3)
+    inner_x = bx + 1
+    inner_w = bw - 2
+    trash_x = inner_x + inner_w - 2
+    return screen_x == trash_x
+end
+
+"""Check if a click x-coordinate hits the rename icon for an entry row."""
+function is_rename_click(fp::FilePanel, screen_x::Int, screen_y::Int)
+    vp = fp.viewport
+    vp.width == 0 && return false
+    hi = Theme.CELL_H_INSET
+    bx = vp.x + hi
+    bw = max(vp.width - 2 * hi, 3)
+    inner_x = bx + 1
+    inner_w = bw - 2
+    rename_x = inner_x + inner_w - 4
+    return screen_x == rename_x
+end
+
+"""Map screen coordinates to a header toolbar button."""
+function toolbar_button_at(fp::FilePanel, screen_x::Int, screen_y::Int)
+    vp = fp.viewport
+    vp.width == 0 && return :none
+    hi = Theme.CELL_H_INSET
+    vi = Theme.CELL_V_INSET
+    bx = vp.x + hi
+    bw = max(vp.width - 2 * hi, 3)
+    inner_x = bx + 1
+    inner_w = bw - 2
+    header_y = vp.y + vi + 1
+    screen_y != header_y && return :none
+
+    # Button positions (right-aligned in header): [⊙] [+] [▸] [↻]
+    # From right to left: ↻ at -2, ▸ at -4, + at -6, ⊙ at -8
+    refresh_x = inner_x + inner_w - 2
+    folder_x  = inner_x + inner_w - 4
+    file_x    = inner_x + inner_w - 6
+    hidden_x  = inner_x + inner_w - 8
+
+    screen_x == refresh_x && return :refresh
+    screen_x == folder_x  && return :new_folder
+    screen_x == file_x    && return :new_file
+    screen_x == hidden_x  && return :toggle_hidden
+    return :none
+end
+
 
 const FILE_PANEL_REFRESH_INTERVAL = 60  # ticks between auto-refreshes (~2s at 30fps)
+
+# ── Rendering ─────────────────────────────────────────────────────────
 
 function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     fp.viewport = rect
@@ -283,13 +441,32 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     inner_w = bw - 2
     inner_w < 2 && return
 
-    # ── Header: folder icon + truncated path ──────────────────────────
+    # ── Header: folder icon + truncated path + toolbar buttons ────────
     header_y = by + 1
-    path_display = _truncate_path(fp.current_dir, inner_w - 4)
+
+    # Toolbar buttons (right-aligned): ⊙  +  ▸  ↻
+    _toolbar_icons = [
+        (:toggle_hidden, fp.show_hidden ? "⊙" : "○"),
+        (:new_file,    "+"),
+        (:new_folder,  "▸"),
+        (:refresh,     "↻"),
+    ]
+    toolbar_width = length(_toolbar_icons) * 2  # icon + space for each
+    path_max_w = max(inner_w - toolbar_width - 4, 4)
+    path_display = _truncate_path(fp.current_dir, path_max_w)
     icon_style = Tachikoma.Style(; fg=Theme.GREEN, bg=Theme.SIDEBAR_BG)
     path_style = Tachikoma.Style(; fg=Theme.ACCENT, bg=Theme.SIDEBAR_BG)
     Tachikoma.set_string!(buf, inner_x + 1, header_y, ICON_FOLDER_OPEN, icon_style)
-    Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, inner_w - 4), path_style)
+    Tachikoma.set_string!(buf, inner_x + 3, header_y, first(path_display, path_max_w), path_style)
+
+    # Draw toolbar buttons
+    for (i, (sym, icon_char)) in enumerate(_toolbar_icons)
+        tx = inner_x + inner_w - 2 * (length(_toolbar_icons) - i + 1)
+        is_hovered = fp.hovered_toolbar == sym
+        fg = is_hovered ? Theme.ACCENT_GLOW : Theme.FG_MUTED
+        Tachikoma.set_string!(buf, tx, header_y, icon_char,
+            Tachikoma.Style(; fg, bg=Theme.SIDEBAR_BG))
+    end
 
     # ── Section divider ───────────────────────────────────────────────
     div_y = by + 2
@@ -313,19 +490,37 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     end
     fp.scroll_offset = clamp(fp.scroll_offset, 0, max(0, length(fp.entries) - entries_height))
 
-    max_name_w = inner_w - 7  # cursor(1) + space(1) + icon(1) + space(1) + padding(1) + trash(1) + pad(1)
+    # icon(1) + space(1) + ... + rename(1) + space(1) + trash(1) + pad(1)
+    max_name_w = max(inner_w - 9, 1)
 
-    for vi_idx in 0:(entries_height - 1)
+    # If creating new file/folder, render the input row first
+    input_row_offset = 0
+    if fp.input_mode in (fp_new_file, fp_new_folder)
+        row = entries_start_y
+        if entries_height > 0
+            _render_input_row!(fp, row, inner_x, inner_w, buf)
+            input_row_offset = 1
+        end
+    end
+
+    for vi_idx in 0:(entries_height - 1 - input_row_offset)
         ei = fp.scroll_offset + vi_idx + 1
         ei > length(fp.entries) && break
         entry = fp.entries[ei]
-        row = entries_start_y + vi_idx
+        row = entries_start_y + vi_idx + input_row_offset
+
+        # If this entry is being renamed, render input row instead
+        if fp.input_mode == fp_rename && ei == fp.input_target_idx
+            _render_input_row!(fp, row, inner_x, inner_w, buf)
+            continue
+        end
+
         is_cursor = (ei == fp.cursor_idx)
         is_hovered = (ei == fp.hovered_idx)
-        is_jl = endswith(entry.name, ".jl")
+        show_actions = is_cursor || is_hovered
 
         # Cursor indicator
-        cursor_char = is_cursor ? "›" : (is_hovered ? "›" : " ")
+        cursor_char = (is_cursor || is_hovered) ? "›" : " "
         cursor_fg = is_cursor ? Theme.ACCENT_GLOW : (is_hovered ? Theme.ACCENT_DIM : Theme.FG_MUTED)
         Tachikoma.set_string!(buf, inner_x, row, cursor_char,
             Tachikoma.Style(; fg=cursor_fg, bg=Theme.SIDEBAR_BG))
@@ -339,30 +534,34 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
         Tachikoma.set_string!(buf, inner_x + 2, row, icon,
             Tachikoma.Style(; fg=ic, bg=Theme.SIDEBAR_BG))
 
-        # Filename — color varies by state and file type
+        # Filename
         name = first(entry.name, max_name_w)
-        name_fg = if is_cursor
+        name_fg = if is_cursor || is_hovered
             Theme.FG
-        elseif is_hovered
-            Theme.FG  # bright on hover
-        elseif entry.name == ".."
-            Theme.FG_DIM
         elseif entry.is_dir
             Theme.FG_DIM
-        elseif is_jl
+        elseif endswith(entry.name, ".jl")
             Theme.FG_DIM
         elseif entry.is_hidden
             Theme.FG_MUTED
         else
-            Theme.FG_MUTED  # non-.jl files are dimmer
+            Theme.FG_MUTED
         end
         Tachikoma.set_string!(buf, inner_x + 4, row, name,
             Tachikoma.Style(; fg=name_fg, bg=Theme.SIDEBAR_BG))
 
-        # Trash icon on far right (skip ".." parent entry)
-        if entry.name != ".."
+        # Action icons on far right (skip ".." parent entry)
+        if entry.name != ".." && show_actions
+            # Rename icon ✎
+            rename_x = inner_x + inner_w - 4
+            rename_hovered = (ei == fp.hovered_rename_idx)
+            rename_fg = rename_hovered ? Theme.ACCENT_GLOW : Theme.FG_MUTED
+            Tachikoma.set_string!(buf, rename_x, row, "✎",
+                Tachikoma.Style(; fg=rename_fg, bg=Theme.SIDEBAR_BG))
+
+            # Trash icon ✕
             trash_x = inner_x + inner_w - 2
-            trash_fg = (is_hovered || is_cursor) ? Theme.RED : Theme.FG_MUTED
+            trash_fg = Theme.RED
             Tachikoma.set_string!(buf, trash_x, row, "✕",
                 Tachikoma.Style(; fg=trash_fg, bg=Theme.SIDEBAR_BG))
         end
@@ -382,17 +581,40 @@ function Tachikoma.render(fp::FilePanel, rect::Tachikoma.Rect, buf::Tachikoma.Bu
     end
 end
 
-"""Check if a click x-coordinate hits the trash icon for an entry row."""
-function is_trash_click(fp::FilePanel, screen_x::Int, screen_y::Int)
-    vp = fp.viewport
-    vp.width == 0 && return false
-    hi = Theme.CELL_H_INSET
-    bx = vp.x + hi
-    bw = max(vp.width - 2 * hi, 3)
-    inner_x = bx + 1
-    inner_w = bw - 2
-    trash_x = inner_x + inner_w - 2
-    return screen_x == trash_x
+"""Render an inline text input row (for rename or new file/folder)."""
+function _render_input_row!(fp::FilePanel, row::Int, inner_x::Int, inner_w::Int, buf::Tachikoma.Buffer)
+    bg = Theme.SIDEBAR_BG
+    # Icon
+    icon = if fp.input_mode == fp_new_folder
+        ICON_FOLDER
+    elseif fp.input_mode == fp_new_file
+        ICON_FILE
+    else
+        file_icon(fp.entries[fp.input_target_idx])
+    end
+    icon_fg = fp.input_mode == fp_new_folder ? Theme.ACCENT : Theme.GREEN
+    Tachikoma.set_string!(buf, inner_x, row, " ", Tachikoma.Style(; bg))
+    Tachikoma.set_string!(buf, inner_x + 2, row, icon, Tachikoma.Style(; fg=icon_fg, bg))
+
+    # Text input area
+    text = String(fp.input_buffer)
+    input_x = inner_x + 4
+    input_w = max(inner_w - 5, 1)
+    # Horizontal scroll if text exceeds width
+    scroll = max(0, fp.input_cursor - input_w + 1)
+    visible = length(text) >= scroll + 1 ? text[scroll+1:min(end, scroll + input_w)] : ""
+
+    # Draw text with input styling
+    input_style = Tachikoma.Style(; fg=Theme.FG, bg=Tachikoma.ColorRGB(0x1E, 0x1E, 0x28))
+    Tachikoma.set_string!(buf, input_x, row, visible * " " ^ max(0, input_w - length(visible)), input_style)
+
+    # Draw cursor (block cursor via inverse)
+    cursor_screen_x = input_x + fp.input_cursor - scroll
+    if cursor_screen_x >= input_x && cursor_screen_x < input_x + input_w
+        cursor_char = fp.input_cursor < length(fp.input_buffer) ? fp.input_buffer[fp.input_cursor + 1] : ' '
+        cursor_style = Tachikoma.Style(; fg=Tachikoma.ColorRGB(0x1E, 0x1E, 0x28), bg=Theme.ACCENT_GLOW)
+        Tachikoma.set_char!(buf, cursor_screen_x, row, cursor_char, cursor_style)
+    end
 end
 
 """Truncate a path from the beginning with ... prefix."""

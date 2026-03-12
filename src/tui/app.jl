@@ -13,6 +13,16 @@ const DROPDOWN_ITEMS = [
     ("⊗", "Delete cell"),
 ]
 
+"""Right-click context menu for the file panel."""
+mutable struct FileContextMenu
+    x::Int
+    y::Int
+    entry_idx::Int                          # which file entry (0 = blank area)
+    entry::Union{FileEntry, Nothing}
+    items::Vector{Tuple{String, String}}    # (icon, label) pairs
+    hovered_idx::Int                        # which item mouse is hovering (0 = none)
+end
+
 """Centered confirmation dialog (e.g. delete cell confirmation)."""
 mutable struct ConfirmDialog
     title::String
@@ -153,6 +163,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     scrollbar_h::Int
     # Rename prompt
     rename_prompt::Union{Nothing, RenamePrompt}
+    # File panel context menu
+    file_context_menu::Union{Nothing, FileContextMenu}
     # Raster debounce: suppress sixel/kitty re-encoding during active interaction
     last_interaction_time::Float64
     # --- Performance: avoid per-frame O(N) scans ---
@@ -498,7 +510,7 @@ function SessionsApp(nb::Notebook)
         nothing, 0, 0, 0.0, false,
         nothing,
         0, 0, 0,
-        nothing,
+        nothing, nothing,
         0.0,
         1, false, false, 0, false)
 end
@@ -525,7 +537,7 @@ function SessionsApp(fev::FileEditorView)
         nothing, 0, 0, 0.0, false,
         nothing,
         0, 0, 0,
-        nothing,
+        nothing, nothing,
         0.0,
         1, false, false, 0, false)
 end
@@ -898,6 +910,11 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         _render_dropdown!(app.cell_dropdown, buf, area)
     end
 
+    # File context menu overlay
+    if app.file_context_menu !== nothing
+        _render_file_context_menu!(app.file_context_menu, buf, area)
+    end
+
     # Completion popup overlay
     if app.completion_popup !== nothing
         _render_completion_popup!(app.completion_popup, buf, area)
@@ -1005,6 +1022,9 @@ end
 function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     fp = app.file_panel
 
+    # Don't handle mouse in file_input mode (keyboard captures all)
+    app.mode == :file_input && return
+
     # Scroll in sidebar
     if evt.button == Tachikoma.mouse_scroll_down
         cursor_down!(fp)
@@ -1015,21 +1035,62 @@ function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # Hover — highlight entry under mouse
+    # Hover — highlight entry + toolbar + rename icon
     if evt.action == Tachikoma.mouse_move
         idx = entry_at_y(fp, evt.y)
         fp.hovered_idx = idx !== nothing ? idx : 0
+        fp.hovered_toolbar = toolbar_button_at(fp, evt.x, evt.y)
+        fp.hovered_rename_idx = 0
+        if idx !== nothing && idx > 0 && idx <= length(fp.entries) &&
+           fp.entries[idx].name != ".." && is_rename_click(fp, evt.x, evt.y)
+            fp.hovered_rename_idx = idx
+        end
         return
     end
 
-    # Left click on a file entry
+    # Right click — open context menu
+    if evt.button == Tachikoma.mouse_right && evt.action == Tachikoma.mouse_press
+        idx = entry_at_y(fp, evt.y)
+        entry = (idx !== nothing && idx > 0 && idx <= length(fp.entries)) ? fp.entries[idx] : nothing
+        _open_file_context_menu!(app, evt.x, evt.y, idx !== nothing ? idx : 0, entry)
+        return
+    end
+
+    # Left click
     if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        # Toolbar button clicks
+        btn = toolbar_button_at(fp, evt.x, evt.y)
+        if btn == :new_file
+            start_new_file!(fp)
+            app.mode = :file_input
+            return
+        elseif btn == :new_folder
+            start_new_folder!(fp)
+            app.mode = :file_input
+            return
+        elseif btn == :refresh
+            refresh_entries!(fp)
+            app.message = "Refreshed"
+            return
+        elseif btn == :toggle_hidden
+            toggle_hidden!(fp)
+            return
+        end
+
         idx = entry_at_y(fp, evt.y)
         if idx !== nothing
             entry = fp.entries[idx]
             # Trash icon click — delete with confirmation
             if entry.name != ".." && is_trash_click(fp, evt.x, evt.y)
                 _request_delete_file!(app, entry)
+                return
+            end
+            # Rename icon click
+            if entry.name != ".." && is_rename_click(fp, evt.x, evt.y)
+                fp.cursor_idx = idx
+                if start_rename!(fp)
+                    app.mode = :file_input
+                end
                 return
             end
             # Normal click — open file or enter directory
@@ -1074,6 +1135,114 @@ end
 """Open a file in a new tab (or switch to existing)."""
 function _open_file!(app::SessionsApp, path::String)
     _open_in_tab!(app, path)
+end
+
+# ── File panel context menu ──────────────────────────────────────────
+
+function _open_file_context_menu!(app::SessionsApp, x::Int, y::Int,
+                                   entry_idx::Int, entry::Union{FileEntry, Nothing})
+    items = if entry !== nothing && entry.name != ".."
+        [("·", "New File"), ("▸", "New Folder"), ("✎", "Rename"),
+         ("✕", "Delete"), ("⎘", "Copy Path")]
+    else
+        [("·", "New File"), ("▸", "New Folder")]
+    end
+    app.file_context_menu = FileContextMenu(x, y, entry_idx, entry, items, 0)
+    app.mode = :file_context
+end
+
+function _close_file_context_menu!(app::SessionsApp)
+    app.file_context_menu = nothing
+    app.mode = :normal
+end
+
+function _file_context_menu_width(menu::FileContextMenu)
+    max_label = maximum(length(label) for (_, label) in menu.items)
+    max_label + 6  # icon(1) + spaces(3) + padding(2)
+end
+
+function _file_context_hit_test(menu::FileContextMenu, click_x::Int, click_y::Int)
+    w = _file_context_menu_width(menu)
+    click_x < menu.x && return nothing
+    click_x >= menu.x + w && return nothing
+    click_y <= menu.y && return nothing
+    click_y > menu.y + length(menu.items) && return nothing
+    item_idx = click_y - menu.y
+    (item_idx >= 1 && item_idx <= length(menu.items)) ? item_idx : nothing
+end
+
+function _execute_file_context_action!(app::SessionsApp, item_idx::Int)
+    menu = app.file_context_menu
+    menu === nothing && return
+    _, label = menu.items[item_idx]
+    fp = app.file_panel
+
+    if label == "New File"
+        _close_file_context_menu!(app)
+        start_new_file!(fp)
+        app.mode = :file_input
+    elseif label == "New Folder"
+        _close_file_context_menu!(app)
+        start_new_folder!(fp)
+        app.mode = :file_input
+    elseif label == "Rename" && menu.entry !== nothing
+        fp.cursor_idx = menu.entry_idx
+        _close_file_context_menu!(app)
+        if start_rename!(fp)
+            app.mode = :file_input
+        end
+    elseif label == "Delete" && menu.entry !== nothing
+        entry = menu.entry
+        _close_file_context_menu!(app)
+        _request_delete_file!(app, entry)
+    elseif label == "Copy Path" && menu.entry !== nothing
+        path = menu.entry.path
+        _close_file_context_menu!(app)
+        _clipboard_copy!(path)
+        app.message = "Copied: $path"
+    end
+end
+
+"""Execute a file panel action (rename, new file, new folder)."""
+function _execute_file_panel_action!(app::SessionsApp, action::Symbol, name::String, target_idx::Int)
+    fp = app.file_panel
+    if action == :rename && target_idx > 0 && target_idx <= length(fp.entries)
+        old_entry = fp.entries[target_idx]
+        old_path = old_entry.path
+        new_path = joinpath(dirname(old_path), name)
+        try
+            mv(old_path, new_path)
+            # Update any open tabs that referenced the old path
+            for tab in app.tabs
+                if tab.path == old_path
+                    tab.path = new_path
+                    tab.name = basename(new_path)
+                end
+            end
+            refresh_entries!(fp)
+            app.message = "Renamed: $(old_entry.name) → $name"
+        catch e
+            app.message = "Rename failed: $(sprint(showerror, e))"
+        end
+    elseif action == :new_file
+        new_path = joinpath(fp.current_dir, name)
+        try
+            write(new_path, "")
+            refresh_entries!(fp)
+            app.message = "Created: $name"
+        catch e
+            app.message = "Create failed: $(sprint(showerror, e))"
+        end
+    elseif action == :new_folder
+        new_path = joinpath(fp.current_dir, name)
+        try
+            mkpath(new_path)
+            refresh_entries!(fp)
+            app.message = "Created folder: $name"
+        catch e
+            app.message = "Create folder failed: $(sprint(showerror, e))"
+        end
+    end
 end
 
 """Reset the entire workspace to a new folder. Creates an empty notebook and refreshes the file panel."""
@@ -1194,6 +1363,35 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             _close_completion!(app)
             # Fall through to normal key handling
         end
+    end
+
+    # --- File panel inline input mode (rename / new file / new folder) ---
+    if app.mode == :file_input
+        fp = app.file_panel
+        if evt.key == :escape
+            cancel_input!(fp)
+            app.mode = :normal
+            return
+        elseif evt.key == :enter
+            result = commit_input!(fp)
+            if result !== nothing
+                action, name, target_idx = result
+                _execute_file_panel_action!(app, action, name, target_idx)
+            end
+            app.mode = :normal
+            return
+        else
+            handle_input_key!(fp, evt)
+            return
+        end
+    end
+
+    # --- File context menu mode ---
+    if app.mode == :file_context && app.file_context_menu !== nothing
+        if evt.key == :escape
+            _close_file_context_menu!(app)
+        end
+        return
     end
 
     # --- Rename mode: handle rename prompt input ---
@@ -1721,6 +1919,25 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             end
         elseif evt.action == Tachikoma.mouse_move
             app.activity_bar.hovered = something(button_at_y(app.activity_bar, evt.y), :none)
+        end
+        return
+    end
+
+    # File context menu mode: handle clicks inside menu or click-away to dismiss
+    if app.mode == :file_context && app.file_context_menu !== nothing
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            hit = _file_context_hit_test(app.file_context_menu, evt.x, evt.y)
+            if hit !== nothing
+                _execute_file_context_action!(app, hit)
+            else
+                _close_file_context_menu!(app)
+            end
+            return
+        end
+        if evt.action == Tachikoma.mouse_move
+            hit = _file_context_hit_test(app.file_context_menu, evt.x, evt.y)
+            app.file_context_menu.hovered_idx = hit !== nothing ? hit : 0
+            return
         end
         return
     end
@@ -3223,6 +3440,46 @@ function _render_dropdown!(dd::CellDropdown, buf::Tachikoma.Buffer, area::Tachik
     # Bottom border (rounded)
     bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
     Tachikoma.set_string!(buf, x, y + length(dd.items) + 1, bot, border_style)
+end
+
+"""Render the file panel right-click context menu."""
+function _render_file_context_menu!(menu::FileContextMenu, buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    w = _file_context_menu_width(menu)
+    h = length(menu.items) + 2  # +2 for top/bottom border
+
+    # Clamp position to stay on screen
+    x = min(menu.x, area.x + area.width - w)
+    x = max(x, area.x)
+    y = min(menu.y, area.y + area.height - h)
+    y = max(y, area.y)
+
+    box = Theme.BOX
+    bg = Theme.DROPDOWN_BG
+    border_style = Tachikoma.Style(; fg=Theme.DROPDOWN_BORDER_FG, bg)
+
+    # Top border (rounded)
+    top = string(box.tl) * repeat(string(box.h), w - 2) * string(box.tr)
+    Tachikoma.set_string!(buf, x, y, top, border_style)
+
+    # Items
+    for (i, (icon, label)) in enumerate(menu.items)
+        iy = y + i
+        is_hovered = (i == menu.hovered_idx)
+        item_bg = is_hovered ? Theme.DROPDOWN_HOVER_BG : bg
+        item_fg = is_hovered ? Theme.DROPDOWN_HOVER_FG : Theme.DROPDOWN_ITEM_FG
+        icon_fg = is_hovered ? Theme.DROPDOWN_HOVER_ICON : Theme.DROPDOWN_ICON_FG
+
+        Tachikoma.set_char!(buf, x, iy, box.v, border_style)
+        Tachikoma.set_string!(buf, x + 1, iy, " ", Tachikoma.Style(; fg=item_fg, bg=item_bg))
+        Tachikoma.set_string!(buf, x + 2, iy, icon, Tachikoma.Style(; fg=icon_fg, bg=item_bg))
+        rest = " $label" * " " ^ max(0, w - length(label) - 5)
+        Tachikoma.set_string!(buf, x + 3, iy, rest, Tachikoma.Style(; fg=item_fg, bg=item_bg))
+        Tachikoma.set_char!(buf, x + w - 1, iy, box.v, border_style)
+    end
+
+    # Bottom border (rounded)
+    bot = string(box.bl) * repeat(string(box.h), w - 2) * string(box.br)
+    Tachikoma.set_string!(buf, x, y + length(menu.items) + 1, bot, border_style)
 end
 
 # --- Completion popup rendering ---
