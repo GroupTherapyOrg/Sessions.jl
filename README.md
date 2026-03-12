@@ -18,9 +18,7 @@
 > **Warning: This is an experimental, alpha-quality project.** It was largely built by AI agents (Claude Code), is untested outside of its own test suite, has rough edges everywhere, and may never reach the goals described below. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl) -- it's excellent. This exists because building it is fun and the ideas are worth exploring.
 
 <div align="center">
-  <img src="assets/screenshot-w-plots.png" alt="Sessions.jl with interactive plots" width="700">
-  <br><br>
-  <img src="assets/screenshot-w-repl.png" alt="Sessions.jl with REPL panel" width="700">
+  <img src="assets/2026-03-12 13.15.38.gif" alt="Sessions.jl demo" width="700">
 </div>
 
 ## Why This Exists
