@@ -6,6 +6,7 @@ ralph_loops/
 ralph_loop/
 @v1.12/
 node_modules/
+package-lock.json
 test-results/
 playwright-report/
 docs/dist/
