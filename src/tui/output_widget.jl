@@ -914,10 +914,12 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
                     ow._cached_encoded_data = _kitty_placement_bytes(kid, rect.width, rect.height)
                     ow._cached_encoded_protocol = Tachikoma.gfx_kitty
                     Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
+                    _force_gfx_blank!(frame.buffer, rect)
                 end
             else
                 Tachikoma.render_graphics!(frame, ow._cached_encoded_data, rect;
                     pixels=pi.pixels, format=Tachikoma.gfx_fmt_kitty)
+                _force_gfx_blank!(frame.buffer, rect)
             end
         else
             if ow._cached_encoded_data === nothing || ow._cached_encoded_protocol != gfx
@@ -928,10 +930,30 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
             data = ow._cached_encoded_data
             if !isempty(data)
                 Tachikoma.render_graphics!(frame, data, rect; pixels=pi.pixels, format=Tachikoma.gfx_fmt_sixel)
+                _force_gfx_blank!(frame.buffer, rect)
             end
         end
     else
         Tachikoma.render(pi, rect, buf)
+    end
+end
+
+"""Force cells in a graphics region to _GFX_BLANK = Cell(' ', RESET).
+
+Tachikoma's set_char! preserves existing bg when new style has NoColor bg.
+render_graphics! uses RESET (NoColor bg), so the canvas background leaks
+through and _filter_visible_gfx rejects the region. This bypasses set_char!
+and writes _GFX_BLANK directly to the buffer array.
+"""
+function _force_gfx_blank!(buf::Tachikoma.Buffer, area::Tachikoma.Rect)
+    blank = Tachikoma.Cell(' ', Tachikoma.Style())
+    for row in area.y:(area.y + area.height - 1)
+        for col in area.x:(area.x + area.width - 1)
+            x_ok = col >= buf.area.x && col <= buf.area.x + buf.area.width - 1
+            y_ok = row >= buf.area.y && row <= buf.area.y + buf.area.height - 1
+            (x_ok && y_ok) || continue
+            @inbounds buf.content[(row - buf.area.y) * buf.area.width + (col - buf.area.x) + 1] = blank
+        end
     end
 end
 
