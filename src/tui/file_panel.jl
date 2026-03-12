@@ -9,6 +9,7 @@ struct FileEntry
     is_dir::Bool
     is_hidden::Bool
     is_notebook::Bool  # cached: is this a Pluto/Sessions notebook?
+    is_symlink::Bool
     size::Int64
 end
 
@@ -53,7 +54,7 @@ function refresh_entries!(fp::FilePanel)
     # Add parent directory entry (..) if not at filesystem root
     parent = dirname(fp.current_dir)
     if parent != fp.current_dir
-        push!(fp.entries, FileEntry("..", parent, true, false, false, 0))
+        push!(fp.entries, FileEntry("..", parent, true, false, false, false, 0))
     end
 
     names = try
@@ -68,12 +69,13 @@ function refresh_entries!(fp::FilePanel)
         is_hidden = startswith(name, '.')
         (!fp.show_hidden && is_hidden) && continue
         full = joinpath(fp.current_dir, name)
-        if isdir(full)
-            push!(dirs, FileEntry(name, full, true, is_hidden, false, 0))
+        sym = islink(full)
+        if isdir(full) && !sym
+            push!(dirs, FileEntry(name, full, true, is_hidden, false, false, 0))
         else
             sz = try; filesize(full); catch; Int64(0); end
-            is_nb = endswith(name, ".jl") ? is_notebook_file(full) : false
-            push!(files, FileEntry(name, full, false, is_hidden, is_nb, sz))
+            is_nb = !sym && endswith(name, ".jl") ? is_notebook_file(full) : false
+            push!(files, FileEntry(name, full, false, is_hidden, is_nb, sym, sz))
         end
     end
 
@@ -245,10 +247,15 @@ const ICON_SHELL      = "⊞"
 const ICON_IMAGE      = "◻"
 const ICON_ARCHIVE    = "⊠"
 const ICON_SESSION    = "◈"   # session cache file
+const ICON_SYMLINK    = "⊘"   # symlink
+const ICON_HTML       = "◇"
+const ICON_CSS        = "◇"
+const ICON_WASM       = "⊡"
 const ICON_PARENT     = "⊖"
 
 function file_icon(entry::FileEntry)
     entry.name == ".." && return ICON_PARENT
+    entry.is_symlink && return ICON_SYMLINK
     entry.is_dir && return ICON_FOLDER
     ext = lowercase(splitext(entry.name)[2])
     if ext == ".jl"
@@ -267,6 +274,10 @@ function file_icon(entry::FileEntry)
     ext == ".png"   && return ICON_IMAGE
     ext == ".jpg"   && return ICON_IMAGE
     ext == ".svg"   && return ICON_IMAGE
+    ext == ".html"  && return ICON_HTML
+    ext == ".htm"   && return ICON_HTML
+    ext == ".css"   && return ICON_CSS
+    ext == ".wasm"  && return ICON_WASM
     ext == ".zip"   && return ICON_ARCHIVE
     ext == ".tar"   && return ICON_ARCHIVE
     ext == ".gz"    && return ICON_ARCHIVE
