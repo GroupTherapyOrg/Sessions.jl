@@ -1,0 +1,2 @@
+# Exclude e2e test scaffolding from GitHub language statistics
+test/e2e/** linguist-vendored
