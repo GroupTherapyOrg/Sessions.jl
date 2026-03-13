@@ -53,7 +53,8 @@ function build_session_dict(nb::Notebook)
 end
 
 """Save notebook execution state to the companion .session.toml file.
-Uses atomic write (write to .tmp, rename) to prevent partial reads."""
+Uses atomic write (write to .tmp, rename) to prevent partial reads.
+Returns `(path, error_msg)` — error_msg is empty on success."""
 function save_session!(nb::Notebook)
     path = session_path(nb.path)
     tmp = path * ".tmp"
@@ -64,10 +65,12 @@ function save_session!(nb::Notebook)
         end
         mv(tmp, path; force=true)
         dlog("session", "saved"; path, cells=length(data["cells"]))
+        return (path, "")
     catch e
-        dlog("session", "save_session! FAILED"; path, err=sprint(showerror, e))
+        msg = sprint(showerror, e)
+        dlog("session", "save_session! FAILED"; path, err=msg)
+        return (path, msg)
     end
-    path
 end
 
 """Load session data from a .session.toml file.

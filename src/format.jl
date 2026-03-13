@@ -30,7 +30,7 @@ end
 """Parse a Pluto .jl notebook file into a Notebook."""
 function load_notebook(path::String)
     content = read(path, String)
-    parse_notebook(content; path)
+    parse_notebook(content; path=abspath(path))
 end
 
 """Parse notebook content string into a Notebook."""

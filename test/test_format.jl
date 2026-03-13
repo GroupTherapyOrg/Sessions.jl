@@ -5,7 +5,7 @@ using UUIDs
 @testset "format.jl" begin
     @testset "parse basic_notebook.jl" begin
         nb = Sessions.load_notebook("test/fixtures/test_basic.jl")
-        @test nb.path == "test/fixtures/test_basic.jl"
+        @test nb.path == abspath("test/fixtures/test_basic.jl")
         @test length(nb) == 3
 
         cells = ordered_cells(nb)

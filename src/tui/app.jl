@@ -2824,6 +2824,7 @@ function _rerun_bond_dependents!(app::SessionsApp, name::Symbol, bond_cell::Cell
             cell.disabled && continue
             execute_cell!(app.workspace, cell)
         end
+        save_session!(app.nb)
     end
 end
 
@@ -2854,7 +2855,8 @@ function run_focused_cell_async!(app::SessionsApp)
         catch e
             dlog("app", "execute_changed! failed"; err=sprint(showerror, e))
         end
-        save_session!(app.nb)
+        _, err = save_session!(app.nb)
+        !isempty(err) && (app.message = "Session save failed: $err")
         # Sync to LSP after execution for updated diagnostics
         _lsp_sync_and_refresh!(app)
     end
@@ -2869,8 +2871,8 @@ function run_focused_cell!(app::SessionsApp)
     cw !== nothing && sync_to_cell!(cw)
 
     execute_changed!(app.nb, [cell]; workspace=app.workspace)
-    save_session!(app.nb)
-    app.message = "Ran cell + dependents"
+    _, err = save_session!(app.nb)
+    app.message = isempty(err) ? "Ran cell + dependents" : "Session save failed: $err"
 end
 
 """Execute all stale cells in topological order. Returns the count of cells executed."""
@@ -2887,7 +2889,8 @@ function run_stale_cells!(app::SessionsApp)
     # and includes downstream dependents
     try
         execute_changed!(app.nb, sc; workspace=app.workspace)
-        save_session!(app.nb)
+        _, err = save_session!(app.nb)
+        !isempty(err) && (app.message = "Session save failed: $err")
     catch e
         app.message = "Execution error: $(sprint(showerror, e))"
     end
@@ -2919,7 +2922,8 @@ function run_all_cells_async!(app::SessionsApp)
         catch e
             dlog("app", "execute_notebook! failed"; err=sprint(showerror, e))
         end
-        save_session!(app.nb)
+        _, err = save_session!(app.nb)
+        !isempty(err) && (app.message = "Session save failed: $err")
     end
 end
 
@@ -2930,8 +2934,8 @@ function run_all_cells!(app::SessionsApp)
     end
 
     execute_notebook!(app.nb; workspace=app.workspace)
-    save_session!(app.nb)
-    app.message = "Ran all cells"
+    _, err = save_session!(app.nb)
+    app.message = isempty(err) ? "Ran all cells" : "Session save failed: $err"
 end
 
 """Recover cells stuck in cell_running for more than 5 minutes.
@@ -3018,8 +3022,8 @@ function run_cell_at_index!(app::SessionsApp, idx::Int)
         sync_to_cell!(app.notebook_view.cell_widgets[idx])
     end
     execute_changed!(app.nb, [cell]; workspace=app.workspace)
-    save_session!(app.nb)
-    app.message = "Ran cell $idx"
+    _, err = save_session!(app.nb)
+    app.message = isempty(err) ? "Ran cell $idx" : "Session save failed: $err"
 end
 
 """Delete focused cell and store in undo buffer."""
