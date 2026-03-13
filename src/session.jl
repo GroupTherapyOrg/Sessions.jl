@@ -57,11 +57,16 @@ Uses atomic write (write to .tmp, rename) to prevent partial reads."""
 function save_session!(nb::Notebook)
     path = session_path(nb.path)
     tmp = path * ".tmp"
-    data = build_session_dict(nb)
-    Base.open(tmp, "w") do io
-        TOML.print(io, data)
+    try
+        data = build_session_dict(nb)
+        Base.open(tmp, "w") do io
+            TOML.print(io, data)
+        end
+        mv(tmp, path; force=true)
+        dlog("session", "saved"; path, cells=length(data["cells"]))
+    catch e
+        dlog("session", "save_session! FAILED"; path, err=sprint(showerror, e))
     end
-    mv(tmp, path; force=true)
     path
 end
 

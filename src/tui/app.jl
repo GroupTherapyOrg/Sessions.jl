@@ -2849,7 +2849,11 @@ function run_focused_cell_async!(app::SessionsApp)
     app.message = "Executing..."
 
     Tachikoma.spawn_task!(app.tq, :execute_cell) do
-        execute_changed!(app.nb, [cell]; workspace=app.workspace)
+        try
+            execute_changed!(app.nb, [cell]; workspace=app.workspace)
+        catch e
+            dlog("app", "execute_changed! failed"; err=sprint(showerror, e))
+        end
         save_session!(app.nb)
         # Sync to LSP after execution for updated diagnostics
         _lsp_sync_and_refresh!(app)
@@ -2910,7 +2914,11 @@ function run_all_cells_async!(app::SessionsApp)
     app.message = "Running all cells..."
 
     Tachikoma.spawn_task!(app.tq, :execute_all) do
-        execute_notebook!(app.nb; workspace=app.workspace)
+        try
+            execute_notebook!(app.nb; workspace=app.workspace)
+        catch e
+            dlog("app", "execute_notebook! failed"; err=sprint(showerror, e))
+        end
         save_session!(app.nb)
     end
 end
