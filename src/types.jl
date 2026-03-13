@@ -45,10 +45,12 @@ mutable struct Notebook
     path::String
     cells::Dict{UUID, Cell}
     cell_order::Vector{UUID}
+    _topology::Any       # cached NotebookTopology (or nothing)
+    _topo_cells::Any     # cached SessionCell wrappers (or nothing)
 end
 
 function Notebook(; path::String="Untitled.jl")
-    Notebook(path, Dict{UUID, Cell}(), UUID[])
+    Notebook(path, Dict{UUID, Cell}(), UUID[], nothing, nothing)
 end
 
 # --- Notebook cell operations ---

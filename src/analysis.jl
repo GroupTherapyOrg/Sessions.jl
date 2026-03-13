@@ -39,28 +39,48 @@ function _safe_parse(code::String)
 end
 
 """
-Build a NotebookTopology from a Notebook.
-Returns the topology and a mapping from SessionCell wrappers to Cells.
+Build a NotebookTopology from a Notebook, using the cached topology when
+available.  Only changed cells are re-parsed; unchanged cells keep their
+cached ReactiveNode/ExprAnalysisCache (like Pluto.jl does).
+
+When `changed_cells` is `nothing`, all cells are treated as changed
+(full rebuild — used on first load).
 """
-function build_topology(nb::Notebook)
+function build_topology(nb::Notebook; changed_cells::Union{Nothing, Vector{Cell}}=nothing)
     cells = ordered_cells(nb)
     session_cells = [SessionCell(c) for c in cells]
 
-    empty_topo = PDE.NotebookTopology{SessionCell}()
+    old_topo = nb._topology
+    if old_topo === nothing
+        # First build: analyze all cells
+        old_topo = PDE.NotebookTopology{SessionCell}()
+        updated = session_cells
+    elseif changed_cells === nothing
+        # Explicit full rebuild requested
+        updated = session_cells
+    else
+        # Incremental: only re-parse the changed cells
+        changed_ids = Set(c.id for c in changed_cells)
+        updated = filter(sc -> sc.cell.id in changed_ids, session_cells)
+    end
 
     topology = PDE.updated_topology(
-        empty_topo,
+        old_topo,
         session_cells,
-        session_cells;
+        updated;
         get_code_str = sc -> sc.cell.code,
         get_code_expr = sc -> _safe_parse(sc.cell.code),
     )
+
+    # Cache for next time
+    nb._topology = topology
+    nb._topo_cells = session_cells
 
     topology, session_cells
 end
 
 """
-Compute the topological execution order for a notebook.
+Compute the topological execution order for a notebook (all cells).
 Returns (runnable_cells, errable_cells) where:
   - runnable_cells: Vector{Cell} in correct execution order
   - errable_cells: Dict{Cell, ReactivityError} for cells with errors
@@ -77,10 +97,11 @@ end
 
 """
 Compute execution order for a subset of cells that changed.
-Only re-runs cells affected by the changes.
+Only re-runs cells affected by the changes.  Uses cached topology
+so only the changed cells are re-parsed.
 """
 function execution_order(nb::Notebook, changed_cells::Vector{Cell})
-    topology, session_cells = build_topology(nb)
+    topology, session_cells = build_topology(nb; changed_cells)
 
     # Find the SessionCell wrappers for changed cells
     changed_ids = Set(c.id for c in changed_cells)
