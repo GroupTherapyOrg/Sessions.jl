@@ -373,6 +373,12 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     captured_stdout = ""
     t_start = time_ns()
 
+    # Snapshot LOAD_PATH entries that Sessions.jl needs.  A cell may call
+    # Pkg.activate() which replaces LOAD_PATH entries — we re-inject any
+    # missing host entries after execution so Sessions.jl's own deps
+    # (Tachikoma, PDE, etc.) remain loadable.
+    host_paths = copy(LOAD_PATH)
+
     try
         code = "begin\n$(cell.code)\nend"
         # Stdout capture via redirect_stdout. Under Tachikoma TUI, the global
@@ -415,6 +421,16 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     catch e
         err = CapturedException(e, catch_backtrace())
         dlog("kernel", "cell error"; cell_id=cell.id, err=sprint(showerror, e))
+    finally
+        # Re-inject any host LOAD_PATH entries that a cell's Pkg.activate()
+        # may have removed.  The cell's additions stay (so subsequent cells
+        # in the same notebook can `using` packages from the activated env),
+        # but Sessions.jl's own paths are guaranteed present.
+        for hp in reverse(host_paths)
+            if hp ∉ LOAD_PATH
+                pushfirst!(LOAD_PATH, hp)
+            end
+        end
     end
 
     t_end = time_ns()
