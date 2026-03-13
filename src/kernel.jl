@@ -261,6 +261,24 @@ function format_cell_error(output::CellOutput)::String
     format_error(ce.ex, bt)
 end
 
+"""Symbols to inject into every workspace module.
+
+Built once at load time from the already-loaded Sessions module, so workspace
+creation never touches the package loader (immune to LOAD_PATH corruption from
+notebook `Pkg.activate()` calls).
+"""
+const _SESSIONS_MODULE = @__MODULE__
+
+const _WORKSPACE_INJECTIONS = Pair{Symbol,Any}[
+    :Slider             => Slider,
+    :TextField          => TextField,
+    :CheckBox           => CheckBox,
+    :Select             => Select,
+    :NumberField        => NumberField,
+    :Button             => Button,
+    :CounterButton      => CounterButton,
+]
+
 """
 The Workspace holds all cell-evaluated state in a dedicated module.
 Each notebook gets its own workspace module so variables don't leak.
@@ -310,8 +328,15 @@ let workspace_counter = Ref(0)
 
         # Pre-import Markdown (Pluto parity — md"..." strings need @md_str)
         Core.eval(mod, :(using Markdown))
-        # Inject @bind and widget types so cells can use them directly
-        Core.eval(mod, :(import Sessions: @bind, Slider, TextField, CheckBox, Select, NumberField, Button, CounterButton))
+        # Inject @bind and widget types so cells can use them directly.
+        # We inject the already-loaded objects directly instead of `import Sessions:`
+        # because a previous notebook's Pkg.activate() may have corrupted LOAD_PATH,
+        # making the Sessions package unfindable by the package loader.
+        for (sym, val) in _WORKSPACE_INJECTIONS
+            Core.eval(mod, :(const $sym = $val))
+        end
+        # Macro injection requires binding the mangled name that Julia looks up
+        Core.eval(mod, :(var"@bind" = $_SESSIONS_MODULE.var"@bind"))
         Workspace(mod, ns, nb_abspath)
     end
 end
