@@ -6,9 +6,9 @@ using TOML
 @testset "session.jl" begin
 
     @testset "session_path" begin
-        @test Sessions.session_path("foo.jl") == "foo.session.toml"
-        @test Sessions.session_path("/path/to/notebook.jl") == "/path/to/notebook.session.toml"
-        @test Sessions.session_path("relative/path.jl") == "relative/path.session.toml"
+        @test Sessions.session_path("foo.jl") == "foo.sessions.toml"
+        @test Sessions.session_path("/path/to/notebook.jl") == "/path/to/notebook.sessions.toml"
+        @test Sessions.session_path("relative/path.jl") == "relative/path.sessions.toml"
     end
 
     @testset "truncation" begin
@@ -228,18 +228,18 @@ using TOML
     end
 
     @testset "load_session — missing file returns nothing" begin
-        @test Sessions.load_session("/nonexistent/path.session.toml") === nothing
+        @test Sessions.load_session("/nonexistent/path.sessions.toml") === nothing
     end
 
     @testset "load_session — corrupt file returns nothing" begin
-        path = tempname() * ".session.toml"
+        path = tempname() * ".sessions.toml"
         Base.write(path, "this is not valid TOML {{{")
         @test Sessions.load_session(path) === nothing
         rm(path; force=true)
     end
 
     @testset "load_session — future version returns nothing" begin
-        path = tempname() * ".session.toml"
+        path = tempname() * ".sessions.toml"
         Base.open(path, "w") do io
             TOML.print(io, Dict(
                 "meta" => Dict("version" => 99),

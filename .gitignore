@@ -1,4 +1,4 @@
-*.session.toml
+*.sessions.toml
 .DS_Store
 Manifest.toml
 LocalPreferences.toml

@@ -2967,9 +2967,35 @@ end
 """Check if any background tasks are running."""
 is_busy(app::SessionsApp) = app.tq.active[] > 0
 
-"""Launch the TUI app for a .jl file — auto-detects notebook vs plain file."""
+"""Launch the TUI app for a .jl file, directory, or plain file."""
 function open(path::String)
-    if is_notebook_file(path)
+    if isdir(path)
+        # Directory: open with file panel, auto-load first notebook
+        _fix_gfx_detection!()
+        dir = abspath(path)
+        jl_files = filter(f -> endswith(f, ".jl"), try readdir(dir) catch; String[] end)
+        nb = if !isempty(jl_files)
+            fp = joinpath(dir, first(jl_files))
+            try
+                is_notebook_file(fp) ? load_notebook_with_session(fp) : begin
+                    n = Notebook(; path=fp)
+                    add_cell!(n, "")
+                    n
+                end
+            catch
+                n = Notebook(; path=joinpath(dir, "Untitled.jl"))
+                add_cell!(n, "")
+                n
+            end
+        else
+            n = Notebook(; path=joinpath(dir, "Untitled.jl"))
+            add_cell!(n, "")
+            n
+        end
+        a = SessionsApp(nb)
+        a.file_panel = FilePanel(dir)
+        Tachikoma.app(a; fps=30, default_bindings=false)
+    elseif is_notebook_file(path)
         nb = load_notebook_with_session(path)
         open(nb)
     else

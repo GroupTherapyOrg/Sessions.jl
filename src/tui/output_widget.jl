@@ -83,7 +83,7 @@ function output_lines(cell::Cell)
             push!(lines, String(line))
         end
     elseif out.error === nothing && out.result === nothing && !isempty(out.text_representation)
-        # Cached output from .session.toml — result not available, use text_representation
+        # Cached output from .sessions.toml — result not available, use text_representation
         for line in split(out.text_representation, '\n')
             push!(lines, String(line))
         end

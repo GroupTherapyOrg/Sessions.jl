@@ -1,4 +1,4 @@
-# Layer 1: Companion file (.session.toml) — TOML-based execution state persistence
+# Layer 1: Companion file (.sessions.toml) — TOML-based execution state persistence
 
 using TOML
 using Dates
@@ -8,8 +8,8 @@ const MAX_TEXT_REPRESENTATION = 50_000  # characters
 const MAX_STDOUT = 20_000              # characters
 const TRUNCATION_MARKER = "\n... [output truncated for caching — re-execute to see full output]"
 
-"""Return the companion file path for a notebook path (e.g. `foo.jl` → `foo.session.toml`)."""
-session_path(notebook_path::String) = replace(notebook_path, r"\.jl$" => "") * ".session.toml"
+"""Return the companion file path for a notebook path (e.g. `foo.jl` → `foo.sessions.toml`)."""
+session_path(notebook_path::String) = replace(notebook_path, r"\.jl$" => "") * ".sessions.toml"
 
 """Truncate a string if it exceeds max_len, appending a truncation marker."""
 function _truncate(s::String, max_len::Int)
@@ -52,7 +52,7 @@ function build_session_dict(nb::Notebook)
     )
 end
 
-"""Save notebook execution state to the companion .session.toml file.
+"""Save notebook execution state to the companion .sessions.toml file.
 Uses atomic write (write to .tmp, rename) to prevent partial reads.
 Returns `(path, error_msg)` — error_msg is empty on success."""
 function save_session!(nb::Notebook)
@@ -73,7 +73,7 @@ function save_session!(nb::Notebook)
     end
 end
 
-"""Load session data from a .session.toml file.
+"""Load session data from a .sessions.toml file.
 Returns the parsed Dict, or nothing if the file is missing, corrupt, or unsupported version."""
 function load_session(path::String)
     isfile(path) || return nothing
@@ -92,11 +92,11 @@ function load_session(path::String)
     end
 end
 
-"""Load a notebook and apply cached session data from the companion .session.toml file.
+"""Load a notebook and apply cached session data from the companion .sessions.toml file.
 Returns the notebook with cached state populated (or plain notebook if no session file)."""
 function load_notebook_with_session(path::String)
     nb = load_notebook(path)
-    session_data = load_session(session_path(path))
+    session_data = load_session(session_path(nb.path))
     apply_session!(nb, session_data)
     nb
 end

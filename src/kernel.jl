@@ -572,6 +572,7 @@ function execute_notebook!(nb::Notebook; workspace::Workspace=Workspace())
         cell.disabled && continue
         yield()  # let render loop draw queued/running states
         execute_cell!(workspace, cell)
+        save_session!(nb)  # incremental save after each cell
     end
 
     nb
@@ -602,6 +603,7 @@ function execute_changed!(nb::Notebook, changed_cells::Vector{Cell}; workspace::
         cell.disabled && continue
         yield()  # let render loop draw queued/running states
         execute_cell!(workspace, cell)
+        save_session!(nb)  # incremental save after each cell
     end
 
     nb
