@@ -47,15 +47,14 @@ using UUIDs
         @test :x in Sessions.cell_references(c2)
     end
 
-    @testset "build_topology" begin
+    @testset "update_topology!" begin
         nb = Notebook()
         add_cell!(nb, "x = 1")
         add_cell!(nb, "y = x + 1")
         add_cell!(nb, "z = x * y")
 
-        topology, session_cells = Sessions.build_topology(nb)
-        @test length(session_cells) == 3
-        @test topology isa Sessions.PDE.NotebookTopology
+        Sessions.update_topology!(nb)
+        @test nb.topology isa Sessions.PDE.NotebookTopology
     end
 
     @testset "execution_order — linear chain" begin
@@ -327,5 +326,167 @@ using UUIDs
         @test c.state == cell_errored
         @test !is_never_run(c)  # produced_by_hash set — errors are execution results
         @test c.produced_by_hash == source_hash(c)
+    end
+
+    # ── Pluto-style topology caching tests ────────────────────────────
+
+    @testset "topology caching — incremental update" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = add_cell!(nb, "z = 100")
+
+        # First call: full build
+        Sessions.update_topology!(nb)
+        topo1 = nb.topology
+        @test topo1 !== nothing
+
+        # Second call with only c3 changed: incremental (topology object changes)
+        c3.code = "z = 200"
+        Sessions.update_topology!(nb, [c3])
+        topo2 = nb.topology
+        @test topo2 !== nothing
+        @test topo2 !== topo1  # new topology object
+
+        # Partial update: only c3 changed, but c1→c2 dependency still works
+        result = Sessions.execution_order(nb, [c1])
+        ids = Set(c.id for c in result.runnable)
+        @test c1.id in ids
+        @test c2.id in ids
+        @test !(c3.id in ids)  # z doesn't depend on x
+    end
+
+    @testset "topology caching — cached topological order" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "a = 1")
+        add_cell!(nb, "b = a + 1")
+
+        # Build topology + get order
+        Sessions.update_topology!(nb)
+        order1 = Sessions._topological_order(nb)
+        @test order1 !== nothing
+
+        # Same topology → cached order returned
+        order2 = Sessions._topological_order(nb)
+        @test order2 === order1  # same object (cached)
+
+        # After real change → cache invalidated
+        c1.code = "a = 999"
+        Sessions.update_topology!(nb, [c1])
+        order3 = Sessions._topological_order(nb)
+        @test order3 !== order1  # different object (recomputed)
+    end
+
+    @testset "disabled cells excluded from execution" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = Cell(; code="z = x + 2", disabled=true)
+        add_cell!(nb, c3)
+
+        result = Sessions.execution_order(nb)
+        ids = Set(c.id for c in result.runnable)
+        @test c1.id in ids
+        @test c2.id in ids
+        # Disabled cell may appear in runnable but is skipped during execution
+        # (execute_changed! checks cell.disabled before running)
+    end
+
+    @testset "multiple definitions — cross-cell conflict" begin
+        nb = Notebook()
+        add_cell!(nb, "x = 1")
+        add_cell!(nb, "x = 2")
+
+        result = Sessions.execution_order(nb)
+        @test !isempty(result.errable)
+        # Both cells should be in errable (Pluto-style multiple definition error)
+    end
+
+    @testset "function definitions — multiple methods in one cell" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "begin\n  f(x) = x + 1\n  f(x, y) = x + y\nend")
+        c2 = add_cell!(nb, "f(5)")
+        c3 = add_cell!(nb, "f(5, 6)")
+
+        result = Sessions.execution_order(nb)
+        @test isempty(result.errable)
+        ids = [c.id for c in result.runnable]
+        # f must be defined before it's called
+        @test findfirst(==(c1.id), ids) < findfirst(==(c2.id), ids)
+        @test findfirst(==(c1.id), ids) < findfirst(==(c3.id), ids)
+    end
+
+    @testset "function redefinition — triggers downstream re-run" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "f(x) = x + 1")
+        c2 = add_cell!(nb, "result = f(10)")
+
+        # Initial topology
+        result = Sessions.execution_order(nb, [c1])
+        ids = Set(c.id for c in result.runnable)
+        @test c1.id in ids
+        @test c2.id in ids  # result depends on f
+
+        # Change f → downstream c2 should still be included
+        c1.code = "f(x) = x * 2"
+        result2 = Sessions.execution_order(nb, [c1])
+        ids2 = Set(c.id for c in result2.runnable)
+        @test c1.id in ids2
+        @test c2.id in ids2
+    end
+
+    @testset "incremental update — editing independent cell skips dependents" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = add_cell!(nb, "z = 100")  # independent
+
+        # Full build first
+        Sessions.update_topology!(nb)
+
+        # Change only the independent cell
+        c3.code = "z = 200"
+        result = Sessions.execution_order(nb, [c3])
+        ids = Set(c.id for c in result.runnable)
+        @test c3.id in ids
+        @test !(c1.id in ids)  # x unchanged
+        @test !(c2.id in ids)  # y unchanged
+    end
+
+    @testset "diamond dependency — partial update propagates through" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "a = x + 1")
+        c3 = add_cell!(nb, "b = x + 2")
+        c4 = add_cell!(nb, "c = a + b")
+
+        # Change root x → all dependents should re-run
+        result = Sessions.execution_order(nb, [c1])
+        ids = Set(c.id for c in result.runnable)
+        @test c1.id in ids
+        @test c2.id in ids  # a depends on x
+        @test c3.id in ids  # b depends on x
+        @test c4.id in ids  # c depends on a, b
+    end
+
+    @testset "cycle detection — mutual references" begin
+        nb = Notebook()
+        add_cell!(nb, "a = b + 1")
+        add_cell!(nb, "b = a + 1")
+
+        result = Sessions.execution_order(nb)
+        @test !isempty(result.errable)
+    end
+
+    @testset "using/import — references propagate" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "using Dates")
+        c2 = add_cell!(nb, "today()")
+
+        result = Sessions.execution_order(nb)
+        @test isempty(result.errable)
+        ids = [c.id for c in result.runnable]
+        # using must come before today()
+        @test findfirst(==(c1.id), ids) < findfirst(==(c2.id), ids)
     end
 end

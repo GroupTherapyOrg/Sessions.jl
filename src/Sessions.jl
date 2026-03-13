@@ -29,7 +29,7 @@ export source_hash, is_stale, is_never_run, stale_cells, never_run_cells, mark_e
 export load_notebook, save_notebook, parse_notebook, serialize_notebook, is_notebook_file
 
 include("analysis.jl")
-export analyze_cell, cell_definitions, cell_references, build_topology, execution_order, downstream_dependents
+export analyze_cell, cell_definitions, cell_references, update_topology!, execution_order, downstream_dependents
 
 include("bind.jl")
 export AbstractWidget, Slider, TextField, CheckBox, Select, NumberField, Button, CounterButton
@@ -114,7 +114,7 @@ y = x * 2
         _pc_nb = parse_notebook(_pc_source; path="precompile.jl")
         serialize_notebook(_pc_nb)
         analyze_cell(_pc_nb.cells[_pc_nb.cell_order[1]])
-        build_topology(_pc_nb)
+        update_topology!(_pc_nb)
         execution_order(_pc_nb)
         source_hash(_pc_nb.cells[_pc_nb.cell_order[1]])
         is_stale(_pc_nb.cells[_pc_nb.cell_order[1]])

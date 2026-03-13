@@ -45,8 +45,12 @@ mutable struct Notebook
     path::String
     cells::Dict{UUID, Cell}
     cell_order::Vector{UUID}
-    _topology::Any       # cached NotebookTopology (or nothing)
-    _topo_cells::Any     # cached SessionCell wrappers (or nothing)
+    # Cached topology state (mirrors Pluto.jl's Notebook fields).
+    # `topology` is the current NotebookTopology; updated incrementally
+    # when cells change.  `_cached_topological_order` caches the full
+    # topological order and is invalidated when topology changes.
+    topology::Any                        # ::NotebookTopology{SessionCell} or nothing
+    _cached_topological_order::Any       # ::TopologicalOrder{SessionCell} or nothing
 end
 
 function Notebook(; path::String="Untitled.jl")
