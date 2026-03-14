@@ -717,14 +717,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         stale_len = length(stale_label)
         stale_x = run_x - stale_len - 1
         if stale_x > bx + 2
-            stale_fg = if is_busy
-                Theme.ORANGE
-            elseif nv.run_stale_hovered
-                Theme.ACCENT
-            else
-                Theme.FG_MUTED
-            end
-            stale_s = Tachikoma.Style(; fg=stale_fg, bg=Theme.CANVAS_BG, bold=nv.run_stale_hovered)
+            stale_s = Tachikoma.Style(; fg=Theme.ORANGE, bg=Theme.CANVAS_BG, bold=nv.run_stale_hovered)
             Tachikoma.set_string!(buf, stale_x, bot_border_y, stale_label, stale_s)
             nv.run_stale_rect = Tachikoma.Rect(stale_x, bot_border_y, stale_len, 1)
         else
