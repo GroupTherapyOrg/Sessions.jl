@@ -303,29 +303,38 @@ function _toggle_diagnostics!(app::SessionsApp)
     end
 end
 
-"""Refresh diagnostics from all sources (LSP + JET direct)."""
-function _refresh_diagnostics!(app::SessionsApp)
-    # Merge LSP diagnostics
-    if app.lsp.status == lsp_ready
-        app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
-    end
+"""Refresh diagnostics from all sources (LSP + JET direct).
 
-    # Also run JET direct analysis as fallback if LSP isn't ready
-    if app.lsp.status != lsp_ready
-        Tachikoma.spawn_task!(app.tq, :jet_analyze) do
-            jet_results = analyze_notebook_jet(app.nb)
-            app.jet_diagnostics_cache = jet_results
-            # Convert to cell diagnostics format
-            for (id, cd) in jet_results
-                app.cell_diagnostics_cache[id] = cd.diagnostics
-            end
-            update_entries!(app.diagnostics_panel, app.jet_diagnostics_cache, app.nb)
+Always runs JET direct analysis (catches macro/inference errors that JETLS misses).
+Also merges LSP diagnostics if available (lowering checks like captured variables)."""
+function _refresh_diagnostics!(app::SessionsApp)
+    # Run JET direct analysis — catches @md_str, @bind, CUDA, MethodError, etc.
+    Tachikoma.spawn_task!(app.tq, :jet_analyze) do
+        jet_results = analyze_notebook_jet(app.nb)
+        app.jet_diagnostics_cache = jet_results
+        # Start from JET direct diagnostics
+        merged = Dict{UUID, Vector{Diagnostic}}()
+        for (id, cd) in jet_results
+            merged[id] = copy(cd.diagnostics)
         end
-    else
-        # Build CellDiagnostics from LSP data for the panel
+        # Merge LSP diagnostics (lowering checks) — deduplicate by message
+        if app.lsp.status == lsp_ready
+            lsp_diags = lsp_cell_diagnostics(app.lsp, app.nb)
+            for (id, diags) in lsp_diags
+                existing = get(merged, id, Diagnostic[])
+                existing_msgs = Set(d.message for d in existing)
+                for d in diags
+                    d.message in existing_msgs && continue
+                    push!(existing, d)
+                end
+                merged[id] = existing
+            end
+        end
+        app.cell_diagnostics_cache = merged
+        # Update panel
         jet_cache = Dict{UUID, CellDiagnostics}()
-        for (id, diags) in app.cell_diagnostics_cache
-            jet_cache[id] = CellDiagnostics(id, diags, UInt64(0), :error)
+        for (id, diags) in merged
+            jet_cache[id] = CellDiagnostics(id, diags, UInt64(0), :merged)
         end
         update_entries!(app.diagnostics_panel, jet_cache, app.nb)
     end
@@ -333,16 +342,17 @@ end
 
 """Sync notebook changes to LSP and refresh diagnostics."""
 function _lsp_sync_and_refresh!(app::SessionsApp)
+    # Sync all editors → cell.code before analysis
+    for cw in app.notebook_view.cell_widgets
+        sync_to_cell!(cw)
+    end
+    # Sync to JETLS if available
     if app.lsp.status == lsp_ready
-        # Sync all editors → cell.code before building the LSP document
-        for cw in app.notebook_view.cell_widgets
-            sync_to_cell!(cw)
-        end
         app.lsp_doc_version += 1
         lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
-        dlog("lsp", "sync_and_refresh"; version=app.lsp_doc_version,
-             n_cells=length(app.nb.cell_order))
     end
+    # Always refresh diagnostics from both JET direct + LSP
+    _refresh_diagnostics!(app)
 end
 
 """Format all notebook cells using Runic.jl. Returns number of cells that changed."""
