@@ -1178,8 +1178,9 @@ function lsp_sync_notebook!(client::LspClient, nb::Notebook, version::Int)
     end
     # Send didSave to trigger JETLS deep analysis (JET inference pass — push model)
     lsp_did_save!(client, uri, text)
-    # Request pull diagnostics (lowering checks — pull model)
-    lsp_request_diagnostics!(client, uri)
+    # NOTE: Do NOT request pull diagnostics here — JETLS hasn't re-analyzed yet
+    # and would return stale cached results. Pull diagnostics are requested
+    # after JETLS pushes updated results (see render-loop poll in app.jl).
 end
 
 """Get LSP diagnostics mapped back to notebook cells.

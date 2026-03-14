@@ -737,9 +737,13 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         end
     end
 
-    # Poll LSP diagnostics — only re-fetch when LSP has new data (version changed)
+    # Poll LSP diagnostics — when JETLS pushes new data, also request pull diagnostics
+    # (push = inference errors, pull = lowering errors like @md_str not found)
     if app.lsp.status == lsp_ready && app.lsp._diag_version != app._lsp_diag_version
         app._lsp_diag_version = app.lsp._diag_version
+        # JETLS pushed new results → now safe to request pull diagnostics
+        # (JETLS has finished re-analyzing, so pull results will be fresh)
+        lsp_request_diagnostics!(app.lsp, notebook_uri(app.nb))
         app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
         # Update diagnostics panel entries if panel is open
         if app.diagnostics_open
