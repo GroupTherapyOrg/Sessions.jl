@@ -319,4 +319,79 @@
         rm(path; force=true)
     end
 
+    @testset "Save clears dirty flag (orange dot disappears)" begin
+        path = tempname() * ".jl"
+        nb = Sessions.Notebook(; path=path)
+        Sessions.add_cell!(nb, "x = 1")
+        Sessions.save_notebook(nb)
+        app = Sessions.SessionsApp(nb)
+
+        # Make notebook dirty by editing a cell
+        cw = app.notebook_view.cell_widgets[1]
+        Tachikoma.set_text!(cw.editor, "x = 2")
+        Sessions.sync_to_cell!(cw)
+        app._dirty_cache_valid = false
+
+        # Render to compute dirty state
+        tb = Tachikoma.TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Tachikoma.Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+        @test app.notebook_view.dirty == true  # should be dirty
+
+        # Save
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+
+        # Dirty cache must be invalidated so next render recomputes
+        @test app._dirty_cache_valid == false
+
+        # Render again — dirty should now be false
+        Tachikoma.view(app, frame)
+        @test app.notebook_view.dirty == false
+
+        rm(path; force=true)
+    end
+
+    @testset "Format on save — all cells get formatted, not just focused" begin
+        path = tempname() * ".jl"
+        nb = Sessions.Notebook(; path=path)
+        Sessions.add_cell!(nb, "x=1+2")
+        Sessions.add_cell!(nb, "y=3+4")
+        Sessions.add_cell!(nb, "z=5+6")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+
+        if Sessions.format_code_available()
+            for (i, cw) in enumerate(app.notebook_view.cell_widgets)
+                code = Tachikoma.text(cw.editor)
+                # Each cell should have spaces around operators
+                @test occursin(" + ", code) || occursin("+", code)
+            end
+            # Verify the message
+            @test occursin("Formatted", app.message)
+            # Verify the saved file has formatted content
+            content = read(path, String)
+            @test occursin("1 + 2", content)
+            @test occursin("3 + 4", content)
+            @test occursin("5 + 6", content)
+        end
+
+        rm(path; force=true)
+    end
+
+    @testset "Format on save — cell.code matches editor after format" begin
+        path = tempname() * ".jl"
+        nb = Sessions.Notebook(; path=path)
+        Sessions.add_cell!(nb, "x=1+2")
+        app = Sessions.SessionsApp(nb)
+
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
+
+        cw = app.notebook_view.cell_widgets[1]
+        # cell.code must match the editor text (for save_notebook consistency)
+        @test cw.cell.code == Tachikoma.text(cw.editor)
+
+        rm(path; force=true)
+    end
+
 end

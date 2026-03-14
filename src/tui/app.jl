@@ -1649,6 +1649,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         save_notebook(app.nb)
         app.last_save_time = time()
         app.last_disk_nb = _snapshot_notebook(app.nb)
+        app._dirty_cache_valid = false  # force dirty recompute (clears orange ● Save)
         _sync_to_active_tab!(app)
         n_stale = run_stale_cells!(app)
         # Re-sync to JETLS after save for updated diagnostics
