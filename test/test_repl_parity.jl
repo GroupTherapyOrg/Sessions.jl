@@ -394,6 +394,48 @@
         rm(path; force=true)
     end
 
+    # ── Ctrl+/ Toggle Comment ────────────────────────────────────────
+
+    @testset "Ctrl+/ comments single line" begin
+        app, cw = make_insert_app("x = 1")
+        cw.editor.cursor_col = 3
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '/'))
+        @test Tachikoma.text(cw.editor) == "# x = 1"
+    end
+
+    @testset "Ctrl+/ uncomments single line" begin
+        app, cw = make_insert_app("# x = 1")
+        cw.editor.cursor_col = 4
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '/'))
+        @test Tachikoma.text(cw.editor) == "x = 1"
+    end
+
+    @testset "Ctrl+/ toggles comment on indented line" begin
+        app, cw = make_insert_app("    x = 1")
+        cw.editor.cursor_col = 6
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '/'))
+        @test Tachikoma.text(cw.editor) == "    # x = 1"
+        # Toggle back
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '/'))
+        @test Tachikoma.text(cw.editor) == "    x = 1"
+    end
+
+    @testset "Ctrl+/ skips empty lines" begin
+        app, cw = make_insert_app("x = 1\n\ny = 2")
+        # Select all 3 lines
+        cw.selection.active = true
+        cw.selection.anchor_row = 1
+        cw.selection.anchor_col = 0
+        cw.editor.cursor_row = 3
+        cw.editor.cursor_col = 5
+        Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, '/'))
+        code = Tachikoma.text(cw.editor)
+        lines = split(code, '\n')
+        @test startswith(lines[1], "# ")
+        @test lines[2] == ""  # empty line preserved
+        @test startswith(lines[3], "# ")
+    end
+
     # ── Save button click (mouse) ──────────────────────────────────
 
     # ── Run Stale ─────────────────────────────────────────────────

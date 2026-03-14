@@ -409,7 +409,80 @@ function _word_right!(editor)
     editor.cursor_col = col
 end
 
-"""Delete previous word (REPL edit_delete_prev_word / Meta+Backspace)."""
+"""Toggle line comment (`# `) on the current line or all selected lines.
+
+Follows VS Code / Pluto behavior:
+- If ANY line in the range is uncommented → comment ALL lines
+- If ALL lines are already commented → uncomment ALL lines
+- Empty lines are skipped (left empty)
+- Comment preserves indentation: `    x = 1` → `    # x = 1`
+- Uses `# ` (with space) per Julia style convention
+"""
+function _toggle_comment!(editor, sel::SelectionState)
+    Tachikoma._push_undo!(editor; force=true)
+
+    # Determine line range
+    if sel.active
+        r1 = min(sel.anchor_row, editor.cursor_row)
+        r2 = max(sel.anchor_row, editor.cursor_row)
+    else
+        r1 = r2 = editor.cursor_row
+    end
+    r1 = clamp(r1, 1, length(editor.lines))
+    r2 = clamp(r2, 1, length(editor.lines))
+
+    # Check if all non-empty lines are commented
+    all_commented = true
+    for r in r1:r2
+        line = editor.lines[r]
+        isempty(line) && continue
+        s = String(line)
+        stripped = lstrip(s)
+        if !startswith(stripped, "# ") && !startswith(stripped, "#")
+            all_commented = false
+            break
+        end
+    end
+
+    if all_commented
+        # Uncomment: remove first `# ` or `#` from each non-empty line
+        for r in r1:r2
+            line = editor.lines[r]
+            isempty(line) && continue
+            s = String(line)
+            # Find where the `#` starts
+            idx = findfirst('#', s)
+            idx === nothing && continue
+            if idx < length(s) && s[idx + 1] == ' '
+                # Remove `# ` (hash + space)
+                new_s = s[1:idx-1] * s[idx+2:end]
+            else
+                # Remove just `#`
+                new_s = s[1:idx-1] * s[idx+1:end]
+            end
+            editor.lines[r] = collect(new_s)
+            Tachikoma._mark_dirty!(editor, r)
+        end
+        # Adjust cursor
+        if editor.cursor_col > 0
+            editor.cursor_col = max(0, editor.cursor_col - 2)
+        end
+    else
+        # Comment: add `# ` after leading whitespace on each non-empty line
+        for r in r1:r2
+            line = editor.lines[r]
+            isempty(line) && continue
+            s = String(line)
+            indent = length(s) - length(lstrip(s))
+            new_s = s[1:indent] * "# " * s[indent+1:end]
+            editor.lines[r] = collect(new_s)
+            Tachikoma._mark_dirty!(editor, r)
+        end
+        editor.cursor_col += 2
+    end
+    Tachikoma._ensure_tokens!(editor)
+end
+
 function _delete_prev_word!(editor, sel::SelectionState)
     Tachikoma._push_undo!(editor; force=true)
     start_row = editor.cursor_row
@@ -616,6 +689,12 @@ function _handle_shared_editor_key!(editor, sel::SelectionState, evt)
             Tachikoma._mark_dirty!(editor, editor.cursor_row)
         end
         Tachikoma._ensure_tokens!(editor)
+        return (true, true)
+    end
+
+    # ── Ctrl+/: toggle line comment (Pluto/VS Code behavior) ──
+    if evt.key == :ctrl && evt.char == '/'
+        _toggle_comment!(editor, sel)
         return (true, true)
     end
 

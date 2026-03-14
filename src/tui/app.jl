@@ -334,22 +334,16 @@ end
 """Sync notebook changes to LSP and refresh diagnostics."""
 function _lsp_sync_and_refresh!(app::SessionsApp)
     if app.lsp.status == lsp_ready
+        # Sync all editors → cell.code before building the LSP document
+        for cw in app.notebook_view.cell_widgets
+            sync_to_cell!(cw)
+        end
         app.lsp_doc_version += 1
         # Force close+reopen so JETLS re-analyzes from scratch
         # (incremental didChange may not update import/macro resolution)
         lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version; force=true)
-        # Schedule diagnostic refresh after a brief delay to let LSP process
-        @async begin
-            sleep(1.0)
-            app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
-            if app.diagnostics_open
-                jet_cache = Dict{UUID, CellDiagnostics}()
-                for (id, diags) in app.cell_diagnostics_cache
-                    jet_cache[id] = CellDiagnostics(id, diags, UInt64(0), :error)
-                end
-                update_entries!(app.diagnostics_panel, jet_cache, app.nb)
-            end
-        end
+        dlog("lsp", "sync_and_refresh forced"; version=app.lsp_doc_version,
+             n_cells=length(app.nb.cell_order))
     end
 end
 
@@ -702,8 +696,12 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
         elapsed = time() - app.lsp_sync_needed
         if elapsed >= 1.0
             app.lsp_sync_needed = 0.0
+            # Sync editors → cell.code before building LSP document
+            for cw in app.notebook_view.cell_widgets
+                sync_to_cell!(cw)
+            end
             app.lsp_doc_version += 1
-            lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+            lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version; force=true)
         end
     end
 
