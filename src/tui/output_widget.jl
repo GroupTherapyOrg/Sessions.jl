@@ -485,6 +485,54 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
     _render_output_selection!(ow, rect, buf)
 end
 
+"""Build the visual text lines for a structured error (matches what _render_structured_error! draws).
+Used for selection text extraction — must stay in sync with the renderer."""
+function _structured_error_visual_lines(ow::OutputWidget)::Vector{String}
+    se = ow.cell.output.structured_error
+    se === nothing && return String[]
+
+    lines = String[]
+
+    # Line 1: type name
+    push!(lines, se.type_name)
+    # Line 2: message
+    push!(lines, se.message)
+    # Line 3: blank
+    push!(lines, "")
+    # Line 4: Stacktrace header
+    push!(lines, "Stacktrace:")
+
+    # Frames
+    visible_frames = if ow._error_show_all
+        se.frames
+    else
+        [f for f in se.frames if f.importance != :dim]
+    end
+    nf = length(visible_frames)
+    display_count = min(nf, _ERROR_MAX_VISIBLE_FRAMES)
+
+    for (i, frame) in enumerate(visible_frames)
+        i > display_count && break
+        dot = (frame.from_user || frame.importance == :important) ? '●' : '○'
+        loc = "  at $(frame.file_short):$(frame.line)"
+        if frame.from_user
+            loc *= "  ←"
+        end
+        push!(lines, " [$i] $dot $(frame.func_short)$loc")
+    end
+
+    # Expand/collapse indicator
+    hidden = length(se.frames) - length(visible_frames)
+    dim_count = length(se.frames) - length([f for f in se.frames if f.importance != :dim])
+    if hidden > 0 && !ow._error_show_all
+        push!(lines, "     ··· $hidden more frames (Click to expand) ···")
+    elseif ow._error_show_all && dim_count > 0
+        push!(lines, "     ··· (Click to collapse) ···")
+    end
+
+    lines
+end
+
 # --- Structured error rendering (Pluto-style) ---
 
 """Render a structured error with per-frame metadata, importance styling, and navigation."""
@@ -613,13 +661,22 @@ end
 
 # --- Output text selection (drag-to-copy) ---
 
+"""Get the visual lines for output selection — structured errors use their own layout,
+everything else uses cached_output_lines."""
+function _selectable_output_lines(ow::OutputWidget)::Vector{String}
+    if ow.cell.output.output_type == :error && ow.cell.output.structured_error !== nothing
+        return _structured_error_visual_lines(ow)
+    end
+    cached_output_lines(ow)
+end
+
 """Map screen coordinates to output text (row, col) given the output rect.
 
 Output text starts at rect.x + 3 (bar + padding). Row/col are clamped
-to the visible output lines. Lines are the ANSI-stripped plain text."""
+to the visible output lines."""
 function _output_click_to_pos(ow::OutputWidget, rect::Tachikoma.Rect,
                                click_x::Int, click_y::Int)
-    lines = cached_output_lines(ow)
+    lines = _selectable_output_lines(ow)
     nlines = length(lines)
     nlines == 0 && return (1, 0)
 
@@ -651,7 +708,7 @@ end
 """Extract the selected output text as a String."""
 function _output_selected_text(ow::OutputWidget)::String
     !ow._sel_active && return ""
-    lines = cached_output_lines(ow)
+    lines = _selectable_output_lines(ow)
     isempty(lines) && return ""
 
     sr, sc, er, ec = _output_selection_range(ow)
@@ -691,7 +748,7 @@ end
 function _render_output_selection!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
     !ow._sel_active && return
 
-    lines = cached_output_lines(ow)
+    lines = _selectable_output_lines(ow)
     isempty(lines) && return
 
     sr, sc, er, ec = _output_selection_range(ow)

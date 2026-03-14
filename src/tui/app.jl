@@ -2308,21 +2308,22 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             # Check for structured error interactive elements (Copy button, expand/collapse)
             se = ow.cell.output.structured_error
             if se !== nothing
-                text_x = out_rect.x + 3
-                # "Copy" button at top-right of error block (first row)
-                copy_text = "⎘ Copy"
-                copy_x = out_rect.x + out_rect.width - length(copy_text) - 1
-                if evt.y == out_rect.y && evt.x >= copy_x && evt.x < copy_x + length(copy_text)
-                    _clipboard_copy!(se.plain_text)
-                    app.message = "Error copied to clipboard"
-                    return
+                # "Copy" button at top-right of error block (first row of output)
+                if evt.y == out_rect.y
+                    # Wide hit zone: last 10 chars of the first line
+                    copy_zone_x = out_rect.x + out_rect.width - 10
+                    if evt.x >= copy_zone_x
+                        _clipboard_copy!(se.plain_text)
+                        app.message = "Error copied to clipboard"
+                        return
+                    end
                 end
 
-                # Expand/collapse indicator line — compute its y position
-                visible_frames = ow._error_show_all ? se.frames : [f for f in se.frames if f.importance != :dim]
-                nf = min(length(visible_frames), _ERROR_MAX_VISIBLE_FRAMES)
-                indicator_y = out_rect.y + 4 + nf  # header(4) + frames
-                if evt.y == indicator_y
+                # Expand/collapse indicator line
+                vis_lines = _structured_error_visual_lines(ow)
+                indicator_y = out_rect.y + length(vis_lines) - 1
+                last_line = isempty(vis_lines) ? "" : vis_lines[end]
+                if evt.y == indicator_y && contains(last_line, "Click to")
                     ow._error_show_all = !ow._error_show_all
                     ow._cached_height = -1  # invalidate height cache
                     app.message = ow._error_show_all ? "Showing all frames" : "Collapsed dim frames"
