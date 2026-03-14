@@ -1049,6 +1049,51 @@ function _render_progress_bar!(buf::Tachikoma.Buffer, rect::Tachikoma.Rect, prog
     end
 end
 
+"""Handle mouse events in the diagnostics panel."""
+function _handle_diagnostics_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
+    dp = app.diagnostics_panel
+    n_entries = length(dp.entries)
+
+    # Scroll
+    if evt.button == Tachikoma.mouse_scroll_down
+        if dp.cursor_idx < n_entries
+            dp.cursor_idx += 1
+        end
+        return
+    end
+    if evt.button == Tachikoma.mouse_scroll_up
+        if dp.cursor_idx > 1
+            dp.cursor_idx -= 1
+        end
+        return
+    end
+
+    # Hover
+    if evt.action == Tachikoma.mouse_move
+        idx = diag_entry_at_y(dp, evt.y)
+        dp.hovered_idx = idx !== nothing ? idx : 0
+        return
+    end
+
+    # Click — navigate to the diagnostic's cell
+    if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+        idx = diag_entry_at_y(dp, evt.y)
+        if idx !== nothing && idx >= 1 && idx <= n_entries
+            dp.cursor_idx = idx
+            cell_id, diag = dp.entries[idx]
+            # Focus the cell that has the diagnostic
+            nv = app.notebook_view
+            for (i, cw) in enumerate(nv.cell_widgets)
+                if cw.cell.id == cell_id
+                    focus_cell!(nv, i)
+                    break
+                end
+            end
+        end
+        return
+    end
+end
+
 """Handle mouse events in the file panel sidebar."""
 function _handle_file_panel_mouse!(app::SessionsApp, evt::Tachikoma.MouseEvent)
     fp = app.file_panel
@@ -2069,11 +2114,17 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
-    # File panel clicks — if click is in sidebar area
+    # Sidebar mouse events — route to diagnostics panel or file panel
     sr = app.sidebar_rect
     if sr.width > 0 && evt.x >= sr.x && evt.x < sr.x + sr.width &&
        evt.y >= sr.y && evt.y < sr.y + sr.height
-        _handle_file_panel_mouse!(app, evt)
+        dp_vp = app.diagnostics_panel.viewport
+        if app.diagnostics_open && dp_vp.width > 0 &&
+           evt.y >= dp_vp.y && evt.y < dp_vp.y + dp_vp.height
+            _handle_diagnostics_mouse!(app, evt)
+        else
+            _handle_file_panel_mouse!(app, evt)
+        end
         return
     end
 
