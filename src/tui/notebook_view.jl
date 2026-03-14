@@ -18,6 +18,8 @@ mutable struct NotebookView
     hovered_bond_idx::Int      # cell index where mouse hovers over a bond widget (0 = none)
     run_all_rect::Tachikoma.Rect   # clickable "▶ Run All" button in bottom border
     run_all_hovered::Bool          # mouse hovering over run-all button
+    run_stale_rect::Tachikoma.Rect # clickable "▶ Stale" button in bottom border
+    run_stale_hovered::Bool        # mouse hovering over run-stale button
     save_rect::Tachikoma.Rect      # clickable "Save" button in top border
     save_hovered::Bool             # mouse hovering over save button
     dirty::Bool                    # notebook has unsaved changes
@@ -38,7 +40,7 @@ function NotebookView(nb::Notebook)
     cell_widgets = [CellWidget(c; focused=(i == 1)) for (i, c) in enumerate(cells)]
     output_widgets = [OutputWidget(c) for c in cells]
     n = length(cells)
-    nv = NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0), zeros(Int, n), zeros(Int, n), true, false)
+    nv = NotebookView(nb, cell_widgets, output_widgets, 1, 0, 0, Tachikoma.Rect(), false, :none, 0, 0, Tachikoma.Rect(), false, Tachikoma.Rect(), false, Tachikoma.Rect(), false, false, Dict{UUID, Vector{Diagnostic}}(), lsp_off, nothing, 0.0, (0, 0), zeros(Int, n), zeros(Int, n), true, false)
     _rebuild_prefix_sums!(nv)
     nv
 end
@@ -685,13 +687,15 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         Tachikoma.set_char!(buf, bx + bw - 1, fy, '│', border_style)
     end
 
-    # ── "▶ Run All" button in bottom-right border (after re-draw so it's not overwritten) ──
+    # ── "▶ Run All" and "▶ Stale" buttons in bottom-right border ──
+    bot_border_y = by + bh - 1
+    is_busy = nv.any_running
+
+    # Run All (rightmost)
     run_label = " ▶ Run All "
     run_len = length(run_label)
     run_x = bx + bw - 1 - run_len - 1  # 1 char inside right border
-    bot_border_y = by + bh - 1          # bottom border row
     if run_x > bx + 2
-        is_busy = nv.any_running
         run_fg = if is_busy
             Theme.ORANGE
         elseif nv.run_all_hovered
@@ -704,6 +708,30 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
         nv.run_all_rect = Tachikoma.Rect(run_x, bot_border_y, run_len, 1)
     else
         nv.run_all_rect = Tachikoma.Rect()
+    end
+
+    # Run Stale (to the left of Run All)
+    n_stale = length(stale_cells(nv.nb))
+    if n_stale > 0
+        stale_label = " ▶ Stale ($n_stale) "
+        stale_len = length(stale_label)
+        stale_x = run_x - stale_len - 1
+        if stale_x > bx + 2
+            stale_fg = if is_busy
+                Theme.ORANGE
+            elseif nv.run_stale_hovered
+                Theme.ACCENT
+            else
+                Theme.FG_MUTED
+            end
+            stale_s = Tachikoma.Style(; fg=stale_fg, bg=Theme.CANVAS_BG, bold=nv.run_stale_hovered)
+            Tachikoma.set_string!(buf, stale_x, bot_border_y, stale_label, stale_s)
+            nv.run_stale_rect = Tachikoma.Rect(stale_x, bot_border_y, stale_len, 1)
+        else
+            nv.run_stale_rect = Tachikoma.Rect()
+        end
+    else
+        nv.run_stale_rect = Tachikoma.Rect()
     end
 
     # ── "Save" button in top-right border ──

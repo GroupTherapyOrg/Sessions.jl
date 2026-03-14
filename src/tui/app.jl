@@ -248,6 +248,7 @@ function _load_from_tab!(app::SessionsApp, idx::Int)
     app.notebook_view.hovered_control_idx = 0
     app.notebook_view.hovered_bond_idx = 0
     app.notebook_view.run_all_hovered = false
+    app.notebook_view.run_stale_hovered = false
     app.notebook_view.save_hovered = false
     app.drag_active = false
     app.slider_drag = false
@@ -1844,6 +1845,12 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # Ctrl+Shift+Enter: Run stale cells only
+    if evt.key == :shift_ctrl_enter
+        run_stale_cells_async!(app)
+        return
+    end
+
     # Delete/Backspace: confirm delete of selected cells or focused cell
     if evt.key == :delete || evt.key == :backspace
         nv = app.notebook_view
@@ -1876,6 +1883,7 @@ function _update_pointer!(app::SessionsApp)
     nv = app.notebook_view
     want_pointer = nv.save_hovered ||
                    nv.run_all_hovered ||
+                   nv.run_stale_hovered ||
                    nv.hovered_control != :none ||
                    app.activity_bar.hovered != :none ||
                    app.file_panel.hovered_idx > 0 ||
@@ -2216,6 +2224,20 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     elseif evt.action == Tachikoma.mouse_move
         nv.run_all_hovered = false
+    end
+
+    # ── "▶ Stale" button in notebook bottom border ──
+    rs = nv.run_stale_rect
+    if rs.width > 0 && evt.x >= rs.x && evt.x < rs.x + rs.width && evt.y == rs.y
+        if evt.action == Tachikoma.mouse_move
+            nv.run_stale_hovered = true
+        end
+        if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            run_stale_cells_async!(app)
+        end
+        return
+    elseif evt.action == Tachikoma.mouse_move
+        nv.run_stale_hovered = false
     end
 
     # ── "Save" button in notebook top border ──
@@ -3197,6 +3219,44 @@ function run_all_cells_async!(app::SessionsApp)
         end
         _, err = save_session!(app.nb)
         !isempty(err) && (app.message = "Session save failed: $err")
+    end
+end
+
+"""Run only stale cells in the background. Shared by keyboard (Ctrl+Shift+R) and ▶ Stale button."""
+function run_stale_cells_async!(app::SessionsApp)
+    # Guard: skip if already executing (with stuck-cell recovery)
+    _recover_stuck_cells!(app.nb)
+    if any(c -> c.state == cell_running || c.state == cell_queued, values(app.nb.cells))
+        app.message = "Already executing…"
+        return
+    end
+
+    for cw in app.notebook_view.cell_widgets
+        sync_to_cell!(cw)
+    end
+
+    sc = stale_cells(app.nb)
+    if isempty(sc)
+        app.message = "No stale cells"
+        return
+    end
+
+    # Mark stale cells as queued
+    for cell in sc
+        cell.state = cell_queued
+    end
+    n = length(sc)
+    app.message = "Running $n stale cell$(n == 1 ? "" : "s")..."
+
+    Tachikoma.spawn_task!(app.tq, :execute_cell) do
+        try
+            execute_changed!(app.nb, sc; workspace=app.workspace)
+        catch e
+            dlog("app", "execute stale failed"; err=sprint(showerror, e))
+        end
+        _, err = save_session!(app.nb)
+        !isempty(err) && (app.message = "Session save failed: $err")
+        _lsp_sync_and_refresh!(app)
     end
 end
 

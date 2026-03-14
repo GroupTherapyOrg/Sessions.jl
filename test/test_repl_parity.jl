@@ -396,6 +396,52 @@
 
     # ── Save button click (mouse) ──────────────────────────────────
 
+    # ── Run Stale ─────────────────────────────────────────────────
+
+    @testset "run_stale_cells_async! — runs only stale cells" begin
+        nb = Sessions.Notebook(; path=tempname() * ".jl")
+        c1 = Sessions.add_cell!(nb, "stale_a = 1")
+        c2 = Sessions.add_cell!(nb, "stale_b = 2")
+        app = Sessions.SessionsApp(nb)
+
+        # Execute both cells
+        Sessions.execute_cell!(app.workspace, c1)
+        Sessions.execute_cell!(app.workspace, c2)
+        @test !Sessions.is_stale(c1)
+        @test !Sessions.is_stale(c2)
+
+        # Make c1 stale
+        c1.code = "stale_a = 99"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+        @test Sessions.is_stale(c1)
+        @test !Sessions.is_stale(c2)
+
+        # Run stale (synchronous version for testing)
+        n = Sessions.run_stale_cells!(app)
+        @test n == 1
+        @test !Sessions.is_stale(c1)
+    end
+
+    @testset "Run Stale button renders when stale cells exist" begin
+        nb = Sessions.Notebook(; path=tempname() * ".jl")
+        c1 = Sessions.add_cell!(nb, "x = 1")
+        app = Sessions.SessionsApp(nb)
+        Sessions.execute_cell!(app.workspace, c1)
+
+        # No stale cells — button should not render
+        tb = Tachikoma.TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Tachikoma.Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+        @test app.notebook_view.run_stale_rect.width == 0
+
+        # Make cell stale — button should render
+        c1.code = "x = 2"
+        Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
+        Tachikoma.view(app, frame)
+        @test app.notebook_view.run_stale_rect.width > 0
+        @test Tachikoma.find_text(tb, "Stale") !== nothing
+    end
+
     @testset "Save button click — formats, saves, clears dirty" begin
         path = tempname() * ".jl"
         nb = Sessions.Notebook(; path=path)
