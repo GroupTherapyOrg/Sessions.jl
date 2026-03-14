@@ -604,6 +604,21 @@ function _handle_shared_editor_key!(editor, sel::SelectionState, evt)
         return (true, true)
     end
 
+    # ── Cmd+Backspace: delete to line start (macOS standard, same as Ctrl+U) ──
+    if evt.key == :cmd_backspace
+        Tachikoma._push_undo!(editor; force=true)
+        line = editor.lines[editor.cursor_row]
+        if editor.cursor_col > 0
+            killed = String(line[1:editor.cursor_col])
+            deleteat!(line, 1:editor.cursor_col)
+            editor.cursor_col = 0
+            _clipboard_copy!(killed)
+            Tachikoma._mark_dirty!(editor, editor.cursor_row)
+        end
+        Tachikoma._ensure_tokens!(editor)
+        return (true, true)
+    end
+
     # ── Ctrl+W: delete word backward (REPL ^W) ──
     if evt.key == :ctrl && evt.char == 'w'
         _delete_prev_word!(editor, sel)

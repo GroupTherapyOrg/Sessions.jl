@@ -1355,7 +1355,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             n = length(popup.items)
             popup.selected_idx = popup.selected_idx <= 1 ? n : popup.selected_idx - 1
             return
-        elseif evt.key == :enter
+        elseif evt.key == :enter || evt.key == :tab
             if popup.selected_idx >= 1 && popup.selected_idx <= length(popup.items)
                 _accept_completion!(app, popup.items[popup.selected_idx])
             end
@@ -1714,6 +1714,19 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     if evt.key == :ctrl_space && app.mode == :insert
         _trigger_completion!(app)
         return
+    end
+
+    # Tab: trigger completion if there's a prefix, otherwise fall through to insert spaces
+    if evt.key == :tab && app.mode == :insert
+        editor = _current_editor(app)
+        if editor !== nothing
+            prefix = _completion_prefix(editor.lines, editor.cursor_row, editor.cursor_col)
+            if !isempty(prefix)
+                _trigger_completion!(app)
+                return
+            end
+        end
+        # Empty prefix: fall through → insert spaces (existing behavior)
     end
 
     # --- Insert mode: all keys (including Delete/Backspace) go to the editor ---

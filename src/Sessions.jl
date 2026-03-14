@@ -294,6 +294,10 @@ function __init__()
         keycode == 27  && return Tachikoma.KeyEvent(:escape, action)
         keycode == 13  && return Tachikoma.KeyEvent(:enter, action)
         keycode == 9   && return Tachikoma.KeyEvent(:tab, action)
+        # Cmd+Backspace → delete to line start (macOS standard)
+        if super && !ctrl && !alt && keycode == 127
+            return Tachikoma.KeyEvent(:cmd_backspace, action)
+        end
         keycode == 127 && return Tachikoma.KeyEvent(:backspace, action)
         if keycode >= 32 && keycode <= 0x10FFFF
             c = Char(keycode)

@@ -421,6 +421,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
             ow.available_cols = _cw_width
             ow.viewport_rows = _inner_h
             ow._cached_height = -1  # invalidate height cache
+            ow._cached_output_lines = nothing  # invalidate text cache on width change
             _needs_resize = true
         end
     end

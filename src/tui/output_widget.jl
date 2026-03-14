@@ -133,6 +133,14 @@ function _strip_ansi(s::AbstractString)::String
     replace(s, r"\e\[[0-9;]*[A-Za-z]" => "")
 end
 
+"""Count how many visual rows a single output line needs at the given width."""
+function _wrapped_line_count(line::String, max_width::Int)::Int
+    max_width <= 0 && return 1
+    w = length(_strip_ansi(line))
+    w <= max_width && return 1
+    cld(w, max_width)  # ceiling division
+end
+
 # --- ANSI SGR → Tachikoma.Style parsing ---
 
 const _ANSI_CSI_RE = r"\e\[([0-9;]*)([A-Za-z])"
@@ -336,19 +344,24 @@ function _compute_output_height(ow::OutputWidget)
     if nlines == 0
         return 0
     end
-    # Truncation: cap at _OUTPUT_TRUNCATE_LINES unless expanded
-    if !ow._output_expanded && nlines > _OUTPUT_TRUNCATE_LINES
+    # Compute visual (wrapped) line count
+    max_w = max(ow.available_cols - 3, 1)
+    visual_lines = sum(l -> _wrapped_line_count(l, max_w), lines; init=0)
+    # Truncation: cap at _OUTPUT_TRUNCATE_LINES visual lines unless expanded
+    if !ow._output_expanded && visual_lines > _OUTPUT_TRUNCATE_LINES
         return _OUTPUT_TRUNCATE_LINES + 1  # +1 for "N more lines" indicator
     end
-    nlines
+    visual_lines
 end
 
 """Compute height for structured error display."""
 function _structured_error_height(ow::OutputWidget)::Int
     se = ow.cell.output.structured_error
     se === nothing && return 0
-    # Header: type_name + message = 2 lines, blank + "Stacktrace:" = 2 lines
-    h = 4
+    max_w = max(ow.available_cols - 3, 1)
+    # Header: type_name (1) + message (wrapped) + blank (1) + "Stacktrace:" (1)
+    msg_rows = _wrapped_line_count(se.message, max_w)
+    h = 1 + msg_rows + 2
     visible_frames = if ow._error_show_all
         se.frames
     else
@@ -440,14 +453,17 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
         pop!(stdout_lines)
     end
 
-    # Output truncation
+    # Output truncation (based on visual/wrapped lines)
     total_lines = length(lines)
-    truncated = !ow._output_expanded && total_lines > _OUTPUT_TRUNCATE_LINES
-    display_count = truncated ? _OUTPUT_TRUNCATE_LINES : total_lines
+    max_x = text_x + max_width - 1
+    total_visual = sum(l -> _wrapped_line_count(l, max_width), lines; init=0)
+    truncated = !ow._output_expanded && total_visual > _OUTPUT_TRUNCATE_LINES
+    max_visual_rows = truncated ? _OUTPUT_TRUNCATE_LINES : total_visual
 
+    visual_row = 0
     for (i, line) in enumerate(lines)
-        i > display_count && break
-        row = rect.y + i - 1
+        visual_row >= max_visual_rows && break
+        row = rect.y + visual_row
         row > rect.y + rect.height - 1 && break
         Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
 
@@ -457,25 +473,34 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
             line_style = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG, italic=true)
         end
 
-        # Parse ANSI escape codes into styled segments
+        # Parse ANSI escape codes into styled segments, render char-by-char with wrapping
         styled_segs = _parse_ansi_line(line, line_style)
         x = text_x
-        max_x = text_x + max_width - 1
         for seg in styled_segs
-            remaining = max_x - x + 1
-            remaining <= 0 && break
-            text = first(seg.text, remaining)
-            Tachikoma.set_string!(buf, x, row, text, seg.style)
-            x += length(text)
+            for ch in seg.text
+                if x > max_x
+                    # Wrap: advance to next visual row
+                    visual_row += 1
+                    visual_row >= max_visual_rows && @goto done_lines
+                    row = rect.y + visual_row
+                    row > rect.y + rect.height - 1 && @goto done_lines
+                    Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+                    x = text_x
+                end
+                Tachikoma.set_char!(buf, x, row, ch, seg.style)
+                x += 1
+            end
         end
+        visual_row += 1
     end
+    @label done_lines
 
     # Truncation indicator
     if truncated
-        row = rect.y + display_count
+        row = rect.y + max_visual_rows
         if row <= rect.y + rect.height - 1
-            hidden = total_lines - _OUTPUT_TRUNCATE_LINES
-            indicator = "··· $hidden more lines ···"
+            hidden_visual = total_visual - _OUTPUT_TRUNCATE_LINES
+            indicator = "··· $hidden_visual more lines ···"
             Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
             Tachikoma.set_string!(buf, text_x, row, indicator, Theme.S_ERROR_SHOW)
         end
@@ -556,11 +581,17 @@ function _render_structured_error!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
     end
     row += 1
 
-    # Line 2: Error message
-    if row <= rect.y + rect.height - 1
+    # Line 2+: Error message (with wrapping)
+    msg_chars = collect(se.message)
+    msg_idx = 1
+    while msg_idx <= length(msg_chars) && row <= rect.y + rect.height - 1
         Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
-        msg = first(se.message, max_width)
-        Tachikoma.set_string!(buf, text_x, row, msg, Theme.S_ERROR_MSG)
+        x = text_x
+        while msg_idx <= length(msg_chars) && x <= text_x + max_width - 1
+            Tachikoma.set_char!(buf, x, row, msg_chars[msg_idx], Theme.S_ERROR_MSG)
+            x += 1
+            msg_idx += 1
+        end
         row += 1
     end
 
@@ -755,17 +786,19 @@ function _render_output_selection!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
     text_x = rect.x + 3
     max_width = max(rect.width - 3, 1)
 
-    # Determine display count (truncation)
-    total = length(lines)
-    truncated = !ow._output_expanded && total > _OUTPUT_TRUNCATE_LINES
-    display_count = truncated ? _OUTPUT_TRUNCATE_LINES : total
+    # Determine visual row limit (truncation based on visual lines)
+    total_visual = sum(l -> _wrapped_line_count(l, max_width), lines; init=0)
+    truncated = !ow._output_expanded && total_visual > _OUTPUT_TRUNCATE_LINES
+    max_visual_rows = truncated ? _OUTPUT_TRUNCATE_LINES : total_visual
 
     sel_style = Tachikoma.Style(; fg=Theme.FG, bg=Theme.SELECTION_BG)
 
-    for i in 1:display_count
-        (i < sr || i > er) && continue
-        row = rect.y + i - 1
-        row > rect.y + rect.height - 1 && break
+    visual_row = 0
+    for i in eachindex(lines)
+        (i < sr || i > er) && begin
+            visual_row += _wrapped_line_count(lines[i], max_width)
+            continue
+        end
 
         # Collect chars for safe positional indexing (handles multi-byte UTF-8 like ● ○)
         chars = collect(_strip_ansi(lines[i]))
@@ -775,21 +808,24 @@ function _render_output_selection!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
         line_sel_start = i == sr ? sc + 1 : 1
         line_sel_end = i == er ? ec : line_len
 
-        for ci in 1:max_width
-            char_idx = ci
-            x = text_x + ci - 1
-            x > rect.x + rect.width - 1 && break
+        # Render selection across all visual rows this logical line occupies
+        for ci in 1:line_len
+            visual_col = ((ci - 1) % max_width)
+            vr = visual_row + div(ci - 1, max_width)
+            vr >= max_visual_rows && @goto done_sel
+            row = rect.y + vr
+            row > rect.y + rect.height - 1 && @goto done_sel
+            x = text_x + visual_col
 
-            (char_idx < line_sel_start || char_idx > line_sel_end) && continue
+            (ci < line_sel_start || ci > line_sel_end) && continue
 
-            if char_idx >= 1 && char_idx <= line_len
-                ch = chars[char_idx]
-                Tachikoma.set_char!(buf, x, row, ch, sel_style)
-            else
-                Tachikoma.set_char!(buf, x, row, ' ', Tachikoma.Style(; bg=Theme.SELECTION_BG))
-            end
+            ch = chars[ci]
+            Tachikoma.set_char!(buf, x, row, ch, sel_style)
         end
+
+        visual_row += _wrapped_line_count(lines[i], max_width)
     end
+    @label done_sel
 end
 
 # --- SVG text fallback rendering ---
