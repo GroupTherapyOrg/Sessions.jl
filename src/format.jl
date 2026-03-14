@@ -172,6 +172,7 @@ function serialize_notebook(nb::Notebook)
     # Cell bodies in topological order (so `julia file.jl` works)
     body_order = _topological_cell_ids(nb)
     for id in body_order
+        haskey(nb.cells, id) || continue  # skip deleted cells
         cell = nb.cells[id]
         println(io)
         println(io, CELL_MARKER, cell.id)
@@ -187,6 +188,7 @@ function serialize_notebook(nb::Notebook)
     println(io)
     println(io, CELL_ORDER_MARKER)
     for id in nb.cell_order
+        haskey(nb.cells, id) || continue  # skip deleted cells
         cell = nb.cells[id]
         if cell.folded
             println(io, CELL_FOLDED_PREFIX, cell.id)
@@ -207,11 +209,13 @@ function _topological_cell_ids(nb::Notebook)::Vector{UUID}
         seen = Set{UUID}()
         result = UUID[]
         for cell in order.runnable
+            haskey(nb.cells, cell.id) || continue  # skip deleted cells
             push!(result, cell.id)
             push!(seen, cell.id)
         end
         # Append errable cells (dependency errors — still need to be in the file)
         for (cell, _) in order.errable
+            haskey(nb.cells, cell.id) || continue
             if cell.id ∉ seen
                 push!(result, cell.id)
                 push!(seen, cell.id)
@@ -219,6 +223,7 @@ function _topological_cell_ids(nb::Notebook)::Vector{UUID}
         end
         # Append any remaining cells not captured by topology (disabled, etc.)
         for id in nb.cell_order
+            haskey(nb.cells, id) || continue
             if id ∉ seen
                 push!(result, id)
                 push!(seen, id)

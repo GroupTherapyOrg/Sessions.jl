@@ -10,6 +10,7 @@ end
 function _snapshot_notebook(nb::Notebook)
     snap = Notebook(; path=nb.path)
     for id in nb.cell_order
+        haskey(nb.cells, id) || continue  # skip deleted cells
         cell = nb.cells[id]
         push!(snap.cell_order, id)
         snap.cells[id] = Cell(; id, code=cell.code, folded=cell.folded, disabled=cell.disabled)
@@ -73,6 +74,7 @@ function is_tab_dirty(tab::EditorTab)
         nb = tab.nb
         nb.cell_order != snap.cell_order && return true
         for id in nb.cell_order
+            haskey(nb.cells, id) || continue  # skip deleted cells
             haskey(snap.cells, id) || return true
             nb.cells[id].code != snap.cells[id].code && return true
             nb.cells[id].folded != snap.cells[id].folded && return true

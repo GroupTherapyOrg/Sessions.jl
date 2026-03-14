@@ -27,6 +27,7 @@ end
 function build_session_dict(nb::Notebook)
     cells_dict = Dict{String, Any}()
     for id in nb.cell_order
+        haskey(nb.cells, id) || continue  # skip deleted cells
         cell = nb.cells[id]
         cell.produced_by_hash == "" && continue  # skip never-executed
 

@@ -184,6 +184,7 @@ function _is_notebook_dirty(app::SessionsApp)
     nb = app.nb
     nb.cell_order != snap.cell_order && return true
     for id in nb.cell_order
+        haskey(nb.cells, id) || continue  # skip deleted cells
         haskey(snap.cells, id) || return true
         nb.cells[id].code != snap.cells[id].code && return true
         nb.cells[id].folded != snap.cells[id].folded && return true
