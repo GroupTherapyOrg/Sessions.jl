@@ -332,7 +332,7 @@ using Markdown: @md_str
         @test !is_stale(c1)
     end
 
-    @testset "SessionsApp — Ctrl+S saves + runs stale" begin
+    @testset "SessionsApp — Ctrl+S saves but does NOT auto-run stale" begin
         nb = Notebook(; path=tempname() * ".jl")
         c1 = add_cell!(nb, "ctrl_s_x = 42")
         app = Sessions.SessionsApp(nb)
@@ -345,10 +345,10 @@ using Markdown: @md_str
         Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
         @test is_stale(c1)
 
-        # Ctrl+S
+        # Ctrl+S — saves code but leaves stale cells unexecuted
         Tachikoma.update!(app, Tachikoma.KeyEvent(:ctrl, 's'))
-        @test !is_stale(c1)
-        @test contains(app.message, "stale")
+        @test is_stale(c1)  # still stale — not auto-run
+        @test contains(app.message, "Saved")
     end
 
     @testset "SessionsApp — run_stale_cells! with error" begin

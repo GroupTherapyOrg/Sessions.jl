@@ -378,19 +378,21 @@ function _format_notebook_cells!(app::SessionsApp)::Int
     n_formatted
 end
 
-"""Format, save, run stale cells, and sync LSP. Shared by Ctrl+S and Save button click."""
+"""Format, save notebook + session, and sync LSP. Shared by Ctrl+S and Save button click.
+
+Saves code to .jl and outputs to .sessions.toml but does NOT auto-run stale cells.
+Stale cells preserve their old outputs and show as stale on reopen."""
 function _save_notebook!(app::SessionsApp)
     n_formatted = _format_notebook_cells!(app)
     save_notebook(app.nb)
+    _, err = save_session!(app.nb)
+    !isempty(err) && dlog("save", "session save failed"; err)
     app.last_save_time = time()
     app.last_disk_nb = _snapshot_notebook(app.nb)
     app._dirty_cache_valid = false  # force dirty recompute (clears orange ● Save)
     _sync_to_active_tab!(app)
-    n_stale = run_stale_cells!(app)
     _lsp_sync_and_refresh!(app)
-    if n_stale > 0
-        app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
-    elseif n_formatted > 0
+    if n_formatted > 0
         app.message = "Formatted $(n_formatted) cell$(n_formatted == 1 ? "" : "s") + Saved: $(basename(app.nb.path))"
     elseif !format_code_available()
         app.message = "Saved: $(basename(app.nb.path)) (no formatter)"
