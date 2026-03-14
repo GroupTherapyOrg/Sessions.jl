@@ -1716,8 +1716,8 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Tab: trigger completion if there's a prefix, otherwise fall through to insert spaces
-    if evt.key == :tab && app.mode == :insert
+    # Tab: trigger completion if there's a prefix AND LSP is ready, otherwise insert spaces
+    if evt.key == :tab && app.mode == :insert && app.lsp.status == lsp_ready
         editor = _current_editor(app)
         if editor !== nothing
             prefix = _completion_prefix(editor.lines, editor.cursor_row, editor.cursor_col)
