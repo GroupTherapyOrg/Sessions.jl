@@ -44,9 +44,15 @@ mutable struct OutputWidget
     _error_scroll_offset::Int   # scroll offset for long traces
     # Output truncation state
     _output_expanded::Bool      # true = show all lines (no truncation)
+    # Output text selection (drag-to-copy)
+    _sel_active::Bool           # selection in progress
+    _sel_anchor_row::Int        # anchor line (1-based into output lines)
+    _sel_anchor_col::Int        # anchor column (0-based)
+    _sel_cursor_row::Int        # current end of selection (1-based)
+    _sel_cursor_col::Int        # current end column (0-based)
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), 0, 0, 1.0, false, 0, 0, false)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), 0, 0, 1.0, false, 0, 0, false, false, 1, 0, 1, 0)
 
 """Format cell output as displayable lines.
 
@@ -114,6 +120,8 @@ function cached_output_lines(ow::OutputWidget)::Vector{String}
     if ow._cached_output_lines !== nothing && ow._cached_output_lines_id == out_id
         return ow._cached_output_lines
     end
+    # Output changed — clear stale selection
+    _clear_output_selection!(ow)
     lines = output_lines(ow.cell)
     ow._cached_output_lines = lines
     ow._cached_output_lines_id = out_id
@@ -469,6 +477,9 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
             Tachikoma.set_string!(buf, text_x, row, indicator, Theme.S_ERROR_SHOW)
         end
     end
+
+    # Overlay selection highlighting
+    _render_output_selection!(ow, rect, buf)
 end
 
 # --- Structured error rendering (Pluto-style) ---
@@ -584,6 +595,132 @@ function _render_structured_error!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
             Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
             indicator = "     ··· $hidden more frames (Space to show) ···"
             Tachikoma.set_string!(buf, text_x, row, first(indicator, max_width), Theme.S_ERROR_SHOW)
+        end
+    end
+
+    # Overlay selection highlighting
+    _render_output_selection!(ow, rect, buf)
+end
+
+# --- Output text selection (drag-to-copy) ---
+
+"""Map screen coordinates to output text (row, col) given the output rect.
+
+Output text starts at rect.x + 3 (bar + padding). Row/col are clamped
+to the visible output lines. Lines are the ANSI-stripped plain text."""
+function _output_click_to_pos(ow::OutputWidget, rect::Tachikoma.Rect,
+                               click_x::Int, click_y::Int)
+    lines = cached_output_lines(ow)
+    nlines = length(lines)
+    nlines == 0 && return (1, 0)
+
+    text_x = rect.x + 3  # bar(1) + pad(2)
+    row = click_y - rect.y + 1
+    row = clamp(row, 1, nlines)
+
+    col = click_x - text_x
+    col = max(col, 0)
+
+    # Clamp col to stripped line length
+    stripped = _strip_ansi(lines[row])
+    col = min(col, length(stripped))
+
+    (row, col)
+end
+
+"""Return normalized (start_row, start_col, end_row, end_col) for output selection."""
+function _output_selection_range(ow::OutputWidget)
+    ar, ac = ow._sel_anchor_row, ow._sel_anchor_col
+    cr, cc = ow._sel_cursor_row, ow._sel_cursor_col
+    if ar < cr || (ar == cr && ac <= cc)
+        return (ar, ac, cr, cc)
+    else
+        return (cr, cc, ar, ac)
+    end
+end
+
+"""Extract the selected output text as a String."""
+function _output_selected_text(ow::OutputWidget)::String
+    !ow._sel_active && return ""
+    lines = cached_output_lines(ow)
+    isempty(lines) && return ""
+
+    sr, sc, er, ec = _output_selection_range(ow)
+    sr = clamp(sr, 1, length(lines))
+    er = clamp(er, 1, length(lines))
+
+    # Use ANSI-stripped text for clipboard
+    stripped = [_strip_ansi(l) for l in lines]
+
+    if sr == er
+        line = stripped[sr]
+        from = sc + 1  # 1-based
+        to = min(ec, length(line))
+        from > to && return ""
+        return line[from:to]
+    else
+        parts = String[]
+        push!(parts, stripped[sr][sc+1:end])
+        for r in sr+1:er-1
+            push!(parts, stripped[r])
+        end
+        push!(parts, stripped[er][1:min(ec, length(stripped[er]))])
+        return join(parts, '\n')
+    end
+end
+
+"""Clear output selection state."""
+function _clear_output_selection!(ow::OutputWidget)
+    ow._sel_active = false
+    ow._sel_anchor_row = 1
+    ow._sel_anchor_col = 0
+    ow._sel_cursor_row = 1
+    ow._sel_cursor_col = 0
+end
+
+"""Render selection highlight over output text lines."""
+function _render_output_selection!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    !ow._sel_active && return
+
+    lines = cached_output_lines(ow)
+    isempty(lines) && return
+
+    sr, sc, er, ec = _output_selection_range(ow)
+    text_x = rect.x + 3
+    max_width = max(rect.width - 3, 1)
+
+    # Determine display count (truncation)
+    total = length(lines)
+    truncated = !ow._output_expanded && total > _OUTPUT_TRUNCATE_LINES
+    display_count = truncated ? _OUTPUT_TRUNCATE_LINES : total
+
+    sel_style = Tachikoma.Style(; fg=Theme.FG, bg=Theme.SELECTION_BG)
+
+    for i in 1:display_count
+        (i < sr || i > er) && continue
+        row = rect.y + i - 1
+        row > rect.y + rect.height - 1 && break
+
+        stripped = _strip_ansi(lines[i])
+        line_len = length(stripped)
+
+        # Selection range on this line (1-based char indices)
+        line_sel_start = i == sr ? sc + 1 : 1
+        line_sel_end = i == er ? ec : line_len
+
+        for ci in 1:max_width
+            char_idx = ci
+            x = text_x + ci - 1
+            x > rect.x + rect.width - 1 && break
+
+            (char_idx < line_sel_start || char_idx > line_sel_end) && continue
+
+            if char_idx >= 1 && char_idx <= line_len
+                ch = stripped[char_idx]
+                Tachikoma.set_char!(buf, x, row, ch, sel_style)
+            else
+                Tachikoma.set_char!(buf, x, row, ' ', Tachikoma.Style(; bg=Theme.SELECTION_BG))
+            end
         end
     end
 end

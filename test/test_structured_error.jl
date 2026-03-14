@@ -128,4 +128,127 @@ using UUIDs
         @test Sessions._shorten_func("my_func") == "my_func"
         @test Sessions._shorten_func("foo{Int64, String}") == "foo"
     end
+
+    @testset "OutputWidget selection state fields" begin
+        cell = Cell("42")
+        ow = Sessions.OutputWidget(cell)
+        @test ow._sel_active == false
+        @test ow._sel_anchor_row == 1
+        @test ow._sel_anchor_col == 0
+        @test ow._sel_cursor_row == 1
+        @test ow._sel_cursor_col == 0
+        @test ow._output_expanded == false
+    end
+
+    @testset "output selection — clear" begin
+        ws = Workspace()
+        cell = Cell("42")
+        execute_cell!(ws, cell)
+        ow = Sessions.OutputWidget(cell)
+
+        # Simulate selection
+        ow._sel_active = true
+        ow._sel_anchor_row = 1
+        ow._sel_anchor_col = 2
+        ow._sel_cursor_row = 1
+        ow._sel_cursor_col = 5
+        @test ow._sel_active == true
+
+        Sessions._clear_output_selection!(ow)
+        @test ow._sel_active == false
+    end
+
+    @testset "output selection — selected text extraction" begin
+        ws = Workspace()
+        cell = Cell("[1, 2, 3]")
+        execute_cell!(ws, cell)
+        ow = Sessions.OutputWidget(cell)
+
+        # Cache output lines
+        lines = Sessions.cached_output_lines(ow)
+        @test !isempty(lines)
+
+        # Single-line selection
+        stripped = Sessions._strip_ansi(lines[1])
+        ow._sel_active = true
+        ow._sel_anchor_row = 1
+        ow._sel_anchor_col = 0
+        ow._sel_cursor_row = 1
+        ow._sel_cursor_col = min(3, length(stripped))
+        text = Sessions._output_selected_text(ow)
+        @test !isempty(text)
+        @test length(text) <= length(stripped)
+    end
+
+    @testset "output selection — multi-line text" begin
+        ws = Workspace()
+        cell = Cell("println(\"line1\"); println(\"line2\"); 42")
+        execute_cell!(ws, cell)
+        ow = Sessions.OutputWidget(cell)
+
+        lines = Sessions.cached_output_lines(ow)
+        if length(lines) >= 2
+            ow._sel_active = true
+            ow._sel_anchor_row = 1
+            ow._sel_anchor_col = 0
+            ow._sel_cursor_row = 2
+            ow._sel_cursor_col = min(3, length(Sessions._strip_ansi(lines[2])))
+            text = Sessions._output_selected_text(ow)
+            @test contains(text, "\n")
+        end
+    end
+
+    @testset "output selection — no selection returns empty" begin
+        cell = Cell("42")
+        ow = Sessions.OutputWidget(cell)
+        @test Sessions._output_selected_text(ow) == ""
+    end
+
+    @testset "output selection — range normalization" begin
+        cell = Cell("42")
+        ow = Sessions.OutputWidget(cell)
+
+        # Forward selection
+        ow._sel_active = true
+        ow._sel_anchor_row = 1
+        ow._sel_anchor_col = 2
+        ow._sel_cursor_row = 3
+        ow._sel_cursor_col = 5
+        sr, sc, er, ec = Sessions._output_selection_range(ow)
+        @test sr == 1
+        @test sc == 2
+        @test er == 3
+        @test ec == 5
+
+        # Backward selection (cursor before anchor)
+        ow._sel_anchor_row = 3
+        ow._sel_anchor_col = 5
+        ow._sel_cursor_row = 1
+        ow._sel_cursor_col = 2
+        sr, sc, er, ec = Sessions._output_selection_range(ow)
+        @test sr == 1
+        @test sc == 2
+        @test er == 3
+        @test ec == 5
+    end
+
+    @testset "output selection cleared on output change" begin
+        ws = Workspace()
+        cell = Cell("42")
+        execute_cell!(ws, cell)
+        ow = Sessions.OutputWidget(cell)
+
+        # Cache lines and set selection
+        Sessions.cached_output_lines(ow)
+        ow._sel_active = true
+        ow._sel_anchor_row = 1
+        ow._sel_anchor_col = 0
+
+        # Re-execute cell (changes output)
+        cell.code = "99"
+        execute_cell!(ws, cell)
+        # Calling cached_output_lines with new output invalidates cache and clears selection
+        Sessions.cached_output_lines(ow)
+        @test ow._sel_active == false
+    end
 end

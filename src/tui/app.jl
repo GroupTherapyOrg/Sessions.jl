@@ -129,6 +129,8 @@ mutable struct SessionsApp <: Tachikoma.Model
     drag_cell_idx::Int       # cell index where drag started
     slider_drag::Bool        # mouse drag on a slider track
     slider_drag_idx::Int     # cell index of slider being dragged
+    output_drag::Bool        # mouse drag on output text (for selection)
+    output_drag_idx::Int     # cell index of output being dragged
     # Tab management
     tabs::Vector{EditorTab}
     active_tab_idx::Int
@@ -502,7 +504,7 @@ function SessionsApp(nb::Notebook)
     tab.last_disk_nb = snapshot
     SessionsApp(nb, ws, nv, nothing, :notebook, fp, ab, Tachikoma.TaskQueue(), :normal, false, "", nothing, nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, snapshot, nothing, 0.0,
-        false, 0, false, 0,
+        false, 0, false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(), Theme.REPL_PCT, 0, false,
         LspClient(; enabled=true), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
@@ -529,7 +531,7 @@ function SessionsApp(fev::FileEditorView)
     tab.notebook_view = nv
     SessionsApp(nb, ws, nv, fev, :file, fp, ab, Tachikoma.TaskQueue(), :insert, false, "", nothing, nothing, nothing,
         DeletedCell[], true, Tachikoma.Rect(), Tachikoma.Rect(), Tachikoma.Rect(), Set{UUID}(), 0, nothing, nothing, 0.0,
-        false, 0, false, 0,
+        false, 0, false, 0, false, 0,
         [tab], 1, Tachikoma.Rect[], Tachikoma.Rect[],
         ReplPanel(), false, Tachikoma.Rect(), Theme.REPL_PCT, 0, false,
         LspClient(; enabled=true), DiagnosticsPanel(), false, Dict{UUID, Vector{Diagnostic}}(), 0,
@@ -2272,24 +2274,32 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             end
         end
 
-        # Check if click is on an error output area — enter error_interact mode
-        err_idx = _error_cell_at_y(nv, evt.y)
-        if err_idx > 0
-            ow = nv.output_widgets[err_idx]
-            if ow.cell.output.structured_error !== nothing
-                nv.focused_idx = err_idx
-                update_focus!(nv)
-                _exit_insert_mode!(app)
-                app.mode = :error_interact
-                ow._error_focused_frame = 1
-                app.message = "Error: ↑↓ navigate, Space expand, c copy, Esc exit"
-                return
-            end
+        # Check if click is on a text/error output area — start output drag selection
+        out_idx, out_rect = _output_cell_at_pos(nv, evt.x, evt.y, cell_left, cw_width)
+        if out_idx > 0 && out_rect.width > 0
+            ow = nv.output_widgets[out_idx]
+            nv.focused_idx = out_idx
+            update_focus!(nv)
+            _exit_insert_mode!(app)
+            # Map click to output text position
+            row, col = _output_click_to_pos(ow, out_rect, evt.x, evt.y)
+            # Start selection at click point
+            ow._sel_active = false  # becomes active on first drag
+            ow._sel_anchor_row = row
+            ow._sel_anchor_col = col
+            ow._sel_cursor_row = row
+            ow._sel_cursor_col = col
+            # Track output drag
+            app.output_drag = true
+            app.output_drag_idx = out_idx
+            return
         end
 
         # Cell click — only enter insert mode if click is inside the cell body
         idx = cell_at_y(nv, evt.y)
         if idx !== nothing
+            # Clear any active output selection
+            _clear_all_output_selections!(app)
             clear_selection!(nv)
             focus_cell!(nv, idx; scroll=false)
             if evt.x >= cell_left && evt.x < cell_right
@@ -2344,6 +2354,29 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
         return
     end
 
+    # Mouse drag: extend output text selection
+    if evt.action == Tachikoma.mouse_drag && app.output_drag && in_notebook
+        idx = app.output_drag_idx
+        if idx >= 1 && idx <= length(nv.output_widgets)
+            ow = nv.output_widgets[idx]
+            hi = Theme.CELL_H_INSET
+            inner_x = nb_vp.x + hi + 1
+            inner_w = max(1, nb_vp.width - 2 * hi - 2)
+            pad = max(1, round(Int, inner_w * Theme.CELL_PAD_FRACTION))
+            pad = min(pad, max(0, div(inner_w - 10, 2)))
+            cell_left = inner_x + pad
+            cw_width = max(1, inner_w - 2 * pad)
+            out_rect = _cell_output_area(nv, idx, cell_left, cw_width)
+            if out_rect.width > 0
+                row, col = _output_click_to_pos(ow, out_rect, evt.x, evt.y)
+                ow._sel_active = true
+                ow._sel_cursor_row = row
+                ow._sel_cursor_col = col
+            end
+        end
+        return
+    end
+
     # Mouse drag: extend text selection within a cell
     if evt.action == Tachikoma.mouse_drag && app.drag_active && app.mode == :insert && in_notebook
         idx = app.drag_cell_idx
@@ -2380,8 +2413,23 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 _auto_copy_selection!(cw.editor, cw.selection)
             end
         end
+        # Auto-copy output selection on release
+        if app.output_drag && app.output_drag_idx >= 1
+            idx = app.output_drag_idx
+            if idx <= length(nv.output_widgets)
+                ow = nv.output_widgets[idx]
+                if ow._sel_active
+                    text = _output_selected_text(ow)
+                    if !isempty(text)
+                        _clipboard_copy!(text)
+                        app.message = "Output copied"
+                    end
+                end
+            end
+        end
         app.drag_active = false
         app.slider_drag = false
+        app.output_drag = false
         return
     end
 
@@ -2552,6 +2600,62 @@ function _cell_code_area(nv::NotebookView, idx::Int, cell_x::Int, cw_width::Int)
     inner_y = border_y + 1
 
     return Tachikoma.Rect(inner_x, inner_y, inner_w, inner_h)
+end
+
+"""Compute the output area rect for a cell at index `idx`.
+Returns a Rect covering the output region, or a zero-size rect if no output."""
+function _cell_output_area(nv::NotebookView, idx::Int, cell_x::Int, cw_width::Int)
+    vp = nv.viewport
+    vi = Theme.CELL_V_INSET
+
+    cell_y = vp.y + vi + 1 + Theme.TOP_MARGIN - nv.scroll_offset
+    for j in 1:idx-1
+        j_oh = output_height(nv.output_widgets[j])
+        cell_y += cell_height(nv.cell_widgets[j]; has_output=j_oh > 0)
+        cell_y += j_oh
+        cell_y += Theme.CELL_GAP
+    end
+
+    cw = nv.cell_widgets[idx]
+    ow = nv.output_widgets[idx]
+    oh = output_height(ow)
+    ch = cell_height(cw; has_output=oh > 0)
+
+    oh <= 0 && return Tachikoma.Rect(0, 0, 0, 0)
+
+    out_y = cell_y + ch
+    return Tachikoma.Rect(cell_x, out_y, cw_width, oh)
+end
+
+"""Find which cell index has a text/error output at the given screen position.
+Returns (cell_index, output_rect) or (0, empty_rect)."""
+function _output_cell_at_pos(nv::NotebookView, screen_x::Int, screen_y::Int,
+                              cell_left::Int, cw_width::Int)
+    isempty(nv.cell_widgets) && return (0, Tachikoma.Rect())
+    vp = nv.viewport
+    vi = Theme.CELL_V_INSET
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ow = nv.output_widgets[i]
+        oh = output_height(ow)
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        y += ch
+        if oh > 0 && content_y >= y && content_y < y + oh
+            cell = nv.cell_widgets[i].cell
+            otype = cell.output.output_type
+            # Only allow selection on text outputs, errors, and structured errors
+            if otype in (:text, :error, :nothing)
+                out_rect = _cell_output_area(nv, i, cell_left, cw_width)
+                return (i, out_rect)
+            end
+            return (0, Tachikoma.Rect())
+        end
+        y += oh
+        y += Theme.CELL_GAP
+    end
+    (0, Tachikoma.Rect())
 end
 
 """Hit test margin controls. Returns (:plus_gap, pos), (:eye, idx), (:move_up, idx), (:move_down, idx), or nothing.
@@ -2842,6 +2946,13 @@ function _error_cell_at_y(nv::NotebookView, screen_y::Int)::Int
         y += Theme.CELL_GAP
     end
     0
+end
+
+"""Clear all output text selections across all cells."""
+function _clear_all_output_selections!(app::SessionsApp)
+    for ow in app.notebook_view.output_widgets
+        _clear_output_selection!(ow)
+    end
 end
 
 """Apply a slider value: update registry, workspace variable, re-execute dependents."""
