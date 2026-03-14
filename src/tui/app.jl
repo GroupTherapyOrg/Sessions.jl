@@ -354,10 +354,14 @@ end
 function _format_notebook_cells!(app::SessionsApp)::Int
     n_formatted = 0
     nv = app.notebook_view
+    dlog("format", "format_notebook_cells!"; n_cells=length(nv.cell_widgets),
+         available=format_code_available())
     for (i, cw) in enumerate(nv.cell_widgets)
         cell = cw.cell
         cell.disabled && continue
-        original = cell.code
+        # Read from editor (source of truth for what user sees), not cell.code
+        original = Tachikoma.text(cw.editor)
+        dlog("format", "cell $i"; len=length(original), first40=first(original, 40))
         formatted = format_code(original)
         if formatted != original
             n_formatted += 1

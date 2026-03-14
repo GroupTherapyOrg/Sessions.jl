@@ -42,4 +42,5 @@ using Sessions
     include("test_svg_fallback.jl")
     include("test_image_interact.jl")
     include("test_structured_error.jl")
+    include("test_repl_parity.jl")
 end

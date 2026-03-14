@@ -187,9 +187,17 @@ function format_code(code::String)::String
     if runic !== nothing
         try
             fmt_fn = getfield(runic, :format_string)
-            return Base.invokelatest(fmt_fn, code)
-        catch; end
+            result = Base.invokelatest(fmt_fn, code)
+            dlog("format", "in-process OK"; changed=(result != code))
+            return result
+        catch e
+            dlog("format", "in-process FAILED"; err=sprint(showerror, e))
+        end
+    else
+        dlog("format", "Runic not loaded in-process")
     end
     # Fallback: persistent subprocess with isolated environment
-    _format_code_subprocess(code)
+    result = _format_code_subprocess(code)
+    dlog("format", "subprocess"; changed=(result != code))
+    result
 end
