@@ -216,7 +216,7 @@ function _save_to_tab!(app::SessionsApp)
     tab.progress_recently = app.progress_recently
     tab.progress_done_tick = app.progress_done_tick
     # Persist mode (collapse transient modes to :normal)
-    tab.mode = (app.mode in (:dropdown, :confirm, :completion, :rename, :datatable)) ? :normal : app.mode
+    tab.mode = (app.mode in (:dropdown, :confirm, :completion, :rename, :datatable, :error_interact)) ? :normal : app.mode
 end
 
 """Load state from a tab into the app fields."""
@@ -1455,6 +1455,50 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
+    # --- Error interact mode: navigate structured error frames ---
+    if app.mode == :error_interact
+        nv = app.notebook_view
+        ow = nv.output_widgets[nv.focused_idx]
+        se = ow.cell.output.structured_error
+        if se === nothing
+            app.mode = :normal
+            app.message = ""
+            return
+        end
+        visible_frames = if ow._error_show_all
+            se.frames
+        else
+            [f for f in se.frames if f.importance != :dim]
+        end
+        nf = length(visible_frames)
+
+        if evt.key == :escape
+            app.mode = :normal
+            ow._error_focused_frame = 0
+            app.message = ""
+            return
+        elseif evt.key == :up
+            ow._error_focused_frame = max(1, ow._error_focused_frame - 1)
+            return
+        elseif evt.key == :down
+            ow._error_focused_frame = min(nf, ow._error_focused_frame + 1)
+            return
+        elseif evt.key == :char && evt.char == ' '
+            # Toggle show all hidden frames
+            ow._error_show_all = !ow._error_show_all
+            # Invalidate height cache
+            ow._cached_height = -1
+            app.message = ow._error_show_all ? "Showing all frames" : "Hiding dim frames"
+            return
+        elseif evt.key == :char && evt.char == 'c'
+            # Copy plain text error to clipboard
+            _clipboard_copy!(se.plain_text)
+            app.message = "Error copied to clipboard"
+            return
+        end
+        return  # absorb all other keys in error_interact mode
+    end
+
     # --- Image interaction mode: pan/zoom focused image ---
     if app.mode == :image_interact
         nv = app.notebook_view
@@ -1704,18 +1748,42 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         return
     end
 
-    # Enter: enter image interaction mode if focused cell has image output, else insert mode
+    # Enter: enter interaction mode for special outputs, else insert mode
     if evt.key == :enter
         nv = app.notebook_view
         if !isempty(nv.output_widgets) && nv.focused_idx <= length(nv.output_widgets)
-            fc = nv.output_widgets[nv.focused_idx].cell
+            ow = nv.output_widgets[nv.focused_idx]
+            fc = ow.cell
             if _is_image_cell(fc)
                 app.mode = :image_interact
                 app.message = "Image: ←→↑↓ pan, +/- zoom, r reset, q/Esc exit"
                 return
             end
+            # Enter error interact mode for cells with structured errors
+            if fc.state == cell_errored && fc.output.structured_error !== nothing
+                app.mode = :error_interact
+                ow._error_focused_frame = 1
+                app.message = "Error: ↑↓ navigate, Space expand, c copy, Esc exit"
+                return
+            end
         end
         _enter_insert_mode!(app)
+        return
+    end
+
+    # y: copy focused cell output to clipboard (normal mode)
+    if evt.key == :char && evt.char == 'y'
+        nv = app.notebook_view
+        if !isempty(nv.cell_widgets) && nv.focused_idx <= length(nv.cell_widgets)
+            cell = nv.cell_widgets[nv.focused_idx].cell
+            text = cell.output.text_representation
+            if !isempty(text)
+                _clipboard_copy!(text)
+                app.message = "Output copied to clipboard"
+            else
+                app.message = "No output to copy"
+            end
+        end
         return
     end
 
@@ -2200,6 +2268,21 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 app.mode = :datatable
                 # Forward click to DataTable's mouse handler
                 Tachikoma.handle_mouse!(dt, evt)
+                return
+            end
+        end
+
+        # Check if click is on an error output area — enter error_interact mode
+        err_idx = _error_cell_at_y(nv, evt.y)
+        if err_idx > 0
+            ow = nv.output_widgets[err_idx]
+            if ow.cell.output.structured_error !== nothing
+                nv.focused_idx = err_idx
+                update_focus!(nv)
+                _exit_insert_mode!(app)
+                app.mode = :error_interact
+                ow._error_focused_frame = 1
+                app.message = "Error: ↑↓ navigate, Space expand, c copy, Esc exit"
                 return
             end
         end
@@ -2729,6 +2812,30 @@ function _datatable_cell_at_y(nv::NotebookView, screen_y::Int)::Int
         if oh > 0 && content_y >= y && content_y < y + oh
             cell = nv.cell_widgets[i].cell
             cell.output.output_type == :dataframe || return 0
+            return i
+        end
+        y += oh
+        y += Theme.CELL_GAP
+    end
+    0
+end
+
+"""Find which cell index has a structured error at the given screen y. Returns cell_index or 0."""
+function _error_cell_at_y(nv::NotebookView, screen_y::Int)::Int
+    isempty(nv.cell_widgets) && return 0
+    vp = nv.viewport
+    vi = Theme.CELL_V_INSET
+    content_y = screen_y - (vp.y + vi + 1) + nv.scroll_offset - Theme.TOP_MARGIN
+
+    y = 0
+    for i in eachindex(nv.cell_widgets)
+        ow = nv.output_widgets[i]
+        oh = output_height(ow)
+        ch = cell_height(nv.cell_widgets[i]; has_output=oh > 0)
+        y += ch
+        if oh > 0 && content_y >= y && content_y < y + oh
+            cell = nv.cell_widgets[i].cell
+            cell.state == cell_errored && cell.output.structured_error !== nothing || return 0
             return i
         end
         y += oh

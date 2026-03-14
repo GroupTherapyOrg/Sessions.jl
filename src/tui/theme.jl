@@ -190,6 +190,29 @@ const RUN_ERROR_FG   = RED
 # │  Component: Output                                               │
 # ╰──────────────────────────────────────────────────────────────────╯
 
+# Structured error display
+const ERROR_BG          = ColorRGB(0x1c, 0x10, 0x12)   # subtle dark red bg for error blocks
+const ERROR_MSG_FG      = ColorRGB(0xf0, 0x78, 0x88)   # softer red for error message
+const ERROR_TYPE_FG     = ColorRGB(0xf7, 0x54, 0x64)   # bright red for error type name
+const ERROR_FILE_FG     = ColorRGB(0x2a, 0xac, 0xb8)   # cyan for file locations
+const ERROR_FRAME_FG    = FG_DIM                         # normal frame text
+const ERROR_FRAME_DIM   = FG_MUTED                       # dim/hidden frames
+const ERROR_FRAME_USER  = FG                             # user code frame (bright)
+const ERROR_SHOW_MORE   = ACCENT                         # "show more" link
+const ERROR_FOCUS_BG    = ColorRGB(0x26, 0x1a, 0x1e)   # focused frame highlight
+const ERROR_COPY_FG     = FG_MUTED                       # copy button
+
+const S_ERROR_TYPE     = Style(; fg=ERROR_TYPE_FG, bg=CANVAS_BG, bold=true)
+const S_ERROR_MSG      = Style(; fg=ERROR_MSG_FG, bg=CANVAS_BG)
+const S_ERROR_FILE     = Style(; fg=ERROR_FILE_FG, bg=CANVAS_BG)
+const S_ERROR_FRAME    = Style(; fg=ERROR_FRAME_FG, bg=CANVAS_BG)
+const S_ERROR_DIM      = Style(; fg=ERROR_FRAME_DIM, bg=CANVAS_BG)
+const S_ERROR_USER     = Style(; fg=ERROR_FRAME_USER, bg=CANVAS_BG)
+const S_ERROR_USER_BG  = Style(; fg=ERROR_FRAME_USER, bg=ERROR_BG)
+const S_ERROR_SHOW     = Style(; fg=ERROR_SHOW_MORE, bg=CANVAS_BG)
+const S_ERROR_COPY     = Style(; fg=ERROR_COPY_FG, bg=CANVAS_BG)
+const S_ERROR_FOCUS    = Style(; fg=FG, bg=ERROR_FOCUS_BG)
+
 # Output text on canvas
 output_text_style(errored::Bool, stale::Bool) =
     if errored

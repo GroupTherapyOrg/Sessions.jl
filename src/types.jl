@@ -9,6 +9,29 @@
     cell_errored   # Finished with error
 end
 
+"""A single frame in a structured error stacktrace (Pluto-style per-frame metadata)."""
+struct StructuredFrame
+    func::String           # full call signature
+    func_short::String     # abbreviated — no type params
+    file::String           # full path
+    file_short::String     # basename
+    line::Int
+    inlined::Bool
+    from_c::Bool
+    from_base::Bool        # Base/Core frame
+    from_user::Bool        # notebook workspace frame
+    importance::Symbol     # :important | :normal | :dim
+end
+
+"""Structured error with per-frame metadata for rich TUI display."""
+struct StructuredError
+    type_name::String           # "UndefVarError" etc.
+    message::String             # user-friendly message
+    frames::Vector{StructuredFrame}
+    hidden_frame_count::Int     # filtered frames for "show N more"
+    plain_text::String          # flat string for clipboard/fallback
+end
+
 """Captured output from a cell execution."""
 mutable struct CellOutput
     result::Any                        # Return value of the cell (actual Julia object)
@@ -18,9 +41,10 @@ mutable struct CellOutput
     output_type::Symbol                # :text, :nothing, :error, :markdown, :dataframe, :image_png
     text_representation::String        # Fallback text rendering for any output type
     image_data::Union{Nothing, Vector{UInt8}}  # PNG bytes for :image_png output (not serialized)
+    structured_error::Union{Nothing, StructuredError}  # Pluto-style structured error
 end
 
-CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "", nothing)
+CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "", nothing, nothing)
 
 """A single notebook cell."""
 mutable struct Cell

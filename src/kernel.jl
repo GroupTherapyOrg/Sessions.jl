@@ -172,6 +172,95 @@ end
 
 # --- Error formatting ---
 
+"""Classify a stackframe's importance using Pluto-style heuristics.
+
+Returns :important for user code, :dim for internal/inlined/iterator frames,
+:normal for everything else."""
+function _classify_frame_importance(frame::Base.StackTraces.StackFrame, workspace_ns::Symbol)::Symbol
+    func = string(frame.func)
+    file = string(frame.file)
+
+    # User code: from workspace module → always important
+    if _is_user_frame(frame, workspace_ns)
+        return :important
+    end
+
+    # Dim: inlined frames, C frames
+    frame.inlined && return :dim
+    frame.from_c && return :dim
+
+    # Dim: common iterator/collect/throw internals
+    func in ("iterate", "collect", "_collect", "_growend!", "throw", "rethrow",
+             "error", "macro expansion", "top-level scope") && return :dim
+    startswith(func, "_") && contains(file, "Base") && return :dim
+    startswith(func, "#") && return :dim
+
+    # Base/Core frames are normal (visible but not highlighted)
+    (contains(file, "Base") || contains(file, "Core")) && return :normal
+    any(startswith(file, p) for p in ("./", "boot.jl", "loading.jl", "essentials.jl")) && return :dim
+
+    :normal
+end
+
+"""Check if a stackframe is from user notebook code (SessionsWorkspace_N module)."""
+function _is_user_frame(frame::Base.StackTraces.StackFrame, workspace_ns::Symbol)::Bool
+    file = string(frame.file)
+    mod = frame.linfo isa Core.MethodInstance ? string(frame.linfo.def.module) : ""
+    # Check module name
+    !isempty(mod) && startswith(mod, "SessionsWorkspace_") && return true
+    # Check if file matches workspace namespace as string
+    contains(file, string(workspace_ns)) && return true
+    # Check common workspace patterns
+    (file == "none" || contains(file, "REPL") || contains(file, "Untitled")) && return true
+    false
+end
+
+"""Shorten a function name by removing type parameter suffixes."""
+function _shorten_func(func::String)::String
+    # Remove everything after first '{' (type params)
+    idx = findfirst('{', func)
+    idx !== nothing ? func[1:prevind(func, idx)] : func
+end
+
+"""Build a StructuredError from an exception + backtrace for Pluto-style display."""
+function build_structured_error(ex::Exception, bt, workspace_ns::Symbol)::StructuredError
+    type_name = string(typeof(ex))
+    message = _format_error_message(ex)
+    plain_text = format_error(ex, bt)
+
+    raw_frames = _to_stackframes(bt)
+    frames = StructuredFrame[]
+    hidden_count = 0
+
+    for frame in raw_frames
+        func = string(frame.func)
+        file = string(frame.file)
+
+        # Skip truly internal frames (eval, include, etc.)
+        func in ("eval", "include") && begin hidden_count += 1; continue; end
+
+        importance = _classify_frame_importance(frame, workspace_ns)
+        is_base = contains(file, "Base") || contains(file, "Core")
+        is_user = _is_user_frame(frame, workspace_ns)
+
+        sf = StructuredFrame(
+            func,
+            _shorten_func(func),
+            file,
+            basename(file),
+            frame.line,
+            frame.inlined,
+            frame.from_c,
+            is_base,
+            is_user,
+            importance
+        )
+        push!(frames, sf)
+    end
+
+    StructuredError(type_name, message, frames, hidden_count, plain_text)
+end
+
 """Format an exception with a clean, filtered stacktrace for display."""
 function format_error(ex::Exception, bt)::String
     lines = String[]
@@ -501,6 +590,13 @@ function execute_cell!(workspace::Workspace, cell::Cell)
                 sprint(showerror, err.ex)
             catch
                 "Error formatting exception"
+            end
+            # Build structured error for rich TUI display
+            out.structured_error = try
+                bt = hasproperty(err, :processed_bt) ? err.processed_bt : backtrace()
+                build_structured_error(err.ex, bt, workspace.ns)
+            catch
+                nothing
             end
             cell.output = out
             cell.state = cell_errored

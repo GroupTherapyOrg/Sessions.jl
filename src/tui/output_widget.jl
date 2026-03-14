@@ -38,9 +38,15 @@ mutable struct OutputWidget
     _img_offset_x::Int
     _img_offset_y::Int
     _img_zoom::Float64
+    # Structured error interaction state
+    _error_show_all::Bool       # toggle to show hidden/dim frames
+    _error_focused_frame::Int   # keyboard-focused frame index (0 = none)
+    _error_scroll_offset::Int   # scroll offset for long traces
+    # Output truncation state
+    _output_expanded::Bool      # true = show all lines (no truncation)
 end
 
-OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), 0, 0, 1.0)
+OutputWidget(cell::Cell) = OutputWidget(cell, false, false, nothing, UInt64(0), nothing, nothing, nothing, UInt64(0), -1, UInt64(0), cell_idle, false, nothing, UInt64(0), nothing, Tachikoma.Rect(), UInt64(0), Tachikoma.gfx_none, UInt32(0), 80, 40, nothing, UInt64(0), 0, 0, 1.0, false, 0, 0, false)
 
 """Format cell output as displayable lines.
 
@@ -59,7 +65,14 @@ function output_lines(cell::Cell)
     end
 
     if out.error !== nothing
-        push!(lines, "ERROR: $(out.error.ex)")
+        if out.structured_error !== nothing
+            # Use structured error's plain text for cached lines (clipboard, fallback)
+            for line in split(out.structured_error.plain_text, '\n')
+                push!(lines, String(line))
+            end
+        else
+            push!(lines, "ERROR: $(out.error.ex)")
+        end
     end
 
     if out.error === nothing && out.result !== nothing
@@ -269,12 +282,24 @@ function output_height(ow::OutputWidget)
     h
 end
 
+"""Max visible lines before truncation (click/key to expand)."""
+const _OUTPUT_TRUNCATE_LINES = 25
+
+"""Max visible frames before truncation in structured error."""
+const _ERROR_MAX_VISIBLE_FRAMES = 15
+
 """Compute output height (uncached)."""
 function _compute_output_height(ow::OutputWidget)
     if ow.collapsed || ow.cell.state == cell_idle
         return 0
     end
     otype = ow.cell.output.output_type
+
+    # Structured error: compute from frames
+    if otype == :error && ow.cell.output.structured_error !== nothing
+        return _structured_error_height(ow)
+    end
+
     if otype == :bond
         return _bond_height(ow.cell)
     elseif otype == :dataframe
@@ -299,7 +324,36 @@ function _compute_output_height(ow::OutputWidget)
         return _svg_height(ow.cell)
     end
     lines = output_lines(ow.cell)
-    isempty(lines) ? 0 : length(lines)
+    nlines = length(lines)
+    if nlines == 0
+        return 0
+    end
+    # Truncation: cap at _OUTPUT_TRUNCATE_LINES unless expanded
+    if !ow._output_expanded && nlines > _OUTPUT_TRUNCATE_LINES
+        return _OUTPUT_TRUNCATE_LINES + 1  # +1 for "N more lines" indicator
+    end
+    nlines
+end
+
+"""Compute height for structured error display."""
+function _structured_error_height(ow::OutputWidget)::Int
+    se = ow.cell.output.structured_error
+    se === nothing && return 0
+    # Header: type_name + message = 2 lines, blank + "Stacktrace:" = 2 lines
+    h = 4
+    visible_frames = if ow._error_show_all
+        se.frames
+    else
+        [f for f in se.frames if f.importance != :dim]
+    end
+    nf = length(visible_frames)
+    h += min(nf, _ERROR_MAX_VISIBLE_FRAMES)
+    # "show more" line if there are hidden frames
+    hidden = length(se.frames) - length(visible_frames)
+    if hidden > 0 && !ow._error_show_all
+        h += 1
+    end
+    h
 end
 
 function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
@@ -309,6 +363,12 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
 
     stale = is_stale(ow.cell)
     otype = ow.cell.output.output_type
+
+    # Structured error display (Pluto-style)
+    if otype == :error && ow.cell.output.structured_error !== nothing
+        _render_structured_error!(ow, rect, buf)
+        return
+    end
 
     # Interactive output: Bond widget (Slider, etc.)
     if otype == :bond && ow.cell.output.result isa Bond && !stale
@@ -360,12 +420,34 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
     text_x = rect.x + 3  # indent: 1 for bar + 2 for padding
     max_width = max(rect.width - 3, 1)  # clamp to rect right edge
 
+    # Determine if stdout and result coexist — render stdout dimmed above result
+    has_stdout = !isempty(ow.cell.output.stdout)
+    has_result = !errored && ow.cell.output.result !== nothing
+    stdout_lines = has_stdout ? split(ow.cell.output.stdout, '\n') : String[]
+    # Remove trailing empty line from stdout (println adds trailing \n)
+    if !isempty(stdout_lines) && isempty(last(stdout_lines))
+        pop!(stdout_lines)
+    end
+
+    # Output truncation
+    total_lines = length(lines)
+    truncated = !ow._output_expanded && total_lines > _OUTPUT_TRUNCATE_LINES
+    display_count = truncated ? _OUTPUT_TRUNCATE_LINES : total_lines
+
     for (i, line) in enumerate(lines)
+        i > display_count && break
         row = rect.y + i - 1
         row > rect.y + rect.height - 1 && break
         Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+
+        # Dim stdout lines when both stdout and result exist
+        line_style = text_style
+        if has_stdout && has_result && i <= length(stdout_lines)
+            line_style = Tachikoma.Style(; fg=Theme.FG_MUTED, bg=Theme.CANVAS_BG, italic=true)
+        end
+
         # Parse ANSI escape codes into styled segments
-        styled_segs = _parse_ansi_line(line, text_style)
+        styled_segs = _parse_ansi_line(line, line_style)
         x = text_x
         max_x = text_x + max_width - 1
         for seg in styled_segs
@@ -374,6 +456,134 @@ function Tachikoma.render(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma
             text = first(seg.text, remaining)
             Tachikoma.set_string!(buf, x, row, text, seg.style)
             x += length(text)
+        end
+    end
+
+    # Truncation indicator
+    if truncated
+        row = rect.y + display_count
+        if row <= rect.y + rect.height - 1
+            hidden = total_lines - _OUTPUT_TRUNCATE_LINES
+            indicator = "··· $hidden more lines ···"
+            Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+            Tachikoma.set_string!(buf, text_x, row, indicator, Theme.S_ERROR_SHOW)
+        end
+    end
+end
+
+# --- Structured error rendering (Pluto-style) ---
+
+"""Render a structured error with per-frame metadata, importance styling, and navigation."""
+function _render_structured_error!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tachikoma.Buffer)
+    se = ow.cell.output.structured_error
+    se === nothing && return
+
+    bar_style = Tachikoma.Style(; fg=Theme.RED, bg=Theme.CANVAS_BG)
+    text_x = rect.x + 3
+    max_width = max(rect.width - 3, 1)
+    row = rect.y
+
+    # Line 1: Error type name + Copy button
+    Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+    Tachikoma.set_string!(buf, text_x, row, se.type_name, Theme.S_ERROR_TYPE)
+    # Copy button at far right
+    copy_text = "⎘ Copy"
+    copy_x = rect.x + rect.width - length(copy_text) - 1
+    if copy_x > text_x + length(se.type_name) + 2
+        Tachikoma.set_string!(buf, copy_x, row, copy_text, Theme.S_ERROR_COPY)
+    end
+    row += 1
+
+    # Line 2: Error message
+    if row <= rect.y + rect.height - 1
+        Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+        msg = first(se.message, max_width)
+        Tachikoma.set_string!(buf, text_x, row, msg, Theme.S_ERROR_MSG)
+        row += 1
+    end
+
+    # Line 3: blank separator
+    if row <= rect.y + rect.height - 1
+        Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+        row += 1
+    end
+
+    # Line 4: "Stacktrace:" header
+    if row <= rect.y + rect.height - 1 && !isempty(se.frames)
+        Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+        Tachikoma.set_string!(buf, text_x, row, "Stacktrace:", Theme.S_ERROR_FRAME)
+        row += 1
+    end
+
+    # Frames
+    visible_frames = if ow._error_show_all
+        se.frames
+    else
+        [f for f in se.frames if f.importance != :dim]
+    end
+
+    nf = length(visible_frames)
+    display_count = min(nf, _ERROR_MAX_VISIBLE_FRAMES)
+
+    for (i, frame) in enumerate(visible_frames)
+        i > display_count && break
+        row > rect.y + rect.height - 1 && break
+
+        Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+
+        # Determine frame style based on importance and focus
+        is_focused = (i == ow._error_focused_frame)
+        frame_style, dot_char = if is_focused
+            Theme.S_ERROR_FOCUS, '●'
+        elseif frame.from_user
+            Theme.S_ERROR_USER_BG, '●'
+        elseif frame.importance == :important
+            Theme.S_ERROR_USER, '●'
+        elseif frame.importance == :dim
+            Theme.S_ERROR_DIM, '○'
+        else
+            Theme.S_ERROR_FRAME, '○'
+        end
+
+        # Format: [N] ●/○ func_short  at file:line
+        idx_str = " [$i] "
+        Tachikoma.set_string!(buf, text_x, row, idx_str, frame_style)
+        x = text_x + length(idx_str)
+
+        # Dot indicator
+        if x <= rect.x + rect.width - 1
+            Tachikoma.set_char!(buf, x, row, dot_char, frame_style)
+            x += 2
+        end
+
+        # Function name
+        func_display = first(frame.func_short, max(max_width - 30, 10))
+        if x + length(func_display) <= rect.x + rect.width
+            Tachikoma.set_string!(buf, x, row, func_display, frame_style)
+            x += length(func_display)
+        end
+
+        # File:line location (right-aligned or after padding)
+        loc = "  at $(frame.file_short):$(frame.line)"
+        if frame.from_user
+            loc *= "  ←"
+        end
+        loc = first(loc, max(max_width - (x - text_x), 1))
+        if x + length(loc) <= rect.x + rect.width
+            file_style = is_focused ? Theme.S_ERROR_FOCUS : Theme.S_ERROR_FILE
+            Tachikoma.set_string!(buf, x, row, loc, file_style)
+        end
+
+        row += 1
+    end
+
+    # "Show more" indicator for hidden frames
+    hidden = length(se.frames) - length(visible_frames)
+    if hidden > 0 && !ow._error_show_all
+        if row <= rect.y + rect.height - 1
+            Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+            indicator = "     ··· $hidden more frames (Space to show) ···"
+            Tachikoma.set_string!(buf, text_x, row, first(indicator, max_width), Theme.S_ERROR_SHOW)
         end
     end
 end

@@ -38,7 +38,8 @@ export Bond, @bind, set_bond_value!, initial_value, possible_values, validate_va
 include("kernel.jl")
 export Workspace, execute_cell!, execute_notebook!, execute_changed!
 export classify_output, text_representation
-export format_error, format_cell_error
+export format_error, format_cell_error, build_structured_error
+export StructuredFrame, StructuredError
 
 include("png_decoder.jl")
 export decode_png

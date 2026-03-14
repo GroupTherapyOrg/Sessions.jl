@@ -41,4 +41,5 @@ using Sessions
     include("test_jpeg_decoder.jl")
     include("test_svg_fallback.jl")
     include("test_image_interact.jl")
+    include("test_structured_error.jl")
 end
