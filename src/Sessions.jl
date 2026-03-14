@@ -159,6 +159,7 @@ function __init__()
         byte == 0x08 && return Tachikoma.KeyEvent(:backspace)
         byte == 0x09 && return Tachikoma.KeyEvent(:tab)
         byte == 0x03 && return Tachikoma.KeyEvent(:ctrl, 'c')  # NOT :ctrl_c — we handle quit ourselves
+        byte == 0x1f && return Tachikoma.KeyEvent(:ctrl, '/')  # Ctrl+/ (0x1f = ^_)
         byte < 0x20  && return Tachikoma.KeyEvent(:ctrl, Char(byte + 0x60))
         return Tachikoma.KeyEvent(Char(byte))
     end
@@ -264,9 +265,18 @@ function __init__()
             end
         end
 
-        # Super (Cmd) + letter → :ctrl + letter (Cmd+S=save, Cmd+C=copy, Cmd+V=paste)
-        if super && !ctrl && !alt && !shift && keycode >= Int('a') && keycode <= Int('z')
-            return Tachikoma.KeyEvent(:ctrl, Char(keycode), action)
+        # Super (Cmd) + letter/symbol → :ctrl + char (Cmd+S=save, Cmd+/=comment, etc.)
+        if super && !ctrl && !alt && !shift
+            if keycode >= Int('a') && keycode <= Int('z')
+                return Tachikoma.KeyEvent(:ctrl, Char(keycode), action)
+            elseif keycode == Int('/')
+                return Tachikoma.KeyEvent(:ctrl, '/', action)
+            end
+        end
+
+        # Ctrl+/ → :ctrl + '/' (toggle comment — before generic ctrl_byte which maps it to DEL)
+        if (ctrl || super) && !alt && keycode == Int('/')
+            return Tachikoma.KeyEvent(:ctrl, '/', action)
         end
 
         # Ctrl+letter combinations (including Ctrl+C → :ctrl+'c', NOT :ctrl_c)
