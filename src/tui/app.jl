@@ -1493,8 +1493,16 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             ow._cached_height = -1
             app.message = ow._error_show_all ? "Showing all frames" : "Hiding dim frames"
             return
-        elseif evt.key == :char && evt.char == 'c'
-            # Copy plain text error to clipboard
+        elseif evt.key == :ctrl && evt.char == 'c'
+            # Ctrl+C: copy output selection if active, otherwise whole error
+            if ow._sel_active
+                text = _output_selected_text(ow)
+                if !isempty(text)
+                    _clipboard_copy!(text)
+                    app.message = "Copied $(length(split(text, '\n'))) line(s)"
+                    return
+                end
+            end
             _clipboard_copy!(se.plain_text)
             app.message = "Error copied to clipboard"
             return
@@ -1586,10 +1594,24 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
     end
 
     # Ctrl+C: behavior depends on mode
+    #   active output selection → copy selected output text
     #   panel  → quit (like Ctrl+C in a normal terminal)
     #   normal → copy entire focused cell code
     #   insert → copy text selection (or current line if no selection)
     if evt.key == :ctrl && evt.char == 'c'
+        # Check for active output selection first (any mode)
+        nv = app.notebook_view
+        if !isempty(nv.output_widgets) && nv.focused_idx >= 1 && nv.focused_idx <= length(nv.output_widgets)
+            ow = nv.output_widgets[nv.focused_idx]
+            if ow._sel_active
+                text = _output_selected_text(ow)
+                if !isempty(text)
+                    _clipboard_copy!(text)
+                    app.message = "Copied $(length(split(text, '\n'))) line(s)"
+                    return
+                end
+            end
+        end
         if app.mode == :panel
             _quit_app!(app)
             return
@@ -1766,7 +1788,7 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
             if fc.state == cell_errored && fc.output.structured_error !== nothing
                 app.mode = :error_interact
                 ow._error_focused_frame = 1
-                app.message = "Error: ↑↓ navigate, Space expand, c copy, Esc exit"
+                app.message = "Error: ↑↓ navigate, Space expand, Ctrl+C copy, Esc exit"
                 return
             end
         end
@@ -2275,22 +2297,46 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             end
         end
 
-        # Check if click is on a text/error output area — start output drag selection
+        # Check if click is on a text/error output area
         out_idx, out_rect = _output_cell_at_pos(nv, evt.x, evt.y, cell_left, cw_width)
         if out_idx > 0 && out_rect.width > 0
             ow = nv.output_widgets[out_idx]
             nv.focused_idx = out_idx
             update_focus!(nv)
             _exit_insert_mode!(app)
-            # Map click to output text position
+
+            # Check for structured error interactive elements (Copy button, expand/collapse)
+            se = ow.cell.output.structured_error
+            if se !== nothing
+                text_x = out_rect.x + 3
+                # "Copy" button at top-right of error block (first row)
+                copy_text = "⎘ Copy"
+                copy_x = out_rect.x + out_rect.width - length(copy_text) - 1
+                if evt.y == out_rect.y && evt.x >= copy_x && evt.x < copy_x + length(copy_text)
+                    _clipboard_copy!(se.plain_text)
+                    app.message = "Error copied to clipboard"
+                    return
+                end
+
+                # Expand/collapse indicator line — compute its y position
+                visible_frames = ow._error_show_all ? se.frames : [f for f in se.frames if f.importance != :dim]
+                nf = min(length(visible_frames), _ERROR_MAX_VISIBLE_FRAMES)
+                indicator_y = out_rect.y + 4 + nf  # header(4) + frames
+                if evt.y == indicator_y
+                    ow._error_show_all = !ow._error_show_all
+                    ow._cached_height = -1  # invalidate height cache
+                    app.message = ow._error_show_all ? "Showing all frames" : "Collapsed dim frames"
+                    return
+                end
+            end
+
+            # Start output drag selection
             row, col = _output_click_to_pos(ow, out_rect, evt.x, evt.y)
-            # Start selection at click point
             ow._sel_active = false  # becomes active on first drag
             ow._sel_anchor_row = row
             ow._sel_anchor_col = col
             ow._sel_cursor_row = row
             ow._sel_cursor_col = col
-            # Track output drag
             app.output_drag = true
             app.output_drag_idx = out_idx
             return
@@ -2414,19 +2460,9 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
                 _auto_copy_selection!(cw.editor, cw.selection)
             end
         end
-        # Auto-copy output selection on release
+        # Output drag complete — keep selection visible, copy via Ctrl+C
         if app.output_drag && app.output_drag_idx >= 1
-            idx = app.output_drag_idx
-            if idx <= length(nv.output_widgets)
-                ow = nv.output_widgets[idx]
-                if ow._sel_active
-                    text = _output_selected_text(ow)
-                    if !isempty(text)
-                        _clipboard_copy!(text)
-                        app.message = "Output copied"
-                    end
-                end
-            end
+            # Selection stays active for Ctrl+C; no auto-copy
         end
         app.drag_active = false
         app.slider_drag = false

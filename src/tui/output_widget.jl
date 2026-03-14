@@ -356,10 +356,13 @@ function _structured_error_height(ow::OutputWidget)::Int
     end
     nf = length(visible_frames)
     h += min(nf, _ERROR_MAX_VISIBLE_FRAMES)
-    # "show more" line if there are hidden frames
+    # "show more" / "collapse" line
     hidden = length(se.frames) - length(visible_frames)
+    dim_count = length(se.frames) - length([f for f in se.frames if f.importance != :dim])
     if hidden > 0 && !ow._error_show_all
         h += 1
+    elseif ow._error_show_all && dim_count > 0
+        h += 1  # "Click to collapse" line
     end
     h
 end
@@ -588,12 +591,18 @@ function _render_structured_error!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
         row += 1
     end
 
-    # "Show more" indicator for hidden frames
+    # "Show more" / "Collapse" indicator
     hidden = length(se.frames) - length(visible_frames)
     if hidden > 0 && !ow._error_show_all
         if row <= rect.y + rect.height - 1
             Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
-            indicator = "     ··· $hidden more frames (Space to show) ···"
+            indicator = "     ··· $hidden more frames (Click to expand) ···"
+            Tachikoma.set_string!(buf, text_x, row, first(indicator, max_width), Theme.S_ERROR_SHOW)
+        end
+    elseif ow._error_show_all && length(se.frames) > length([f for f in se.frames if f.importance != :dim])
+        if row <= rect.y + rect.height - 1
+            Tachikoma.set_char!(buf, rect.x, row, '│', bar_style)
+            indicator = "     ··· (Click to collapse) ···"
             Tachikoma.set_string!(buf, text_x, row, first(indicator, max_width), Theme.S_ERROR_SHOW)
         end
     end
