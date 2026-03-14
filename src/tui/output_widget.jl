@@ -715,22 +715,22 @@ function _output_selected_text(ow::OutputWidget)::String
     sr = clamp(sr, 1, length(lines))
     er = clamp(er, 1, length(lines))
 
-    # Use ANSI-stripped text for clipboard
-    stripped = [_strip_ansi(l) for l in lines]
+    # Collect chars for safe positional indexing (handles multi-byte UTF-8 like ● ○)
+    char_lines = [collect(_strip_ansi(l)) for l in lines]
 
     if sr == er
-        line = stripped[sr]
+        chars = char_lines[sr]
         from = sc + 1  # 1-based
-        to = min(ec, length(line))
+        to = min(ec, length(chars))
         from > to && return ""
-        return line[from:to]
+        return String(chars[from:to])
     else
         parts = String[]
-        push!(parts, stripped[sr][sc+1:end])
+        push!(parts, String(char_lines[sr][sc+1:end]))
         for r in sr+1:er-1
-            push!(parts, stripped[r])
+            push!(parts, String(char_lines[r]))
         end
-        push!(parts, stripped[er][1:min(ec, length(stripped[er]))])
+        push!(parts, String(char_lines[er][1:min(ec, length(char_lines[er]))]))
         return join(parts, '\n')
     end
 end
@@ -767,8 +767,9 @@ function _render_output_selection!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
         row = rect.y + i - 1
         row > rect.y + rect.height - 1 && break
 
-        stripped = _strip_ansi(lines[i])
-        line_len = length(stripped)
+        # Collect chars for safe positional indexing (handles multi-byte UTF-8 like ● ○)
+        chars = collect(_strip_ansi(lines[i]))
+        line_len = length(chars)
 
         # Selection range on this line (1-based char indices)
         line_sel_start = i == sr ? sc + 1 : 1
@@ -782,7 +783,7 @@ function _render_output_selection!(ow::OutputWidget, rect::Tachikoma.Rect, buf::
             (char_idx < line_sel_start || char_idx > line_sel_end) && continue
 
             if char_idx >= 1 && char_idx <= line_len
-                ch = stripped[char_idx]
+                ch = chars[char_idx]
                 Tachikoma.set_char!(buf, x, row, ch, sel_style)
             else
                 Tachikoma.set_char!(buf, x, row, ' ', Tachikoma.Style(; bg=Theme.SELECTION_BG))
