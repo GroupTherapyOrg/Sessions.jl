@@ -439,7 +439,7 @@
         Sessions.sync_from_cell!(app.notebook_view.cell_widgets[1])
         Tachikoma.view(app, frame)
         @test app.notebook_view.run_stale_rect.width > 0
-        @test Tachikoma.find_text(tb, "Stale") !== nothing
+        @test Tachikoma.find_text(tb, "Run Stale") !== nothing
     end
 
     @testset "Save button click — formats, saves, clears dirty" begin

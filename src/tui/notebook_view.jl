@@ -713,7 +713,7 @@ function Tachikoma.render(nv::NotebookView, rect::Tachikoma.Rect, buf::Tachikoma
     # Run Stale (to the left of Run All)
     n_stale = length(stale_cells(nv.nb))
     if n_stale > 0
-        stale_label = " ▶ Stale ($n_stale) "
+        stale_label = " ▶ Run Stale ($n_stale) "
         stale_len = length(stale_label)
         stale_x = run_x - stale_len - 1
         if stale_x > bx + 2
