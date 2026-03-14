@@ -339,10 +339,8 @@ function _lsp_sync_and_refresh!(app::SessionsApp)
             sync_to_cell!(cw)
         end
         app.lsp_doc_version += 1
-        # Force close+reopen so JETLS re-analyzes from scratch
-        # (incremental didChange may not update import/macro resolution)
-        lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version; force=true)
-        dlog("lsp", "sync_and_refresh forced"; version=app.lsp_doc_version,
+        lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+        dlog("lsp", "sync_and_refresh"; version=app.lsp_doc_version,
              n_cells=length(app.nb.cell_order))
     end
 end
@@ -701,7 +699,8 @@ function Tachikoma.view(app::SessionsApp, frame::Tachikoma.Frame)
                 sync_to_cell!(cw)
             end
             app.lsp_doc_version += 1
-            lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version; force=true)
+            # Incremental update — does NOT reset JETLS state
+            lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
         end
     end
 
