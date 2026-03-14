@@ -2848,7 +2848,7 @@ function _hit_test_cell_controls(app::SessionsApp, nv::NotebookView,
         if click_y >= run_gap_y - 1 && click_y <= run_gap_y + 1 &&
            click_x >= run_x - 2 && click_x <= cell_right + 2
             focus_cell!(nv, target_idx; scroll=false)
-            run_cell_at_index!(app, target_idx)
+            run_focused_cell_async!(app)
             return true
         end
     end
@@ -3309,12 +3309,11 @@ function new(path::String="Untitled.jl")
     open(nb)
 end
 
-"""Run a cell by its index (for indicator click)."""
+"""Run a specific cell by index (synchronous, for tests and headless runner)."""
 function run_cell_at_index!(app::SessionsApp, idx::Int)
     cells = ordered_cells(app.nb)
     (idx < 1 || idx > length(cells)) && return
     cell = cells[idx]
-    # Sync editor text first
     if idx <= length(app.notebook_view.cell_widgets)
         sync_to_cell!(app.notebook_view.cell_widgets[idx])
     end
