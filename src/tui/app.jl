@@ -1657,9 +1657,11 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.KeyEvent)
         if n_stale > 0
             app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
         elseif n_formatted > 0
-            app.message = "Formatted $(n_formatted) cell$(n_formatted == 1 ? "" : "s") + Saved"
+            app.message = "Formatted $(n_formatted) cell$(n_formatted == 1 ? "" : "s") + Saved: $(basename(app.nb.path))"
+        elseif !format_code_available()
+            app.message = "Saved: $(basename(app.nb.path)) (no formatter)"
         else
-            app.message = "Saved: $(app.nb.path)"
+            app.message = "Saved: $(basename(app.nb.path))"
         end
         return
     end
@@ -2217,13 +2219,19 @@ function Tachikoma.update!(app::SessionsApp, evt::Tachikoma.MouseEvent)
             nv.save_hovered = true
         end
         if evt.button == Tachikoma.mouse_left && evt.action == Tachikoma.mouse_press
+            n_formatted = _format_notebook_cells!(app)
             save_notebook(app.nb)
             app.last_save_time = time()
             app.last_disk_nb = _snapshot_notebook(app.nb)
+            app._dirty_cache_valid = false  # clear orange ● Save
             _sync_to_active_tab!(app)
             n_stale = run_stale_cells!(app)
             if n_stale > 0
                 app.message = "Saved + ran $n_stale stale cell$(n_stale == 1 ? "" : "s")"
+            elseif n_formatted > 0
+                app.message = "Formatted $(n_formatted) cell$(n_formatted == 1 ? "" : "s") + Saved: $(basename(app.nb.path))"
+            elseif !format_code_available()
+                app.message = "Saved: $(basename(app.nb.path)) (no formatter)"
             else
                 app.message = "Saved: $(basename(app.nb.path))"
             end

@@ -394,4 +394,51 @@
         rm(path; force=true)
     end
 
+    # ── Save button click (mouse) ──────────────────────────────────
+
+    @testset "Save button click — formats, saves, clears dirty" begin
+        path = tempname() * ".jl"
+        nb = Sessions.Notebook(; path=path)
+        Sessions.add_cell!(nb, "x=1+2")
+        Sessions.add_cell!(nb, "y=3+4")
+        Sessions.save_notebook(nb)
+        app = Sessions.SessionsApp(nb)
+
+        # Render to establish save_rect
+        tb = Tachikoma.TestBackend(120, 40)
+        frame = Tachikoma.Frame(tb.buf, Tachikoma.Rect(1, 1, 120, 40), [], [])
+        Tachikoma.view(app, frame)
+
+        sa = app.notebook_view.save_rect
+        @test sa.width > 0  # save button exists
+
+        # Click the Save button
+        Tachikoma.update!(app, Tachikoma.MouseEvent(
+            sa.x + 1, sa.y,
+            Tachikoma.mouse_left, Tachikoma.mouse_press,
+            false, false, false
+        ))
+
+        # Verify formatting happened
+        if Sessions.format_code_available()
+            cw1 = app.notebook_view.cell_widgets[1]
+            cw2 = app.notebook_view.cell_widgets[2]
+            @test occursin("1 + 2", Tachikoma.text(cw1.editor))
+            @test occursin("3 + 4", Tachikoma.text(cw2.editor))
+            @test occursin("Formatted", app.message)
+        end
+
+        # Dirty cache invalidated
+        @test app._dirty_cache_valid == false
+
+        # Render and verify not dirty
+        Tachikoma.view(app, frame)
+        @test app.notebook_view.dirty == false
+
+        # File was saved
+        @test isfile(path)
+
+        rm(path; force=true)
+    end
+
 end
