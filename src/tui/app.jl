@@ -335,10 +335,12 @@ end
 function _lsp_sync_and_refresh!(app::SessionsApp)
     if app.lsp.status == lsp_ready
         app.lsp_doc_version += 1
-        lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
+        # Force close+reopen so JETLS re-analyzes from scratch
+        # (incremental didChange may not update import/macro resolution)
+        lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version; force=true)
         # Schedule diagnostic refresh after a brief delay to let LSP process
         @async begin
-            sleep(0.5)
+            sleep(1.0)
             app.cell_diagnostics_cache = lsp_cell_diagnostics(app.lsp, app.nb)
             if app.diagnostics_open
                 jet_cache = Dict{UUID, CellDiagnostics}()

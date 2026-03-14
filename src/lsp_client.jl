@@ -1166,12 +1166,17 @@ end
 Sends didOpen/didChange + didSave to push diagnostics (inference checks),
 then requests pull diagnostics (lowering checks like undef-local-var).
 """
-function lsp_sync_notebook!(client::LspClient, nb::Notebook, version::Int)
+function lsp_sync_notebook!(client::LspClient, nb::Notebook, version::Int; force::Bool=false)
     client.status != lsp_ready && return
     uri = notebook_uri(nb)
     text = notebook_as_document(nb)
 
-    if version == 1
+    if force
+        # Close + reopen forces JETLS to re-analyze from scratch
+        # (didChange alone may not trigger full re-analysis for imports/macros)
+        lsp_did_close!(client, uri)
+        lsp_did_open!(client, uri, text)
+    elseif version == 1
         lsp_did_open!(client, uri, text)
     else
         lsp_did_change!(client, uri, text, version)
