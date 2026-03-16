@@ -1352,7 +1352,8 @@ function _render_image_output!(ow::OutputWidget, rect::Tachikoma.Rect, buf::Tach
         if gfx == Tachikoma.gfx_kitty
             needs_fresh = ow._cached_kitty_id == UInt32(0) ||
                           ow._cached_encoded_data === nothing ||
-                          ow._cached_encoded_rect != rect
+                          ow._cached_encoded_rect.width != rect.width ||
+                          ow._cached_encoded_rect.height != rect.height
             if needs_fresh
                 data = Tachikoma.encode_kitty(pi.pixels; decay=pi.decay,
                             cols=rect.width, rows=rect.height)
