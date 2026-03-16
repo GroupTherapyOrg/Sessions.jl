@@ -415,8 +415,8 @@ let workspace_counter = Ref(0)
             end
         end
 
-        # Pre-import Markdown (Pluto parity — md"..." strings need @md_str)
-        Core.eval(mod, :(using Markdown))
+        # Pre-import Pkg so it's always available even after Pkg.activate changes LOAD_PATH
+        Core.eval(mod, :(using Pkg))
         # Inject @bind and widget types so cells can use them directly.
         # We inject the already-loaded objects directly instead of `import Sessions:`
         # because a previous notebook's Pkg.activate() may have corrupted LOAD_PATH,
