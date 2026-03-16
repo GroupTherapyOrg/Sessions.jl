@@ -511,11 +511,19 @@ function execute_cell!(workspace::Workspace, cell::Cell)
         try
             # Use include_string with the notebook path so @__DIR__ resolves
             # to the notebook's directory (like running a normal .jl file).
+            # Also cd to the notebook's directory so pwd() matches expectations
+            # (Pluto parity — many notebooks use dirname(pwd())).
             dlog("kernel", "eval begin"; cell_id=cell.id)
-            if !isempty(workspace.notebook_path)
-                result = Base.include_string(workspace.mod, code, workspace.notebook_path)
+            nb_dir = isempty(workspace.notebook_path) ? "" : dirname(workspace.notebook_path)
+            eval_fn = if !isempty(workspace.notebook_path)
+                () -> Base.include_string(workspace.mod, code, workspace.notebook_path)
             else
-                result = Base.eval(workspace.mod, Base.Meta.parse(code))
+                () -> Base.eval(workspace.mod, Base.Meta.parse(code))
+            end
+            if !isempty(nb_dir) && isdir(nb_dir)
+                result = cd(eval_fn, nb_dir)
+            else
+                result = eval_fn()
             end
             dlog("kernel", "eval done"; cell_id=cell.id)
         finally
