@@ -351,7 +351,11 @@ function _refresh_diagnostics!(app::SessionsApp)
     end
 end
 
-"""Sync notebook changes to LSP and refresh diagnostics."""
+"""Sync notebook changes to LSP. Called on save and after execution.
+
+Does NOT run JET direct analysis (too slow, produces false positives for
+large notebooks with unresolvable imports). JET direct only runs when
+the diagnostics panel is explicitly opened via _toggle_diagnostics!."""
 function _lsp_sync_and_refresh!(app::SessionsApp)
     # Sync all editors → cell.code before analysis
     for cw in app.notebook_view.cell_widgets
@@ -362,8 +366,6 @@ function _lsp_sync_and_refresh!(app::SessionsApp)
         app.lsp_doc_version += 1
         lsp_sync_notebook!(app.lsp, app.nb, app.lsp_doc_version)
     end
-    # Refresh diagnostics from both JET direct + LSP
-    _refresh_diagnostics!(app)
 end
 
 """Format all notebook cells using Runic.jl. Returns number of cells that changed."""
