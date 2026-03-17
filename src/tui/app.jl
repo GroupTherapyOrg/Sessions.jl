@@ -622,6 +622,8 @@ function Tachikoma.init!(app::SessionsApp, t::Tachikoma.Terminal)
     print(t.io, "\e[?1003h")  # upgrade to any-event tracking
     try; Tachikoma.enable_markdown(); catch; end  # load CommonMark extension
     _start_watcher!(app)
+    # Warm up Runic formatter in background so first save isn't slow (~3s cold start)
+    @async try; format_code("x=1"); catch; end
     # Start JETLS language server (on by default)
     if app.lsp.enabled
         dir = _find_project_root(app.nb.path)

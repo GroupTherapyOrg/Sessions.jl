@@ -133,29 +133,49 @@ function _stop_formatter!()
     _FORMATTER_OUT[] = nothing
 end
 
-"""Format code via the persistent subprocess. Returns original code on failure."""
+"""Format code via the persistent subprocess. Returns original code on failure.
+
+Uses a timeout to prevent deadlock if the subprocess hangs — the lock is
+never held for more than 5 seconds."""
 function _format_code_subprocess(code::String)::String
-    lock(_FORMATTER_LOCK) do
+    # Non-blocking lock — if another format is in progress, skip
+    trylock(_FORMATTER_LOCK) || return code
+    try
         _start_formatter!() || return code
-        try
-            inp = _FORMATTER_IN[]
-            out = _FORMATTER_OUT[]
-            (inp === nothing || out === nothing) && return code
+        inp = _FORMATTER_IN[]
+        out = _FORMATTER_OUT[]
+        (inp === nothing || out === nothing) && return code
 
-            # Send: byte count + code
-            write(inp, string(length(codeunits(code))), "\n")
-            write(inp, code)
-            flush(inp)
-
-            # Read: byte count + formatted code
-            resp_line = readline(out)
-            n = parse(Int, resp_line)
-            formatted = String(read(out, n))
-            return formatted
-        catch
+        # Check subprocess is alive
+        if _FORMATTER_PROCESS[] !== nothing && !process_running(_FORMATTER_PROCESS[])
             _stop_formatter!()
             return code
         end
+
+        # Send: byte count + code
+        write(inp, string(length(codeunits(code))), "\n")
+        write(inp, code)
+        flush(inp)
+
+        # Read with timeout — prevents deadlock if subprocess hangs
+        result = Ref(code)
+        reader = @async begin
+            resp_line = readline(out)
+            n = parse(Int, resp_line)
+            String(read(out, n))
+        end
+        status = timedwait(() -> istaskdone(reader), 5.0)
+        if status == :ok && !istaskfailed(reader)
+            result[] = fetch(reader)
+        else
+            _stop_formatter!()
+        end
+        return result[]
+    catch
+        _stop_formatter!()
+        return code
+    finally
+        unlock(_FORMATTER_LOCK)
     end
 end
 
