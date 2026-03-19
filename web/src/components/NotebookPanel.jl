@@ -52,14 +52,17 @@ function NotebookPanel()
         Span(:class => "flex-1"),
         # Toolbar
         Div(:class => "flex items-center gap-2 px-3.5",
-            # Run Stale button — only shown when there are stale cells
-            _Sess.stale_cells(nb) |> sc -> !isempty(sc) ?
-                Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] font-sans cursor-pointer hover:bg-hov transition-colors",
-                    :style => "color:#d4a056;",
+            # Run Stale button — always in DOM, hidden when no stale cells.
+            # Server broadcasts stale_count after execution to show/hide.
+            let sc = _Sess.stale_cells(nb), n = length(sc)
+                Button(:id => "run-stale-btn",
+                    :class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] font-sans cursor-pointer hover:bg-hov transition-colors",
+                    :style => "color:#d4a056;" * (n == 0 ? "display:none;" : ""),
                     :on_click => "window._sessionsRunStale()",
-                    :title => "Run $(length(sc)) stale cell$(length(sc)==1 ? "" : "s") (Ctrl+Shift+Enter)",
+                    :title => "Run stale cells (Ctrl+Shift+Enter)",
                     RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""),
-                    " Run Stale ($(length(sc)))") : nothing,
+                    Span(:id => "run-stale-label", n > 0 ? " Run Stale ($n)" : " Run Stale"))
+            end,
             # Run All button
             Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "window._sessionsRunAll()",

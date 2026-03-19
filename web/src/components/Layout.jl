@@ -342,6 +342,20 @@ function _notebook_channel_script()
       if (ind) { ind.textContent = 'Saved'; setTimeout(function(){ ind.textContent = 'Save'; }, 2000); }
     }
 
+    else if (data.event === 'stale_count') {
+      // Show/hide Run Stale button based on server-computed stale count
+      var btn = document.getElementById('run-stale-btn');
+      var label = document.getElementById('run-stale-label');
+      if (btn) {
+        if (data.count > 0) {
+          btn.style.display = '';
+          if (label) label.textContent = ' Run Stale (' + data.count + ')';
+        } else {
+          btn.style.display = 'none';
+        }
+      }
+    }
+
     else if (data.event === 'full_state') {
       console.log('[Sessions] Full state:', data.cells ? data.cells.length : 0, 'cells');
       if (data.cells) {

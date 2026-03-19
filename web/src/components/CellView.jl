@@ -128,27 +128,8 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
         ctrl_children...)
 
-    # -- State badge (small dot indicator, top-left of cell) --
-    state_color = if cell.state == _Sessions.cell_running
-        "#7bb8e8"
-    elseif cell.state == _Sessions.cell_queued
-        "#d4a056"
-    elseif cell.state == _Sessions.cell_errored
-        "#e06b65"
-    elseif cell.state == _Sessions.cell_done
-        "#56d4a0"
-    elseif cell_stale
-        "#d4a056"
-    elseif cell_never_run
-        "#3d5068"
-    else
-        "#3d5068"
-    end
-    state_pulse = cell.state in (_Sessions.cell_queued, _Sessions.cell_running)
-    state_anim = state_pulse ? "animation:pulse 1.5s infinite;" : ""
-    state_badge = Span(:data_cell_state => string(cell.state),
-        :data_cell_id => cell_id,
-        :style => "position:absolute;top:8px;left:8px;width:7px;height:7px;border-radius:50%;background:$(state_color);z-index:5;$(state_anim)")
+    # State tracked via data attribute on the code-cell div (for CSS left accent bar).
+    # No visible badge dot — the left accent bar (green/orange/red via CSS ::before) is sufficient.
 
     # -- CodeMirror host (data-cell-id lets JS find editor for this cell) --
     # NOTE: Do NOT html-escape data_src — Therapy's render_to_string handles attribute escaping.
@@ -170,8 +151,8 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         code_cell_classes *= " stale"
     end
 
-    # Code cell inner children (state badge + controls + CM editor)
-    inner_children = Any[state_badge, ctrls, cm_div]
+    # Code cell inner children (controls + CM editor)
+    inner_children = Any[ctrls, cm_div]
 
     # ── Output area: ABOVE the code cell, directly on canvas (Pluto-style).
     # When the eye hides the code-cell, output stays visible.

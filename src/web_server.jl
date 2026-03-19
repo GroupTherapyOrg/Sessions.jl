@@ -222,6 +222,13 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     end
 
     save_session!(state.nb)
+
+    # Broadcast stale count so client can show/hide "Run Stale" button
+    sc = stale_cells(state.nb)
+    broadcast_channel!("notebook", Dict(
+        "event" => "stale_count",
+        "count" => length(sc)
+    ))
 end
 
 # =============================================================================
