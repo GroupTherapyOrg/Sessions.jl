@@ -57,6 +57,10 @@ include("web.jl")
 export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
+# Layer 1.5: Web Server (channel handlers for web UI)
+include("web_server.jl")
+export WebNotebookState, setup_web_notebook!, send_full_state!
+
 # Layer 1.5: Static Analysis (JET.jl + JETLS LSP)
 include("jet_analysis.jl")
 export Diagnostic, CellDiagnostics, analyze_cell_jet, analyze_notebook_jet, total_diagnostics, cell_diagnostics

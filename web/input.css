@@ -1,0 +1,227 @@
+@import "tailwindcss";
+
+/* Configure content sources for v4 */
+@source "./src/**/*.jl";
+@source "../src/web.jl";
+@source "../src/web_server.jl";
+
+/* Enable class-based dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Theme customizations */
+@theme {
+  --font-sans: 'Optima', 'Palatino Linotype', 'Book Antiqua', 'EB Garamond', serif;
+  --font-serif: 'EB Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --font-mono: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
+
+  /* Blue-gray neutral palette (Sessions.jl — islands-inspired) */
+  --color-warm-50: #f4f4f6;
+  --color-warm-100: #eaeaed;
+  --color-warm-200: #d4d5d9;
+  --color-warm-300: #bcbec4;
+  --color-warm-400: #9a9ea5;
+  --color-warm-500: #7a7e85;
+  --color-warm-600: #6f737a;
+  --color-warm-700: #4e5157;
+  --color-warm-800: #2b2d30;
+  --color-warm-900: #181a1d;
+  --color-warm-950: #121216;
+
+  /* Accent palette — Julia Green #389826 */
+  --color-accent-50: #f0fdf0;
+  --color-accent-100: #dcfcdc;
+  --color-accent-200: #b4f6b4;
+  --color-accent-300: #7aeb7a;
+  --color-accent-400: #4ad64a;
+  --color-accent-500: #389826;
+  --color-accent-600: #2d7a1f;
+  --color-accent-700: #245f18;
+  --color-accent-800: #1c4a13;
+  --color-accent-900: #153b0f;
+  --color-accent-950: #0a2108;
+
+  /* Accent-secondary palette — Julia Red #cb3c33 */
+  --color-accent-secondary-50: #fdf2f1;
+  --color-accent-secondary-100: #f9dbd9;
+  --color-accent-secondary-200: #f0aba6;
+  --color-accent-secondary-300: #e47b74;
+  --color-accent-secondary-400: #d85a51;
+  --color-accent-secondary-500: #cb3c33;
+  --color-accent-secondary-600: #a8312a;
+  --color-accent-secondary-700: #832620;
+  --color-accent-secondary-800: #5f1b17;
+  --color-accent-secondary-900: #3d110f;
+  --color-accent-secondary-950: #240a09;
+
+  /* Border radius tokens */
+  --radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  /* Shadow tokens */
+  --shadow-sm: 0 2px 4px -1px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 8px -2px rgba(0,0,0,0.12), 0 2px 4px -2px rgba(0,0,0,0.08);
+}
+
+/* Design System CSS custom properties */
+@layer base {
+  :root {
+    color: var(--text-primary);
+    --bg-primary: #f4f4f6;
+    --bg-secondary: #eaeaed;
+    --bg-tertiary: #d4d5d9;
+    --text-primary: #1a1b1f;
+    --text-secondary: #5a5c63;
+    --text-tertiary: #7a7e85;
+
+    --julia-red: #cb3c33;
+    --julia-purple: #9558b2;
+    --julia-blue: #4063d8;
+    --julia-green: #389826;
+    --accent: var(--julia-green);
+    --accent-secondary: var(--julia-red);
+
+    --jl-dot: #9558b2;
+    --jl-j: #389826;
+    --jl-l: #cb3c33;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--bg-primary);
+  }
+
+  pre code {
+    font-family: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
+  }
+}
+
+/* Dark mode custom properties */
+@layer base {
+  .dark {
+    --bg-primary: #121216;
+    --bg-secondary: #161619;
+    --bg-tertiary: #181a1d;
+    --text-primary: #bcbec4;
+    --text-secondary: #7a7e85;
+    --text-tertiary: #4e5157;
+    --shadow-sm: 0 2px 8px 0 rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px 0 rgba(0,0,0,0.4);
+  }
+}
+
+/* Julia syntax highlighting */
+@layer components {
+  .hl-keyword  { color: #c792ea; }
+  .hl-string   { color: #c3e88d; }
+  .hl-comment  { color: #6b6560; font-style: italic; }
+  .hl-number   { color: #f78c6c; }
+  .hl-funcall  { color: #82aaff; }
+  .hl-type     { color: #ffcb6b; }
+  .hl-symbol   { color: #ff5370; }
+  .hl-macro    { color: #c792ea; font-weight: 600; }
+  .hl-operator { color: #89ddff; }
+}
+
+/* Notebook prose styles */
+@layer components {
+  .notebook-prose h1 { @apply text-3xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-4 mt-2; }
+  .notebook-prose h2 { @apply text-2xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-3 mt-6; }
+  .notebook-prose h3 { @apply text-xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-2 mt-4; }
+  .notebook-prose p { @apply text-warm-600 dark:text-warm-400 leading-relaxed mb-4; }
+  .notebook-prose ul { @apply list-disc list-inside space-y-1 text-warm-600 dark:text-warm-400 mb-4; }
+  .notebook-prose ol { @apply list-decimal list-inside space-y-1 text-warm-600 dark:text-warm-400 mb-4; }
+  .notebook-prose blockquote { @apply border-l-4 border-accent-400 pl-4 italic text-warm-500 dark:text-warm-500 mb-4; }
+  .notebook-prose code { @apply font-mono text-sm bg-warm-200 dark:bg-warm-800 px-1.5 py-0.5 rounded; }
+  .notebook-prose pre code { @apply bg-transparent p-0; }
+  .notebook-prose strong { @apply font-semibold text-warm-800 dark:text-warm-300; }
+  .notebook-prose em { @apply italic; }
+  .notebook-prose a { @apply text-accent-600 dark:text-accent-400 hover:underline; }
+}
+
+/* =============================================================================
+   Panel Layout — Three-panel IDE chrome
+   ============================================================================= */
+
+@layer components {
+  /* Activity bar — narrow icon strip on the far left */
+  .activity-bar {
+    @apply flex flex-col items-center gap-1 py-2 w-12 shrink-0
+           bg-warm-100 dark:bg-warm-900
+           border-r border-warm-200 dark:border-warm-700;
+  }
+
+  .activity-bar-icon {
+    @apply w-10 h-10 flex items-center justify-center rounded-md
+           text-warm-500 dark:text-warm-400
+           hover:bg-warm-200 dark:hover:bg-warm-800
+           hover:text-warm-700 dark:hover:text-warm-300
+           transition-colors cursor-pointer;
+  }
+
+  .activity-bar-icon.active {
+    @apply text-accent-600 dark:text-accent-400
+           bg-warm-200/50 dark:bg-warm-800/50;
+  }
+
+  /* Sidebar panel — file explorer */
+  .sidebar-panel {
+    @apply w-64 shrink-0 overflow-y-auto
+           bg-warm-50 dark:bg-warm-950
+           border-r border-warm-200 dark:border-warm-700;
+  }
+
+  .sidebar-header {
+    @apply flex items-center justify-between px-4 py-3
+           text-xs font-semibold uppercase tracking-wider
+           text-warm-500 dark:text-warm-400
+           border-b border-warm-200 dark:border-warm-700;
+  }
+
+  /* Bottom panel — REPL */
+  .bottom-panel {
+    @apply h-48 shrink-0 overflow-y-auto
+           bg-warm-50 dark:bg-warm-950
+           border-t border-warm-200 dark:border-warm-700;
+  }
+
+  .bottom-panel-header {
+    @apply flex items-center justify-between px-4 py-2
+           text-xs font-semibold uppercase tracking-wider
+           text-warm-500 dark:text-warm-400
+           border-b border-warm-200 dark:border-warm-700;
+  }
+
+  /* Cell state badges */
+  .cell-state-idle    { @apply w-2 h-2 rounded-full bg-warm-400; }
+  .cell-state-queued  { @apply w-2 h-2 rounded-full bg-yellow-400 animate-pulse; }
+  .cell-state-running { @apply w-2 h-2 rounded-full bg-blue-400 animate-pulse; }
+  .cell-state-done    { @apply w-2 h-2 rounded-full bg-accent-500; }
+  .cell-state-errored { @apply w-2 h-2 rounded-full bg-accent-secondary-500; }
+
+  /* Cell container */
+  .cell-container {
+    @apply group relative;
+  }
+
+  /* Add cell gap */
+  .cell-gap {
+    @apply flex items-center justify-center h-6 opacity-0 group-hover:opacity-100
+           hover:!opacity-100 transition-opacity;
+  }
+
+  .cell-gap-button {
+    @apply text-xs text-warm-400 hover:text-accent-600 dark:hover:text-accent-400
+           border border-dashed border-warm-300 dark:border-warm-600
+           hover:border-accent-400 dark:hover:border-accent-400
+           rounded px-3 py-0.5 transition-colors cursor-pointer;
+  }
+}
+
+/* Smooth panel transitions */
+@layer utilities {
+  .panel-transition {
+    transition: width 200ms ease-in-out, height 200ms ease-in-out, opacity 150ms ease-in-out;
+  }
+}
