@@ -52,15 +52,23 @@ function NotebookPanel()
         Span(:class => "flex-1"),
         # Toolbar
         Div(:class => "flex items-center gap-2 px-3.5",
+            # Run Stale button
+            Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
+                :on_click => "window._sessionsRunStale()",
+                :title => "Run stale cells (Ctrl+Shift+Enter)",
+                RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" style="color:#d4a056"><path d="M4 2.5v11l10-5.5z"/></svg>"""),
+                " Stale"),
             # Run All button
             Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "window._sessionsRunAll()",
+                :title => "Run all cells (Shift+R)",
                 RawHtml(_SVG_RUN_SMALL),
                 " Run All"),
             # Save button
             Button(:id => "save-indicator",
                 :class => "bg-island border border-b2 rounded px-3 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
-                :on_click => "TherapyWS.sendMessage('notebook', {action: 'save'})",
+                :on_click => "window._sessionsSave()",
+                :title => "Save (Ctrl+S)",
                 "Save")))
 
     # ===================================================================

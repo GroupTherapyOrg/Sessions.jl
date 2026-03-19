@@ -43,6 +43,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_update_code!(state, conn, data)
             elseif action == "save"
                 handle_save!(state, conn, data)
+            elseif action == "run_stale"
+                handle_run_stale!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -305,8 +307,17 @@ function handle_update_code!(state::WebNotebookState, conn, data)
     cell.code = new_code
 end
 
-"""Handle save request."""
+"""Handle save request. Syncs codes from client first if provided."""
 function handle_save!(state::WebNotebookState, conn, data)
+    # Sync any codes sent with the save request
+    codes = get(data, "codes", nothing)
+    if codes !== nothing
+        for (cid, code) in codes
+            cell = get_cell(state.nb, UUID(String(cid)))
+            cell !== nothing && (cell.code = String(code))
+        end
+    end
+
     save_notebook(state.nb)
     save_session!(state.nb)
     broadcast_channel!("notebook", Dict(
@@ -314,6 +325,37 @@ function handle_save!(state::WebNotebookState, conn, data)
         "notebook_path" => state.nb.path
     ))
     println("[WebNotebook] Saved: $(state.nb.path)")
+end
+
+"""Handle run-stale request — execute only stale cells (like TUI's Ctrl+Shift+Enter)."""
+function handle_run_stale!(state::WebNotebookState, conn, data)
+    # Sync codes from client first
+    codes = get(data, "codes", nothing)
+    if codes !== nothing
+        for (cid, code) in codes
+            cell = get_cell(state.nb, UUID(String(cid)))
+            cell !== nothing && (cell.code = String(code))
+        end
+    end
+
+    @async begin
+        state.executing = true
+        try
+            sc = stale_cells(state.nb)
+            if isempty(sc)
+                broadcast_channel!("notebook", Dict(
+                    "event" => "info",
+                    "message" => "No stale cells"
+                ))
+                return
+            end
+
+            println("[WebNotebook] Running $(length(sc)) stale cells...")
+            _execute_cells!(state, sc)
+        finally
+            state.executing = false
+        end
+    end
 end
 
 # =============================================================================

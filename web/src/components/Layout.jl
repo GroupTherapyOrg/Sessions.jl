@@ -169,18 +169,40 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     }
   };
 
+  // ── Collect all codes from CM editors ──
+  function _collectCodes() {
+    var codes = {};
+    for (var cid in editors) {
+      codes[cid] = editors[cid].state.doc.toString();
+    }
+    return codes;
+  }
+
   // ── Run All: sync all codes then execute ──
   window._sessionsRunAll = function() {
-    // First sync all edited codes to server
-    for (var cid in editors) {
-      var code = editors[cid].state.doc.toString();
+    // Sync all codes to server, then run all
+    var codes = _collectCodes();
+    for (var cid in codes) {
       if (window.TherapyWS && TherapyWS.sendMessage) {
-        TherapyWS.sendMessage('notebook', {action: 'update_code', cell_id: cid, code: code});
+        TherapyWS.sendMessage('notebook', {action: 'update_code', cell_id: cid, code: codes[cid]});
       }
     }
-    // Then run all
     if (window.TherapyWS && TherapyWS.sendMessage) {
       TherapyWS.sendMessage('notebook', {action: 'run_all'});
+    }
+  };
+
+  // ── Run Stale: sync codes then execute only stale cells ──
+  window._sessionsRunStale = function() {
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage('notebook', {action: 'run_stale', codes: _collectCodes()});
+    }
+  };
+
+  // ── Save: sync codes then save .jl + .sessions.toml ──
+  window._sessionsSave = function() {
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage('notebook', {action: 'save', codes: _collectCodes()});
     }
   };
 
@@ -346,7 +368,7 @@ function _notebook_channel_script()
   document.addEventListener('keydown', function(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
-      if (window.TherapyWS && TherapyWS.sendMessage) TherapyWS.sendMessage('notebook', {action: 'save'});
+      window._sessionsSave && window._sessionsSave();
     }
   });
 })();
