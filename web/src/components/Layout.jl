@@ -95,16 +95,91 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         # --- Notebook channel handler ---
         _notebook_channel_script(),
 
-        # --- CM initialization + eye toggle (after children so DOM exists) ---
+        # --- CM initialization + cell execution + eye toggle ---
         RawHtml("""<script>
 (function() {
   if (typeof C === 'undefined' || !C.EditorView) return;
 
-  // Initialize CM editors
+  // ── Registry: cell_id → CM EditorView ──
+  var editors = {};
+
+  // ── Shared theme + highlight ──
+  var hlTheme = C.HighlightStyle.define([
+    {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
+    {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
+    {tag:C.t.moduleKeyword,color:"#e06b65"},
+    {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
+    {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
+    {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
+    {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
+    {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
+    {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
+    {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
+    {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
+    {tag:C.t.variableName,color:"#d4dce8"},
+    {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
+    {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
+    {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
+    {tag:C.t.macroName,color:"#d4a056"},
+  ]);
+
+  var edTheme = C.EditorView.theme({
+    "&":{backgroundColor:"transparent",color:"#d4dce8"},
+    ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
+    ".cm-activeLine":{backgroundColor:"rgba(86,212,160,.03)"},
+    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#6b7d93"},
+    "&.cm-focused .cm-cursor":{borderLeftColor:"#56d4a0"},
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"rgba(86,212,160,.15) !important"},
+    ".cm-content":{caretColor:"#56d4a0",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
+    ".cm-matchingBracket":{color:"#56d4a0 !important",backgroundColor:"rgba(86,212,160,.1)",outline:"1px solid rgba(86,212,160,.2)"},
+    ".cm-line":{paddingLeft:"4px"},
+  },{dark:true});
+
+  // ── Run cell: read code from CM editor, send to server ──
+  window._sessionsRunCell = function(cellId) {
+    var code = '';
+    var ev = editors[cellId];
+    if (ev) code = ev.state.doc.toString();
+    if (!code) {
+      var host = document.querySelector('.cm-cell[data-cell-id="' + cellId + '"]');
+      if (host) code = host.dataset.src || '';
+    }
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage('notebook', {action: 'execute', cell_id: cellId, code: code});
+    }
+  };
+
+  // ── Run All: sync all codes then execute ──
+  window._sessionsRunAll = function() {
+    // First sync all edited codes to server
+    for (var cid in editors) {
+      var code = editors[cid].state.doc.toString();
+      if (window.TherapyWS && TherapyWS.sendMessage) {
+        TherapyWS.sendMessage('notebook', {action: 'update_code', cell_id: cid, code: code});
+      }
+    }
+    // Then run all
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage('notebook', {action: 'run_all'});
+    }
+  };
+
+  // ── Shift+Enter keybinding for CM ──
+  function shiftEnterKeymap(cellId) {
+    return C.keymap.of([{
+      key: 'Shift-Enter',
+      run: function() { window._sessionsRunCell(cellId); return true; }
+    }]);
+  }
+
+  // ── Initialize CM editors ──
   document.querySelectorAll('.cm-cell').forEach(function(host) {
     if (host.querySelector('.cm-editor')) return;
     var src = host.dataset.src || '';
-    new C.EditorView({
+    var cellId = host.dataset.cellId || '';
+
+    var view = new C.EditorView({
       doc: src,
       extensions: [
         C.lineNumbers(), C.highlightActiveLineGutter(), C.highlightSpecialChars(),
@@ -116,43 +191,18 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
           ...C.closeBracketsKeymap, ...C.defaultKeymap, ...C.searchKeymap,
           ...C.historyKeymap, ...C.completionKeymap, C.indentWithTab,
         ]),
+        shiftEnterKeymap(cellId),
         C.julia(),
-        C.syntaxHighlighting(C.HighlightStyle.define([
-          {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
-          {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
-          {tag:C.t.moduleKeyword,color:"#e06b65"},
-          {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
-          {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
-          {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
-          {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
-          {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
-          {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
-          {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
-          {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
-          {tag:C.t.variableName,color:"#d4dce8"},
-          {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
-          {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
-          {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
-          {tag:C.t.macroName,color:"#d4a056"},
-        ])),
-        C.EditorView.theme({
-          "&":{backgroundColor:"transparent",color:"#d4dce8"},
-          ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
-          ".cm-activeLine":{backgroundColor:"rgba(86,212,160,.03)"},
-          ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#6b7d93"},
-          "&.cm-focused .cm-cursor":{borderLeftColor:"#56d4a0"},
-          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"rgba(86,212,160,.15) !important"},
-          ".cm-content":{caretColor:"#56d4a0",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
-          ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-          ".cm-matchingBracket":{color:"#56d4a0 !important",backgroundColor:"rgba(86,212,160,.1)",outline:"1px solid rgba(86,212,160,.2)"},
-          ".cm-line":{paddingLeft:"4px"},
-        },{dark:true}),
+        C.syntaxHighlighting(hlTheme),
+        edTheme,
       ],
       parent: host,
     });
+
+    if (cellId) editors[cellId] = view;
   });
 
-  // Eye toggle
+  // ── Eye toggle ──
   document.querySelectorAll('.cell-eye').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var wrap = btn.closest('.cell-wrap').querySelector('.code-cell, .md-cell');
@@ -197,13 +247,49 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_output') {
-      var output = document.querySelector('.cell-output[data-cell-id="' + data.cell_id + '"]');
-      if (output) output.innerHTML = data.output_html || '';
+      // Update output HTML
+      var output = document.querySelector('.cell-out[data-cell-id="' + data.cell_id + '"]');
+      if (output) {
+        var html = data.output_html || '';
+        if (html) {
+          output.innerHTML = html;
+          output.style.display = '';
+          // Add visual classes for non-empty output
+          output.classList.add('border-t', 'border-b1', 'py-2', 'pr-3.5', 'font-mono', 'text-xs', 'text-tout', 'bg-deep', 'whitespace-pre', 'overflow-x-auto');
+        } else {
+          output.innerHTML = '';
+          output.style.display = 'none';
+        }
+      }
+      // Update state badge
       var badge = document.querySelector('[data-cell-state][data-cell-id="' + data.cell_id + '"]');
       if (badge && data.state) {
         badge.style.background = stateColors[data.state] || '#56d4a0';
         badge.dataset.cellState = data.state;
         badge.style.animation = 'none';
+      }
+      // Update runtime badge
+      if (data.runtime_ns && data.runtime_ns > 0) {
+        var cell_wrap = document.querySelector('.cell-wrap[data-cell-id="' + data.cell_id + '"]');
+        if (cell_wrap) {
+          var ctrls = cell_wrap.querySelector('.cell-ctrls');
+          if (ctrls) {
+            // Remove old runtime badge if exists
+            var old = ctrls.querySelector('.rt-badge');
+            if (old) old.remove();
+            // Format runtime
+            var ms = data.runtime_ns / 1e6;
+            var rt = ms < 1 ? (data.runtime_ns / 1e3).toFixed(1) + '\u00b5s' : ms < 1000 ? ms.toFixed(1) + 'ms' : (ms / 1000).toFixed(2) + 's';
+            var badge_el = document.createElement('span');
+            badge_el.className = 'rt-badge';
+            badge_el.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:4px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);';
+            badge_el.textContent = rt;
+            ctrls.insertBefore(badge_el, ctrls.firstChild);
+          }
+          // Remove idle class
+          var codeCell = cell_wrap.querySelector('.code-cell');
+          if (codeCell) codeCell.classList.remove('idle');
+        }
       }
     }
 
@@ -226,8 +312,12 @@ function _notebook_channel_script()
             badge.dataset.cellState = cell.state;
           }
           if (cell.output_html) {
-            var output = document.querySelector('.cell-output[data-cell-id="' + cell.cell_id + '"]');
-            if (output && output.innerHTML === '') output.innerHTML = cell.output_html;
+            var output = document.querySelector('.cell-out[data-cell-id="' + cell.cell_id + '"]');
+            if (output && !output.innerHTML) {
+              output.innerHTML = cell.output_html;
+              output.style.display = '';
+              output.classList.add('border-t', 'border-b1', 'py-2', 'pr-3.5', 'font-mono', 'text-xs', 'text-tout', 'bg-deep', 'whitespace-pre', 'overflow-x-auto');
+            }
           }
         });
       }

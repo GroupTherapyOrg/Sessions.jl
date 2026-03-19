@@ -115,12 +115,12 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
                 runtime_str))
     end
 
-    # Run button
+    # Run button (reads code from CM editor before sending)
     push!(ctrl_children,
         Therapy.Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-jg hover:brightness-125",
             :style => "background:rgba(86,212,160,.1)",
             :title => "Run cell (Shift+Enter)",
-            :on_click => "TherapyWS.sendMessage('notebook', {action: 'execute', cell_id: '$(cell_id)'})",
+            :on_click => "window._sessionsRunCell('$(cell_id)')",
             RawHtml(_SVG_RUN)))
 
     # Menu button
@@ -132,8 +132,9 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
         ctrl_children...)
 
-    # -- CodeMirror host --
+    # -- CodeMirror host (data-cell-id lets JS find editor for this cell) --
     cm_div = Div(:class => "cm-cell",
+        :data_cell_id => cell_id,
         :data_src => _html_escape(String(code)))
 
     # -- Output area (only if cell has output) --
@@ -149,12 +150,14 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
 
     inner_children = Any[ctrls, cm_div]
 
+    # Output area — always present so server broadcasts can fill it.
+    # Hidden via style when empty, shown when output arrives.
+    out_style = "padding-left:48px;line-height:1.5;"
     if has_output
-        # Use text_representation as preformatted text if available, otherwise use rendered output
         out_content = if !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
             output.text_representation
         elseif !isempty(output_html)
-            nothing  # will use RawHtml below
+            nothing
         else
             nothing
         end
@@ -162,16 +165,28 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         if out_content !== nothing
             push!(inner_children,
                 Div(:class => "cell-out border-t border-b1 py-2 pr-3.5 font-mono text-xs text-tout bg-deep whitespace-pre overflow-x-auto",
-                    :style => "padding-left:48px;line-height:1.5",
+                    :style => out_style,
                     :data_cell_id => cell_id,
                     out_content))
         elseif !isempty(output_html)
             push!(inner_children,
                 Div(:class => "cell-out border-t border-b1 py-2 pr-3.5 font-mono text-xs text-tout bg-deep whitespace-pre overflow-x-auto",
-                    :style => "padding-left:48px;line-height:1.5",
+                    :style => out_style,
                     :data_cell_id => cell_id,
                     RawHtml(output_html)))
+        else
+            # Empty but present for server to fill
+            push!(inner_children,
+                Div(:class => "cell-out",
+                    :style => "display:none;" * out_style,
+                    :data_cell_id => cell_id))
         end
+    else
+        # No output yet — hidden container, server will populate and show it
+        push!(inner_children,
+            Div(:class => "cell-out",
+                :style => "display:none;" * out_style,
+                :data_cell_id => cell_id))
     end
 
     Div(:class => "cell-wrap relative", :style => "margin-left:28px",
