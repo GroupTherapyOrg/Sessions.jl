@@ -1,65 +1,161 @@
 # Layout.jl — HTML shell for Sessions.jl Web UI
 #
-# Always-dark IDE layout. Uses inline styles for the structural colors so the
-# layout looks correct even when Tailwind falls back to CDN (which strips
-# custom @theme tokens like warm-*/accent-*).
+# Always-dark IDE layout with custom color palette.
+# Injects Google Fonts, Tailwind CDN with custom theme config,
+# full CSS for cell controls / scrollbar / CodeMirror overrides,
+# and the editor.js bundle + CM initialization scripts.
 
-# Color constants matching the TUI theme
-const _BG_BASE      = "#121216"  # warm-950
-const _BG_SURFACE   = "#181a1d"  # warm-900
-const _BG_ELEVATED  = "#1e1f23"  # between warm-900 and warm-800
-const _BG_CELL      = "#0e0e12"  # darker than base for code blocks
-const _BORDER       = "#2b2d30"  # warm-800
-const _BORDER_LIGHT = "#3a3d42"  # warm-700ish
-const _TEXT_PRIMARY  = "#bcbec4"  # warm-300
-const _TEXT_SECONDARY= "#7a7e85"  # warm-500
-const _TEXT_DIM      = "#4e5157"  # warm-700
-const _ACCENT        = "#389826"  # Julia green
-const _ACCENT_LIGHT  = "#4ad64a"  # accent-400
-const _RED           = "#cb3c33"  # Julia red
-const _BLUE          = "#4063d8"  # Julia blue
-const _PURPLE        = "#9558b2"  # Julia purple
+# Load CodeMirror bundle at include time (589KB, inlined into page)
+const _EDITOR_BUNDLE_JS = let
+    p = joinpath(@__DIR__, "..", "..", "static", "editor.js")
+    isfile(p) ? read(p, String) : "/* editor.js not found */"
+end
 
 function Layout(children...; title="Sessions.jl")
     Fragment(
-        # Force dark mode + base styles
+        # --- Google Fonts ---
+        RawHtml("""<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">"""),
+
+        # --- Tailwind CDN + custom config ---
+        RawHtml("""<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        deep:'#0a0e14', base:'#0f1419', surf:'#151c25', island:'#1a2332', hov:'#1f2b3d',
+        b1:'#1c2736', b2:'#2a3a4f',
+        t1:'#d4dce8', t2:'#9baabd', t3:'#6b7d93', t4:'#3d5068', tout:'#7ca0bf',
+        accent:'#56d4a0', jr:'#e06b65', jg:'#56d4a0', jp:'#b08fd8',
+      },
+      fontFamily: {
+        sans:['DM Sans','system-ui','sans-serif'],
+        mono:['JetBrains Mono','SF Mono','monospace'],
+        display:['Fraunces','Georgia','serif'],
+      },
+    }
+  }
+}
+</script>"""),
+
+        # --- Full CSS ---
         RawHtml("""<style>
-html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-html { background: $(_BG_BASE); color: $(_TEXT_PRIMARY); }
-* { box-sizing: border-box; }
-/* Syntax highlighting */
-.hl-keyword  { color: #c792ea; }
-.hl-string   { color: #c3e88d; }
-.hl-comment  { color: #6b6560; font-style: italic; }
-.hl-number   { color: #f78c6c; }
-.hl-funcall  { color: #82aaff; }
-.hl-type     { color: #ffcb6b; }
-.hl-symbol   { color: #ff5370; }
-.hl-macro    { color: #c792ea; font-weight: 600; }
-.hl-operator { color: #89ddff; }
-/* Scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: $(_BG_BASE); }
-::-webkit-scrollbar-thumb { background: $(_BORDER); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: $(_BORDER_LIGHT); }
-/* Notebook prose */
-.nb-prose h1 { font-size: 1.875rem; font-weight: 600; color: $(_TEXT_PRIMARY); margin: 0.5rem 0 1rem; }
-.nb-prose h2 { font-size: 1.5rem; font-weight: 600; color: $(_TEXT_PRIMARY); margin: 1.5rem 0 0.75rem; border-bottom: 1px solid $(_BORDER); padding-bottom: 0.5rem; }
-.nb-prose h3 { font-size: 1.25rem; font-weight: 600; color: $(_TEXT_PRIMARY); margin: 1rem 0 0.5rem; }
-.nb-prose p { color: $(_TEXT_SECONDARY); line-height: 1.7; margin-bottom: 1rem; }
-.nb-prose ul, .nb-prose ol { color: $(_TEXT_SECONDARY); margin-bottom: 1rem; padding-left: 1.5rem; }
-.nb-prose li { margin-bottom: 0.25rem; }
-.nb-prose blockquote { border-left: 3px solid $(_ACCENT); padding-left: 1rem; color: $(_TEXT_SECONDARY); font-style: italic; }
-.nb-prose code { font-family: 'JuliaMono', 'Fira Code', monospace; font-size: 0.875rem; background: $(_BG_ELEVATED); padding: 0.125rem 0.375rem; border-radius: 3px; }
-.nb-prose a { color: $(_ACCENT_LIGHT); text-decoration: none; }
-.nb-prose a:hover { text-decoration: underline; }
-.nb-prose strong { color: $(_TEXT_PRIMARY); font-weight: 600; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{overflow:hidden;}
+.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
+.code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
+.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
+.code-cell:hover::before{opacity:.7;}
+.code-cell.idle::before{background:#3d5068;opacity:.2;}
+.md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
+.cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
+.cell-wrap:hover .cell-eye{opacity:1;}
+.cell-eye svg{color:#3d5068;transition:color .15s;}
+.cell-eye:hover svg{color:#56d4a0;}
+.cell-collapsed .cm-cell,.cell-collapsed .cell-out{display:none;}
+.cell-collapsed .md-inner{display:none;}
+.cell-collapsed::before{opacity:.15!important;}
+.cell-collapsed{border-style:dashed!important;opacity:.6;}
+.cdiv:hover .cdiv-inner{opacity:1;}
+.chv{transition:transform .12s ease;}
+.chv.open{transform:rotate(90deg);}
+.tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:#56d4a0;border-radius:2px 2px 0 0;}
+#fpanel.hide{width:0!important;opacity:0;padding:0;border:none;overflow:hidden;pointer-events:none;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#2a3a4f;border-radius:3px;}
+::selection{background:rgba(86,212,160,.2);}
+@keyframes blink{50%{opacity:0}}
+.cblink{animation:blink 1s step-end infinite;}
+.cm-cell .cm-editor{background:transparent!important;}
+.cm-cell .cm-scroller{overflow-x:auto;}
+.cm-cell .cm-focused{outline:none!important;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 </style>"""),
-        # App container
-        Div(:style => "height: 100vh; overflow: hidden; background: $(_BG_BASE); color: $(_TEXT_PRIMARY); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
-            Div(:id => "page-content", :style => "height: 100%;",
-                children...)),
-        _notebook_channel_script())
+
+        # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
+        RawHtml(string("<script>", _EDITOR_BUNDLE_JS, "</script>")),
+
+        # --- Body wrapper with children ---
+        Div(:class => "bg-base text-t1 font-sans h-screen w-screen flex flex-col",
+            children...),
+
+        # --- Notebook channel handler ---
+        _notebook_channel_script(),
+
+        # --- CM initialization + eye toggle (after children so DOM exists) ---
+        RawHtml("""<script>
+(function() {
+  if (typeof C === 'undefined' || !C.EditorView) return;
+
+  // Initialize CM editors
+  document.querySelectorAll('.cm-cell').forEach(function(host) {
+    if (host.querySelector('.cm-editor')) return;
+    var src = host.dataset.src || '';
+    new C.EditorView({
+      doc: src,
+      extensions: [
+        C.lineNumbers(), C.highlightActiveLineGutter(), C.highlightSpecialChars(),
+        C.history(), C.drawSelection(),
+        C.EditorState.allowMultipleSelections.of(true),
+        C.indentOnInput(), C.bracketMatching(), C.closeBrackets(),
+        C.rectangularSelection(), C.highlightActiveLine(), C.highlightSelectionMatches(),
+        C.keymap.of([
+          ...C.closeBracketsKeymap, ...C.defaultKeymap, ...C.searchKeymap,
+          ...C.historyKeymap, ...C.completionKeymap, C.indentWithTab,
+        ]),
+        C.julia(),
+        C.syntaxHighlighting(C.HighlightStyle.define([
+          {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
+          {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
+          {tag:C.t.moduleKeyword,color:"#e06b65"},
+          {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
+          {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
+          {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
+          {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
+          {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
+          {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
+          {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
+          {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
+          {tag:C.t.variableName,color:"#d4dce8"},
+          {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
+          {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
+          {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
+          {tag:C.t.macroName,color:"#d4a056"},
+        ])),
+        C.EditorView.theme({
+          "&":{backgroundColor:"transparent",color:"#d4dce8"},
+          ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
+          ".cm-activeLine":{backgroundColor:"rgba(86,212,160,.03)"},
+          ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#6b7d93"},
+          "&.cm-focused .cm-cursor":{borderLeftColor:"#56d4a0"},
+          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"rgba(86,212,160,.15) !important"},
+          ".cm-content":{caretColor:"#56d4a0",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+          ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
+          ".cm-matchingBracket":{color:"#56d4a0 !important",backgroundColor:"rgba(86,212,160,.1)",outline:"1px solid rgba(86,212,160,.2)"},
+          ".cm-line":{paddingLeft:"4px"},
+        },{dark:true}),
+      ],
+      parent: host,
+    });
+  });
+
+  // Eye toggle
+  document.querySelectorAll('.cell-eye').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var wrap = btn.closest('.cell-wrap').querySelector('.code-cell, .md-cell');
+      if (!wrap) return;
+      var collapsed = wrap.classList.toggle('cell-collapsed');
+      btn.innerHTML = collapsed
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+      btn.title = collapsed ? 'Show cell' : 'Hide cell';
+    });
+  });
+})();
+</script>"""))
 end
 
 """Client-side JavaScript for handling notebook WebSocket channel messages."""
@@ -70,11 +166,11 @@ function _notebook_channel_script()
   window._sessionsNotebookHandler = true;
 
   var stateColors = {
-    'cell_idle':    '$(_TEXT_DIM)',
-    'cell_queued':  '#eab308',
-    'cell_running': '$(_BLUE)',
-    'cell_done':    '$(_ACCENT)',
-    'cell_errored': '$(_RED)'
+    'cell_idle':    '#3d5068',
+    'cell_queued':  '#d4a056',
+    'cell_running': '#7bb8e8',
+    'cell_done':    '#56d4a0',
+    'cell_errored': '#e06b65'
   };
 
   window.addEventListener('therapy:channel:notebook', function(e) {
@@ -95,7 +191,7 @@ function _notebook_channel_script()
       if (output) output.innerHTML = data.output_html || '';
       var badge = document.querySelector('[data-cell-state][data-cell-id="' + data.cell_id + '"]');
       if (badge && data.state) {
-        badge.style.background = stateColors[data.state] || '$(_ACCENT)';
+        badge.style.background = stateColors[data.state] || '#56d4a0';
         badge.dataset.cellState = data.state;
         badge.style.animation = 'none';
       }
@@ -135,6 +231,5 @@ function _notebook_channel_script()
     }
   });
 })();
-</script>
-<style>@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }</style>""")
+</script>""")
 end

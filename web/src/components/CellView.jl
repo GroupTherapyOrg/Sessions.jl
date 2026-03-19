@@ -1,22 +1,73 @@
-# CellView.jl — Single cell component matching the TUI aesthetic
+# CellView.jl — Single cell component for the Sessions.jl web IDE
 #
-# Layout per cell:
-#   [◌ state]  code block  [▶ runtime]
-#              output area
-#   ─────────── + ───────────────────
+# Two cell types:
+#   Code cell  — CodeMirror host (.cm-cell with data-src), output area, hover controls
+#   Markdown   — Rendered prose with purple accent divider
 #
-# Uses inline styles for reliability.
+# Between cells: CellGap divider with "+ Code" button
+#
+# Color palette:
+#   deep=#0a0e14 base=#0f1419 surf=#151c25 island=#1a2332 hov=#1f2b3d
+#   b1=#1c2736 b2=#2a3a4f
+#   t1=#d4dce8 t2=#9baabd t3=#6b7d93 t4=#3d5068 tout=#7ca0bf
+#   accent/jg=#56d4a0 jr=#e06b65 jp=#b08fd8
 
 const _Sessions = Main.Sessions
 
-# State badge colors
-const _STATE_COLORS = Dict(
-    _Sessions.cell_idle    => "#4e5157",
-    _Sessions.cell_queued  => "#eab308",
-    _Sessions.cell_running => "#4063d8",
-    _Sessions.cell_done    => "#389826",
-    _Sessions.cell_errored => "#cb3c33",
-)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+"""HTML-escape a string for safe embedding in an attribute (e.g. data-src)."""
+function _html_escape(s::AbstractString)
+    s = replace(s, "&"  => "&amp;")
+    s = replace(s, "\"" => "&quot;")
+    s = replace(s, "'"  => "&#39;")
+    s = replace(s, "<"  => "&lt;")
+    s = replace(s, ">"  => "&gt;")
+    s
+end
+
+"""Format runtime nanoseconds into a compact human string."""
+function _format_runtime(ns::UInt64)
+    ns == 0 && return ""
+    ms = ns / 1_000_000
+    if ms < 1
+        return "$(round(ns / 1000, digits=1))\u03bcs"   # μs
+    elseif ms < 1000
+        return "$(round(ms, digits=1))ms"
+    else
+        return "$(round(ms / 1000, digits=2))s"
+    end
+end
+
+"""Render cell output to an HTML string (for embedding inside cell-out div)."""
+function _render_cell_output_html(cell)
+    if _Sessions._is_markdown_cell(strip(cell.code)) && cell.output.output_type == :markdown
+        return ""
+    end
+    vnode = _Sessions._render_output(cell)
+    vnode === nothing && return ""
+    Therapy.render_to_string(vnode)
+end
+
+# ---------------------------------------------------------------------------
+# SVG constants
+# ---------------------------------------------------------------------------
+
+const _SVG_EYE_OPEN = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""
+
+const _SVG_EYE_CLOSED = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>"""
+
+const _SVG_RUN = """<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""
+
+const _SVG_MENU = """<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""
+
+const _SVG_PLUS = """<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>"""
+
+# ---------------------------------------------------------------------------
+# CellView
+# ---------------------------------------------------------------------------
 
 function CellView(cell::_Sessions.Cell; index::Int=0)
     code = strip(cell.code)
@@ -25,108 +76,123 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
 
     output = cell.output
     cell_id = string(cell.id)
-
-    # Runtime string
-    runtime_ms = output.runtime_ns / 1_000_000
-    runtime_str = if output.runtime_ns == 0
-        ""
-    elseif runtime_ms < 1
-        "$(round(output.runtime_ns / 1000, digits=1))μs"
-    elseif runtime_ms < 1000
-        "$(round(runtime_ms, digits=1))ms"
-    else
-        "$(round(runtime_ms / 1000, digits=2))s"
-    end
-
-    state_color = get(_STATE_COLORS, cell.state, "#4e5157")
-    is_pulsing = cell.state in (_Sessions.cell_queued, _Sessions.cell_running)
     is_md = _Sessions._is_markdown_cell(code)
 
-    parts = Any[]
+    # --- Eye toggle (positioned to the left of the cell) ---
+    eye_svg = cell.folded ? _SVG_EYE_CLOSED : _SVG_EYE_OPEN
+    eye_div = Div(:class => "cell-eye",
+        RawHtml(eye_svg))
 
-    # --- Markdown cell: render as prose ---
+    # =======================================================================
+    # Markdown cell
+    # =======================================================================
     if is_md && cell.state in (_Sessions.cell_done, _Sessions.cell_errored) && output.output_type == :markdown
         md_html = sprint(io -> Markdown.html(io, output.result))
-        push!(parts,
-            Div(:style => "display: flex; gap: 12px; padding: 8px 16px;",
-                # State dot in left margin
-                Div(:style => "width: 16px; padding-top: 6px; flex-shrink: 0; display: flex; justify-content: center;",
-                    Div(:style => "width: 7px; height: 7px; border-radius: 50%; background: $(state_color);",
-                        :data_cell_state => string(cell.state),
-                        :data_cell_id => cell_id)),
-                # Prose content
-                Div(:style => "flex: 1; min-width: 0;",
-                    :class => "nb-prose",
+
+        return Div(:class => "cell-wrap relative", :style => "margin-left:28px",
+            :data_cell_id => cell_id,
+            eye_div,
+            Div(:class => "md-cell relative rounded-lg border border-b1 bg-island overflow-hidden",
+                Div(:class => "md-inner py-[18px] px-6",
                     RawHtml(md_html))))
-        return Div(:data_cell_id => cell_id, parts...)
     end
 
-    # --- Code cell ---
-    push!(parts,
-        Div(:style => "display: flex; gap: 8px; padding: 4px 16px;",
-            # Left margin: state dot
-            Div(:style => "width: 16px; padding-top: 12px; flex-shrink: 0; display: flex; justify-content: center;",
-                Div(:style => "width: 7px; height: 7px; border-radius: 50%; background: $(state_color);$(is_pulsing ? " animation: pulse 1.5s infinite;" : "")",
-                    :data_cell_state => string(cell.state),
-                    :data_cell_id => cell_id)),
-            # Code block
-            Div(:style => "flex: 1; min-width: 0; position: relative;",
-                # Code
-                Div(:style => "background: #0e0e12; border: 1px solid #2b2d30; border-radius: 6px; overflow: hidden;",
-                    Pre(:style => "margin: 0; padding: 12px 16px; font-family: 'JuliaMono', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; color: #bcbec4; overflow-x: auto; white-space: pre;",
-                        Code(:style => "display: block;", _Sessions._highlight_julia(String(code))))),
-                # Right side: run button + runtime
-                Div(:style => "position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px;",
-                    # Run button
-                    Therapy.Button(:style => "background: none; border: none; color: #4e5157; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px;",
-                        :title => "Run cell (Shift+Enter)",
-                        :on_click => "TherapyWS.sendMessage('notebook', {action: 'execute', cell_id: '$(cell_id)'})",
-                        "▶"),
-                    # Runtime
-                    !isempty(runtime_str) ?
-                        Span(:style => "font-size: 11px; font-family: 'JuliaMono', monospace; color: #389826;",
-                            "▶ " * runtime_str) : nothing))))
+    # =======================================================================
+    # Code cell
+    # =======================================================================
 
-    # --- Stdout ---
-    if !isempty(output.stdout)
-        push!(parts,
-            Pre(:style => "margin: 4px 0 0 40px; padding: 8px 12px; font-family: 'JuliaMono', 'Fira Code', monospace; font-size: 12px; color: #7a7e85; white-space: pre-wrap; max-height: 200px; overflow-y: auto;",
-                output.stdout))
+    runtime_str = _format_runtime(output.runtime_ns)
+    is_idle = cell.state == _Sessions.cell_idle
+
+    # -- Hover controls (top-right) --
+    ctrl_children = Any[]
+
+    # Runtime badge
+    if !isempty(runtime_str)
+        push!(ctrl_children,
+            Span(:class => "text-[10px] font-mono px-[7px] py-px rounded",
+                :style => "color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12)",
+                runtime_str))
     end
 
-    # --- Output area ---
+    # Run button
+    push!(ctrl_children,
+        Therapy.Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-jg hover:brightness-125",
+            :style => "background:rgba(86,212,160,.1)",
+            :title => "Run cell (Shift+Enter)",
+            :on_click => "TherapyWS.sendMessage('notebook', {action: 'execute', cell_id: '$(cell_id)'})",
+            RawHtml(_SVG_RUN)))
+
+    # Menu button
+    push!(ctrl_children,
+        Therapy.Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-t4 hover:text-t3",
+            :style => "background:rgba(255,255,255,.04)",
+            RawHtml(_SVG_MENU)))
+
+    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
+        ctrl_children...)
+
+    # -- CodeMirror host --
+    cm_div = Div(:class => "cm-cell",
+        :data_src => _html_escape(String(code)))
+
+    # -- Output area (only if cell has output) --
+    has_text_output = !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
     output_html = _render_cell_output_html(cell)
-    if !isempty(output_html)
-        push!(parts,
-            Div(:style => "margin: 4px 0 0 40px;",
-                :class => "cell-output",
-                :data_cell_id => cell_id,
-                RawHtml(output_html)))
-    else
-        push!(parts,
-            Div(:class => "cell-output", :data_cell_id => cell_id))
+    has_output = has_text_output || !isempty(output_html)
+
+    # Build inner children
+    code_cell_classes = "code-cell relative rounded-lg border border-b1 bg-island overflow-hidden transition-all duration-200 hover:border-b2"
+    if is_idle
+        code_cell_classes *= " idle"
     end
 
-    Div(:data_cell_id => cell_id, parts...)
+    inner_children = Any[ctrls, cm_div]
+
+    if has_output
+        # Use text_representation as preformatted text if available, otherwise use rendered output
+        out_content = if !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
+            output.text_representation
+        elseif !isempty(output_html)
+            nothing  # will use RawHtml below
+        else
+            nothing
+        end
+
+        if out_content !== nothing
+            push!(inner_children,
+                Div(:class => "cell-out border-t border-b1 py-2 pr-3.5 font-mono text-xs text-tout bg-deep whitespace-pre overflow-x-auto",
+                    :style => "padding-left:48px;line-height:1.5",
+                    :data_cell_id => cell_id,
+                    out_content))
+        elseif !isempty(output_html)
+            push!(inner_children,
+                Div(:class => "cell-out border-t border-b1 py-2 pr-3.5 font-mono text-xs text-tout bg-deep whitespace-pre overflow-x-auto",
+                    :style => "padding-left:48px;line-height:1.5",
+                    :data_cell_id => cell_id,
+                    RawHtml(output_html)))
+        end
+    end
+
+    Div(:class => "cell-wrap relative", :style => "margin-left:28px",
+        :data_cell_id => cell_id,
+        eye_div,
+        Div(:class => code_cell_classes,
+            inner_children...))
 end
 
-"""Add-cell divider between cells — thin line with + on left."""
+# ---------------------------------------------------------------------------
+# CellGap — divider between cells with "+ Code" button
+# ---------------------------------------------------------------------------
+
+"""Add-cell divider between cells."""
 function CellGap(; after_cell_id::String="")
-    Div(:style => "display: flex; align-items: center; padding: 2px 16px 2px 28px; opacity: 0.3; transition: opacity 0.15s;",
-        :onmouseenter => "this.style.opacity='1'",
-        :onmouseleave => "this.style.opacity='0.3'",
-        Therapy.Button(:style => "background: none; border: none; color: #4e5157; cursor: pointer; font-size: 14px; padding: 0 8px; line-height: 1;",
-            :on_click => "TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: '$(after_cell_id)'})",
-            "+"),
-        Div(:style => "flex: 1; height: 1px; background: #2b2d30;"))
-end
-
-"""Render cell output to HTML string."""
-function _render_cell_output_html(cell)
-    if _Sessions._is_markdown_cell(strip(cell.code)) && cell.output.output_type == :markdown
-        return ""
-    end
-    vnode = _Sessions._render_output(cell)
-    vnode === nothing && return ""
-    Therapy.render_to_string(vnode)
+    Div(:class => "cdiv h-[18px] flex items-center justify-center",
+        Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
+            Div(:class => "h-px w-14 bg-b2"),
+            Therapy.Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
+                :on_click => "TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: '$(after_cell_id)'})",
+                RawHtml(_SVG_PLUS),
+                "Code"),
+            Div(:class => "h-px w-14 bg-b2")))
 end

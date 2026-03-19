@@ -1,7 +1,19 @@
-# NotebookPanel.jl — Renders all notebook cells (SSR)
+# NotebookPanel.jl — Renders the full notebook panel (SSR)
 #
-# Matches the TUI notebook aesthetic: tab bar, cell list, toolbar.
-# Uses inline styles for reliability.
+# Structure: tab bar (38px) + scrollable cell list
+# Contains: tab with .jl wordmark, Run All / Save toolbar, CellGap + CellView pairs
+#
+# Color palette:
+#   deep=#0a0e14 base=#0f1419 surf=#151c25 island=#1a2332 hov=#1f2b3d
+#   b1=#1c2736 b2=#2a3a4f
+#   t1=#d4dce8 t2=#9baabd t3=#6b7d93 t4=#3d5068 tout=#7ca0bf
+#   accent/jg=#56d4a0 jr=#e06b65 jp=#b08fd8
+
+# .jl wordmark SVG (three-dot Julia logo)
+const _SVG_JL_WORDMARK = """<svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>"""
+
+# Run button SVG (small play triangle)
+const _SVG_RUN_SMALL = """<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" class="text-jg"><path d="M4 2.5v11l10-5.5z"/></svg>"""
 
 function NotebookPanel()
     state = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
@@ -13,41 +25,51 @@ function NotebookPanel()
     nb = state !== nothing ? state.nb : nothing
 
     if nb === nothing
-        return Div(:style => "display: flex; align-items: center; justify-content: center; height: 100%; color: #4e5157; font-size: 14px;",
-            "No notebook loaded")
+        return Div(:id => "nb-island",
+            :class => "flex-1 flex flex-col bg-surf border border-b1 rounded-xl overflow-hidden min-h-0 shadow-lg shadow-black/25",
+            Div(:class => "flex-1 flex items-center justify-content-center text-t3 text-sm",
+                :style => "justify-content:center",
+                "No notebook loaded"))
     end
 
     _Sess = Main.Sessions
     cells = _Sess.ordered_cells(nb)
     nb_name = basename(nb.path)
-    cell_count = length(cells)
-    done_count = count(c -> c.state == _Sess.cell_done, cells)
 
-    # --- Tab bar ---
-    tab_bar = Div(:style => "display: flex; align-items: center; background: #181a1d; border-bottom: 1px solid #2b2d30; padding: 0; height: 36px; flex-shrink: 0;",
+    # ===================================================================
+    # Tab bar (38px)
+    # ===================================================================
+    tab_bar = Div(:class => "h-[38px] flex items-stretch bg-deep border-b border-b1 shrink-0",
         # Active tab
-        Div(:style => "display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 100%; background: #121216; border-right: 1px solid #2b2d30; font-size: 12px; color: #bcbec4;",
-            Span(:style => "color: #389826;", "◆"),
-            Span(nb_name),
-            Span(:style => "color: #4e5157; cursor: pointer; margin-left: 8px; font-size: 10px;", "×")),
+        Div(:class => "tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs text-t1 bg-surf border-r border-b1 cursor-pointer",
+            RawHtml(_SVG_JL_WORDMARK),
+            nb_name,
+            # Unsaved dot (accent green)
+            Span(:class => "w-[5px] h-[5px] rounded-full bg-accent"),
+            # Close button
+            Span(:class => "text-sm text-t4 ml-0.5 leading-none hover:text-t2 cursor-pointer", "\u00d7")),  # ×
         # Spacer
-        Div(:style => "flex: 1;"),
-        # Status + toolbar
-        Div(:style => "display: flex; align-items: center; gap: 12px; padding-right: 12px; font-size: 12px;",
-            # Cell counter
-            Span(:style => "color: #7a7e85; font-family: 'JuliaMono', monospace; font-size: 11px;",
-                "$(done_count)/$(cell_count)"),
+        Span(:class => "flex-1"),
+        # Toolbar
+        Div(:class => "flex items-center gap-2 px-3.5",
+            # Run All button
+            Therapy.Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
+                :on_click => "TherapyWS.sendMessage('notebook', {action: 'run_all'})",
+                RawHtml(_SVG_RUN_SMALL),
+                " Run All"),
             # Save button
-            Therapy.Button(:style => "background: none; border: none; color: #7a7e85; cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 4px;",
-                :id => "save-indicator",
+            Therapy.Button(:id => "save-indicator",
+                :class => "bg-island border border-b2 rounded px-3 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "TherapyWS.sendMessage('notebook', {action: 'save'})",
                 "Save")))
 
-    # --- Cell list ---
+    # ===================================================================
+    # Cell list
+    # ===================================================================
     rendered_cells = Any[]
     cell_index = 0
 
-    # Initial add-cell gap
+    # Initial gap
     push!(rendered_cells, CellGap(after_cell_id=""))
 
     for cell in cells
@@ -59,14 +81,12 @@ function NotebookPanel()
         push!(rendered_cells, CellGap(after_cell_id=string(cell.id)))
     end
 
-    # Run All button at bottom
-    push!(rendered_cells,
-        Div(:style => "display: flex; justify-content: flex-end; padding: 8px 24px 24px;",
-            Therapy.Button(:style => "background: none; border: none; color: #389826; cursor: pointer; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 4px; display: flex; align-items: center; gap: 4px;",
-                :on_click => "TherapyWS.sendMessage('notebook', {action: 'run_all'})",
-                "▶ Run All")))
-
-    Div(:id => "notebook-container", :style => "display: flex; flex-direction: column; height: 100%;",
+    # ===================================================================
+    # Assemble
+    # ===================================================================
+    Div(:id => "nb-island",
+        :class => "flex-1 flex flex-col bg-surf border border-b1 rounded-xl overflow-hidden min-h-0 shadow-lg shadow-black/25",
         tab_bar,
-        Div(:style => "flex: 1; overflow-y: auto; padding: 0;", rendered_cells...))
+        Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
+            rendered_cells...))
 end
