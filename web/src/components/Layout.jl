@@ -206,6 +206,30 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     }
   };
 
+  // ── Debounced code sync: sends update_code to server on edit ──
+  // Server updates cell.code, recomputes stale state, broadcasts stale_count.
+  // This is the bridge that keeps server in sync with client edits —
+  // same result as agent editing the .jl file (file watcher path).
+  var _syncTimers = {};
+  function syncCodeToServer(cellId) {
+    if (_syncTimers[cellId]) clearTimeout(_syncTimers[cellId]);
+    _syncTimers[cellId] = setTimeout(function() {
+      var ev = editors[cellId];
+      if (!ev) return;
+      var code = ev.state.doc.toString();
+      if (window.TherapyWS && TherapyWS.sendMessage) {
+        TherapyWS.sendMessage('notebook', {action: 'update_code', cell_id: cellId, code: code});
+      }
+    }, 400);  // 400ms debounce
+  }
+
+  // CM extension: fire syncCodeToServer on any document change
+  function editSyncExtension(cellId) {
+    return C.EditorView.updateListener.of(function(update) {
+      if (update.docChanged) syncCodeToServer(cellId);
+    });
+  }
+
   // ── Shift+Enter keybinding for CM ──
   function shiftEnterKeymap(cellId) {
     return C.keymap.of([{
@@ -233,6 +257,7 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
           ...C.historyKeymap, ...C.completionKeymap, C.indentWithTab,
         ]),
         shiftEnterKeymap(cellId),
+        editSyncExtension(cellId),
         C.julia(),
         C.syntaxHighlighting(hlTheme),
         edTheme,
@@ -342,8 +367,8 @@ function _notebook_channel_script()
       if (ind) { ind.textContent = 'Saved'; setTimeout(function(){ ind.textContent = 'Save'; }, 2000); }
     }
 
-    else if (data.event === 'stale_count') {
-      // Show/hide Run Stale button based on server-computed stale count
+    else if (data.event === 'stale_update') {
+      // Show/hide Run Stale button
       var btn = document.getElementById('run-stale-btn');
       var label = document.getElementById('run-stale-label');
       if (btn) {
@@ -354,6 +379,17 @@ function _notebook_channel_script()
           btn.style.display = 'none';
         }
       }
+      // Toggle stale class on cell accent bars
+      var staleSet = new Set(data.stale_ids || []);
+      document.querySelectorAll('.code-cell').forEach(function(el) {
+        var wrap = el.closest('.cell-wrap');
+        var cid = wrap ? wrap.dataset.cellId : null;
+        if (cid && staleSet.has(cid)) {
+          el.classList.add('stale');
+        } else {
+          el.classList.remove('stale');
+        }
+      });
     }
 
     else if (data.event === 'full_state') {

@@ -222,12 +222,17 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     end
 
     save_session!(state.nb)
+    _broadcast_stale!(state)
+end
 
-    # Broadcast stale count so client can show/hide "Run Stale" button
+"""Broadcast stale cell info to all clients (Run Stale button + cell accent bars)."""
+function _broadcast_stale!(state::WebNotebookState)
     sc = stale_cells(state.nb)
+    stale_ids = [string(c.id) for c in sc]
     broadcast_channel!("notebook", Dict(
-        "event" => "stale_count",
-        "count" => length(sc)
+        "event" => "stale_update",
+        "count" => length(sc),
+        "stale_ids" => stale_ids
     ))
 end
 
@@ -303,7 +308,7 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
     ))
 end
 
-"""Handle code update (without execution)."""
+"""Handle code update (without execution). Broadcasts stale count so UI updates."""
 function handle_update_code!(state::WebNotebookState, conn, data)
     cell_id_str = get(data, "cell_id", "")
     new_code = get(data, "code", "")
@@ -312,6 +317,9 @@ function handle_update_code!(state::WebNotebookState, conn, data)
     cell = get_cell(state.nb, UUID(cell_id_str))
     cell === nothing && return
     cell.code = new_code
+
+    # Broadcast stale info — same path as agent editing .jl file
+    _broadcast_stale!(state)
 end
 
 """Handle save request. Syncs codes from client first if provided."""
