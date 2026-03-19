@@ -50,9 +50,10 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #page-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
 therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
-/* Activity bar button: active highlight when panel is open */
-.ab-btn[data-state="on"]{background:rgba(86,212,160,.08);color:#56d4a0;}
-.ab-btn:hover{background:rgba(86,212,160,.06);color:#9baabd;}
+/* Activity bar button: active highlight when panel is open.
+   !important needed to override inline style from _AB_BTN_STYLE */
+.ab-btn[data-state="on"]{background:rgba(86,212,160,.08) !important;color:#56d4a0 !important;}
+.ab-btn:hover{background:rgba(86,212,160,.06) !important;color:#9baabd !important;}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
 .code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
