@@ -34,8 +34,10 @@ const _TREE_ITEM = "display:flex;align-items:center;gap:6px;padding:2px 0;border
 # Chevron style
 const _CHV_STYLE = "width:12px;height:12px;font-size:8px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s;"
 
-# Inline JS for folder toggle (click handler)
-const _FOLDER_TOGGLE_JS = "onclick=\"(function(e){e.stopPropagation();var c=this.nextElementSibling;var ch=this.querySelector('.chv');if(c.style.display==='none'){c.style.display='block';ch.classList.add('open')}else{c.style.display='none';ch.classList.remove('open')}}).call(this,event)\""
+# Inline JS for folder toggle (click handler) — also swaps folder icon SVG
+const _FOLDER_SVG_OPEN = """<svg width='14' height='14' viewBox='0 0 20 20' fill='none'><path d='M2 5.5A1.5 1.5 0 013.5 4H8l1.5 2h7A1.5 1.5 0 0118 7.5V9H4.5L2 15.5v-10z' fill='#3d5068' opacity='.4' stroke='#7bb8e8' stroke-width='1'/><path d='M2 15.5L4.5 9H18l-2.5 6.5H2z' fill='#1a2332' stroke='#7bb8e8' stroke-width='1'/></svg>"""
+const _FOLDER_SVG_CLOSED = """<svg width='14' height='14' viewBox='0 0 20 20' fill='none'><path d='M2 5.5A1.5 1.5 0 013.5 4H8l1.5 2h7A1.5 1.5 0 0118 7.5v7a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 14.5v-9z' fill='#3d5068' opacity='.5' stroke='#5a7a99' stroke-width='1'/></svg>"""
+const _FOLDER_TOGGLE_JS = "onclick=\"(function(e){e.stopPropagation();var c=this.nextElementSibling;var ch=this.querySelector('.chv');var ic=this.querySelectorAll('svg')[1];if(c.style.display==='none'){c.style.display='block';ch.classList.add('open');if(ic)ic.outerHTML='$(_FOLDER_SVG_OPEN)'}else{c.style.display='none';ch.classList.remove('open');if(ic)ic.outerHTML='$(_FOLDER_SVG_CLOSED)'}}).call(this,event)\""
 
 # Hover JS for non-active items
 const _HOVER_ENTER = "onmouseenter=\"this.style.background='rgba(255,255,255,.03)'\""
@@ -52,6 +54,15 @@ function _icon_for_type(ft::Symbol)::String
     return _ICON_GENERIC
 end
 
+"""Check if a tree node (recursively) contains the active file path."""
+function _contains_active(node::Main.Sessions.FileNode, active_path::String)::Bool
+    node.path == active_path && return true
+    for child in node.children
+        _contains_active(child, active_path) && return true
+    end
+    false
+end
+
 """Render a single tree node (file or directory) as an HTML string."""
 function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path::String)::String
     pad = depth * 14 + 6
@@ -59,8 +70,8 @@ function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path
 
     if node.is_dir
         # Directory: clickable row + children container
-        # Depth 0 and 1 start open, deeper start closed
-        start_open = depth <= 1
+        # Only open folders that contain the active file
+        start_open = _contains_active(node, active_path)
         children_display = start_open ? "block" : "none"
         chv_class = start_open ? "chv open" : "chv"
         folder_icon = start_open ? _ICON_FOLDER_OPEN : _ICON_FOLDER_CLOSED

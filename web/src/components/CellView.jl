@@ -86,14 +86,21 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     # =======================================================================
     # Markdown cell
     # =======================================================================
-    if is_md && cell.state in (_Sessions.cell_done, _Sessions.cell_errored) && output.output_type == :markdown
-        md_html = sprint(io -> Markdown.html(io, output.result))
+    if is_md
+        # Render markdown regardless of execution state
+        md_html = if cell.state in (_Sessions.cell_done, _Sessions.cell_errored) && output.output_type == :markdown
+            sprint(io -> Markdown.html(io, output.result))
+        else
+            # Not yet executed — parse the md"..." source directly
+            md_content = _Sessions._extract_markdown_content(String(code))
+            sprint(io -> Markdown.html(io, Markdown.parse(md_content)))
+        end
 
         return Div(:class => "cell-wrap relative", :style => "margin-left:28px",
             :data_cell_id => cell_id,
             eye_div,
             Div(:class => "md-cell relative rounded-lg border border-b1 bg-island overflow-hidden",
-                Div(:class => "md-inner py-[18px] px-6",
+                Div(:class => "md-inner md-prose py-[18px] px-6",
                     RawHtml(md_html))))
     end
 
@@ -103,6 +110,10 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
 
     runtime_str = _format_runtime(output.runtime_ns)
     is_idle = cell.state == _Sessions.cell_idle
+
+    # Stale / never-run detection
+    cell_stale = _Sessions.is_stale(cell)
+    cell_never_run = _Sessions.is_never_run(cell)
 
     # -- Hover controls (top-right) --
     ctrl_children = Any[]
@@ -132,6 +143,28 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
         ctrl_children...)
 
+    # -- State badge (small dot indicator, top-left of cell) --
+    state_color = if cell.state == _Sessions.cell_running
+        "#7bb8e8"
+    elseif cell.state == _Sessions.cell_queued
+        "#d4a056"
+    elseif cell.state == _Sessions.cell_errored
+        "#e06b65"
+    elseif cell.state == _Sessions.cell_done
+        "#56d4a0"
+    elseif cell_stale
+        "#d4a056"
+    elseif cell_never_run
+        "#3d5068"
+    else
+        "#3d5068"
+    end
+    state_pulse = cell.state in (_Sessions.cell_queued, _Sessions.cell_running)
+    state_anim = state_pulse ? "animation:pulse 1.5s infinite;" : ""
+    state_badge = Span(:data_cell_state => string(cell.state),
+        :data_cell_id => cell_id,
+        :style => "position:absolute;top:8px;left:8px;width:7px;height:7px;border-radius:50%;background:$(state_color);z-index:5;$(state_anim)")
+
     # -- CodeMirror host (data-cell-id lets JS find editor for this cell) --
     cm_div = Div(:class => "cm-cell",
         :data_cell_id => cell_id,
@@ -147,8 +180,11 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     if is_idle
         code_cell_classes *= " idle"
     end
+    if cell_stale
+        code_cell_classes *= " stale"
+    end
 
-    inner_children = Any[ctrls, cm_div]
+    inner_children = Any[state_badge, ctrls, cm_div]
 
     # Output area — always present so server broadcasts can fill it.
     # Hidden via style when empty, shown when output arrives.

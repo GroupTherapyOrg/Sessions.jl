@@ -83,6 +83,25 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
 .cm-cell .cm-scroller{overflow-x:auto;}
 .cm-cell .cm-focused{outline:none!important;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.code-cell.stale::before{background:#d4a056;opacity:.5;}
+/* Markdown prose — Pluto-style notebook text */
+.md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#9baabd;line-height:1.7;font-size:14px;}
+.md-prose h1{font-family:'Fraunces',Georgia,serif;font-size:1.8em;font-weight:600;color:#d4dce8;margin:0.3em 0 0.6em;letter-spacing:-0.01em;}
+.md-prose h2{font-family:'Fraunces',Georgia,serif;font-size:1.4em;font-weight:600;color:#d4dce8;margin:1.2em 0 0.4em;padding-bottom:0.3em;border-bottom:1px solid #1c2736;}
+.md-prose h3{font-family:'Fraunces',Georgia,serif;font-size:1.15em;font-weight:600;color:#d4dce8;margin:1em 0 0.3em;}
+.md-prose p{margin:0 0 0.8em;color:#9baabd;}
+.md-prose ul,.md-prose ol{margin:0 0 0.8em;padding-left:1.5em;color:#9baabd;}
+.md-prose li{margin:0.2em 0;}
+.md-prose blockquote{border-left:3px solid #b08fd8;padding:0.2em 0 0.2em 1em;margin:0.8em 0;color:#6b7d93;font-style:italic;}
+.md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:#0a0e14;padding:0.15em 0.4em;border-radius:4px;color:#7bb8e8;}
+.md-prose pre{background:#0a0e14;border-radius:6px;padding:0.8em 1em;margin:0.8em 0;overflow-x:auto;}
+.md-prose pre code{background:none;padding:0;font-size:0.85em;color:#d4dce8;}
+.md-prose strong{color:#d4dce8;font-weight:600;}
+.md-prose em{font-style:italic;}
+.md-prose a{color:#56d4a0;text-decoration:none;}
+.md-prose a:hover{text-decoration:underline;}
+.md-prose hr{border:none;border-top:1px solid #1c2736;margin:1.2em 0;}
+.md-prose img{max-width:100%;border-radius:6px;}
 </style>"""),
 
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
