@@ -53,12 +53,12 @@ function NotebookPanel()
         # Toolbar
         Div(:class => "flex items-center gap-2 px-3.5",
             # Run All button
-            Therapy.Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
+            Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "window._sessionsRunAll()",
                 RawHtml(_SVG_RUN_SMALL),
                 " Run All"),
             # Save button
-            Therapy.Button(:id => "save-indicator",
+            Button(:id => "save-indicator",
                 :class => "bg-island border border-b2 rounded px-3 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "TherapyWS.sendMessage('notebook', {action: 'save'})",
                 "Save")))

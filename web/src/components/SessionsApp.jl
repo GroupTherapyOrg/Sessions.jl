@@ -34,7 +34,7 @@ const _AB_BTN_STYLE = "width:32px;height:32px;display:flex;align-items:center;ju
                     RawHtml(_JULIA_LOGO_SVG)),
 
                 # File explorer toggle — active highlight via BindBool → data-state
-                Therapy.Button(:class => "ab-btn",
+                Button(:class => "ab-btn",
                     :style => _AB_BTN_STYLE,
                     :title => "Toggle Explorer (Ctrl+B)",
                     Symbol("data-state") => BindBool(sidebar_open, "off", "on"),
@@ -48,13 +48,13 @@ const _AB_BTN_STYLE = "width:32px;height:32px;display:flex;align-items:center;ju
                     RawHtml("""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>""")),
 
                 # JET diagnostics button (static for now)
-                Therapy.Button(:class => "ab-btn",
+                Button(:class => "ab-btn",
                     :style => _AB_BTN_STYLE,
                     :title => "Diagnostics",
                     RawHtml("""<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>""")),
 
                 # Terminal toggle — active highlight via BindBool → data-state
-                Therapy.Button(:class => "ab-btn",
+                Button(:class => "ab-btn",
                     :style => _AB_BTN_STYLE,
                     :title => "Toggle REPL (Ctrl+`)",
                     Symbol("data-state") => BindBool(repl_open, "off", "on"),

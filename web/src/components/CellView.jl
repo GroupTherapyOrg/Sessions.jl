@@ -117,7 +117,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
 
     # Run button (reads code from CM editor before sending)
     push!(ctrl_children,
-        Therapy.Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-jg hover:brightness-125",
+        Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-jg hover:brightness-125",
             :style => "background:rgba(86,212,160,.1)",
             :title => "Run cell (Shift+Enter)",
             :on_click => "window._sessionsRunCell('$(cell_id)')",
@@ -125,7 +125,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
 
     # Menu button
     push!(ctrl_children,
-        Therapy.Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-t4 hover:text-t3",
+        Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-t4 hover:text-t3",
             :style => "background:rgba(255,255,255,.04)",
             RawHtml(_SVG_MENU)))
 
@@ -205,7 +205,7 @@ function CellGap(; after_cell_id::String="")
     Div(:class => "cdiv h-[18px] flex items-center justify-center",
         Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
             Div(:class => "h-px w-14 bg-b2"),
-            Therapy.Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
+            Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
                 :on_click => "TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: '$(after_cell_id)'})",
                 RawHtml(_SVG_PLUS),
                 "Code"),
