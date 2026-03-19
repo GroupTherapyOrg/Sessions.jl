@@ -1,13 +1,18 @@
-# ReplPanel.jl — REPL panel content (placeholder for Phase 1)
+# ReplPanel.jl — REPL panel content (placeholder)
 #
-# Shows a static placeholder for the REPL area.
-# Server-backed terminal (PTY integration) comes in Phase 7.
+# Matches the TUI REPL aesthetic: dark terminal area with julia> prompt.
 
 function ReplPanel()
-    Div(:class => "p-4 font-mono text-sm",
-        Div(:class => "flex items-center gap-2 text-warm-500 dark:text-warm-400",
-            Span(:class => "text-accent-500", "julia>"),
-            Span(:class => "text-warm-400 dark:text-warm-600 animate-pulse", "▊")),
-        Div(:class => "mt-3 text-xs text-warm-400 dark:text-warm-600",
-            "REPL panel — server-backed terminal coming in a future phase."))
+    Div(:style => "flex: 1; padding: 12px 16px; font-family: 'JuliaMono', 'Fira Code', monospace; font-size: 13px; overflow-y: auto;",
+        # Tab bar
+        Div(:style => "display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #2b2d30;",
+            Span(:style => "display: flex; align-items: center; gap: 6px; color: #bcbec4; font-size: 12px;",
+                Span(:style => "color: #389826;", "⊳"),
+                "Julia 1",
+                Span(:style => "color: #4e5157; cursor: pointer; margin-left: 4px;", "×")),
+            Span(:style => "color: #4e5157; cursor: pointer; font-size: 14px;", "+")),
+        # Prompt
+        Div(:style => "display: flex; align-items: center; gap: 4px;",
+            Span(:style => "color: #389826; font-weight: 600;", "julia>"),
+            Span(:style => "color: #4e5157; animation: pulse 1.5s infinite;", "▊")))
 end

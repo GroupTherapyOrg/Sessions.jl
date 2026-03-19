@@ -1,11 +1,7 @@
 # NotebookPanel.jl — Renders all notebook cells (SSR)
 #
-# Iterates ordered_cells(nb), renders each with CellView.
-# Includes header with notebook filename, save indicator, and toolbar.
-# Scrollable container with cell gaps for adding new cells.
-#
-# Note: Components are included in Therapy's module context by load_app!,
-# so we access Sessions via Main.Sessions and state via Main.WEB_STATE.
+# Matches the TUI notebook aesthetic: tab bar, cell list, toolbar.
+# Uses inline styles for reliability.
 
 function NotebookPanel()
     state = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
@@ -17,7 +13,7 @@ function NotebookPanel()
     nb = state !== nothing ? state.nb : nothing
 
     if nb === nothing
-        return Div(:class => "flex items-center justify-center h-full text-warm-400 dark:text-warm-600",
+        return Div(:style => "display: flex; align-items: center; justify-content: center; height: 100%; color: #4e5157; font-size: 14px;",
             "No notebook loaded")
     end
 
@@ -27,32 +23,31 @@ function NotebookPanel()
     cell_count = length(cells)
     done_count = count(c -> c.state == _Sess.cell_done, cells)
 
-    # --- Header toolbar ---
-    header = Div(:class => "sticky top-0 z-10 bg-warm-50/95 dark:bg-warm-950/95 backdrop-blur-sm border-b border-warm-200 dark:border-warm-700",
-        Div(:class => "flex items-center gap-3 px-4 py-2",
-            # Notebook name
-            Div(:class => "flex items-center gap-2",
-                Span(:class => "font-medium text-sm text-warm-700 dark:text-warm-300", nb_name),
-                Span(:class => "text-[10px] text-warm-400 dark:text-warm-600 font-mono",
-                    "$(done_count)/$(cell_count) cells")),
-            # Spacer
-            Div(:class => "flex-1"),
-            # Toolbar buttons
-            Div(:class => "flex items-center gap-2",
-                # Run All
-                Therapy.Button(:class => "text-xs font-medium text-warm-500 hover:text-accent-600 dark:hover:text-accent-400 cursor-pointer px-2 py-1 rounded hover:bg-warm-100 dark:hover:bg-warm-800 transition-colors",
-                    :on_click => "TherapyWS.sendMessage('notebook', {action: 'run_all'})",
-                    "▶ Run All"),
-                # Save
-                Therapy.Button(:class => "text-xs font-medium text-warm-500 hover:text-accent-600 dark:hover:text-accent-400 cursor-pointer px-2 py-1 rounded hover:bg-warm-100 dark:hover:bg-warm-800 transition-colors",
-                    :on_click => "TherapyWS.sendMessage('notebook', {action: 'save'})",
-                    "Save"))))
+    # --- Tab bar ---
+    tab_bar = Div(:style => "display: flex; align-items: center; background: #181a1d; border-bottom: 1px solid #2b2d30; padding: 0; height: 36px; flex-shrink: 0;",
+        # Active tab
+        Div(:style => "display: flex; align-items: center; gap: 6px; padding: 0 16px; height: 100%; background: #121216; border-right: 1px solid #2b2d30; font-size: 12px; color: #bcbec4;",
+            Span(:style => "color: #389826;", "◆"),
+            Span(nb_name),
+            Span(:style => "color: #4e5157; cursor: pointer; margin-left: 8px; font-size: 10px;", "×")),
+        # Spacer
+        Div(:style => "flex: 1;"),
+        # Status + toolbar
+        Div(:style => "display: flex; align-items: center; gap: 12px; padding-right: 12px; font-size: 12px;",
+            # Cell counter
+            Span(:style => "color: #7a7e85; font-family: 'JuliaMono', monospace; font-size: 11px;",
+                "$(done_count)/$(cell_count)"),
+            # Save button
+            Therapy.Button(:style => "background: none; border: none; color: #7a7e85; cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 4px;",
+                :id => "save-indicator",
+                :on_click => "TherapyWS.sendMessage('notebook', {action: 'save'})",
+                "Save")))
 
     # --- Cell list ---
     rendered_cells = Any[]
     cell_index = 0
 
-    # Initial "+" gap before first cell
+    # Initial add-cell gap
     push!(rendered_cells, CellGap(after_cell_id=""))
 
     for cell in cells
@@ -61,11 +56,17 @@ function NotebookPanel()
         view = CellView(cell; index=cell_index)
         view === nothing && continue
         push!(rendered_cells, view)
-        # "+" gap after each cell
         push!(rendered_cells, CellGap(after_cell_id=string(cell.id)))
     end
 
-    Div(:id => "notebook-container",
-        header,
-        Div(:class => "px-2 py-4 space-y-1 max-w-5xl mx-auto", rendered_cells...))
+    # Run All button at bottom
+    push!(rendered_cells,
+        Div(:style => "display: flex; justify-content: flex-end; padding: 8px 24px 24px;",
+            Therapy.Button(:style => "background: none; border: none; color: #389826; cursor: pointer; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 4px; display: flex; align-items: center; gap: 4px;",
+                :on_click => "TherapyWS.sendMessage('notebook', {action: 'run_all'})",
+                "▶ Run All")))
+
+    Div(:id => "notebook-container", :style => "display: flex; flex-direction: column; height: 100%;",
+        tab_bar,
+        Div(:style => "flex: 1; overflow-y: auto; padding: 0;", rendered_cells...))
 end

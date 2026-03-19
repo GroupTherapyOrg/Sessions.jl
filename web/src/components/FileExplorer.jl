@@ -1,26 +1,43 @@
-# FileExplorer.jl — File tree panel (placeholder for Phase 1)
+# FileExplorer.jl — File tree panel (placeholder)
 #
-# Shows notebook filename and a static placeholder.
-# Server-populated file listing comes in Phase 7.
+# Shows notebook filename and directory path, matching the TUI file panel aesthetic.
 
 function FileExplorer()
-    nb_name = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
-        basename(Main.WEB_STATE[].nb.path)
+    state = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
+        Main.WEB_STATE[]
     else
-        "Untitled.jl"
+        nothing
     end
 
-    Div(:class => "p-3",
-        # Current notebook
-        Div(:class => "mb-4",
-            Div(:class => "flex items-center gap-2 px-2 py-1.5 rounded-md bg-warm-100 dark:bg-warm-900",
-                Svg(:class => "w-4 h-4 text-accent-500 shrink-0", :fill => "none", :viewBox => "0 0 24 24",
-                    :stroke => "currentColor", :stroke_width => "1.5",
-                    Path(:stroke_linecap => "round", :stroke_linejoin => "round",
-                        :d => "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z")),
-                Span(:class => "text-sm text-warm-700 dark:text-warm-300 truncate", nb_name))),
+    nb_name = state !== nothing ? basename(state.nb.path) : "Untitled.jl"
+    nb_dir = state !== nothing ? dirname(state.nb.path) : ""
+    # Shorten directory display
+    dir_display = if length(nb_dir) > 30
+        "..." * nb_dir[end-27:end]
+    else
+        nb_dir
+    end
 
-        # Placeholder tree
-        Div(:class => "mt-2 space-y-1",
-            Span(:class => "text-xs text-warm-400 dark:text-warm-600 px-2", "No file browser yet")))
+    Div(:style => "flex: 1; padding: 8px;",
+        # Directory path header
+        !isempty(dir_display) ?
+            Div(:style => "padding: 4px 8px; margin-bottom: 8px; font-size: 11px; font-weight: 600; color: #bcbec4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+                "▾ " * dir_display) : nothing,
+
+        # Current notebook file
+        Div(:style => "display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 4px; background: rgba(56,152,38,0.1);",
+            # Diamond icon (active file)
+            Span(:style => "color: #389826; font-size: 12px;", "◆"),
+            Span(:style => "font-size: 13px; color: #bcbec4;", nb_name)),
+
+        # Session file
+        state !== nothing ?
+            Div(:style => "display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 24px;",
+                Span(:style => "color: #4e5157; font-size: 12px;", "◇"),
+                Span(:style => "font-size: 13px; color: #7a7e85;",
+                    replace(nb_name, ".jl" => ".sessions.toml"))) : nothing,
+
+        # Bottom status
+        Div(:style => "position: absolute; bottom: 8px; left: 8px; right: 8px; padding: 6px 8px; font-size: 11px; color: #4e5157;",
+            "⚠ No issues"))
 end
