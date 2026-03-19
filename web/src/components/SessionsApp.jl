@@ -56,13 +56,13 @@ const _AB_BTN_STYLE = "width:32px;height:32px;display:flex;align-items:center;ju
             # ── File Explorer Panel (shown/hidden by sidebar_open signal) ──
             Show(sidebar_open) do
                 Div(:id => "fpanel",
-                    :class => "rounded-xl bg-surf border border-b1 flex flex-col overflow-hidden shrink-0 shadow-lg shadow-black/25",
+                    :class => "h-full rounded-xl bg-surf border border-b1 flex flex-col overflow-hidden shrink-0 shadow-lg shadow-black/25",
                     :style => "width:234px;",
                     # Header
                     Div(:class => "flex items-center justify-between px-3 py-2.5 border-b border-b1 shrink-0",
                         Span(:class => "text-[10px] font-semibold uppercase tracking-wider text-t3", "Explorer"),
                         Span(:class => "text-[9px] text-t4 font-mono", "⌘B")),
-                    # Content
+                    # Content (@island with folder toggle signals)
                     FileExplorer())
             end,
 
