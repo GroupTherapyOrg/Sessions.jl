@@ -51,6 +51,17 @@ function _render_cell_output_html(cell)
     Therapy.render_to_string(vnode)
 end
 
+"""Render a Markdown.MD object to HTML string via Sessions' imported Markdown module."""
+function _render_cell_output_html_md(md_result)
+    try
+        # Sessions.jl has `import Markdown` — use it through the module
+        sprint(io -> Main.Sessions.Markdown.html(io, md_result))
+    catch
+        # Fallback: show text representation
+        sprint(show, md_result)
+    end
+end
+
 # ---------------------------------------------------------------------------
 # SVG constants
 # ---------------------------------------------------------------------------
@@ -84,17 +95,14 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         RawHtml(eye_svg))
 
     # =======================================================================
-    # Markdown cell
+    # Markdown cell — only render as prose if executed (output.result is a
+    # Markdown.MD object from the notebook's own `using Markdown`).
+    # Unexecuted md cells fall through to the normal CodeMirror view.
     # =======================================================================
-    if is_md
-        # Render markdown regardless of execution state
-        md_html = if cell.state in (_Sessions.cell_done, _Sessions.cell_errored) && output.output_type == :markdown
-            sprint(io -> Markdown.html(io, output.result))
-        else
-            # Not yet executed — parse the md"..." source directly
-            md_content = _Sessions._extract_markdown_content(String(code))
-            sprint(io -> Markdown.html(io, Markdown.parse(md_content)))
-        end
+    if is_md && output.output_type == :markdown && output.result !== nothing
+        # The notebook executed this cell and produced a Markdown.MD result.
+        # Use Sessions._render_output which handles Markdown.html() internally.
+        md_html = _render_cell_output_html_md(output.result)
 
         return Div(:class => "cell-wrap relative", :style => "margin-left:28px",
             :data_cell_id => cell_id,
