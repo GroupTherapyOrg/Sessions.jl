@@ -169,49 +169,55 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         code_cell_classes *= " stale"
     end
 
+    # Code cell inner children (state badge + controls + CM editor)
     inner_children = Any[state_badge, ctrls, cm_div]
 
-    # Output area — always present so server broadcasts can fill it.
-    # Hidden via style when empty, shown when output arrives.
-    out_style = "padding-left:48px;line-height:1.5;"
-    if has_output
-        out_content = if !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
+    # ── Output area: ABOVE the code cell, directly on canvas (Pluto-style).
+    # When the eye hides the code-cell, output stays visible.
+    # Markdown output uses md-prose styling. Text output uses monospace.
+    # Always present (hidden when empty) so server broadcasts can fill it.
+    is_md_output = output.output_type == :markdown
+    out_div = if has_output
+        out_content = if !isempty(output_html)
+            RawHtml(output_html)
+        elseif has_text_output
             output.text_representation
-        elseif !isempty(output_html)
-            nothing
         else
             nothing
         end
 
         if out_content !== nothing
-            push!(inner_children,
-                Div(:class => "cell-out border-t border-b1 py-2 pr-3.5 font-mono text-xs text-tout bg-deep whitespace-pre overflow-x-auto",
-                    :style => out_style,
-                    :data_cell_id => cell_id,
-                    out_content))
-        elseif !isempty(output_html)
-            push!(inner_children,
-                Div(:class => "cell-out border-t border-b1 py-2 pr-3.5 font-mono text-xs text-tout bg-deep whitespace-pre overflow-x-auto",
-                    :style => out_style,
-                    :data_cell_id => cell_id,
-                    RawHtml(output_html)))
-        else
-            # Empty but present for server to fill
-            push!(inner_children,
+            if is_md_output
+                # Markdown: clean prose, no box, flows on canvas
                 Div(:class => "cell-out",
-                    :style => "display:none;" * out_style,
-                    :data_cell_id => cell_id))
+                    :data_cell_id => cell_id,
+                    :style => "padding:4px 0 8px;overflow-x:auto;",
+                    out_content)
+            else
+                # Code/text output: monospace, subtle style, horizontal scroll
+                Div(:class => "cell-out font-mono text-xs text-tout whitespace-pre overflow-x-auto",
+                    :data_cell_id => cell_id,
+                    :style => "padding:6px 0 10px;line-height:1.5;",
+                    out_content)
+            end
+        else
+            Div(:class => "cell-out",
+                :data_cell_id => cell_id,
+                :style => "display:none;")
         end
     else
         # No output yet — hidden container, server will populate and show it
-        push!(inner_children,
-            Div(:class => "cell-out",
-                :style => "display:none;" * out_style,
-                :data_cell_id => cell_id))
+        Div(:class => "cell-out",
+            :data_cell_id => cell_id,
+            :style => "display:none;")
     end
 
+    # ── Assemble: output ABOVE, then eye + code-cell BELOW
     Div(:class => "cell-wrap relative", :style => "margin-left:28px",
         :data_cell_id => cell_id,
+        # Output (directly on canvas, not inside code-cell box)
+        out_div,
+        # Eye toggle + code cell (eye hides code-cell, output stays)
         eye_div,
         Div(:class => code_cell_classes,
             inner_children...))

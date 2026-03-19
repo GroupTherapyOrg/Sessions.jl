@@ -64,10 +64,10 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
 .cell-wrap:hover .cell-eye{opacity:1;}
 .cell-eye svg{color:#3d5068;transition:color .15s;}
 .cell-eye:hover svg{color:#56d4a0;}
-.cell-collapsed .cm-cell,.cell-collapsed .cell-out{display:none;}
-.cell-collapsed .md-inner{display:none;}
+.cell-collapsed .cm-cell{display:none;}
+.cell-collapsed .cell-ctrls{display:none;}
 .cell-collapsed::before{opacity:.15!important;}
-.cell-collapsed{border-style:dashed!important;opacity:.6;}
+.cell-collapsed{border-style:dashed!important;opacity:.4;max-height:8px;overflow:hidden;}
 .cdiv:hover .cdiv-inner{opacity:1;}
 .chv{transition:transform .12s ease;}
 .chv.open{transform:rotate(90deg);}
@@ -295,8 +295,7 @@ function _notebook_channel_script()
         if (html) {
           output.innerHTML = html;
           output.style.display = '';
-          // Add visual classes for non-empty output
-          output.classList.add('border-t', 'border-b1', 'py-2', 'pr-3.5', 'font-mono', 'text-xs', 'text-tout', 'bg-deep', 'whitespace-pre', 'overflow-x-auto');
+          output.style.padding = '6px 0 10px';
         } else {
           output.innerHTML = '';
           output.style.display = 'none';
@@ -357,7 +356,7 @@ function _notebook_channel_script()
             if (output && !output.innerHTML) {
               output.innerHTML = cell.output_html;
               output.style.display = '';
-              output.classList.add('border-t', 'border-b1', 'py-2', 'pr-3.5', 'font-mono', 'text-xs', 'text-tout', 'bg-deep', 'whitespace-pre', 'overflow-x-auto');
+              output.style.padding = '6px 0 10px';
             }
           }
         });
