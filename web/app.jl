@@ -89,8 +89,13 @@ Sessions.setup_web_notebook!(WEB_STATE[])
 
 on_ws_connect() do conn
     println("[WS] Client connected: $(conn.id)")
-    # Send full notebook state to newly connected client
-    Sessions.send_full_state!(WEB_STATE[], conn)
+    # Send full notebook state async to avoid blocking the handler
+    # (client may disconnect before transfer completes → EPIPE)
+    @async try
+        Sessions.send_full_state!(WEB_STATE[], conn)
+    catch e
+        e isa Base.IOError || @warn "[WS] send_full_state! error" exception=e
+    end
 end
 
 on_ws_disconnect() do conn
