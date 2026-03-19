@@ -43,9 +43,13 @@ tailwind.config = {
         # --- Full CSS ---
         RawHtml("""<style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-body{overflow:hidden;}
-/* Ensure therapy-island and Show wrapper divs participate in flex layout */
-therapy-island,#workspace>div{min-height:0;}
+html,body{height:100%;overflow:hidden;margin:0;padding:0;}
+/* Full height chain: html → body → #therapy-content → #page-content → therapy-island → app.
+   Every wrapper in the chain must pass through height and flex constraints. */
+#therapy-content{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+#page-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+#workspace>div{min-height:0;}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
 .code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
