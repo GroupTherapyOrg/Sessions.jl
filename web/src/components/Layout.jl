@@ -322,7 +322,7 @@ function _notebook_channel_script()
             var rt = ms < 1 ? (data.runtime_ns / 1e3).toFixed(1) + '\u00b5s' : ms < 1000 ? ms.toFixed(1) + 'ms' : (ms / 1000).toFixed(2) + 's';
             var badge_el = document.createElement('span');
             badge_el.className = 'rt-badge';
-            badge_el.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:4px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);';
+            badge_el.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);';
             badge_el.textContent = rt;
             ctrls.insertBefore(badge_el, ctrls.firstChild);
           }

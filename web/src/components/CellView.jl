@@ -103,17 +103,17 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     # -- Hover controls (top-right) --
     ctrl_children = Any[]
 
-    # Runtime badge
+    # Runtime badge (class rt-badge so the channel handler JS can find and replace it)
     if !isempty(runtime_str)
         push!(ctrl_children,
-            Span(:class => "text-[10px] font-mono px-[7px] py-px rounded",
+            Span(:class => "rt-badge text-[10px] font-mono px-[7px] py-px rounded-full",
                 :style => "color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12)",
                 runtime_str))
     end
 
     # Run button (reads code from CM editor before sending)
     push!(ctrl_children,
-        Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-jg hover:brightness-125",
+        Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125",
             :style => "background:rgba(86,212,160,.1)",
             :title => "Run cell (Shift+Enter)",
             :on_click => "window._sessionsRunCell('$(cell_id)')",
@@ -121,7 +121,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
 
     # Menu button
     push!(ctrl_children,
-        Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded border-0 cursor-pointer text-t4 hover:text-t3",
+        Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
             :style => "background:rgba(255,255,255,.04)",
             RawHtml(_SVG_MENU)))
 
@@ -151,9 +151,10 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         :style => "position:absolute;top:8px;left:8px;width:7px;height:7px;border-radius:50%;background:$(state_color);z-index:5;$(state_anim)")
 
     # -- CodeMirror host (data-cell-id lets JS find editor for this cell) --
+    # NOTE: Do NOT html-escape data_src — Therapy's render_to_string handles attribute escaping.
     cm_div = Div(:class => "cm-cell",
         :data_cell_id => cell_id,
-        :data_src => _html_escape(String(code)))
+        :data_src => String(code))
 
     # -- Output area (only if cell has output) --
     has_text_output = !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
