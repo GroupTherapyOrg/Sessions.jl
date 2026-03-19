@@ -60,6 +60,7 @@ export session_path, save_session!, load_session, apply_session!, load_notebook_
 # Layer 1.5: Web Server (channel handlers for web UI)
 include("web_server.jl")
 export WebNotebookState, setup_web_notebook!, send_full_state!
+export FileNode, _build_file_tree
 
 # Layer 1.5: Static Analysis (JET.jl + JETLS LSP)
 include("jet_analysis.jl")

@@ -315,3 +315,76 @@ function handle_save!(state::WebNotebookState, conn, data)
     ))
     println("[WebNotebook] Saved: $(state.nb.path)")
 end
+
+# =============================================================================
+# File tree for web explorer
+# =============================================================================
+
+"""A node in the file tree (file or directory)."""
+struct FileNode
+    name::String
+    path::String        # relative path from root
+    is_dir::Bool
+    children::Vector{FileNode}
+    file_type::Symbol   # :jl, :toml, :md, :yml, :git, :lic, :generic
+end
+
+"""Detect file type from filename/extension."""
+function _detect_file_type(name::String)::Symbol
+    name == "LICENSE" && return :lic
+    name == ".gitignore" && return :git
+    endswith(name, ".jl") && return :jl
+    endswith(name, ".toml") && return :toml
+    endswith(name, ".md") && return :md
+    (endswith(name, ".yml") || endswith(name, ".yaml")) && return :yml
+    return :generic
+end
+
+const _SKIP_NAMES = Set(["node_modules", ".git", "Manifest.toml", "__pycache__", ".DS_Store"])
+
+"""
+    _build_file_tree(root_dir::String; max_depth::Int=4)
+
+Walk `root_dir` and return a `Vector{FileNode}` representing its contents.
+Skips hidden files/directories (names starting with `.`), `node_modules`,
+`Manifest.toml`, and `.git`. Directories are sorted first, then files,
+alphabetical within each group. Recurses up to `max_depth` levels.
+"""
+function _build_file_tree(root_dir::String; max_depth::Int=4)
+    _build_tree_recursive(root_dir, root_dir, 0, max_depth)
+end
+
+function _build_tree_recursive(dir::String, root::String, depth::Int, max_depth::Int)::Vector{FileNode}
+    depth >= max_depth && return FileNode[]
+    entries = try
+        readdir(dir)
+    catch
+        return FileNode[]
+    end
+
+    dirs = FileNode[]
+    files = FileNode[]
+
+    for name in entries
+        # Skip hidden files (starting with .) except .gitignore
+        if startswith(name, '.') && name != ".gitignore"
+            continue
+        end
+        # Skip blocklisted names
+        name in _SKIP_NAMES && continue
+
+        full = joinpath(dir, name)
+        rel = relpath(full, root)
+
+        if isdir(full)
+            children = _build_tree_recursive(full, root, depth + 1, max_depth)
+            push!(dirs, FileNode(name, rel, true, children, :generic))
+        elseif isfile(full)
+            push!(files, FileNode(name, rel, false, FileNode[], _detect_file_type(name)))
+        end
+    end
+
+    sort!(dirs; by=n -> lowercase(n.name))
+    sort!(files; by=n -> lowercase(n.name))
+    return vcat(dirs, files)
+end
