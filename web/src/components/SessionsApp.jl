@@ -63,7 +63,7 @@ end
 # ── Activity Bar (inline, not a separate component) ──
 
 function _activity_bar()
-    Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 rounded-xl bg-surf border border-b1",
+    Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl bg-surf border border-b1 shadow-lg shadow-black/25",
         # Julia logo at top
         Div(:class => "flex items-center justify-center w-8 h-8 mb-2",
             RawHtml(_JULIA_LOGO_SVG)),
