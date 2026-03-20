@@ -114,55 +114,7 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         # --- Panel state: persist to localStorage, restore after WASM hydration ---
         RawHtml("""<script>
 (function(){
-  // ═══════════════════════════════════════════════════════════════════
-  // Panel persistence.
-  // SSR starts with both panels CLOSED (signal=0, no flash).
-  // After WASM hydration: open panels that localStorage says should be open.
-  // On toggle: MutationObserver saves data-state to localStorage instantly.
-  // ═══════════════════════════════════════════════════════════════════
-
-  var _setupSave = function() {
-    var btns = document.querySelectorAll('.ab-btn[data-state]');
-    if (btns.length >= 2) {
-      new MutationObserver(function(){
-        localStorage.setItem('sessions-sidebar', btns[0].getAttribute('data-state') === 'on' ? '1' : '0');
-      }).observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
-      new MutationObserver(function(){
-        localStorage.setItem('sessions-repl', btns[1].getAttribute('data-state') === 'on' ? '1' : '0');
-      }).observe(btns[1], {attributes: true, attributeFilter: ['data-state']});
-    }
-  };
-
-  // Default: first visit with no localStorage → open sidebar
-  var sidebarOpen = localStorage.getItem('sessions-sidebar') !== '0';
-  var replOpen = localStorage.getItem('sessions-repl') === '1';
-
-  if (sidebarOpen || replOpen) {
-    // Wait for WASM hydration (BindBool sets data-state)
-    var _tries = 0;
-    var _check = setInterval(function() {
-      _tries++;
-      if (_tries > 100) { clearInterval(_check); _setupSave(); return; }
-      var btns = document.querySelectorAll('.ab-btn[data-state]');
-      if (btns.length < 2) return;
-      clearInterval(_check);
-      // Click to open panels that should be open (signal starts at 0)
-      if (sidebarOpen && btns[0].getAttribute('data-state') === 'off') btns[0].click();
-      if (replOpen && btns[1].getAttribute('data-state') === 'off') btns[1].click();
-      _setupSave();
-    }, 50);
-  } else {
-    // Both closed — just set up save observers after hydration
-    var _tries2 = 0;
-    var _check2 = setInterval(function() {
-      _tries2++;
-      if (_tries2 > 100) { clearInterval(_check2); return; }
-      var btns = document.querySelectorAll('.ab-btn[data-state]');
-      if (btns.length < 2) return;
-      clearInterval(_check2);
-      _setupSave();
-    }, 50);
-  }
+  // Panel persistence is handled by SessionsApp.jl (toggle + restore scripts)
 })();
 </script>"""),
 
