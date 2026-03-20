@@ -60,19 +60,21 @@ function classify_output(value)::Symbol
     # 1. Bond (Sessions-specific, like Pluto's divelement)
     value isa Bond && return :bond
 
-    # 2. Table (Pluto: application/vnd.pluto.table+object)
-    if _is_table_value(value)
-        return :dataframe
-    end
-
-    # 3. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
+    # 2. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
     value isa Markdown.MD && return :markdown
 
-    # 3b. text/html — packages like DataFrames, Plots.jl HTML backend, etc.
-    #     Check AFTER markdown (Markdown.MD has text/html but we handle it specially)
-    #     and AFTER tables (we render tables ourselves for better styling)
+    # 3. text/html — packages like DataFrames.jl, Plots.jl HTML backend, etc.
+    #    Check BEFORE our custom table renderer so DataFrames gets its own
+    #    rich HTML rendering (like Pluto) instead of our basic fallback table.
+    #    Markdown.MD also has text/html but we handle it above.
     if !(value isa Markdown.MD) && _tui_showable(MIME"text/html"(), value)
         return :html
+    end
+
+    # 4. Table fallback — for NamedTuple vectors and Tables.jl types that
+    #    DON'T have their own text/html method. Our basic table renderer.
+    if _is_table_value(value)
+        return :dataframe
     end
 
     # 4. Images — always check BEFORE text/plain. With a graphics protocol
