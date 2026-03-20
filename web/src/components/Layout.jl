@@ -268,16 +268,22 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     if (cellId) editors[cellId] = view;
   });
 
-  // ── Eye toggle ──
+  // ── Eye toggle: fold/unfold cell + persist to server ──
   document.querySelectorAll('.cell-eye').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      var wrap = btn.closest('.cell-wrap').querySelector('.code-cell, .md-cell');
-      if (!wrap) return;
-      var collapsed = wrap.classList.toggle('cell-collapsed');
+      var cellWrap = btn.closest('.cell-wrap');
+      var codeCell = cellWrap ? cellWrap.querySelector('.code-cell') : null;
+      if (!codeCell) return;
+      var collapsed = codeCell.classList.toggle('cell-collapsed');
       btn.innerHTML = collapsed
         ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>'
         : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
       btn.title = collapsed ? 'Show cell' : 'Hide cell';
+      // Persist fold state to server (stored in .jl file as ╟─ vs ╠═)
+      var cellId = cellWrap ? cellWrap.dataset.cellId : '';
+      if (cellId && window.TherapyWS && TherapyWS.sendMessage) {
+        TherapyWS.sendMessage('notebook', {action: 'toggle_fold', cell_id: cellId, folded: collapsed});
+      }
     });
   });
 })();

@@ -41,6 +41,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_move_cell!(state, conn, data)
             elseif action == "update_code"
                 handle_update_code!(state, conn, data)
+            elseif action == "toggle_fold"
+                handle_toggle_fold!(state, conn, data)
             elseif action == "save"
                 handle_save!(state, conn, data)
             elseif action == "run_stale"
@@ -306,6 +308,15 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
         "event" => "cell_order",
         "cell_order" => [string(id) for id in state.nb.cell_order]
     ))
+end
+
+"""Handle fold/unfold toggle — persisted in .jl file as ╟─ (folded) vs ╠═ (visible)."""
+function handle_toggle_fold!(state::WebNotebookState, conn, data)
+    cell_id_str = get(data, "cell_id", "")
+    isempty(cell_id_str) && return
+    cell = get_cell(state.nb, UUID(cell_id_str))
+    cell === nothing && return
+    cell.folded = get(data, "folded", false)
 end
 
 """Handle code update (without execution). Broadcasts stale count so UI updates."""

@@ -150,6 +150,9 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     if cell_stale
         code_cell_classes *= " stale"
     end
+    if cell.folded
+        code_cell_classes *= " cell-collapsed"
+    end
 
     # Code cell inner children (controls + CM editor)
     inner_children = Any[ctrls, cm_div]
