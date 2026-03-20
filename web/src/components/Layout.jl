@@ -111,6 +111,33 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         Div(:class => "bg-base text-t1 font-sans h-screen w-screen flex flex-col",
             children...),
 
+        # --- Panel state: save to localStorage on toggle, restore on load ---
+        RawHtml("""<script>
+(function(){
+  // Save panel state whenever Show wrappers change visibility
+  setInterval(function(){
+    var fp = document.getElementById('fpanel');
+    var repl = document.getElementById('repl');
+    if (fp) localStorage.setItem('sessions_sidebar', fp.offsetParent !== null ? '1' : '0');
+    if (repl) localStorage.setItem('sessions_repl', repl.offsetParent !== null ? '1' : '0');
+  }, 1000);
+
+  // Patch island props BEFORE Therapy hydrates — so WASM signals
+  // start with the correct initial values from localStorage.
+  var sp = localStorage.getItem('sessions_sidebar');
+  var rp = localStorage.getItem('sessions_repl');
+  if (sp !== null || rp !== null) {
+    document.querySelectorAll('therapy-island[data-component="SessionsApp"]').forEach(function(el) {
+      var props = {};
+      try { props = JSON.parse(el.dataset.props || '{}'); } catch(e) {}
+      if (sp !== null) props.initial_sidebar = parseInt(sp);
+      if (rp !== null) props.initial_repl = parseInt(rp);
+      el.dataset.props = JSON.stringify(props);
+    });
+  }
+})();
+</script>"""),
+
         # --- Notebook channel handler ---
         _notebook_channel_script(),
 

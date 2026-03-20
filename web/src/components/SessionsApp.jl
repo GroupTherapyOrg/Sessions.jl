@@ -11,10 +11,10 @@ const _JULIA_LOGO_SVG = """<svg width="16" height="14" viewBox="0 0 40 34" fill=
 # Activity bar button base style (inactive state)
 const _AB_BTN_STYLE = "width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:#3d5068;transition:all .15s;"
 
-@island function SessionsApp(children...)
+@island function SessionsApp(children...; initial_sidebar=1, initial_repl=1)
     # Panel visibility signals (Int32: 0=closed, 1=open)
-    sidebar_open, set_sidebar_open = create_signal(Int32(1))
-    repl_open, set_repl_open = create_signal(Int32(1))
+    sidebar_open, set_sidebar_open = create_signal(Int32(initial_sidebar))
+    repl_open, set_repl_open = create_signal(Int32(initial_repl))
 
     # Get notebook state for status bar (server-side only, not compiled to WASM)
     cell_count = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
