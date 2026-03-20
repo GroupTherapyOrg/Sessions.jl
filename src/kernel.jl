@@ -63,18 +63,16 @@ function classify_output(value)::Symbol
     # 2. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
     value isa Markdown.MD && return :markdown
 
-    # 3. text/html — packages like DataFrames.jl, Plots.jl HTML backend, etc.
-    #    Check BEFORE our custom table renderer so DataFrames gets its own
-    #    rich HTML rendering (like Pluto) instead of our basic fallback table.
-    #    Markdown.MD also has text/html but we handle it above.
-    if !(value isa Markdown.MD) && _tui_showable(MIME"text/html"(), value)
-        return :html
-    end
-
-    # 4. Table fallback — for NamedTuple vectors and Tables.jl types that
-    #    DON'T have their own text/html method. Our basic table renderer.
+    # 3. Table — our own renderer (like Pluto's custom table viewer).
+    #    Checked BEFORE text/html so DataFrames.jl gets our styled table
+    #    instead of its own basic HTML output.
     if _is_table_value(value)
         return :dataframe
+    end
+
+    # 4. text/html — packages with custom HTML output (Plots.jl, widgets, etc.)
+    if !(value isa Markdown.MD) && _tui_showable(MIME"text/html"(), value)
+        return :html
     end
 
     # 4. Images — always check BEFORE text/plain. With a graphics protocol

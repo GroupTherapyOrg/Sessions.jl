@@ -493,21 +493,103 @@ function _render_bond_output(result, cell::Cell, prerendered)
     nothing
 end
 
+"""Render a table (DataFrames, NamedTuple vectors, any Tables.jl type) as a Pluto-style HTML table."""
 function _render_table_output(result)
-    if result isa AbstractVector && !isempty(result) && first(result) isa NamedTuple
-        cols = keys(first(result))
-        header = Thead(Tr([Th(:class => _WEB_TH_CLS, string(col)) for col in cols]...))
-        rows = [
-            Tr(:class => _WEB_TR_CLS,
-                [Td(:class => _WEB_TD_CLS, string(getfield(row, col))) for col in cols]...)
-            for row in result
-        ]
-        return Div(:class => "overflow-x-auto",
-            Table(:class => "w-full text-sm", header, Tbody(rows...)))
+    # Extract rows via Tables.jl interface or NamedTuple fallback
+    rows_data = try
+        Base.invokelatest(Tables.rowtable, result)
+    catch
+        if result isa AbstractVector && !isempty(result) && first(result) isa NamedTuple
+            result
+        else
+            nothing
+        end
     end
 
-    Pre(:class => "text-sm font-mono text-warm-700 dark:text-warm-300",
-        Code(sprint(show, result)))
+    rows_data === nothing && return Pre(:class => "text-sm font-mono text-tout", Code(sprint(show, result)))
+    isempty(rows_data) && return Span(:class => "text-sm text-t3", "0 rows")
+
+    cols = keys(first(rows_data))
+    nrows = length(rows_data)
+    max_display = 25  # Pluto-style: show first N rows, collapse the rest
+
+    # Dimension label (e.g. "8×7 DataFrame")
+    ncols = length(cols)
+    type_name = nameof(typeof(result))
+    dim_label = Div(:style => "font-size:12px;color:#6b7d93;font-family:'JetBrains Mono',monospace;margin-bottom:6px;",
+        "$(nrows)×$(ncols) $(type_name)")
+
+    # Column type names (if available via Tables.schema)
+    col_types = try
+        schema = Base.invokelatest(Tables.schema, result)
+        schema !== nothing ? [string(T) for T in schema.types] : nothing
+    catch
+        nothing
+    end
+
+    # Header row
+    header_cells = Any[Th(:class => "sst-th sst-row-label", "#")]
+    for col in cols
+        push!(header_cells, Th(:class => "sst-th", string(col)))
+    end
+
+    # Type row (under header)
+    type_cells = if col_types !== nothing
+        tc = Any[Th(:class => "sst-type-th", "")]
+        for t in col_types
+            push!(tc, Th(:class => "sst-type-th", t))
+        end
+        Tr(:class => "sst-type-row", tc...)
+    else
+        nothing
+    end
+
+    # Data rows (show first max_display, hide the rest)
+    show_all = nrows <= max_display
+    visible_rows = Any[]
+    for (i, row) in enumerate(rows_data)
+        is_hidden = !show_all && i > max_display && i < nrows  # hide middle rows
+        is_last = i == nrows
+        row_style = (is_hidden && !is_last) ? "display:none;" : ""
+
+        cells = Any[Td(:class => "sst-td sst-row-label", string(i))]
+        for col in cols
+            val = getfield(row, col)
+            push!(cells, Td(:class => "sst-td", string(val)))
+        end
+        push!(visible_rows, Tr(:class => "sst-row", :style => row_style,
+            :data_row_idx => string(i), cells...))
+    end
+
+    # "⋮ more" expand button (if rows truncated)
+    expand_btn = if !show_all
+        hidden_count = nrows - max_display - 1
+        Tr(Td(:class => "sst-more",
+            :colspan => string(ncols + 1),
+            :on_click => "var t=this.closest('table');t.querySelectorAll('tr[style*=none]').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'",
+            "⋮ $(hidden_count) more rows"))
+    else
+        nothing
+    end
+
+    thead_children = Any[Tr(header_cells...)]
+    type_cells !== nothing && push!(thead_children, type_cells)
+
+    tbody_children = Any[]
+    for (i, row_el) in enumerate(visible_rows)
+        push!(tbody_children, row_el)
+        # Insert expand button after visible rows
+        if !show_all && i == max_display
+            expand_btn !== nothing && push!(tbody_children, expand_btn)
+        end
+    end
+
+    Div(:class => "sst-wrap",
+        dim_label,
+        Div(:style => "overflow-x:auto;",
+            Table(:class => "sst-table",
+                Thead(thead_children...),
+                Tbody(tbody_children...))))
 end
 
 """
