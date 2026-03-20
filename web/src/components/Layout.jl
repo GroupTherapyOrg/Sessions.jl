@@ -130,7 +130,7 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
   var rp = localStorage.getItem('sessions_repl');
   if (sp !== null || rp !== null) {
     // Patch data-props on the SessionsApp island element
-    var islands = document.querySelectorAll('therapy-island[data-component="SessionsApp"]');
+    var islands = document.querySelectorAll('therapy-island[data-component="sessionsapp"]');
     islands.forEach(function(el) {
       try {
         var p = JSON.parse(el.dataset.props || '{}');
