@@ -2,9 +2,10 @@
 #
 # SessionsApp wraps NotebookPanel with the three-panel layout
 # (activity bar + file explorer + REPL + status bar).
+# Props passed explicitly so data-props attribute exists for localStorage patching.
 
 function Index()
-    SessionsApp(NotebookPanel())
+    SessionsApp(NotebookPanel(); initial_sidebar=1, initial_repl=1)
 end
 
 Index

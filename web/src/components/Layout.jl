@@ -134,8 +134,8 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     islands.forEach(function(el) {
       try {
         var p = JSON.parse(el.dataset.props || '{}');
-        if (sp !== null) p.initial_sidebar = parseInt(sp) || 0;
-        if (rp !== null) p.initial_repl = parseInt(rp) || 0;
+        if (sp !== null) p.initial_sidebar = parseInt(sp);
+        if (rp !== null) p.initial_repl = parseInt(rp);
         el.dataset.props = JSON.stringify(p);
       } catch(e) {}
     });
