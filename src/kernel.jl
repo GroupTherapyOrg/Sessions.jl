@@ -68,6 +68,13 @@ function classify_output(value)::Symbol
     # 3. Markdown (Pluto renders text/html from Markdown.MD; we render natively)
     value isa Markdown.MD && return :markdown
 
+    # 3b. text/html — packages like DataFrames, Plots.jl HTML backend, etc.
+    #     Check AFTER markdown (Markdown.MD has text/html but we handle it specially)
+    #     and AFTER tables (we render tables ourselves for better styling)
+    if !(value isa Markdown.MD) && _tui_showable(MIME"text/html"(), value)
+        return :html
+    end
+
     # 4. Images — always check BEFORE text/plain. With a graphics protocol
     #    (Kitty/Sixel) images render as sharp raster. Without one, images
     #    render as braille/unicode-block fallback — still far better than
@@ -585,6 +592,14 @@ function execute_cell!(workspace::Workspace, cell::Cell)
                     if svg_src !== nothing
                         out.text_representation = svg_src
                     end
+                elseif out.output_type == :html
+                    # Capture text/html output
+                    html_str = try
+                        sprint(io -> Base.invokelatest(show, io, MIME"text/html"(), result))
+                    catch
+                        text_representation(result)
+                    end
+                    out.text_representation = html_str
                 end
                 dlog("kernel", "output classified"; cell_id=cell.id,
                     otype=out.output_type, has_image=out.image_data !== nothing)

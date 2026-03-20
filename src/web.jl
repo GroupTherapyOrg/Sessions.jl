@@ -371,6 +371,22 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
     elseif output.output_type == :image_png
         return _render_image_output(cell, prerendered)
 
+    elseif output.output_type == :image_svg
+        # SVG: render as inline SVG or img tag
+        svg_src = output.text_representation
+        if !isempty(svg_src)
+            return Div(:class => "overflow-x-auto", RawHtml(svg_src))
+        end
+        return nothing
+
+    elseif output.output_type == :html
+        # Raw HTML output (from packages with text/html MIME method)
+        html_str = output.text_representation
+        if !isempty(html_str)
+            return Div(:class => "overflow-x-auto", RawHtml(html_str))
+        end
+        return nothing
+
     elseif output.output_type == :text
         # Live WASM binding for trivial numeric cells downstream of a slider
         gallery = get(prerendered, cell.id, nothing)
