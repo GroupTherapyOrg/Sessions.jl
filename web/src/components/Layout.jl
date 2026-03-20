@@ -122,13 +122,24 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     if (repl) localStorage.setItem('sessions_repl', repl.offsetParent !== null ? '1' : '0');
   }, 1000);
 
-  // After WASM hydration, click toggle buttons to close panels that
-  // localStorage says should be closed. This properly toggles the WASM
-  // signal through its own handler — no fighting with SSR state.
+  // Restore panel state from localStorage BEFORE Therapy hydrates.
+  // Therapy reads data-props from the DOM at hydration time (line 1310
+  // of Hydration.jl: JSON.parse(el.dataset.props)), so patching it
+  // before hydration makes the WASM signals start with correct values.
   var sp = localStorage.getItem('sessions_sidebar');
   var rp = localStorage.getItem('sessions_repl');
-  if (sp === '0' || rp === '0') {
-    // Hide SSR content immediately to prevent flash (before WASM loads)
+  if (sp !== null || rp !== null) {
+    // Patch data-props on the SessionsApp island element
+    var islands = document.querySelectorAll('therapy-island[data-component="SessionsApp"]');
+    islands.forEach(function(el) {
+      try {
+        var p = JSON.parse(el.dataset.props || '{}');
+        if (sp !== null) p.initial_sidebar = parseInt(sp) || 0;
+        if (rp !== null) p.initial_repl = parseInt(rp) || 0;
+        el.dataset.props = JSON.stringify(p);
+      } catch(e) {}
+    });
+    // Also hide SSR-rendered content immediately (before WASM loads) to prevent flash
     if (sp === '0') {
       var fp = document.getElementById('fpanel');
       if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
@@ -137,14 +148,12 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
       var repl = document.getElementById('repl');
       if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
     }
-    // After WASM hydrates (~500ms), click the buttons to sync signal state
-    setTimeout(function(){
-      var btns = document.querySelectorAll('.ab-btn');
-      if (btns.length >= 3) {
-        if (sp === '0') btns[0].click();
-        if (rp === '0') btns[2].click();
-      }
-    }, 800);
+    // Update button data-state attributes to match
+    var btns = document.querySelectorAll('.ab-btn[data-state]');
+    if (btns.length >= 3) {
+      if (sp !== null) btns[0].setAttribute('data-state', sp === '1' ? 'on' : 'off');
+      if (rp !== null) btns[2].setAttribute('data-state', rp === '1' ? 'on' : 'off');
+    }
   }
 })();
 </script>"""),
