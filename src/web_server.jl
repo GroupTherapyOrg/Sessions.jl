@@ -148,10 +148,19 @@ end
 
 """Render cell output to HTML string via Sessions._render_output + Therapy.render_to_string."""
 function _web_render_output_html(cell::Cell)
-    # Markdown cells: render prose with md-prose class for styling
-    if cell.output.output_type == :markdown && cell.output.result !== nothing
-        md_html = sprint(io -> Markdown.html(io, cell.output.result))
-        return """<div class="md-prose">$(md_html)</div>"""
+    # Markdown: HTML is in text_representation (from worker or session cache)
+    if cell.output.output_type == :markdown
+        md_html = if cell.output.result !== nothing
+            sprint(io -> Markdown.html(io, cell.output.result))
+        else
+            cell.output.text_representation  # already HTML from worker/cache
+        end
+        return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
+    end
+    # HTML output: text_representation has the HTML
+    if cell.output.output_type == :html
+        html = cell.output.text_representation
+        return isempty(html) ? "" : html
     end
     vnode = _render_output(cell)
     vnode === nothing && return ""

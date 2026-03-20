@@ -26,13 +26,22 @@ end
 """Render cell output to an HTML string."""
 function _render_cell_output_html(cell)
     output = cell.output
-    if output.output_type == :markdown && output.result !== nothing
-        html = try
-            sprint(io -> Main.Sessions.Markdown.html(io, output.result))
-        catch
-            sprint(show, output.result)
+    # Markdown: HTML is in text_representation (from worker or session cache)
+    if output.output_type == :markdown
+        md_html = if output.result !== nothing
+            try
+                sprint(io -> Main.Sessions.Markdown.html(io, output.result))
+            catch
+                output.text_representation
+            end
+        else
+            output.text_representation  # already HTML from worker/cache
         end
-        return """<div class="md-prose">$(html)</div>"""
+        return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
+    end
+    # HTML output: text_representation has the HTML directly
+    if output.output_type == :html
+        return output.text_representation
     end
     vnode = _Sessions._render_output(cell)
     vnode === nothing && return ""

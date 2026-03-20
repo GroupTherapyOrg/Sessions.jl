@@ -19,6 +19,8 @@ function _create_workspace(; notebook_path::String="")
     ns = Symbol("SW_", _ws_counter[])
     mod = Module(ns)
     Core.eval(mod, :(import Base))
+    # Pre-inject Markdown so md"..." works immediately
+    Core.eval(mod, :(import Markdown))
 
     # Activate notebook directory if Project.toml exists
     if !isempty(notebook_path) && isfile(notebook_path)
