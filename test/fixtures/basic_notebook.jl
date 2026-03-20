@@ -1,6 +1,9 @@
 ### A Pluto.jl notebook ###
 # v0.19.0
 
+# ╔═╡ 66ef225a-dd9b-4b36-880c-5e777688f37a
+using Markdown
+
 # ╔═╡ f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 md"""
 # Welcome to Sessions.jl
@@ -20,14 +23,8 @@ Try editing a cell and pressing `Ctrl+R` to run it!
 > "The best way to predict the future is to invent it." — Alan Kay
 """
 
-# ╔═╡ 66ef225a-dd9b-4b36-880c-5e777688f37a
-using Markdown
-
 # ╔═╡ 5ea37984-1433-4bb8-bff0-1784bbf52986
-import Sessions: @bind, Slider
-
-# ╔═╡ 9c606da0-915a-4cfb-91fc-cdc93a454b8e
-using UnicodePlots
+# using SessionsUI: @bind, Slider
 
 # ╔═╡ 0b7a9ca3-5430-4e6a-9894-cd2339447be5
 md"""
@@ -41,10 +38,10 @@ A 3D surface plot of `cos(ω√(x²+y²)) · e^(−0.3√(x²+y²))` — a radia
 """
 
 # ╔═╡ 1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
-@bind n Slider(2:20, default = 8)
+# @bind n Slider(2:20, default = 8)
 
 # ╔═╡ 3d413fde-745c-4222-836a-24e5a6e7a481
-surfaceplot(-2:0.05:2, -2:0.05:2, (x, y) -> cos(n / 3 * sqrt(x^2 + y^2)) * exp(-0.3 * sqrt(x^2 + y^2)); width = 50, height = 20, title = "$(n)-fold ripple")
+# surfaceplot(-2:0.05:2, -2:0.05:2, (x, y) -&amp;gt; cos(n / 3 * sqrt(x^2 + y^2)) * exp(-0.3 * sqrt(x^2 + y^2)); width = 50, height = 20, title = &amp;quot;$(n)-fold ripple&amp;quot;)
 
 # ╔═╡ 6e7bfb3a-23f5-499a-92b3-66207a5d898f
 function add_2(x)
@@ -123,9 +120,8 @@ end
 # ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 # ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
 # ╠═5ea37984-1433-4bb8-bff0-1784bbf52986
-# ╠═9c606da0-915a-4cfb-91fc-cdc93a454b8e
-# ╟─0b7a9ca3-5430-4e6a-9894-cd2339447be5
-# ╟─1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
+# ╠═0b7a9ca3-5430-4e6a-9894-cd2339447be5
+# ╠═1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
 # ╠═3d413fde-745c-4222-836a-24e5a6e7a481
 # ╠═6e7bfb3a-23f5-499a-92b3-66207a5d898f
 # ╠═4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
