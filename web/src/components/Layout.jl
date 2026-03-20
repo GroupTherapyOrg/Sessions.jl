@@ -114,47 +114,38 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         # --- Panel state: persist to localStorage, restore after WASM hydration ---
         RawHtml("""<script>
 (function(){
-  // ── Panel state persistence ──
-  // Check actual visibility: element must exist AND have non-zero size
-  function isVisible(el) {
-    return el && el.offsetHeight > 0 && el.offsetWidth > 0;
-  }
-  // Save to localStorage + cookie on every toggle (1s poll)
+  // ═══════════════════════════════════════════════════════════════════
+  // Panel state: ONE signal per panel. Everything flows from it.
+  //
+  // LOAD:  localStorage → patch data-props → WASM signal init
+  // USE:   signal → Show (display) + BindBool (button highlight)
+  // SAVE:  BindBool data-state (= signal output) → localStorage
+  //
+  // Default: both closed (0). Only open if localStorage says so.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // 1. READ: get saved state, default to 0 (closed)
+  var sidebarVal = parseInt(localStorage.getItem('sessions-sidebar')) || 0;
+  var replVal = parseInt(localStorage.getItem('sessions-repl')) || 0;
+
+  // 2. PATCH: set data-props before WASM hydration reads them
+  document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
+    try {
+      var p = JSON.parse(el.dataset.props || '{}');
+      p.initial_sidebar = sidebarVal;
+      p.initial_repl = replVal;
+      el.dataset.props = JSON.stringify(p);
+    } catch(e) {}
+  });
+
+  // 3. SAVE: read BindBool data-state (the signal's output) every second
   setInterval(function(){
-    var sv = isVisible(document.getElementById('fpanel')) ? '1' : '0';
-    var rv = isVisible(document.getElementById('repl')) ? '1' : '0';
-    localStorage.setItem('sessions-sidebar', sv);
-    localStorage.setItem('sessions-repl', rv);
-    document.cookie = 'sessions-sidebar=' + sv + ';path=/;SameSite=Lax';
-    document.cookie = 'sessions-repl=' + rv + ';path=/;SameSite=Lax';
+    var btns = document.querySelectorAll('.ab-btn[data-state]');
+    if (btns.length >= 3) {
+      localStorage.setItem('sessions-sidebar', btns[0].getAttribute('data-state') === 'on' ? '1' : '0');
+      localStorage.setItem('sessions-repl', btns[2].getAttribute('data-state') === 'on' ? '1' : '0');
+    }
   }, 1000);
-
-  // Restore: patch data-props BEFORE hydration so WASM signal starts correct.
-  // With set_visible fixed in Therapy v2, the signal drives everything:
-  // Show() sets display, BindBool sets data-state. No hacks.
-  var sp = localStorage.getItem('sessions-sidebar');
-  var rp = localStorage.getItem('sessions-repl');
-
-  if (sp !== null || rp !== null) {
-    document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
-      try {
-        var p = JSON.parse(el.dataset.props || '{}');
-        if (sp !== null) p.initial_sidebar = parseInt(sp);
-        if (rp !== null) p.initial_repl = parseInt(rp);
-        el.dataset.props = JSON.stringify(p);
-        console.log('[Sessions] Patched props:', p, 'from localStorage sidebar=' + sp + ' repl=' + rp);
-        console.log('[Sessions] DOM data-props now:', el.dataset.props);
-        console.log('[Sessions] Parsed back:', JSON.parse(el.dataset.props));
-      } catch(e) { console.error('[Sessions] Patch error:', e); }
-    });
-    // Verify after a delay (after hydration)
-    setTimeout(function(){
-      var el = document.querySelector('therapy-island[data-component="sessionsapp"]');
-      if (el) console.log('[Sessions] Post-hydration data-props:', el.dataset.props);
-    }, 3000);
-  } else {
-    console.log('[Sessions] No localStorage state found (first visit)');
-  }
 })();
 </script>"""),
 
