@@ -115,52 +115,48 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         RawHtml("""<script>
 (function(){
   // ═══════════════════════════════════════════════════════════════════
-  // Panel state: ONE signal per panel. Everything flows from it.
-  //
-  // LOAD:  localStorage → patch data-props → WASM signal init
-  // USE:   signal → Show (display) + BindBool (button highlight)
-  // SAVE:  BindBool data-state (= signal output) → localStorage
-  //
-  // Default: both closed (0). Only open if localStorage says so.
+  // Panel persistence. Simple approach:
+  // - WASM signals always start at 1 (both open) — baked at compile time
+  // - After hydration: if localStorage says closed, click the button
+  //   to toggle signal 1→0. This fires Show + BindBool properly.
+  // - On toggle: MutationObserver saves data-state to localStorage.
   // ═══════════════════════════════════════════════════════════════════
 
-  // 1. READ: get saved state, default to 0 (closed)
-  var rawSidebar = localStorage.getItem('sessions-sidebar');
-  var rawRepl = localStorage.getItem('sessions-repl');
-  var sidebarVal = parseInt(rawSidebar) || 0;
-  var replVal = parseInt(rawRepl) || 0;
-  console.log('[Panels] 1. READ localStorage: sidebar=' + rawSidebar + ' → ' + sidebarVal + ', repl=' + rawRepl + ' → ' + replVal);
+  // SAVE: watch BindBool data-state changes (instant, no polling)
+  var _setupSave = function() {
+    var btns = document.querySelectorAll('.ab-btn[data-state]');
+    if (btns.length >= 2) {
+      new MutationObserver(function(){
+        localStorage.setItem('sessions-sidebar', btns[0].getAttribute('data-state') === 'on' ? '1' : '0');
+      }).observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
+      new MutationObserver(function(){
+        localStorage.setItem('sessions-repl', btns[1].getAttribute('data-state') === 'on' ? '1' : '0');
+      }).observe(btns[1], {attributes: true, attributeFilter: ['data-state']});
+    }
+  };
 
-  // 2. PATCH: set data-props before WASM hydration reads them
-  document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
-    try {
-      var before = el.dataset.props;
-      var p = JSON.parse(before || '{}');
-      p.initial_sidebar = sidebarVal;
-      p.initial_repl = replVal;
-      el.dataset.props = JSON.stringify(p);
-      console.log('[Panels] 2. PATCH data-props: before=' + before + ' → after=' + el.dataset.props);
-    } catch(e) { console.error('[Panels] 2. PATCH error:', e); }
-  });
+  // RESTORE: after WASM hydration, click buttons to close panels
+  var _restorePanels = function() {
+    var sidebarClosed = localStorage.getItem('sessions-sidebar') === '0';
+    var replClosed = localStorage.getItem('sessions-repl') === '0';
+    if (!sidebarClosed && !replClosed) { _setupSave(); return; }
 
-  // 3. SAVE: MutationObserver on data-state (fires instantly when signal changes)
-  //    Only explorer (index 0) and terminal (index 1) have BindBool data-state.
-  //    JET button has no BindBool — no data-state attribute.
-  var btns = document.querySelectorAll('.ab-btn[data-state]');
-  console.log('[Panels] 3. SAVE setup: found ' + btns.length + ' ab-btn[data-state] elements');
-  if (btns.length >= 2) {
-    console.log('[Panels] 3. Initial button states: sidebar=' + btns[0].getAttribute('data-state') + ' repl=' + btns[1].getAttribute('data-state'));
-    new MutationObserver(function(){
-      var v = btns[0].getAttribute('data-state') === 'on' ? '1' : '0';
-      localStorage.setItem('sessions-sidebar', v);
-      console.log('[Panels] SAVE sidebar → ' + v);
-    }).observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
-    new MutationObserver(function(){
-      var v = btns[1].getAttribute('data-state') === 'on' ? '1' : '0';
-      localStorage.setItem('sessions-repl', v);
-      console.log('[Panels] SAVE repl → ' + v);
-    }).observe(btns[1], {attributes: true, attributeFilter: ['data-state']});
-  }
+    // Wait for WASM to hydrate (buttons get data-state from BindBool)
+    var _tries = 0;
+    var _check = setInterval(function() {
+      _tries++;
+      if (_tries > 100) { clearInterval(_check); _setupSave(); return; }
+      var btns = document.querySelectorAll('.ab-btn[data-state]');
+      if (btns.length < 2) return;
+      clearInterval(_check);
+      // Click buttons for panels that should be closed
+      if (sidebarClosed && btns[0].getAttribute('data-state') === 'on') btns[0].click();
+      if (replClosed && btns[1].getAttribute('data-state') === 'on') btns[1].click();
+      _setupSave();
+    }, 50);
+  };
+
+  _restorePanels();
 })();
 </script>"""),
 
