@@ -111,10 +111,10 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         Div(:class => "bg-base text-t1 font-sans h-screen w-screen flex flex-col",
             children...),
 
-        # --- Panel state: save to localStorage on toggle, restore on load ---
+        # --- Panel state: persist to localStorage, restore after WASM hydration ---
         RawHtml("""<script>
 (function(){
-  // Save panel state whenever Show wrappers change visibility
+  // Save panel state periodically
   setInterval(function(){
     var fp = document.getElementById('fpanel');
     var repl = document.getElementById('repl');
@@ -122,20 +122,13 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     if (repl) localStorage.setItem('sessions_repl', repl.offsetParent !== null ? '1' : '0');
   }, 1000);
 
-  // Patch island props BEFORE Therapy hydrates — so WASM signals
-  // start with the correct initial values from localStorage.
-  // Also hide SSR-rendered panel content to prevent flash.
+  // After WASM hydration, click toggle buttons to close panels that
+  // localStorage says should be closed. This properly toggles the WASM
+  // signal through its own handler — no fighting with SSR state.
   var sp = localStorage.getItem('sessions_sidebar');
   var rp = localStorage.getItem('sessions_repl');
-  if (sp !== null || rp !== null) {
-    document.querySelectorAll('therapy-island[data-component="SessionsApp"]').forEach(function(el) {
-      var props = {};
-      try { props = JSON.parse(el.dataset.props || '{}'); } catch(e) {}
-      if (sp !== null) props.initial_sidebar = parseInt(sp);
-      if (rp !== null) props.initial_repl = parseInt(rp);
-      el.dataset.props = JSON.stringify(props);
-    });
-    // Hide SSR content + fix button highlights for closed panels
+  if (sp === '0' || rp === '0') {
+    // Hide SSR content immediately to prevent flash (before WASM loads)
     if (sp === '0') {
       var fp = document.getElementById('fpanel');
       if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
@@ -144,13 +137,14 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
       var repl = document.getElementById('repl');
       if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
     }
-    // Update activity bar button data-state to match (BindBool reads this)
-    var abBtns = document.querySelectorAll('.ab-btn[data-state]');
-    // Buttons are in order: explorer, diagnostics, terminal
-    if (abBtns.length >= 3) {
-      if (sp !== null) abBtns[0].dataset.state = sp === '1' ? 'on' : 'off';
-      if (rp !== null) abBtns[2].dataset.state = rp === '1' ? 'on' : 'off';
-    }
+    // After WASM hydrates (~500ms), click the buttons to sync signal state
+    setTimeout(function(){
+      var btns = document.querySelectorAll('.ab-btn');
+      if (btns.length >= 3) {
+        if (sp === '0') btns[0].click();
+        if (rp === '0') btns[2].click();
+      }
+    }, 800);
   }
 })();
 </script>"""),
