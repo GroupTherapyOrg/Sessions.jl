@@ -150,9 +150,17 @@ function is_stale(cell::Cell)
     source_hash(cell) != cell.produced_by_hash
 end
 
-"""Get all stale cells in the notebook (source changed since last execution)."""
+"""Get all cells that need execution: stale (code changed) OR never-run with code."""
 function stale_cells(nb::Notebook)
-    [nb.cells[id] for id in nb.cell_order if haskey(nb.cells, id) && is_stale(nb.cells[id])]
+    result = Cell[]
+    for id in nb.cell_order
+        haskey(nb.cells, id) || continue
+        cell = nb.cells[id]
+        if is_stale(cell) || (is_never_run(cell) && !isempty(strip(cell.code)))
+            push!(result, cell)
+        end
+    end
+    result
 end
 
 """Get all never-run cells in the notebook."""

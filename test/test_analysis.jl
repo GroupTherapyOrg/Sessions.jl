@@ -218,8 +218,8 @@ using UUIDs
         c2 = add_cell!(nb, "y = x + 1")
         c3 = add_cell!(nb, "z = 100")
 
-        # All never-run → none are stale (is_stale returns false for never-run)
-        @test isempty(stale_cells(nb))
+        # All never-run with code → included in stale_cells (need execution)
+        @test length(stale_cells(nb)) == 3
 
         # Execute all cells
         mark_executed!(c1)
