@@ -436,12 +436,38 @@ function _notebook_channel_script()
     }
   });
 
-  // Close cell action dropdowns when clicking outside
+  // ── Shared cell action dropdown (fixed position, escapes all overflow) ──
+  var _cellMenu = document.createElement('div');
+  _cellMenu.style.cssText = 'display:none;position:fixed;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:8px;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;';
+  _cellMenu.innerHTML = '<div class="cell-menu-delete" style="display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:#9baabd;transition:background .1s,color .1s;"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/></svg>Delete cell</div>';
+  document.body.appendChild(_cellMenu);
+  var _menuCellId = '';
+
+  // Hover effects
+  _cellMenu.querySelector('.cell-menu-delete').addEventListener('mouseenter', function(){ this.style.background='rgba(224,107,101,.12)'; this.style.color='#e06b65'; });
+  _cellMenu.querySelector('.cell-menu-delete').addEventListener('mouseleave', function(){ this.style.background=''; this.style.color='#9baabd'; });
+
+  // Delete action
+  _cellMenu.querySelector('.cell-menu-delete').addEventListener('click', function(){
+    _cellMenu.style.display = 'none';
+    if (_menuCellId && confirm('Delete this cell?')) {
+      TherapyWS.sendMessage('notebook', {action: 'delete_cell', cell_id: _menuCellId});
+    }
+  });
+
+  // Show dropdown next to a menu button
+  window._sessionsShowCellMenu = function(btn, cellId) {
+    _menuCellId = cellId;
+    var r = btn.getBoundingClientRect();
+    _cellMenu.style.top = (r.bottom + 4) + 'px';
+    _cellMenu.style.left = (r.right - 130) + 'px';
+    _cellMenu.style.display = 'block';
+  };
+
+  // Close on click outside
   document.addEventListener('click', function(e) {
-    if (!e.target.closest('.menu-btn')) {
-      document.querySelectorAll('.menu-btn + div').forEach(function(d) {
-        d.style.display = 'none';
-      });
+    if (!e.target.closest('.menu-btn') && _cellMenu.style.display !== 'none') {
+      _cellMenu.style.display = 'none';
     }
   });
 })();
