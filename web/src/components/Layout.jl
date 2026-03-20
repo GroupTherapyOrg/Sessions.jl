@@ -426,9 +426,12 @@ function _notebook_channel_script()
         }
       }
 
-      // Initialize CM editors in the newly inserted HTML
-      // (reuse the same init function from page load)
+      // Initialize CM editors + hydrate WASM islands in the new HTML
       window._sessionsInitNewCells && window._sessionsInitNewCells();
+      if (window.__hydrateTherapyIslands) {
+        var container = document.querySelector('#nb > div');
+        if (container) window.__hydrateTherapyIslands(container);
+      }
     }
 
     else if (data.event === 'cell_deleted') {
@@ -481,10 +484,14 @@ function _notebook_channel_script()
       var nbIsland = document.getElementById('nb-island');
       if (nbIsland && data.nb_html) {
         nbIsland.outerHTML = data.nb_html;
-        // Re-init CM editors on the new content
+        // Re-init CM editors
         window._sessionsInitNewCells && window._sessionsInitNewCells();
+        // Re-hydrate WASM islands (CellIsland eye toggles, etc.)
+        if (window.__hydrateTherapyIslands) {
+          var newNb = document.getElementById('nb-island');
+          if (newNb) window.__hydrateTherapyIslands(newNb);
+        }
       } else if (!data.nb_html) {
-        // Fallback: reload if server couldn't render
         setTimeout(function(){ window.location.reload(); }, 200);
       }
     }
