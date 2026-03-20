@@ -15,6 +15,31 @@ mutable struct WebNotebookState
 end
 
 """
+    create_cell_signals!(state::WebNotebookState)
+
+Create a server signal per cell for real-time state updates.
+Signal names: `cell_{uuid}_state` with values like "idle", "running", "done".
+Therapy's WS client auto-updates DOM elements with `data-server-signal` attrs.
+"""
+function create_cell_signals!(state::WebNotebookState)
+    for cell in ordered_cells(state.nb)
+        sig_name = "cell_$(cell.id)_state"
+        if !haskey(Therapy.SERVER_SIGNALS, sig_name)
+            create_server_signal(sig_name, string(cell.state); use_patches=false)
+        end
+    end
+end
+
+"""Update a cell's server signal to broadcast its state to all clients."""
+function _update_cell_signal!(cell::Cell)
+    sig_name = "cell_$(cell.id)_state"
+    sig = get(Therapy.SERVER_SIGNALS, sig_name, nothing)
+    if sig !== nothing
+        set_server_signal!(sig, string(cell.state))
+    end
+end
+
+"""
     setup_web_notebook!(state::WebNotebookState)
 
 Set up WebSocket channel handlers for notebook communication.
@@ -182,9 +207,10 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     update_topology!(state.nb, changed_cells)
     order = execution_order(state.nb, changed_cells)
 
-    # Mark all runnable as queued
+    # Mark all runnable as queued — update both channel + server signal
     for c in order.runnable
         c.state = cell_queued
+        _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
             "event" => "cell_state",
             "cell_id" => string(c.id),
@@ -195,6 +221,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     # Execute in topological order
     for c in order.runnable
         c.state = cell_running
+        _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
             "event" => "cell_state",
             "cell_id" => string(c.id),
@@ -202,6 +229,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         ))
 
         execute_cell!(state.workspace, c)
+        _update_cell_signal!(c)
 
         broadcast_channel!("notebook", Dict(
             "event" => "cell_output",
@@ -216,6 +244,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     # Broadcast errors
     for (c, _err) in order.errable
         c.state = cell_errored
+        _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
             "event" => "cell_state",
             "cell_id" => string(c.id),
