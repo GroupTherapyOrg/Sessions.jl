@@ -125,26 +125,39 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
   // ═══════════════════════════════════════════════════════════════════
 
   // 1. READ: get saved state, default to 0 (closed)
-  var sidebarVal = parseInt(localStorage.getItem('sessions-sidebar')) || 0;
-  var replVal = parseInt(localStorage.getItem('sessions-repl')) || 0;
+  var rawSidebar = localStorage.getItem('sessions-sidebar');
+  var rawRepl = localStorage.getItem('sessions-repl');
+  var sidebarVal = parseInt(rawSidebar) || 0;
+  var replVal = parseInt(rawRepl) || 0;
+  console.log('[Panels] 1. READ localStorage: sidebar=' + rawSidebar + ' → ' + sidebarVal + ', repl=' + rawRepl + ' → ' + replVal);
 
   // 2. PATCH: set data-props before WASM hydration reads them
   document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
     try {
-      var p = JSON.parse(el.dataset.props || '{}');
+      var before = el.dataset.props;
+      var p = JSON.parse(before || '{}');
       p.initial_sidebar = sidebarVal;
       p.initial_repl = replVal;
       el.dataset.props = JSON.stringify(p);
-    } catch(e) {}
+      console.log('[Panels] 2. PATCH data-props: before=' + before + ' → after=' + el.dataset.props);
+    } catch(e) { console.error('[Panels] 2. PATCH error:', e); }
   });
 
   // 3. SAVE: MutationObserver on data-state (fires instantly when signal changes)
   var btns = document.querySelectorAll('.ab-btn[data-state]');
+  console.log('[Panels] 3. SAVE setup: found ' + btns.length + ' ab-btn elements');
   if (btns.length >= 3) {
-    new MutationObserver(function(){ localStorage.setItem('sessions-sidebar', btns[0].getAttribute('data-state') === 'on' ? '1' : '0'); })
-      .observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
-    new MutationObserver(function(){ localStorage.setItem('sessions-repl', btns[2].getAttribute('data-state') === 'on' ? '1' : '0'); })
-      .observe(btns[2], {attributes: true, attributeFilter: ['data-state']});
+    console.log('[Panels] 3. Initial button states: [0]=' + btns[0].getAttribute('data-state') + ' [2]=' + btns[2].getAttribute('data-state'));
+    new MutationObserver(function(){
+      var v = btns[0].getAttribute('data-state') === 'on' ? '1' : '0';
+      localStorage.setItem('sessions-sidebar', v);
+      console.log('[Panels] SAVE sidebar → ' + v);
+    }).observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
+    new MutationObserver(function(){
+      var v = btns[2].getAttribute('data-state') === 'on' ? '1' : '0';
+      localStorage.setItem('sessions-repl', v);
+      console.log('[Panels] SAVE repl → ' + v);
+    }).observe(btns[2], {attributes: true, attributeFilter: ['data-state']});
   }
 })();
 </script>"""),
