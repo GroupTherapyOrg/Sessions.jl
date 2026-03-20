@@ -1,91 +1,126 @@
 ### A Pluto.jl notebook ###
 # v0.19.0
 
+# ╔═╡ 76fc12d5-6bdd-4d55-aa2f-bfe8bf110ea7
+begin
+	import Pkg
+	Pkg.activate(mktempdir())
+	Pkg.add("DataFrames")
+end
+
 # ╔═╡ aa11bb22-cc33-dd44-ee55-ff6677889900
 using Markdown
+
+# ╔═╡ a0b1c2d3-e4f5-6789-abcd-ef0123456789
+using DataFrames
 
 # ╔═╡ bb22cc33-dd44-ee55-ff66-778899001122
 md"""
 # Interactive DataFrame Explorer
 
-Explore tabular data interactively — **click** on the table to enter DataTable mode, then:
+This notebook demonstrates rich table rendering with **DataFrames.jl**.
 
-- **↑/↓** — navigate rows
-- **1–9** — sort by column
-- **Enter** — view row detail
-- **Escape** — exit DataTable mode
+DataFrames produce beautiful HTML tables via their built-in `text/html` MIME method — the same output you see in Pluto and Jupyter.
 """
 
 # ╔═╡ cc33dd44-ee55-ff66-7788-99aabbccdd00
 md"""
 ### Planets of the Solar System
-
-A table of planetary data. Click on the table to explore!
 """
 
 # ╔═╡ dd44ee55-ff66-7788-99aa-bbccddee0011
-planets = [
-    (name="Mercury", distance_au=0.39, radius_km=2440, mass_earth=0.055, moons=0, type="Rocky"),
-    (name="Venus",   distance_au=0.72, radius_km=6052, mass_earth=0.815, moons=0, type="Rocky"),
-    (name="Earth",   distance_au=1.00, radius_km=6371, mass_earth=1.000, moons=1, type="Rocky"),
-    (name="Mars",    distance_au=1.52, radius_km=3390, mass_earth=0.107, moons=2, type="Rocky"),
-    (name="Jupiter", distance_au=5.20, radius_km=69911, mass_earth=317.8, moons=95, type="Gas Giant"),
-    (name="Saturn",  distance_au=9.54, radius_km=58232, mass_earth=95.16, moons=146, type="Gas Giant"),
-    (name="Uranus",  distance_au=19.2, radius_km=25362, mass_earth=14.54, moons=28, type="Ice Giant"),
-    (name="Neptune", distance_au=30.1, radius_km=24622, mass_earth=17.15, moons=16, type="Ice Giant"),
-]
+planets = DataFrame(
+	name = ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"],
+	distance_au = [0.39, 0.72, 1.00, 1.52, 5.20, 9.54, 19.2, 30.1],
+	radius_km = [2440, 6052, 6371, 3390, 69911, 58232, 25362, 24622],
+	mass_earth = [0.055, 0.815, 1.000, 0.107, 317.8, 95.16, 14.54, 17.15],
+	moons = [0, 0, 1, 2, 95, 146, 28, 16],
+	type = ["Rocky", "Rocky", "Rocky", "Rocky", "Gas Giant", "Gas Giant", "Ice Giant", "Ice Giant"],
+	has_rings = [false, false, false, false, true, true, true, true]
+)
 
 # ╔═╡ ee55ff66-7788-99aa-bbcc-ddeeff001122
 md"""
+### Filtering & Transformations
+
+Filter gas giants and compute derived columns:
+"""
+
+# ╔═╡ f1a2b3c4-d5e6-7890-abcd-ef1234567890
+gas_giants = filter(row -> row.mass_earth > 10, planets)
+
+# ╔═╡ a2b3c4d5-e6f7-8901-bcde-f12345678901
+transform(planets, :radius_km => (r -> round.(r ./ 6371, digits=2)) => :radius_earth)
+
+# ╔═╡ ee55ff66-7788-99aa-bbcc-ddeeff001133
+md"""
 ### Element Data
 
-The first 20 elements of the periodic table with atomic properties.
+The first 20 elements with atomic properties:
 """
 
 # ╔═╡ ff667788-99aa-bbcc-ddee-ff0011223344
-elements = [
-    (Z=1,  symbol="H",  name="Hydrogen",   mass=1.008,   group=1,  period=1, category="Nonmetal"),
-    (Z=2,  symbol="He", name="Helium",     mass=4.003,   group=18, period=1, category="Noble gas"),
-    (Z=3,  symbol="Li", name="Lithium",    mass=6.941,   group=1,  period=2, category="Alkali metal"),
-    (Z=4,  symbol="Be", name="Beryllium",  mass=9.012,   group=2,  period=2, category="Alkaline earth"),
-    (Z=5,  symbol="B",  name="Boron",      mass=10.81,   group=13, period=2, category="Metalloid"),
-    (Z=6,  symbol="C",  name="Carbon",     mass=12.01,   group=14, period=2, category="Nonmetal"),
-    (Z=7,  symbol="N",  name="Nitrogen",   mass=14.01,   group=15, period=2, category="Nonmetal"),
-    (Z=8,  symbol="O",  name="Oxygen",     mass=16.00,   group=16, period=2, category="Nonmetal"),
-    (Z=9,  symbol="F",  name="Fluorine",   mass=19.00,   group=17, period=2, category="Halogen"),
-    (Z=10, symbol="Ne", name="Neon",       mass=20.18,   group=18, period=2, category="Noble gas"),
-    (Z=11, symbol="Na", name="Sodium",     mass=22.99,   group=1,  period=3, category="Alkali metal"),
-    (Z=12, symbol="Mg", name="Magnesium",  mass=24.31,   group=2,  period=3, category="Alkaline earth"),
-    (Z=13, symbol="Al", name="Aluminum",   mass=26.98,   group=13, period=3, category="Post-transition"),
-    (Z=14, symbol="Si", name="Silicon",    mass=28.09,   group=14, period=3, category="Metalloid"),
-    (Z=15, symbol="P",  name="Phosphorus", mass=30.97,   group=15, period=3, category="Nonmetal"),
-    (Z=16, symbol="S",  name="Sulfur",     mass=32.07,   group=16, period=3, category="Nonmetal"),
-    (Z=17, symbol="Cl", name="Chlorine",   mass=35.45,   group=17, period=3, category="Halogen"),
-    (Z=18, symbol="Ar", name="Argon",      mass=39.95,   group=18, period=3, category="Noble gas"),
-    (Z=19, symbol="K",  name="Potassium",  mass=39.10,   group=1,  period=4, category="Alkali metal"),
-    (Z=20, symbol="Ca", name="Calcium",    mass=40.08,   group=2,  period=4, category="Alkaline earth"),
-]
+elements = DataFrame(
+	Z = 1:20,
+	symbol = ["H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
+	          "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca"],
+	name = ["Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon",
+	        "Nitrogen", "Oxygen", "Fluorine", "Neon", "Sodium", "Magnesium",
+	        "Aluminum", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon",
+	        "Potassium", "Calcium"],
+	mass = [1.008, 4.003, 6.941, 9.012, 10.81, 12.01, 14.01, 16.00,
+	        19.00, 20.18, 22.99, 24.31, 26.98, 28.09, 30.97, 32.07,
+	        35.45, 39.95, 39.10, 40.08],
+	category = ["Nonmetal", "Noble gas", "Alkali metal", "Alkaline earth",
+	            "Metalloid", "Nonmetal", "Nonmetal", "Nonmetal", "Halogen",
+	            "Noble gas", "Alkali metal", "Alkaline earth", "Post-transition",
+	            "Metalloid", "Nonmetal", "Nonmetal", "Halogen", "Noble gas",
+	            "Alkali metal", "Alkaline earth"]
+)
 
-# ╔═╡ 11223344-5566-7788-99aa-bbccddeeff11
+# ╔═╡ b3c4d5e6-f7a8-9012-cdef-234567890123
 md"""
-### Slider-Driven Table
+### GroupBy & Aggregation
 
-Use the slider to control how many rows are generated.
+Group elements by category and summarize:
 """
 
-# ╔═╡ 22334455-6677-8899-aabb-ccddeeff0011
-@bind n_rows Slider(5:5:50, default=15)
+# ╔═╡ c4d5e6f7-a8b9-0123-def0-345678901234
+combine(groupby(elements, :category), nrow => :count, :mass => mean => :avg_mass)
 
-# ╔═╡ 33445566-7788-99aa-bbcc-ddeeff001100
-[(i=i, square=i^2, cube=i^3, sqrt=round(sqrt(i); digits=3), even=iseven(i)) for i in 1:n_rows]
+# ╔═╡ d5e6f7a8-b9c0-1234-ef01-456789012345
+md"""
+### Sorting & Selection
+
+Sort planets by mass (descending) and select key columns:
+"""
+
+# ╔═╡ e6f7a8b9-c0d1-2345-f012-567890123456
+sort(select(planets, :name, :mass_earth, :moons, :type), :mass_earth, rev=true)
+
+# ╔═╡ f7a8b9c0-d1e2-3456-0123-678901234567
+md"""
+### Descriptive Statistics
+"""
+
+# ╔═╡ 08b9c0d1-e2f3-4567-1234-789012345678
+describe(planets[:, [:distance_au, :radius_km, :mass_earth, :moons]])
 
 # ╔═╡ Cell order:
+# ╠═76fc12d5-6bdd-4d55-aa2f-bfe8bf110ea7
 # ╠═aa11bb22-cc33-dd44-ee55-ff6677889900
+# ╠═a0b1c2d3-e4f5-6789-abcd-ef0123456789
 # ╟─bb22cc33-dd44-ee55-ff66-778899001122
 # ╟─cc33dd44-ee55-ff66-7788-99aabbccdd00
 # ╠═dd44ee55-ff66-7788-99aa-bbccddee0011
 # ╟─ee55ff66-7788-99aa-bbcc-ddeeff001122
+# ╠═f1a2b3c4-d5e6-7890-abcd-ef1234567890
+# ╠═a2b3c4d5-e6f7-8901-bcde-f12345678901
+# ╟─ee55ff66-7788-99aa-bbcc-ddeeff001133
 # ╠═ff667788-99aa-bbcc-ddee-ff0011223344
-# ╟─11223344-5566-7788-99aa-bbccddeeff11
-# ╟─22334455-6677-8899-aabb-ccddeeff0011
-# ╠═33445566-7788-99aa-bbcc-ddeeff001100
+# ╟─b3c4d5e6-f7a8-9012-cdef-234567890123
+# ╠═c4d5e6f7-a8b9-0123-def0-345678901234
+# ╟─d5e6f7a8-b9c0-1234-ef01-456789012345
+# ╠═e6f7a8b9-c0d1-2345-f012-567890123456
+# ╟─f7a8b9c0-d1e2-3456-0123-678901234567
+# ╠═08b9c0d1-e2f3-4567-1234-789012345678
