@@ -64,7 +64,7 @@ function _contains_active(node::Main.Sessions.FileNode, active_path::String)::Bo
 end
 
 """Render a single tree node (file or directory) as an HTML string."""
-function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path::String)::String
+function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path::String; root_dir::String="")::String
     pad = depth * 14 + 6
     is_active = !node.is_dir && node.path == active_path
 
@@ -92,7 +92,7 @@ function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path
         children_html = IOBuffer()
         write(children_html, "<div style=\"display:", children_display, ";\">")
         for child in node.children
-            write(children_html, _render_tree_node(child, depth + 1, active_path))
+            write(children_html, _render_tree_node(child, depth + 1, active_path; root_dir=root_dir))
         end
         write(children_html, "</div>")
 
@@ -101,11 +101,20 @@ function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path
         # File: single row
         icon = _icon_for_type(node.file_type)
 
+        # .jl files: clickable to open in a new tab
+        jl_onclick = ""
+        if node.file_type === :jl && !isempty(root_dir)
+            # Use the absolute path so the server can resolve it
+            abs_file_path = _html_escape(joinpath(root_dir, node.path))
+            jl_onclick = " onclick=\"TherapyWS.sendMessage('notebook',{action:'open_notebook',path:'$(abs_file_path)'})\""
+        end
+
         if is_active
             # Active file: green left border, subtle green bg, bright text, modified dot
             return string(
                 "<div style=\"", _TREE_ITEM, "padding-left:", pad, "px;",
-                "color:#d4dce8;border-left:2px solid #56d4a0;background:rgba(86,212,160,.06);\">",
+                "color:#d4dce8;border-left:2px solid #56d4a0;background:rgba(86,212,160,.06);\"",
+                jl_onclick, ">",
                 icon,
                 "<span>", _html_escape(node.name), "</span>",
                 "<span style=\"flex:1;\"></span>",
@@ -115,7 +124,8 @@ function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path
         else
             return string(
                 "<div style=\"", _TREE_ITEM, "padding-left:", pad, "px;color:#6b7d93;\" ",
-                _HOVER_ENTER, " ", _HOVER_LEAVE, ">",
+                _HOVER_ENTER, " ", _HOVER_LEAVE,
+                jl_onclick, ">",
                 icon,
                 "<span>", _html_escape(node.name), "</span>",
                 "</div>"
@@ -148,7 +158,7 @@ function FileExplorer()
         nothing
     end
 
-    nb = state !== nothing ? state.nb : nothing
+    nb = state !== nothing ? Main.Sessions.active_nb(state) : nothing
     nb_path = nb !== nothing ? nb.path : "Untitled.jl"
     nb_name = basename(nb_path)
 
@@ -188,7 +198,7 @@ function FileExplorer()
     # Build tree HTML
     tree_html = IOBuffer()
     for node in tree
-        write(tree_html, _render_tree_node(node, 0, active_rel))
+        write(tree_html, _render_tree_node(node, 0, active_rel; root_dir=root_dir))
     end
 
     # CSS for chevron rotation (inline style block)

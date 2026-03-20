@@ -447,6 +447,11 @@ function _notebook_channel_script()
       setTimeout(function(){ window.location.reload(); }, 200);
     }
 
+    else if (data.event === 'tabs_changed') {
+      // Tab structure changed (open/switch/close) — reload to re-render
+      setTimeout(function(){ window.location.reload(); }, 200);
+    }
+
     else if (data.event === 'saved') {
       var ind = document.getElementById('save-indicator');
       if (ind) { ind.textContent = 'Saved'; setTimeout(function(){ ind.textContent = 'Save'; }, 2000); }

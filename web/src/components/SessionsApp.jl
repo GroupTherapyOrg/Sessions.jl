@@ -14,7 +14,7 @@ const _AB_BTN_STYLE = "width:32px;height:32px;display:flex;align-items:center;ju
 
 function SessionsApp(children...)
     cell_count = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
-        length(Main.Sessions.ordered_cells(Main.WEB_STATE[].nb))
+        length(Main.Sessions.ordered_cells(Main.Sessions.active_nb(Main.WEB_STATE[])))
     else
         0
     end

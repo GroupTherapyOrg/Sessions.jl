@@ -5,14 +5,33 @@
 # All heavy lifting (execution, reactivity, analysis) stays server-side.
 
 using Therapy
+using UUIDs
 # Note: Markdown is already imported by web.jl (included earlier in the module)
 
-"""Server-side notebook state for the web UI."""
-mutable struct WebNotebookState
+"""A single notebook tab in the web UI."""
+mutable struct WebTab
+    id::UUID
     nb::Notebook
     workspace::Workspace
+    label::String   # display name (filename)
+    path::String    # absolute file path
+end
+
+"""Server-side notebook state for the web UI (multi-tab)."""
+mutable struct WebNotebookState
+    tabs::Vector{WebTab}
+    active_tab_idx::Int
     executing::Bool
 end
+
+"""Return the currently active tab."""
+active_tab(state::WebNotebookState) = state.tabs[state.active_tab_idx]
+
+"""Return the notebook of the currently active tab."""
+active_nb(state::WebNotebookState) = active_tab(state).nb
+
+"""Return the workspace of the currently active tab."""
+active_workspace(state::WebNotebookState) = active_tab(state).workspace
 
 """
     create_cell_signals!(state::WebNotebookState)
@@ -22,7 +41,7 @@ Signal names: `cell_{uuid}_state` with values like "idle", "running", "done".
 Therapy's WS client auto-updates DOM elements with `data-server-signal` attrs.
 """
 function create_cell_signals!(state::WebNotebookState)
-    for cell in ordered_cells(state.nb)
+    for cell in ordered_cells(active_nb(state))
         sig_name = "cell_$(cell.id)_state"
         if !haskey(Therapy.SERVER_SIGNALS, sig_name)
             create_server_signal(sig_name, string(cell.state); use_patches=false)
@@ -72,6 +91,12 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_save!(state, conn, data)
             elseif action == "run_stale"
                 handle_run_stale!(state, conn, data)
+            elseif action == "open_notebook"
+                handle_open_notebook!(state, conn, data)
+            elseif action == "switch_tab"
+                handle_switch_tab!(state, conn, data)
+            elseif action == "close_tab"
+                handle_close_tab!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -87,16 +112,17 @@ end
 
 """Send complete notebook state to a newly connected client."""
 function send_full_state!(state::WebNotebookState, conn)
+    nb = active_nb(state)
     cells_data = []
-    for cell in ordered_cells(state.nb)
+    for cell in ordered_cells(nb)
         push!(cells_data, _cell_to_dict(cell))
     end
 
     send_channel!("notebook", conn, Dict(
         "event" => "full_state",
-        "notebook_path" => state.nb.path,
+        "notebook_path" => nb.path,
         "cells" => cells_data,
-        "cell_order" => [string(id) for id in state.nb.cell_order]
+        "cell_order" => [string(id) for id in nb.cell_order]
     ))
 end
 
@@ -138,7 +164,7 @@ function handle_execute_cell!(state::WebNotebookState, conn, data)
     isempty(cell_id_str) && return
 
     cell_id = UUID(cell_id_str)
-    cell = get_cell(state.nb, cell_id)
+    cell = get_cell(active_nb(state), cell_id)
     cell === nothing && return
 
     # Update code if provided
@@ -162,8 +188,9 @@ function handle_run_all!(state::WebNotebookState, conn, data)
     @async begin
         state.executing = true
         try
-            update_topology!(state.nb)
-            order = execution_order(state.nb)
+            nb = active_nb(state)
+            update_topology!(nb)
+            order = execution_order(nb)
 
             # Mark all as queued
             for c in order.runnable
@@ -184,7 +211,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                     "state" => "cell_running"
                 ))
 
-                execute_cell!(state.workspace, c)
+                execute_cell!(active_workspace(state), c)
 
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_output",
@@ -196,7 +223,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                 ))
             end
 
-            save_session!(state.nb)
+            save_session!(nb)
         finally
             state.executing = false
         end
@@ -205,8 +232,9 @@ end
 
 """Execute cells with reactive dependencies: topology → queued → running → done."""
 function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
-    update_topology!(state.nb, changed_cells)
-    order = execution_order(state.nb, changed_cells)
+    nb = active_nb(state)
+    update_topology!(nb, changed_cells)
+    order = execution_order(nb, changed_cells)
 
     # Mark all runnable as queued — update both channel + server signal
     for c in order.runnable
@@ -229,7 +257,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
             "state" => "cell_running"
         ))
 
-        execute_cell!(state.workspace, c)
+        execute_cell!(active_workspace(state), c)
         _update_cell_signal!(c)
 
         broadcast_channel!("notebook", Dict(
@@ -253,13 +281,13 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         ))
     end
 
-    save_session!(state.nb)
+    save_session!(nb)
     _broadcast_stale!(state)
 end
 
 """Broadcast stale cell info to all clients (Run Stale button + cell accent bars)."""
 function _broadcast_stale!(state::WebNotebookState)
-    sc = stale_cells(state.nb)
+    sc = stale_cells(active_nb(state))
     stale_ids = [string(c.id) for c in sc]
     broadcast_channel!("notebook", Dict(
         "event" => "stale_update",
@@ -274,19 +302,20 @@ end
 
 """Handle add-cell request."""
 function handle_add_cell!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
     after_cell_id_str = get(data, "after_cell_id", "")
     new_cell = Cell(; code="")
 
     if isempty(after_cell_id_str)
         # Insert at beginning
-        insert_cell!(state.nb, 1, new_cell)
+        insert_cell!(nb, 1, new_cell)
     else
         after_id = UUID(after_cell_id_str)
-        idx = findfirst(==(after_id), state.nb.cell_order)
+        idx = findfirst(==(after_id), nb.cell_order)
         if idx !== nothing
-            insert_cell!(state.nb, idx + 1, new_cell)
+            insert_cell!(nb, idx + 1, new_cell)
         else
-            add_cell!(state.nb, new_cell)
+            add_cell!(nb, new_cell)
         end
     end
 
@@ -327,7 +356,7 @@ function handle_delete_cell!(state::WebNotebookState, conn, data)
     isempty(cell_id_str) && return
 
     cell_id = UUID(cell_id_str)
-    removed = remove_cell!(state.nb, cell_id)
+    removed = remove_cell!(active_nb(state), cell_id)
     removed === nothing && return
 
     println("[WebNotebook] Deleted cell $(cell_id_str)")
@@ -340,18 +369,19 @@ end
 
 """Handle move-cell request."""
 function handle_move_cell!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
     cell_id_str = get(data, "cell_id", "")
     direction = get(data, "direction", "")
     isempty(cell_id_str) && return
 
     cell_id = UUID(cell_id_str)
-    idx = findfirst(==(cell_id), state.nb.cell_order)
+    idx = findfirst(==(cell_id), nb.cell_order)
     idx === nothing && return
 
     swapped = if direction == "up"
-        swap_cell_up!(state.nb, idx)
+        swap_cell_up!(nb, idx)
     elseif direction == "down"
-        swap_cell_down!(state.nb, idx)
+        swap_cell_down!(nb, idx)
     else
         false
     end
@@ -360,7 +390,7 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
 
     broadcast_channel!("notebook", Dict(
         "event" => "cell_order",
-        "cell_order" => [string(id) for id in state.nb.cell_order]
+        "cell_order" => [string(id) for id in nb.cell_order]
     ))
 end
 
@@ -368,7 +398,7 @@ end
 function handle_toggle_fold!(state::WebNotebookState, conn, data)
     cell_id_str = get(data, "cell_id", "")
     isempty(cell_id_str) && return
-    cell = get_cell(state.nb, UUID(cell_id_str))
+    cell = get_cell(active_nb(state), UUID(cell_id_str))
     cell === nothing && return
     cell.folded = get(data, "folded", false)
 end
@@ -379,7 +409,7 @@ function handle_update_code!(state::WebNotebookState, conn, data)
     new_code = get(data, "code", "")
     isempty(cell_id_str) && return
 
-    cell = get_cell(state.nb, UUID(cell_id_str))
+    cell = get_cell(active_nb(state), UUID(cell_id_str))
     cell === nothing && return
     cell.code = new_code
 
@@ -389,31 +419,33 @@ end
 
 """Handle save request. Syncs codes from client first if provided."""
 function handle_save!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
     # Sync any codes sent with the save request
     codes = get(data, "codes", nothing)
     if codes !== nothing
         for (cid, code) in codes
-            cell = get_cell(state.nb, UUID(String(cid)))
+            cell = get_cell(nb, UUID(String(cid)))
             cell !== nothing && (cell.code = String(code))
         end
     end
 
-    save_notebook(state.nb)
-    save_session!(state.nb)
+    save_notebook(nb)
+    save_session!(nb)
     broadcast_channel!("notebook", Dict(
         "event" => "saved",
-        "notebook_path" => state.nb.path
+        "notebook_path" => nb.path
     ))
-    println("[WebNotebook] Saved: $(state.nb.path)")
+    println("[WebNotebook] Saved: $(nb.path)")
 end
 
 """Handle run-stale request — execute only stale cells (like TUI's Ctrl+Shift+Enter)."""
 function handle_run_stale!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
     # Sync codes from client first
     codes = get(data, "codes", nothing)
     if codes !== nothing
         for (cid, code) in codes
-            cell = get_cell(state.nb, UUID(String(cid)))
+            cell = get_cell(nb, UUID(String(cid)))
             cell !== nothing && (cell.code = String(code))
         end
     end
@@ -421,7 +453,7 @@ function handle_run_stale!(state::WebNotebookState, conn, data)
     @async begin
         state.executing = true
         try
-            sc = stale_cells(state.nb)
+            sc = stale_cells(nb)
             if isempty(sc)
                 broadcast_channel!("notebook", Dict(
                     "event" => "info",
@@ -436,6 +468,101 @@ function handle_run_stale!(state::WebNotebookState, conn, data)
             state.executing = false
         end
     end
+end
+
+# =============================================================================
+# Tab management handlers
+# =============================================================================
+
+"""Handle open-notebook request — deduplicates by absolute path."""
+function handle_open_notebook!(state::WebNotebookState, conn, data)
+    raw_path = get(data, "path", "")
+    isempty(raw_path) && return
+
+    # Resolve path: if absolute, use as-is; if relative, resolve from notebook dir
+    full_path = if isabspath(raw_path)
+        abspath(raw_path)
+    else
+        nb_dir = dirname(abspath(active_nb(state).path))
+        abspath(joinpath(nb_dir, raw_path))
+    end
+
+    if !isfile(full_path)
+        @warn "[WebNotebook] File not found" path=full_path
+        return
+    end
+
+    if !endswith(full_path, ".jl")
+        @warn "[WebNotebook] Not a Julia file" path=full_path
+        return
+    end
+
+    # Check if already open (dedup by absolute path)
+    for (i, tab) in enumerate(state.tabs)
+        if tab.path == full_path
+            # Already open — just switch to it
+            state.active_tab_idx = i
+            create_cell_signals!(state)
+            broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+            return
+        end
+    end
+
+    # Load notebook, create workspace, restore session
+    nb = load_notebook(full_path)
+    session_data = load_session(session_path(nb.path))
+    if session_data !== nothing
+        apply_session!(nb, session_data)
+    end
+    ws = Workspace(; notebook_path=nb.path)
+
+    # Create new tab and switch to it
+    tab = WebTab(uuid4(), nb, ws, basename(full_path), full_path)
+    push!(state.tabs, tab)
+    state.active_tab_idx = length(state.tabs)
+    create_cell_signals!(state)
+
+    println("[WebNotebook] Opened tab: $(tab.label) ($(length(state.tabs)) tabs)")
+    broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+end
+
+"""Handle switch-tab request."""
+function handle_switch_tab!(state::WebNotebookState, conn, data)
+    tab_idx = get(data, "tab_idx", 0)
+    (tab_idx isa Number) || return
+    tab_idx = Int(tab_idx)
+    (tab_idx < 1 || tab_idx > length(state.tabs)) && return
+
+    state.active_tab_idx = tab_idx
+    create_cell_signals!(state)
+    broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+end
+
+"""Handle close-tab request — enforces minimum 1 tab."""
+function handle_close_tab!(state::WebNotebookState, conn, data)
+    tab_idx = get(data, "tab_idx", 0)
+    (tab_idx isa Number) || return
+    tab_idx = Int(tab_idx)
+    (tab_idx < 1 || tab_idx > length(state.tabs)) && return
+
+    # Enforce minimum 1 tab
+    length(state.tabs) <= 1 && return
+
+    closed_label = state.tabs[tab_idx].label
+    deleteat!(state.tabs, tab_idx)
+
+    # Adjust active index
+    if state.active_tab_idx > length(state.tabs)
+        state.active_tab_idx = length(state.tabs)
+    elseif state.active_tab_idx > tab_idx
+        state.active_tab_idx -= 1
+    elseif state.active_tab_idx == tab_idx && state.active_tab_idx > length(state.tabs)
+        state.active_tab_idx = length(state.tabs)
+    end
+
+    create_cell_signals!(state)
+    println("[WebNotebook] Closed tab: $(closed_label) ($(length(state.tabs)) tabs)")
+    broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
 end
 
 # =============================================================================
