@@ -122,38 +122,48 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     if (repl) localStorage.setItem('sessions_repl', repl.offsetParent !== null ? '1' : '0');
   }, 1000);
 
-  // Restore panel state from localStorage BEFORE Therapy hydrates.
-  // Therapy reads data-props from the DOM at hydration time (line 1310
-  // of Hydration.jl: JSON.parse(el.dataset.props)), so patching it
-  // before hydration makes the WASM signals start with correct values.
+  // Restore panel state from localStorage.
+  // V2 hydration's set_visible is a no-op — Show wrappers keep their
+  // SSR display state. So we:
+  // 1. Hide SSR content immediately (prevents flash)
+  // 2. Patch data-props so signal reads correct initial value
+  // 3. After hydration, click buttons for closed panels to sync
+  //    the signal state (since v2 set_visible doesn't fire)
   var sp = localStorage.getItem('sessions_sidebar');
   var rp = localStorage.getItem('sessions_repl');
-  if (sp !== null || rp !== null) {
-    // Patch data-props on the SessionsApp island element
-    var islands = document.querySelectorAll('therapy-island[data-component="sessionsapp"]');
-    islands.forEach(function(el) {
-      try {
-        var p = JSON.parse(el.dataset.props || '{}');
-        if (sp !== null) p.initial_sidebar = parseInt(sp);
-        if (rp !== null) p.initial_repl = parseInt(rp);
-        el.dataset.props = JSON.stringify(p);
-      } catch(e) {}
-    });
-    // Also hide SSR-rendered content immediately (before WASM loads) to prevent flash
-    if (sp === '0') {
-      var fp = document.getElementById('fpanel');
-      if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
-    }
-    if (rp === '0') {
-      var repl = document.getElementById('repl');
-      if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
-    }
-    // Update button data-state attributes to match
-    var btns = document.querySelectorAll('.ab-btn[data-state]');
-    if (btns.length >= 3) {
-      if (sp !== null) btns[0].setAttribute('data-state', sp === '1' ? 'on' : 'off');
-      if (rp !== null) btns[2].setAttribute('data-state', rp === '1' ? 'on' : 'off');
-    }
+
+  // Patch data-props (signal reads this at hydration)
+  document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
+    try {
+      var p = JSON.parse(el.dataset.props || '{}');
+      if (sp !== null) p.initial_sidebar = parseInt(sp);
+      if (rp !== null) p.initial_repl = parseInt(rp);
+      el.dataset.props = JSON.stringify(p);
+    } catch(e) {}
+  });
+
+  // Immediately hide panels that should be closed
+  if (sp === '0') {
+    var fp = document.getElementById('fpanel');
+    if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
+  }
+  if (rp === '0') {
+    var repl = document.getElementById('repl');
+    if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
+  }
+
+  // After hydration: if signal started at 1 but panel should be closed,
+  // click the button once to toggle signal 1→0. This syncs everything:
+  // signal, Show wrapper, BindBool attribute.
+  if (sp === '0' || rp === '0') {
+    setTimeout(function(){
+      var btns = document.querySelectorAll('.ab-btn');
+      if (btns.length >= 3) {
+        // Only click if the panel is supposed to be closed but signal is 1
+        if (sp === '0') btns[0].click();
+        if (rp === '0') btns[2].click();
+      }
+    }, 1500);
   }
 })();
 </script>"""),
