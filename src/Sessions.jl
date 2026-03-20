@@ -60,11 +60,15 @@ export session_path, save_session!, load_session, apply_session!, load_notebook_
 # Layer 1.5: File Watcher (needed by web_server.jl for DebouncedWatcher)
 include("watcher.jl")
 
+# Layer 1.5: Notebook Worker (Malt.jl per-notebook process)
+include("worker/notebook_worker.jl")
+export NotebookWorker, remote_execute_cell!, stop_worker!, restart_worker!, is_worker_alive
+
 # Layer 1.5: Web Server (channel handlers for web UI)
 include("web_server.jl")
-export WebTab, WebNotebookState, active_tab, active_nb, active_workspace
+export WebTab, WebNotebookState, active_tab, active_nb, active_worker
 export setup_web_notebook!, send_full_state!, create_cell_signals!, start_web_watchers!
-export setup_web_notebook!, send_full_state!, create_cell_signals!
+export setup_file_explorer!
 export FileNode, _build_file_tree
 
 # Layer 1.5: Static Analysis (JET.jl + JETLS LSP)

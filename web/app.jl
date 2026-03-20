@@ -54,15 +54,15 @@ if _notebook_path !== nothing
         println("[Sessions Web] Restored $(length(nb.cells)) cells from session cache")
     end
 
-    ws = Sessions.Workspace(; notebook_path=nb.path)
-    tab = Sessions.WebTab(uuid4(), nb, ws, basename(nb.path), abspath(nb.path))
+    worker = Sessions.NotebookWorker(; notebook_path=nb.path)
+    tab = Sessions.WebTab(uuid4(), nb, worker, basename(nb.path), abspath(nb.path))
     WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false)
 else
     println("[Sessions Web] No notebook specified — starting with empty notebook")
     nb = Sessions.Notebook(; path="Untitled.jl")
     Sessions.add_cell!(nb, "# Welcome to Sessions.jl\n# Add cells and start coding!")
-    ws = Sessions.Workspace()
-    tab = Sessions.WebTab(uuid4(), nb, ws, "Untitled.jl", abspath("Untitled.jl"))
+    worker = Sessions.NotebookWorker()
+    tab = Sessions.WebTab(uuid4(), nb, worker, "Untitled.jl", abspath("Untitled.jl"))
     WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false)
 end
 
@@ -83,6 +83,7 @@ app = App(
 # =============================================================================
 
 Sessions.setup_web_notebook!(WEB_STATE[])
+Sessions.setup_file_explorer!(WEB_STATE[])
 Sessions.create_cell_signals!(WEB_STATE[])
 Sessions.start_web_watchers!(WEB_STATE[])
 
