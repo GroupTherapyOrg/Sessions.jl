@@ -81,20 +81,27 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
             :title => "Run cell (Shift+Enter)",
             :on_click => "window._sessionsRunCell('$(cell_id)')",
             RawHtml(_SVG_RUN)))
-    # Menu button (⋮) — wired to actions later
+    # Menu button (⋮) with dropdown
     push!(ctrl_children,
-        Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
-            :style => "background:rgba(255,255,255,.04)",
-            :title => "Cell actions",
-            RawHtml(_SVG_MENU)))
-
-    # Delete button (×)
-    push!(ctrl_children,
-        Button(:class => "del-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-jr transition-colors",
-            :style => "background:rgba(255,255,255,.04)",
-            :title => "Delete cell",
-            :on_click => "if(confirm('Delete this cell?'))TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:'$(cell_id)'})",
-            RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>""")))
+        Div(:class => "relative",
+            :style => "display:inline-block;",
+            # Trigger button
+            Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
+                :style => "background:rgba(255,255,255,.04)",
+                :title => "Cell actions",
+                :on_click => "var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none'",
+                RawHtml(_SVG_MENU)),
+            # Dropdown menu
+            Div(:class => "absolute right-0 top-full mt-1 z-20 rounded-lg overflow-hidden",
+                :style => "display:none;background:#1a2332;border:1px solid #2a3a4f;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,.4);",
+                # Delete option
+                Div(:class => "flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors",
+                    :style => "color:#9baabd;",
+                    :onmouseenter => "this.style.background='rgba(224,107,101,.1)';this.style.color='#e06b65'",
+                    :onmouseleave => "this.style.background='';this.style.color='#9baabd'",
+                    :on_click => "if(confirm('Delete this cell?')){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:'$(cell_id)'})}this.closest('.relative').querySelector('div[style*=display]').style.display='none'",
+                    RawHtml("""<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/></svg>"""),
+                    "Delete cell"))))
 
     ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
         ctrl_children...)
@@ -105,7 +112,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         :data_src => String(code))
 
     # Code cell classes
-    code_cell_classes = "code-cell relative rounded-lg border border-b1 bg-island overflow-hidden transition-all duration-200 hover:border-b2"
+    code_cell_classes = "code-cell relative rounded-lg border border-b1 bg-island transition-all duration-200 hover:border-b2"
     is_idle && (code_cell_classes *= " idle")
     cell_stale && (code_cell_classes *= " stale")
 

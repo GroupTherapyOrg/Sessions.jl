@@ -376,7 +376,8 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_added' || data.event === 'cell_deleted' || data.event === 'cell_order') {
-      window.location.reload();
+      // Small delay to let server finish processing before reload
+      setTimeout(function(){ window.location.reload(); }, 200);
     }
 
     else if (data.event === 'saved') {
@@ -432,6 +433,15 @@ function _notebook_channel_script()
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       window._sessionsSave && window._sessionsSave();
+    }
+  });
+
+  // Close cell action dropdowns when clicking outside
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.menu-btn')) {
+      document.querySelectorAll('.menu-btn + div').forEach(function(d) {
+        d.style.display = 'none';
+      });
     }
   });
 })();
