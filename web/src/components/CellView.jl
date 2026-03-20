@@ -81,10 +81,13 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
             :title => "Run cell (Shift+Enter)",
             :on_click => "window._sessionsRunCell('$(cell_id)')",
             RawHtml(_SVG_RUN)))
+    # Delete button (×)
     push!(ctrl_children,
-        Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
+        Button(:class => "del-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-jr transition-colors",
             :style => "background:rgba(255,255,255,.04)",
-            RawHtml(_SVG_MENU)))
+            :title => "Delete cell",
+            :on_click => "if(confirm('Delete this cell?'))TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:'$(cell_id)'})",
+            RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>""")))
 
     ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
         ctrl_children...)

@@ -290,6 +290,12 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
         end
     end
 
+    # Create server signal for the new cell
+    sig_name = "cell_$(new_cell.id)_state"
+    if !haskey(Therapy.SERVER_SIGNALS, sig_name)
+        create_server_signal(sig_name, string(new_cell.state); use_patches=false)
+    end
+
     broadcast_channel!("notebook", Dict(
         "event" => "cell_added",
         "cell" => _cell_to_dict(new_cell),
