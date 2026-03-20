@@ -299,10 +299,12 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
     println("[WebNotebook] Added cell $(new_cell.id) after $(after_cell_id_str)")
 
     # Render the new cell to HTML server-side (same as SSR)
-    # so the client can insert it without constructing DOM in JS
+    # CellView and CellGap are loaded into Therapy's module scope by load_app!
     cell_html = try
-        cell_vnode = Base.invokelatest(Main.CellView, new_cell; index=0)
-        gap_vnode = Base.invokelatest(Main.CellGap; after_cell_id=string(new_cell.id))
+        _CellView = getfield(Therapy, :CellView)
+        _CellGap = getfield(Therapy, :CellGap)
+        cell_vnode = Base.invokelatest(_CellView, new_cell; index=0)
+        gap_vnode = Base.invokelatest(_CellGap; after_cell_id=string(new_cell.id))
         cell_str = cell_vnode !== nothing ? Therapy.render_to_string(cell_vnode) : ""
         gap_str = Therapy.render_to_string(gap_vnode)
         cell_str * gap_str

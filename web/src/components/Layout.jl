@@ -111,34 +111,6 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         Div(:class => "bg-base text-t1 font-sans h-screen w-screen flex flex-col",
             children...),
 
-        # --- Panel state persistence (localStorage) ---
-        RawHtml("""<script>
-(function(){
-  // Restore panel state from localStorage before paint
-  var sp = localStorage.getItem('sessions_sidebar');
-  var rp = localStorage.getItem('sessions_repl');
-  // The WASM signals default to open (1). If localStorage says closed,
-  // we hide immediately via CSS to avoid flash, then let WASM hydrate.
-  if (sp === '0') {
-    var fp = document.getElementById('fpanel');
-    if (fp) fp.style.display = 'none';
-  }
-  if (rp === '0') {
-    var repl = document.getElementById('repl');
-    if (repl) repl.style.display = 'none';
-  }
-  // Save panel state when WASM toggles visibility
-  var _savePanelState = function() {
-    var fp = document.getElementById('fpanel');
-    var repl = document.getElementById('repl');
-    if (fp) localStorage.setItem('sessions_sidebar', fp.offsetParent !== null ? '1' : '0');
-    if (repl) localStorage.setItem('sessions_repl', repl.offsetParent !== null ? '1' : '0');
-  };
-  // Poll every 500ms (simple, reliable — WASM Show toggle changes display)
-  setInterval(_savePanelState, 500);
-})();
-</script>"""),
-
         # --- Notebook channel handler ---
         _notebook_channel_script(),
 
