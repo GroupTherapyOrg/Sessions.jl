@@ -268,23 +268,26 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     if (cellId) editors[cellId] = view;
   });
 
-  // ── Fold persistence: watch CellFold WASM toggle and sync to server ──
-  // CellFold @island handles the visual toggle via WASM signal + Show().
+  // ── Fold persistence: watch CellIsland WASM toggle and sync to server ──
+  // CellIsland @island handles the visual toggle via WASM signal + Show().
   // This observer detects when the Show wrapper hides/shows the code-cell
   // and sends the fold state to the server for .jl file persistence.
-  document.querySelectorAll('.cell-fold-wrap').forEach(function(wrap) {
-    var cellWrap = wrap.closest('.cell-wrap');
+  document.querySelectorAll('.cell-island').forEach(function(island) {
+    var cellWrap = island.closest('.cell-wrap');
     var cellId = cellWrap ? cellWrap.dataset.cellId : '';
     if (!cellId) return;
+    var lastFolded = null;
     var observer = new MutationObserver(function() {
-      // Check if the code-cell is visible (Show wrapper has display != none)
-      var codeCell = wrap.querySelector('.code-cell');
+      var codeCell = island.querySelector('.code-cell');
       var folded = !codeCell || codeCell.offsetParent === null;
-      if (window.TherapyWS && TherapyWS.sendMessage) {
-        TherapyWS.sendMessage('notebook', {action: 'toggle_fold', cell_id: cellId, folded: folded});
+      if (folded !== lastFolded) {
+        lastFolded = folded;
+        if (window.TherapyWS && TherapyWS.sendMessage) {
+          TherapyWS.sendMessage('notebook', {action: 'toggle_fold', cell_id: cellId, folded: folded});
+        }
       }
     });
-    observer.observe(wrap, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
+    observer.observe(island, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
   });
 })();
 </script>"""))

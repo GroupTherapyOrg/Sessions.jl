@@ -141,7 +141,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     Div(:class => "cell-wrap relative", :style => "margin-left:28px",
         :data_cell_id => cell_id,
         out_div,
-        CellFold(; initial_open = cell.folded ? 0 : 1) do
+        CellIsland(; initial_open = cell.folded ? 0 : 1) do
             code_cell
         end)
 end
