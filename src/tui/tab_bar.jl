@@ -6,17 +6,7 @@ struct DeletedCell
     position::Int
 end
 
-"""Create a safe notebook snapshot for diffing (avoids deepcopy of Module references in error stacktraces)."""
-function _snapshot_notebook(nb::Notebook)
-    snap = Notebook(; path=nb.path)
-    for id in nb.cell_order
-        haskey(nb.cells, id) || continue  # skip deleted cells
-        cell = nb.cells[id]
-        push!(snap.cell_order, id)
-        snap.cells[id] = Cell(; id, code=cell.code, folded=cell.folded, disabled=cell.disabled)
-    end
-    snap
-end
+# _snapshot_notebook defined in web_server.jl (shared between web + TUI)
 
 """A single editor tab holding either a notebook or a file editor."""
 mutable struct EditorTab
