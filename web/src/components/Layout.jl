@@ -115,12 +115,14 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         RawHtml("""<script>
 (function(){
   // ── Panel state persistence ──
+  // Check actual visibility: element must exist AND have non-zero size
+  function isVisible(el) {
+    return el && el.offsetHeight > 0 && el.offsetWidth > 0;
+  }
   // Save to localStorage + cookie on every toggle (1s poll)
   setInterval(function(){
-    var fp = document.getElementById('fpanel');
-    var repl = document.getElementById('repl');
-    var sv = fp && fp.offsetParent !== null ? '1' : '0';
-    var rv = repl && repl.offsetParent !== null ? '1' : '0';
+    var sv = isVisible(document.getElementById('fpanel')) ? '1' : '0';
+    var rv = isVisible(document.getElementById('repl')) ? '1' : '0';
     localStorage.setItem('sessions-sidebar', sv);
     localStorage.setItem('sessions-repl', rv);
     document.cookie = 'sessions-sidebar=' + sv + ';path=/;SameSite=Lax';
