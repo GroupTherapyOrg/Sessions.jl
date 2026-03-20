@@ -296,11 +296,12 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
         create_server_signal(sig_name, string(new_cell.state); use_patches=false)
     end
 
+    println("[WebNotebook] Added cell $(new_cell.id) after $(after_cell_id_str)")
+
     broadcast_channel!("notebook", Dict(
         "event" => "cell_added",
-        "cell" => _cell_to_dict(new_cell),
-        "after_cell_id" => after_cell_id_str,
-        "cell_order" => [string(id) for id in state.nb.cell_order]
+        "cell_id" => string(new_cell.id),
+        "after_cell_id" => after_cell_id_str
     ))
 end
 
@@ -313,10 +314,11 @@ function handle_delete_cell!(state::WebNotebookState, conn, data)
     removed = remove_cell!(state.nb, cell_id)
     removed === nothing && return
 
+    println("[WebNotebook] Deleted cell $(cell_id_str)")
+
     broadcast_channel!("notebook", Dict(
         "event" => "cell_deleted",
-        "cell_id" => cell_id_str,
-        "cell_order" => [string(id) for id in state.nb.cell_order]
+        "cell_id" => cell_id_str
     ))
 end
 

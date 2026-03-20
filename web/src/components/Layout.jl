@@ -375,8 +375,113 @@ function _notebook_channel_script()
       }
     }
 
-    else if (data.event === 'cell_added' || data.event === 'cell_deleted' || data.event === 'cell_order') {
-      // Small delay to let server finish processing before reload
+    else if (data.event === 'cell_added') {
+      // Insert a new empty cell in-place (no page reload)
+      var newId = data.cell_id;
+      var afterId = data.after_cell_id;
+
+      // Build new cell DOM: wrapper with CM editor
+      var wrap = document.createElement('div');
+      wrap.className = 'cell-wrap relative';
+      wrap.style.marginLeft = '28px';
+      wrap.dataset.cellId = newId;
+
+      // Output container (hidden, empty)
+      var outDiv = document.createElement('div');
+      outDiv.className = 'cell-out';
+      outDiv.dataset.cellId = newId;
+      outDiv.style.display = 'none';
+      wrap.appendChild(outDiv);
+
+      // Code cell with CM editor
+      var codeCell = document.createElement('div');
+      codeCell.className = 'code-cell relative rounded-lg border border-b1 bg-island transition-all duration-200 hover:border-b2 idle';
+      var cmHost = document.createElement('div');
+      cmHost.className = 'cm-cell';
+      cmHost.dataset.cellId = newId;
+      cmHost.dataset.src = '';
+      codeCell.appendChild(cmHost);
+      wrap.appendChild(codeCell);
+
+      // Add divider after new cell
+      var divider = document.createElement('div');
+      divider.className = 'cdiv h-[18px] flex items-center justify-center';
+      divider.innerHTML = '<div class="cdiv-inner flex items-center gap-1 opacity-0 transition-opacity"><div class="h-px w-14 bg-b2"></div><button class="flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov" onclick="TherapyWS.sendMessage(\'notebook\',{action:\'add_cell\',after_cell_id:\'' + newId + '\'})">' +
+        '<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code</button><div class="h-px w-14 bg-b2"></div></div>';
+
+      // Find insertion point
+      var nb = document.getElementById('nb');
+      if (nb) {
+        if (afterId) {
+          var afterWrap = nb.querySelector('.cell-wrap[data-cell-id="' + afterId + '"]');
+          if (afterWrap) {
+            // Insert after the divider that follows the target cell
+            var next = afterWrap.nextElementSibling;
+            if (next) next = next.nextElementSibling; // skip existing divider
+            if (next) {
+              nb.insertBefore(divider, next);
+              nb.insertBefore(wrap, divider);
+            } else {
+              nb.appendChild(wrap);
+              nb.appendChild(divider);
+            }
+          } else {
+            nb.appendChild(wrap);
+            nb.appendChild(divider);
+          }
+        } else {
+          // Insert at beginning (after first divider)
+          var first = nb.firstElementChild;
+          if (first) first = first.nextElementSibling;
+          if (first) {
+            nb.insertBefore(divider, first);
+            nb.insertBefore(wrap, divider);
+          } else {
+            nb.appendChild(wrap);
+            nb.appendChild(divider);
+          }
+        }
+
+        // Initialize CM editor for the new cell
+        if (typeof C !== 'undefined' && C.EditorView) {
+          var view = new C.EditorView({
+            doc: '',
+            extensions: [
+              C.lineNumbers(), C.highlightActiveLineGutter(), C.highlightSpecialChars(),
+              C.history(), C.drawSelection(),
+              C.EditorState.allowMultipleSelections.of(true),
+              C.indentOnInput(), C.bracketMatching(), C.closeBrackets(),
+              C.rectangularSelection(), C.highlightActiveLine(), C.highlightSelectionMatches(),
+              C.keymap.of([...C.closeBracketsKeymap, ...C.defaultKeymap, ...C.searchKeymap,
+                ...C.historyKeymap, ...C.completionKeymap, C.indentWithTab]),
+              C.keymap.of([{key:'Shift-Enter',run:function(){window._sessionsRunCell(newId);return true;}}]),
+              C.EditorView.updateListener.of(function(u){if(u.docChanged)syncCodeToServer(newId);}),
+              C.julia(), C.syntaxHighlighting(hlTheme), edTheme,
+            ],
+            parent: cmHost,
+          });
+          editors[newId] = view;
+          // Focus the new cell
+          view.focus();
+        }
+      }
+    }
+
+    else if (data.event === 'cell_deleted') {
+      // Remove cell from DOM in-place (no page reload)
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="' + data.cell_id + '"]');
+      if (wrap) {
+        // Also remove the divider after this cell
+        var next = wrap.nextElementSibling;
+        if (next && next.classList.contains('cdiv')) next.remove();
+        wrap.remove();
+      }
+      // Clean up editor reference
+      delete editors[data.cell_id];
+    }
+
+    else if (data.event === 'cell_order') {
+      // Order changes (move up/down) — reload for now
       setTimeout(function(){ window.location.reload(); }, 200);
     }
 
