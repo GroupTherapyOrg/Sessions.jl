@@ -393,8 +393,9 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
     swapped || return
 
     broadcast_channel!("notebook", Dict(
-        "event" => "cell_order",
-        "cell_order" => [string(id) for id in nb.cell_order]
+        "event" => "cell_moved",
+        "cell_id" => cell_id_str,
+        "direction" => direction
     ))
 end
 

@@ -444,9 +444,36 @@ function _notebook_channel_script()
       delete editors[data.cell_id];
     }
 
-    else if (data.event === 'cell_order') {
-      // Order changes (move up/down) — reload for now
-      setTimeout(function(){ window.location.reload(); }, 200);
+    else if (data.event === 'cell_moved') {
+      // Swap cell DOM nodes in-place (no reload)
+      var container = document.querySelector('#nb > div'); // max-width wrapper
+      if (!container) return;
+      var cellWrap = container.querySelector('.cell-wrap[data-cell-id="' + data.cell_id + '"]');
+      if (!cellWrap) return;
+
+      // Each cell has: cell-wrap + following cdiv (divider)
+      var divider = cellWrap.nextElementSibling;
+      if (data.direction === 'up') {
+        // Find the previous cell-wrap (skip its divider)
+        var prevDiv = cellWrap.previousElementSibling; // divider before this cell
+        if (!prevDiv) return;
+        var prevCell = prevDiv.previousElementSibling; // cell-wrap above
+        if (!prevCell || !prevCell.classList.contains('cell-wrap')) return;
+        // Move this cell+divider before the previous cell
+        container.insertBefore(cellWrap, prevCell);
+        if (divider && divider.classList.contains('cdiv')) container.insertBefore(divider, prevCell);
+      } else if (data.direction === 'down') {
+        // Find the next cell-wrap (after our divider)
+        if (!divider || !divider.classList.contains('cdiv')) return;
+        var nextCell = divider.nextElementSibling;
+        if (!nextCell || !nextCell.classList.contains('cell-wrap')) return;
+        var nextDiv = nextCell.nextElementSibling;
+        // Move next cell+divider before this cell
+        container.insertBefore(nextCell, cellWrap);
+        if (nextDiv && nextDiv.classList.contains('cdiv')) container.insertBefore(nextDiv, cellWrap);
+      }
+      // Smooth scroll to keep moved cell visible
+      cellWrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
 
     else if (data.event === 'tabs_changed') {
