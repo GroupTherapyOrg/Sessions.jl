@@ -94,17 +94,13 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
         :data_cell_id => cell_id,
         :data_src => String(code))
 
-    # Code cell classes + server signal for state-driven CSS
-    state_sig_name = "cell_$(cell_id)_state"
+    # Code cell classes
     code_cell_classes = "code-cell relative rounded-lg border border-b1 bg-island overflow-hidden transition-all duration-200 hover:border-b2"
     is_idle && (code_cell_classes *= " idle")
     cell_stale && (code_cell_classes *= " stale")
 
     # The code-cell div (passed as children to CellIsland)
-    # data-server-signal drives auto-updates via Therapy WS client
-    code_cell = Div(:class => code_cell_classes,
-        :data_server_signal => state_sig_name,
-        ctrls, cm_div)
+    code_cell = Div(:class => code_cell_classes, ctrls, cm_div)
 
     # =======================================================================
     # Output area (ABOVE code, on canvas — stays visible when folded)
