@@ -141,8 +141,15 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         if (rp !== null) p.initial_repl = parseInt(rp);
         el.dataset.props = JSON.stringify(p);
         console.log('[Sessions] Patched props:', p, 'from localStorage sidebar=' + sp + ' repl=' + rp);
+        console.log('[Sessions] DOM data-props now:', el.dataset.props);
+        console.log('[Sessions] Parsed back:', JSON.parse(el.dataset.props));
       } catch(e) { console.error('[Sessions] Patch error:', e); }
     });
+    // Verify after a delay (after hydration)
+    setTimeout(function(){
+      var el = document.querySelector('therapy-island[data-component="sessionsapp"]');
+      if (el) console.log('[Sessions] Post-hydration data-props:', el.dataset.props);
+    }, 3000);
   } else {
     console.log('[Sessions] No localStorage state found (first visit)');
   }
