@@ -111,14 +111,15 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     has_text_output = !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
     output_html = _render_cell_output_html(cell)
     has_output = has_text_output || !isempty(output_html)
-    is_md_output = output.output_type == :markdown
+    # Rich output types: render as HTML (no monospace pre wrapper)
+    is_rich_output = output.output_type in (:markdown, :html, :dataframe, :image_png, :image_svg, :bond)
 
     out_div = if has_output
         out_content = !isempty(output_html) ? RawHtml(output_html) :
                       has_text_output ? output.text_representation : nothing
 
         if out_content !== nothing
-            if is_md_output
+            if is_rich_output
                 Div(:class => "cell-out",
                     :data_cell_id => cell_id,
                     :style => "padding:4px 0 8px;overflow-x:auto;",
