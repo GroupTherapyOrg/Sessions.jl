@@ -4,10 +4,6 @@
 # Usage (from Sessions.jl root directory):
 #   julia +1.12 --project=. web/app.jl dev                            # Empty notebook
 #   julia +1.12 --project=. web/app.jl dev test/fixtures/basic_notebook.jl  # Load notebook
-#
-# This runs a server-backed web UI for Sessions.jl notebooks using Therapy.jl.
-# Julia runs server-side for cell execution over WebSocket.
-# The browser renders the notebook with Tailwind CSS + WASM @island components.
 
 # Use local Therapy.jl if available (sibling directory)
 local_therapy = joinpath(dirname(@__DIR__), "..", "Therapy.jl")
@@ -29,7 +25,6 @@ cd(@__DIR__)
 # Load notebook from CLI args
 # =============================================================================
 
-# Parse args: `web/app.jl dev [notebook_path]` or `web/app.jl build [notebook_path]`
 _notebook_path = let path = nothing
     for arg in ARGS
         arg in ("dev", "build") && continue
@@ -90,8 +85,6 @@ Sessions.create_cell_signals!(WEB_STATE[])
 
 on_ws_connect() do conn
     println("[WS] Client connected: $(conn.id)")
-    # Send full notebook state async to avoid blocking the handler
-    # (client may disconnect before transfer completes → EPIPE)
     @async try
         Sessions.send_full_state!(WEB_STATE[], conn)
     catch e

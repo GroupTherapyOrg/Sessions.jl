@@ -114,21 +114,24 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         # --- Panel state: persist to localStorage, restore after WASM hydration ---
         RawHtml("""<script>
 (function(){
-  // Save panel state periodically
+  // ── Panel state persistence ──
+  // Save to localStorage + cookie on every toggle (1s poll)
   setInterval(function(){
     var fp = document.getElementById('fpanel');
     var repl = document.getElementById('repl');
-    if (fp) localStorage.setItem('sessions_sidebar', fp.offsetParent !== null ? '1' : '0');
-    if (repl) localStorage.setItem('sessions_repl', repl.offsetParent !== null ? '1' : '0');
+    var sv = fp && fp.offsetParent !== null ? '1' : '0';
+    var rv = repl && repl.offsetParent !== null ? '1' : '0';
+    localStorage.setItem('sessions-sidebar', sv);
+    localStorage.setItem('sessions-repl', rv);
+    document.cookie = 'sessions-sidebar=' + sv + ';path=/;SameSite=Lax';
+    document.cookie = 'sessions-repl=' + rv + ';path=/;SameSite=Lax';
   }, 1000);
 
-  // Restore panel state from localStorage.
-  // Patch data-props BEFORE Therapy hydrates so compiled_get_prop_i32()
-  // reads the correct initial value. WASM set_visible then sets the
-  // correct display state, and BindBool sets the correct data-state.
-  // No hacks, no delays — the signal is the single source of truth.
-  var sp = localStorage.getItem('sessions_sidebar');
-  var rp = localStorage.getItem('sessions_repl');
+  // Restore: patch data-props BEFORE hydration so WASM signal starts correct.
+  // With set_visible fixed in Therapy v2, the signal drives everything:
+  // Show() sets display, BindBool sets data-state. No hacks.
+  var sp = localStorage.getItem('sessions-sidebar');
+  var rp = localStorage.getItem('sessions-repl');
 
   if (sp !== null || rp !== null) {
     document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
