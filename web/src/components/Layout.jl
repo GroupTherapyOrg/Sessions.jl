@@ -124,6 +124,7 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
 
   // Patch island props BEFORE Therapy hydrates — so WASM signals
   // start with the correct initial values from localStorage.
+  // Also hide SSR-rendered panel content to prevent flash.
   var sp = localStorage.getItem('sessions_sidebar');
   var rp = localStorage.getItem('sessions_repl');
   if (sp !== null || rp !== null) {
@@ -134,6 +135,15 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
       if (rp !== null) props.initial_repl = parseInt(rp);
       el.dataset.props = JSON.stringify(props);
     });
+    // Hide SSR content that should be closed (Show wrappers contain id'd elements)
+    if (sp === '0') {
+      var fp = document.getElementById('fpanel');
+      if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
+    }
+    if (rp === '0') {
+      var repl = document.getElementById('repl');
+      if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
+    }
   }
 })();
 </script>"""),

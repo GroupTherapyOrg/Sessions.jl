@@ -86,7 +86,6 @@ function NotebookPanel()
     push!(rendered_cells, CellGap(after_cell_id=""))
 
     for cell in cells
-        isempty(strip(cell.code)) && cell.state == _Sess.cell_idle && continue
         cell_index += 1
         view = CellView(cell; index=cell_index)
         view === nothing && continue

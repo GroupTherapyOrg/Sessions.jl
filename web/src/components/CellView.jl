@@ -52,8 +52,7 @@ const _SVG_PLUS = """<svg width="8" height="8" viewBox="0 0 16 16" fill="none" s
 # ---------------------------------------------------------------------------
 
 function CellView(cell::_Sessions.Cell; index::Int=0)
-    code = strip(cell.code)
-    isempty(code) && return nothing
+    code = cell.code
     cell.disabled && return nothing
 
     output = cell.output
