@@ -12,8 +12,7 @@ export initial_value, possible_values, validate_value
 # @bind macro — creates a Bond that connects a widget to a variable
 include("Bind.jl")
 
-# Widget components (Therapy @island components for web rendering)
-# These will be @island components when used in the web UI
-include("widgets/BindSlider.jl")
+# Widget components
+include("widgets/BoundSlider.jl")
 
 end # module

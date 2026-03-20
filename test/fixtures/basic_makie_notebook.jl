@@ -14,7 +14,7 @@ end
 using Markdown
 
 # ╔═╡ 09436f68-3867-4be6-955d-63003d78e2af
-using SessionsUI: @bind, Slider
+using SessionsUI: @bind, BoundSlider
 
 # ╔═╡ b2c3d4e5-6f7a-8b9c-0d1e-f2a3b4c5d6e7
 import CairoMakie as Mke
@@ -38,7 +38,7 @@ Use the slider to control wave frequency **w**.
 """
 
 # ╔═╡ d4e5f6a7-8b9c-0d1e-2f3a-b4c5d6e7f8a9
-@bind w Slider(2:20, default = 8)
+@bind w BoundSlider(2:20, default = 8)
 
 # ╔═╡ e5f6a7b8-9c0d-1e2f-3a4b-c5d6e7f8a9b0
 let
@@ -60,7 +60,7 @@ Slider controls the number of visible periods.
 """
 
 # ╔═╡ 11223344-5566-7788-99aa-bbccddeeff00
-@bind periods Slider(1:8, default = 2)
+@bind periods BoundSlider(1:8, default = 2)
 
 # ╔═╡ a7b8c9d0-1e2f-3a4b-5c6d-e7f8a9b0c1d2
 let
@@ -82,7 +82,7 @@ Slider controls the frequency multiplier **k** in `sin(k*x) * cos(k*y)`.
 """
 
 # ╔═╡ aabbccdd-1122-3344-5566-778899001122
-@bind k Slider(1:10, default = 1)
+@bind k BoundSlider(1:10, default = 1)
 
 # ╔═╡ c9d0e1f2-3a4b-5c6d-7e8f-a9b0c1d2e3f4
 let
@@ -105,7 +105,7 @@ Slider controls the number of points **n**.
 """
 
 # ╔═╡ 00112233-4455-6677-8899-aabbccddeeff
-@bind n_pts Slider(50:50:1000, default = 200)
+@bind n_pts BoundSlider(50:50:1000, default = 200)
 
 # ╔═╡ e1f2a3b4-5c6d-7e8f-9a0b-c1d2e3f4a5b6
 let

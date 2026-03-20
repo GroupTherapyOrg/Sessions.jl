@@ -101,6 +101,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_switch_tab!(state, conn, data)
             elseif action == "close_tab"
                 handle_close_tab!(state, conn, data)
+            elseif action == "set_bond"
+                handle_set_bond!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -478,6 +480,63 @@ function handle_run_stale!(state::WebNotebookState, conn, data)
 
             println("[WebNotebook] Running $(length(sc)) stale cells...")
             _execute_cells!(state, sc)
+        finally
+            state.executing = false
+        end
+    end
+end
+
+"""Handle bond value change — update bond in worker, re-execute downstream cells."""
+function handle_set_bond!(state::WebNotebookState, conn, data)
+    bond_name = get(data, "name", "")
+    isempty(bond_name) && return
+    new_value = get(data, "value", nothing)
+    new_value === nothing && return
+
+    nb = active_nb(state)
+    worker = active_worker(state)
+    name_sym = Symbol(bond_name)
+
+    # Convert value to appropriate type (JSON sends floats)
+    val = if new_value isa Float64 && new_value == floor(new_value)
+        Int(new_value)
+    else
+        new_value
+    end
+
+    @async begin
+        state.executing = true
+        try
+            # Update bond value in the worker process
+            Malt.remote_eval_wait(worker.worker, quote
+                Sessions.set_bond_value!($(QuoteNode(name_sym)), $val)
+                # Also set the variable directly in the workspace
+                Core.eval(_workspace.mod, :($($name_sym) = $($val)))
+            end)
+
+            # Find the bond cell and its downstream dependents
+            bond_cell = nothing
+            for cell in ordered_cells(nb)
+                if cell.output.output_type == :bond || cell.output.output_type == :html
+                    # Check if this cell defines the bond variable
+                    defs = try cell_definitions(cell) catch; Set{Symbol}() end
+                    if name_sym in defs
+                        bond_cell = cell
+                        break
+                    end
+                end
+            end
+
+            if bond_cell !== nothing
+                # Find downstream cells that depend on this bond variable
+                deps = downstream_dependents(nb, [bond_cell])
+                if !isempty(deps)
+                    println("[WebNotebook] Bond :$(bond_name) = $(val) → re-executing $(length(deps)) dependent cells")
+                    _execute_cells!(state, deps)
+                end
+            end
+        catch e
+            @warn "[WebNotebook] set_bond error" exception=(e, catch_backtrace())
         finally
             state.executing = false
         end

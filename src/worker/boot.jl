@@ -148,7 +148,7 @@ function _render_bond_html(widget, var_name)
             <span style="font-size:13px;font-family:ui-monospace,monospace;color:#6b7d93;">$(var_name) =</span>
             <input type="range" min="$(min_v)" max="$(max_v)" step="$(step_v)" value="$(def_v)"
                 style="flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;"
-                oninput="this.nextElementSibling.textContent=this.value">
+                oninput="this.nextElementSibling.textContent=this.value;if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})">
             <span style="font-size:13px;font-family:ui-monospace,monospace;color:#56d4a0;min-width:2em;text-align:right;">$(def_v)</span>
         </div>"""
     end
