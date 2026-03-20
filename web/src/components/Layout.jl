@@ -406,8 +406,16 @@ function _notebook_channel_script()
       // Add divider after new cell
       var divider = document.createElement('div');
       divider.className = 'cdiv h-[18px] flex items-center justify-center';
-      divider.innerHTML = '<div class="cdiv-inner flex items-center gap-1 opacity-0 transition-opacity"><div class="h-px w-14 bg-b2"></div><button class="flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov" onclick="TherapyWS.sendMessage(\'notebook\',{action:\'add_cell\',after_cell_id:\'' + newId + '\'})">' +
-        '<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code</button><div class="h-px w-14 bg-b2"></div></div>';
+      var dInner = document.createElement('div');
+      dInner.className = 'cdiv-inner flex items-center gap-1 opacity-0 transition-opacity';
+      var dLine1 = document.createElement('div'); dLine1.className = 'h-px w-14 bg-b2';
+      var dBtn = document.createElement('button');
+      dBtn.className = 'flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov';
+      dBtn.innerHTML = '<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code';
+      (function(id){ dBtn.addEventListener('click', function(){ TherapyWS.sendMessage('notebook',{action:'add_cell',after_cell_id:id}); }); })(newId);
+      var dLine2 = document.createElement('div'); dLine2.className = 'h-px w-14 bg-b2';
+      dInner.appendChild(dLine1); dInner.appendChild(dBtn); dInner.appendChild(dLine2);
+      divider.appendChild(dInner);
 
       // Find insertion point
       var nb = document.getElementById('nb');
