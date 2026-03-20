@@ -266,11 +266,12 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     }]);
   }
 
-  // ── Initialize CM editors ──
-  document.querySelectorAll('.cm-cell').forEach(function(host) {
-    if (host.querySelector('.cm-editor')) return;
-    var src = host.dataset.src || '';
-    var cellId = host.dataset.cellId || '';
+  // ── Initialize CM editors (callable for new cells too) ──
+  function initCMEditors() {
+    document.querySelectorAll('.cm-cell').forEach(function(host) {
+      if (host.querySelector('.cm-editor')) return;
+      var src = host.dataset.src || '';
+      var cellId = host.dataset.cellId || '';
 
     var view = new C.EditorView({
       doc: src,
@@ -294,7 +295,10 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     });
 
     if (cellId) editors[cellId] = view;
-  });
+    });
+  }
+  initCMEditors();
+  window._sessionsInitNewCells = initCMEditors;
 
   // ── Fold persistence: watch CellIsland WASM toggle and sync to server ──
   // CellIsland @island handles the visual toggle via WASM signal + Show().
@@ -404,103 +408,46 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_added') {
-      // Insert a new empty cell in-place (no page reload)
-      var newId = data.cell_id;
-      var afterId = data.after_cell_id;
+      // Server renders the cell HTML — just insert it and init CM
+      var html = data.cell_html || '';
+      if (!html) return;
 
-      // Build new cell DOM: wrapper with CM editor
-      var wrap = document.createElement('div');
-      wrap.className = 'cell-wrap relative';
-      wrap.style.marginLeft = '28px';
-      wrap.dataset.cellId = newId;
+      var nb = document.getElementById('nb');
+      if (!nb) return;
+      var container = nb.firstElementChild; // max-width wrapper
 
-      // Output container (hidden, empty)
-      var outDiv = document.createElement('div');
-      outDiv.className = 'cell-out';
-      outDiv.dataset.cellId = newId;
-      outDiv.style.display = 'none';
-      wrap.appendChild(outDiv);
-
-      // Code cell with CM editor
-      var codeCell = document.createElement('div');
-      codeCell.className = 'code-cell relative rounded-lg border border-b1 bg-island transition-all duration-200 hover:border-b2 idle';
-      var cmHost = document.createElement('div');
-      cmHost.className = 'cm-cell';
-      cmHost.dataset.cellId = newId;
-      cmHost.dataset.src = '';
-      codeCell.appendChild(cmHost);
-      wrap.appendChild(codeCell);
-
-      // Add divider after new cell
-      var divider = document.createElement('div');
-      divider.className = 'cdiv h-[18px] flex items-center justify-center';
-      var dInner = document.createElement('div');
-      dInner.className = 'cdiv-inner flex items-center gap-1 opacity-0 transition-opacity';
-      var dLine1 = document.createElement('div'); dLine1.className = 'h-px w-14 bg-b2';
-      var dBtn = document.createElement('button');
-      dBtn.className = 'flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov';
-      dBtn.innerHTML = '<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code';
-      (function(id){ dBtn.addEventListener('click', function(){ TherapyWS.sendMessage('notebook',{action:'add_cell',after_cell_id:id}); }); })(newId);
-      var dLine2 = document.createElement('div'); dLine2.className = 'h-px w-14 bg-b2';
-      dInner.appendChild(dLine1); dInner.appendChild(dBtn); dInner.appendChild(dLine2);
-      divider.appendChild(dInner);
+      // Create a temp container to parse the HTML
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
 
       // Find insertion point
-      var nb = document.getElementById('nb');
-      if (nb) {
-        if (afterId) {
-          var afterWrap = nb.querySelector('.cell-wrap[data-cell-id="' + afterId + '"]');
-          if (afterWrap) {
-            // Insert after the divider that follows the target cell
-            var next = afterWrap.nextElementSibling;
-            if (next) next = next.nextElementSibling; // skip existing divider
-            if (next) {
-              nb.insertBefore(divider, next);
-              nb.insertBefore(wrap, divider);
-            } else {
-              nb.appendChild(wrap);
-              nb.appendChild(divider);
-            }
-          } else {
-            nb.appendChild(wrap);
-            nb.appendChild(divider);
+      var afterId = data.after_cell_id;
+      if (afterId) {
+        var afterWrap = container.querySelector('.cell-wrap[data-cell-id="' + afterId + '"]');
+        if (afterWrap) {
+          // Insert after the divider that follows the target cell
+          var ref = afterWrap.nextElementSibling;
+          if (ref && ref.classList.contains('cdiv')) ref = ref.nextElementSibling;
+          while (tmp.firstChild) {
+            if (ref) container.insertBefore(tmp.firstChild, ref);
+            else container.appendChild(tmp.firstChild);
           }
         } else {
-          // Insert at beginning (after first divider)
-          var first = nb.firstElementChild;
-          if (first) first = first.nextElementSibling;
-          if (first) {
-            nb.insertBefore(divider, first);
-            nb.insertBefore(wrap, divider);
-          } else {
-            nb.appendChild(wrap);
-            nb.appendChild(divider);
-          }
+          while (tmp.firstChild) container.appendChild(tmp.firstChild);
         }
-
-        // Initialize CM editor for the new cell
-        if (typeof C !== 'undefined' && C.EditorView) {
-          var view = new C.EditorView({
-            doc: '',
-            extensions: [
-              C.lineNumbers(), C.highlightActiveLineGutter(), C.highlightSpecialChars(),
-              C.history(), C.drawSelection(),
-              C.EditorState.allowMultipleSelections.of(true),
-              C.indentOnInput(), C.bracketMatching(), C.closeBrackets(),
-              C.rectangularSelection(), C.highlightActiveLine(), C.highlightSelectionMatches(),
-              C.keymap.of([...C.closeBracketsKeymap, ...C.defaultKeymap, ...C.searchKeymap,
-                ...C.historyKeymap, ...C.completionKeymap, C.indentWithTab]),
-              C.keymap.of([{key:'Shift-Enter',run:function(){window._sessionsRunCell(newId);return true;}}]),
-              C.EditorView.updateListener.of(function(u){if(u.docChanged)syncCodeToServer(newId);}),
-              C.julia(), C.syntaxHighlighting(hlTheme), edTheme,
-            ],
-            parent: cmHost,
-          });
-          editors[newId] = view;
-          // Focus the new cell
-          view.focus();
+      } else {
+        // Insert at beginning
+        var first = container.firstElementChild;
+        if (first) first = first.nextElementSibling; // skip initial divider
+        while (tmp.firstChild) {
+          if (first) container.insertBefore(tmp.firstChild, first);
+          else container.appendChild(tmp.firstChild);
         }
       }
+
+      // Initialize CM editors in the newly inserted HTML
+      // (reuse the same init function from page load)
+      window._sessionsInitNewCells && window._sessionsInitNewCells();
     }
 
     else if (data.event === 'cell_deleted') {
