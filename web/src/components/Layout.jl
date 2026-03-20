@@ -123,47 +123,22 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
   }, 1000);
 
   // Restore panel state from localStorage.
-  // V2 hydration's set_visible is a no-op — Show wrappers keep their
-  // SSR display state. So we:
-  // 1. Hide SSR content immediately (prevents flash)
-  // 2. Patch data-props so signal reads correct initial value
-  // 3. After hydration, click buttons for closed panels to sync
-  //    the signal state (since v2 set_visible doesn't fire)
+  // Patch data-props BEFORE Therapy hydrates so compiled_get_prop_i32()
+  // reads the correct initial value. WASM set_visible then sets the
+  // correct display state, and BindBool sets the correct data-state.
+  // No hacks, no delays — the signal is the single source of truth.
   var sp = localStorage.getItem('sessions_sidebar');
   var rp = localStorage.getItem('sessions_repl');
 
-  // Patch data-props (signal reads this at hydration)
-  document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
-    try {
-      var p = JSON.parse(el.dataset.props || '{}');
-      if (sp !== null) p.initial_sidebar = parseInt(sp);
-      if (rp !== null) p.initial_repl = parseInt(rp);
-      el.dataset.props = JSON.stringify(p);
-    } catch(e) {}
-  });
-
-  // Immediately hide panels that should be closed
-  if (sp === '0') {
-    var fp = document.getElementById('fpanel');
-    if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
-  }
-  if (rp === '0') {
-    var repl = document.getElementById('repl');
-    if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
-  }
-
-  // After hydration: if signal started at 1 but panel should be closed,
-  // click the button once to toggle signal 1→0. This syncs everything:
-  // signal, Show wrapper, BindBool attribute.
-  if (sp === '0' || rp === '0') {
-    setTimeout(function(){
-      var btns = document.querySelectorAll('.ab-btn');
-      if (btns.length >= 3) {
-        // Only click if the panel is supposed to be closed but signal is 1
-        if (sp === '0') btns[0].click();
-        if (rp === '0') btns[2].click();
-      }
-    }, 1500);
+  if (sp !== null || rp !== null) {
+    document.querySelectorAll('therapy-island[data-component="sessionsapp"]').forEach(function(el) {
+      try {
+        var p = JSON.parse(el.dataset.props || '{}');
+        if (sp !== null) p.initial_sidebar = parseInt(sp);
+        if (rp !== null) p.initial_repl = parseInt(rp);
+        el.dataset.props = JSON.stringify(p);
+      } catch(e) {}
+    });
   }
 })();
 </script>"""),
