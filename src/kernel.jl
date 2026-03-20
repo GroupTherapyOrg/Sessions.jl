@@ -64,9 +64,8 @@ function classify_output(value)::Symbol
     value isa Markdown.MD && return :markdown
 
     # 3. text/html — packages like DataFrames.jl produce rich HTML tables.
-    #    DataFrames' text/html is much better than our custom renderer AND
-    #    it gets cached in text_representation for session restore.
     if !(value isa Markdown.MD) && _tui_showable(MIME"text/html"(), value)
+        @info "[classify] text/html detected" type=typeof(value)
         return :html
     end
 
