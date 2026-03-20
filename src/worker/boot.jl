@@ -89,6 +89,15 @@ function _worker_execute(ws::SessionsWorkspace, code::String)
 end
 
 function _classify_and_capture(result, stdout_str, runtime)
+    # Bond (@bind widget) — detect by duck typing (has .element and .defines fields)
+    if hasproperty(result, :element) && hasproperty(result, :defines)
+        widget = result.element
+        var_name = result.defines
+        # Serialize bond info as a simple HTML range input for sliders
+        html = _render_bond_html(widget, var_name)
+        return (output_type=:html, text_representation=html, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+    end
+
     # Markdown
     result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
 
@@ -124,6 +133,28 @@ function _classify_and_capture(result, stdout_str, runtime)
     # text/plain
     text = _text_repr(result)
     return (output_type=:text, text_representation=text, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+end
+
+"""Render a bond widget as HTML (simple range input for sliders, badge for others)."""
+function _render_bond_html(widget, var_name)
+    # Duck-type slider detection: has .values and .default fields
+    if hasproperty(widget, :values) && hasproperty(widget, :default)
+        vals = widget.values
+        min_v = first(vals)
+        max_v = last(vals)
+        step_v = length(vals) > 1 ? vals[2] - vals[1] : 1
+        def_v = widget.default
+        return """<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">
+            <span style="font-size:13px;font-family:ui-monospace,monospace;color:#6b7d93;">$(var_name) =</span>
+            <input type="range" min="$(min_v)" max="$(max_v)" step="$(step_v)" value="$(def_v)"
+                style="flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;"
+                oninput="this.nextElementSibling.textContent=this.value">
+            <span style="font-size:13px;font-family:ui-monospace,monospace;color:#56d4a0;min-width:2em;text-align:right;">$(def_v)</span>
+        </div>"""
+    end
+    # Fallback: show widget type and variable name
+    wtype = nameof(typeof(widget))
+    return """<span style="font-size:12px;font-family:ui-monospace,monospace;color:#6b7d93;padding:4px 8px;border:1px solid #2a3a4f;border-radius:6px;">$(wtype) → :$(var_name)</span>"""
 end
 
 function _try_showable(mime, value)
