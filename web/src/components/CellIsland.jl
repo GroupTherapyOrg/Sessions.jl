@@ -32,6 +32,6 @@
 
         # Code cell — shown/hidden by is_open signal
         Show(is_open) do
-            children
+            Div(children...)
         end)
 end
