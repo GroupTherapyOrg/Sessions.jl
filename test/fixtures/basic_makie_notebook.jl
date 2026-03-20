@@ -8,6 +8,11 @@ using Markdown
 import Sessions: @bind, Slider
 
 # ╔═╡ 076b1881-2363-4e4c-8015-4f5e12969675
+begin
+	import Pkg
+	Pkg.activate(mktempdir())
+	Pkg.add("CairoMakie")
+end
 
 # ╔═╡ b2c3d4e5-6f7a-8b9c-0d1e-f2a3b4c5d6e7
 import CairoMakie as Mke
