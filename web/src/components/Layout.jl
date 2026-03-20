@@ -144,20 +144,22 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
   });
 
   // 3. SAVE: MutationObserver on data-state (fires instantly when signal changes)
+  //    Only explorer (index 0) and terminal (index 1) have BindBool data-state.
+  //    JET button has no BindBool — no data-state attribute.
   var btns = document.querySelectorAll('.ab-btn[data-state]');
-  console.log('[Panels] 3. SAVE setup: found ' + btns.length + ' ab-btn elements');
-  if (btns.length >= 3) {
-    console.log('[Panels] 3. Initial button states: [0]=' + btns[0].getAttribute('data-state') + ' [2]=' + btns[2].getAttribute('data-state'));
+  console.log('[Panels] 3. SAVE setup: found ' + btns.length + ' ab-btn[data-state] elements');
+  if (btns.length >= 2) {
+    console.log('[Panels] 3. Initial button states: sidebar=' + btns[0].getAttribute('data-state') + ' repl=' + btns[1].getAttribute('data-state'));
     new MutationObserver(function(){
       var v = btns[0].getAttribute('data-state') === 'on' ? '1' : '0';
       localStorage.setItem('sessions-sidebar', v);
       console.log('[Panels] SAVE sidebar → ' + v);
     }).observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
     new MutationObserver(function(){
-      var v = btns[2].getAttribute('data-state') === 'on' ? '1' : '0';
+      var v = btns[1].getAttribute('data-state') === 'on' ? '1' : '0';
       localStorage.setItem('sessions-repl', v);
       console.log('[Panels] SAVE repl → ' + v);
-    }).observe(btns[2], {attributes: true, attributeFilter: ['data-state']});
+    }).observe(btns[1], {attributes: true, attributeFilter: ['data-state']});
   }
 })();
 </script>"""),
