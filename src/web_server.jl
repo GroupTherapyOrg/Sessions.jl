@@ -508,7 +508,7 @@ function handle_open_notebook!(state::WebNotebookState, conn, data)
             # Already open — just switch to it
             state.active_tab_idx = i
             create_cell_signals!(state)
-            broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+            _broadcast_nb_html!(state)
             return
         end
     end
@@ -529,19 +529,48 @@ function handle_open_notebook!(state::WebNotebookState, conn, data)
     create_cell_signals!(state)
 
     println("[WebNotebook] Opened tab: $(tab.label) ($(length(state.tabs)) tabs)")
-    broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+    _broadcast_nb_html!(state)
 end
 
-"""Handle switch-tab request."""
+"""Handle switch-tab request — renders new tab content server-side."""
 function handle_switch_tab!(state::WebNotebookState, conn, data)
     tab_idx = get(data, "tab_idx", 0)
     (tab_idx isa Number) || return
     tab_idx = Int(tab_idx)
     (tab_idx < 1 || tab_idx > length(state.tabs)) && return
+    tab_idx == state.active_tab_idx && return  # already active
 
     state.active_tab_idx = tab_idx
     create_cell_signals!(state)
-    broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+
+    # Render the full notebook panel (tab bar + cells) server-side
+    nb_html = try
+        _NotebookPanel = getfield(Therapy, :NotebookPanel)
+        vnode = Base.invokelatest(_NotebookPanel)
+        vnode !== nothing ? Therapy.render_to_string(vnode) : ""
+    catch e
+        @warn "[WebNotebook] Failed to render notebook panel" exception=e
+        ""
+    end
+
+    _broadcast_nb_html!(state)
+end
+
+"""Render the full NotebookPanel to HTML and broadcast to all clients."""
+function _broadcast_nb_html!(state::WebNotebookState)
+    nb_html = try
+        _NotebookPanel = getfield(Therapy, :NotebookPanel)
+        vnode = Base.invokelatest(_NotebookPanel)
+        vnode !== nothing ? Therapy.render_to_string(vnode) : ""
+    catch e
+        @warn "[WebNotebook] Failed to render notebook panel" exception=e
+        ""
+    end
+
+    broadcast_channel!("notebook", Dict(
+        "event" => "nb_replaced",
+        "nb_html" => nb_html
+    ))
 end
 
 """Handle close-tab request — enforces minimum 1 tab."""
@@ -568,7 +597,7 @@ function handle_close_tab!(state::WebNotebookState, conn, data)
 
     create_cell_signals!(state)
     println("[WebNotebook] Closed tab: $(closed_label) ($(length(state.tabs)) tabs)")
-    broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+    _broadcast_nb_html!(state)
 end
 
 # =============================================================================
@@ -626,9 +655,9 @@ function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
         _broadcast_stale!(state)
 
         if !isempty(diff.added) || !isempty(diff.removed) || reordered
-            # Structural change — client needs to reload
+            # Structural change — re-render notebook panel
             println("[WebNotebook] External change: $(n_changes) cells changed in $(tab.label)")
-            broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+            _broadcast_nb_html!(state)
         else
             # Code-only changes — just update stale indicators
             println("[WebNotebook] External code change: $(n_changes) cells in $(tab.label)")

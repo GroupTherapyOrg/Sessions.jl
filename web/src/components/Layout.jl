@@ -476,8 +476,21 @@ function _notebook_channel_script()
       cellWrap.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
 
+    else if (data.event === 'nb_replaced') {
+      // Server rendered the full notebook panel — swap in-place
+      var nbIsland = document.getElementById('nb-island');
+      if (nbIsland && data.nb_html) {
+        nbIsland.outerHTML = data.nb_html;
+        // Re-init CM editors on the new content
+        window._sessionsInitNewCells && window._sessionsInitNewCells();
+      } else if (!data.nb_html) {
+        // Fallback: reload if server couldn't render
+        setTimeout(function(){ window.location.reload(); }, 200);
+      }
+    }
+
     else if (data.event === 'tabs_changed') {
-      // Tab structure changed (open/switch/close) — reload to re-render
+      // Legacy fallback — reload
       setTimeout(function(){ window.location.reload(); }, 200);
     }
 
