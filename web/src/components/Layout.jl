@@ -291,70 +291,78 @@ function _notebook_channel_script()
   if (window._sessionsNotebookHandler) return;
   window._sessionsNotebookHandler = true;
 
-  var stateColors = {
-    'cell_idle':    '#3d5068',
-    'cell_queued':  '#d4a056',
-    'cell_running': '#7bb8e8',
-    'cell_done':    '#56d4a0',
-    'cell_errored': '#e06b65'
-  };
+  // ── Helper: find cell elements by ID ──
+  function cellEls(cellId) {
+    var wrap = document.querySelector('.cell-wrap[data-cell-id="' + cellId + '"]');
+    if (!wrap) return null;
+    return {
+      wrap: wrap,
+      code: wrap.querySelector('.code-cell'),
+      out: wrap.querySelector('.cell-out'),
+      ctrls: wrap.querySelector('.cell-ctrls')
+    };
+  }
+
+  // ── Helper: format runtime ──
+  function fmtRuntime(ns) {
+    var ms = ns / 1e6;
+    return ms < 1 ? (ns / 1e3).toFixed(1) + '\u00b5s' : ms < 1000 ? ms.toFixed(1) + 'ms' : (ms / 1000).toFixed(2) + 's';
+  }
+
+  // ── Helper: update cell CSS state (accent bar color) ──
+  function setCellState(el, state) {
+    if (!el) return;
+    var cc = el.code;
+    if (!cc) return;
+    cc.classList.remove('idle', 'stale');
+    // Queued/running: add a pulsing border
+    if (state === 'cell_queued' || state === 'cell_running') {
+      cc.style.borderColor = state === 'cell_queued' ? '#d4a056' : '#7bb8e8';
+    } else if (state === 'cell_errored') {
+      cc.style.borderColor = '#e06b65';
+    } else {
+      cc.style.borderColor = '';  // revert to CSS default
+    }
+  }
 
   window.addEventListener('therapy:channel:notebook', function(e) {
     var data = e.detail;
     if (!data || !data.event) return;
 
     if (data.event === 'cell_state') {
-      var badge = document.querySelector('[data-cell-state][data-cell-id="' + data.cell_id + '"]');
-      if (badge) {
-        badge.style.background = stateColors[data.state] || stateColors['cell_idle'];
-        badge.dataset.cellState = data.state;
-        badge.style.animation = (data.state === 'cell_queued' || data.state === 'cell_running') ? 'pulse 1.5s infinite' : 'none';
-      }
+      var el = cellEls(data.cell_id);
+      setCellState(el, data.state);
     }
 
     else if (data.event === 'cell_output') {
+      var el = cellEls(data.cell_id);
+      if (!el) return;
+
       // Update output HTML
-      var output = document.querySelector('.cell-out[data-cell-id="' + data.cell_id + '"]');
-      if (output) {
+      if (el.out) {
         var html = data.output_html || '';
         if (html) {
-          output.innerHTML = html;
-          output.style.display = '';
-          output.style.padding = '6px 0 10px';
+          el.out.innerHTML = html;
+          el.out.style.display = '';
+          el.out.style.padding = '6px 0 10px';
         } else {
-          output.innerHTML = '';
-          output.style.display = 'none';
+          el.out.innerHTML = '';
+          el.out.style.display = 'none';
         }
       }
-      // Update state badge
-      var badge = document.querySelector('[data-cell-state][data-cell-id="' + data.cell_id + '"]');
-      if (badge && data.state) {
-        badge.style.background = stateColors[data.state] || '#56d4a0';
-        badge.dataset.cellState = data.state;
-        badge.style.animation = 'none';
-      }
+
+      // Update cell state (done/errored)
+      setCellState(el, data.state);
+
       // Update runtime badge
-      if (data.runtime_ns && data.runtime_ns > 0) {
-        var cell_wrap = document.querySelector('.cell-wrap[data-cell-id="' + data.cell_id + '"]');
-        if (cell_wrap) {
-          var ctrls = cell_wrap.querySelector('.cell-ctrls');
-          if (ctrls) {
-            // Remove old runtime badge if exists
-            var old = ctrls.querySelector('.rt-badge');
-            if (old) old.remove();
-            // Format runtime
-            var ms = data.runtime_ns / 1e6;
-            var rt = ms < 1 ? (data.runtime_ns / 1e3).toFixed(1) + '\u00b5s' : ms < 1000 ? ms.toFixed(1) + 'ms' : (ms / 1000).toFixed(2) + 's';
-            var badge_el = document.createElement('span');
-            badge_el.className = 'rt-badge';
-            badge_el.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);';
-            badge_el.textContent = rt;
-            ctrls.insertBefore(badge_el, ctrls.firstChild);
-          }
-          // Remove idle class
-          var codeCell = cell_wrap.querySelector('.code-cell');
-          if (codeCell) codeCell.classList.remove('idle');
-        }
+      if (el.ctrls && data.runtime_ns && data.runtime_ns > 0) {
+        var old = el.ctrls.querySelector('.rt-badge');
+        if (old) old.remove();
+        var badge = document.createElement('span');
+        badge.className = 'rt-badge';
+        badge.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);';
+        badge.textContent = fmtRuntime(data.runtime_ns);
+        el.ctrls.insertBefore(badge, el.ctrls.firstChild);
       }
     }
 
@@ -396,18 +404,15 @@ function _notebook_channel_script()
       console.log('[Sessions] Full state:', data.cells ? data.cells.length : 0, 'cells');
       if (data.cells) {
         data.cells.forEach(function(cell) {
-          var badge = document.querySelector('[data-cell-state][data-cell-id="' + cell.cell_id + '"]');
-          if (badge) {
-            badge.style.background = stateColors[cell.state] || stateColors['cell_idle'];
-            badge.dataset.cellState = cell.state;
-          }
-          if (cell.output_html) {
-            var output = document.querySelector('.cell-out[data-cell-id="' + cell.cell_id + '"]');
-            if (output && !output.innerHTML) {
-              output.innerHTML = cell.output_html;
-              output.style.display = '';
-              output.style.padding = '6px 0 10px';
-            }
+          var el = cellEls(cell.cell_id);
+          if (!el) return;
+          // Update cell state
+          setCellState(el, cell.state);
+          // Fill empty output containers with cached output
+          if (cell.output_html && el.out && !el.out.innerHTML) {
+            el.out.innerHTML = cell.output_html;
+            el.out.style.display = '';
+            el.out.style.padding = '6px 0 10px';
           }
         });
       }
