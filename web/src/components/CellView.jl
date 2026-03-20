@@ -81,6 +81,13 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
             :title => "Run cell (Shift+Enter)",
             :on_click => "window._sessionsRunCell('$(cell_id)')",
             RawHtml(_SVG_RUN)))
+    # Menu button (⋮) — wired to actions later
+    push!(ctrl_children,
+        Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
+            :style => "background:rgba(255,255,255,.04)",
+            :title => "Cell actions",
+            RawHtml(_SVG_MENU)))
+
     # Delete button (×)
     push!(ctrl_children,
         Button(:class => "del-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-jr transition-colors",
