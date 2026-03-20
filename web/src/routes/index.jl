@@ -3,7 +3,7 @@
 # Props passed explicitly so data-props exists for localStorage patching.
 
 function Index()
-    SessionsApp(NotebookPanel(); initial_sidebar=1, initial_repl=1)
+    SessionsApp(NotebookPanel(); initial_sidebar=0, initial_repl=0)
 end
 
 Index

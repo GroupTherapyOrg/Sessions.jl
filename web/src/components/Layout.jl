@@ -115,14 +115,12 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         RawHtml("""<script>
 (function(){
   // ═══════════════════════════════════════════════════════════════════
-  // Panel persistence. Simple approach:
-  // - WASM signals always start at 1 (both open) — baked at compile time
-  // - After hydration: if localStorage says closed, click the button
-  //   to toggle signal 1→0. This fires Show + BindBool properly.
-  // - On toggle: MutationObserver saves data-state to localStorage.
+  // Panel persistence.
+  // SSR starts with both panels CLOSED (signal=0, no flash).
+  // After WASM hydration: open panels that localStorage says should be open.
+  // On toggle: MutationObserver saves data-state to localStorage instantly.
   // ═══════════════════════════════════════════════════════════════════
 
-  // SAVE: watch BindBool data-state changes (instant, no polling)
   var _setupSave = function() {
     var btns = document.querySelectorAll('.ab-btn[data-state]');
     if (btns.length >= 2) {
@@ -135,13 +133,12 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     }
   };
 
-  // RESTORE: after WASM hydration, click buttons to close panels
-  var _restorePanels = function() {
-    var sidebarClosed = localStorage.getItem('sessions-sidebar') === '0';
-    var replClosed = localStorage.getItem('sessions-repl') === '0';
-    if (!sidebarClosed && !replClosed) { _setupSave(); return; }
+  // Default: first visit with no localStorage → open sidebar
+  var sidebarOpen = localStorage.getItem('sessions-sidebar') !== '0';
+  var replOpen = localStorage.getItem('sessions-repl') === '1';
 
-    // Wait for WASM to hydrate (buttons get data-state from BindBool)
+  if (sidebarOpen || replOpen) {
+    // Wait for WASM hydration (BindBool sets data-state)
     var _tries = 0;
     var _check = setInterval(function() {
       _tries++;
@@ -149,14 +146,23 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
       var btns = document.querySelectorAll('.ab-btn[data-state]');
       if (btns.length < 2) return;
       clearInterval(_check);
-      // Click buttons for panels that should be closed
-      if (sidebarClosed && btns[0].getAttribute('data-state') === 'on') btns[0].click();
-      if (replClosed && btns[1].getAttribute('data-state') === 'on') btns[1].click();
+      // Click to open panels that should be open (signal starts at 0)
+      if (sidebarOpen && btns[0].getAttribute('data-state') === 'off') btns[0].click();
+      if (replOpen && btns[1].getAttribute('data-state') === 'off') btns[1].click();
       _setupSave();
     }, 50);
-  };
-
-  _restorePanels();
+  } else {
+    // Both closed — just set up save observers after hydration
+    var _tries2 = 0;
+    var _check2 = setInterval(function() {
+      _tries2++;
+      if (_tries2 > 100) { clearInterval(_check2); return; }
+      var btns = document.querySelectorAll('.ab-btn[data-state]');
+      if (btns.length < 2) return;
+      clearInterval(_check2);
+      _setupSave();
+    }, 50);
+  }
 })();
 </script>"""),
 
