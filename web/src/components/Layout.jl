@@ -140,8 +140,11 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
         if (sp !== null) p.initial_sidebar = parseInt(sp);
         if (rp !== null) p.initial_repl = parseInt(rp);
         el.dataset.props = JSON.stringify(p);
-      } catch(e) {}
+        console.log('[Sessions] Patched props:', p, 'from localStorage sidebar=' + sp + ' repl=' + rp);
+      } catch(e) { console.error('[Sessions] Patch error:', e); }
     });
+  } else {
+    console.log('[Sessions] No localStorage state found (first visit)');
   }
 })();
 </script>"""),
