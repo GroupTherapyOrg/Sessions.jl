@@ -135,7 +135,7 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
       if (rp !== null) props.initial_repl = parseInt(rp);
       el.dataset.props = JSON.stringify(props);
     });
-    // Hide SSR content that should be closed (Show wrappers contain id'd elements)
+    // Hide SSR content + fix button highlights for closed panels
     if (sp === '0') {
       var fp = document.getElementById('fpanel');
       if (fp && fp.parentElement) fp.parentElement.style.display = 'none';
@@ -143,6 +143,13 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     if (rp === '0') {
       var repl = document.getElementById('repl');
       if (repl && repl.parentElement) repl.parentElement.style.display = 'none';
+    }
+    // Update activity bar button data-state to match (BindBool reads this)
+    var abBtns = document.querySelectorAll('.ab-btn[data-state]');
+    // Buttons are in order: explorer, diagnostics, terminal
+    if (abBtns.length >= 3) {
+      if (sp !== null) abBtns[0].dataset.state = sp === '1' ? 'on' : 'off';
+      if (rp !== null) abBtns[2].dataset.state = rp === '1' ? 'on' : 'off';
     }
   }
 })();
