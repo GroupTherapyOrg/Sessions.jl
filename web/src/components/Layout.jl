@@ -102,6 +102,19 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
 .md-prose a:hover{text-decoration:underline;}
 .md-prose hr{border:none;border-top:1px solid #1c2736;margin:1.2em 0;}
 .md-prose img{max-width:100%;border-radius:6px;}
+/* DataFrames.jl HTML table styling — matches dark IDE theme */
+.data-frame{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;border-radius:8px;overflow:hidden;border:1px solid #2a3a4f;}
+table.data-frame{width:100%;border-collapse:collapse;margin:0;}
+table.data-frame thead{background:#151c25;}
+table.data-frame .columnLabelRow th{padding:6px 12px;color:#7bb8e8;font-weight:600;font-size:12px;border-bottom:1px solid #2a3a4f;white-space:nowrap;}
+table.data-frame .columnLabelRow:nth-child(2) th{color:#3d5068;font-weight:400;font-size:11px;font-style:italic;padding:2px 12px 6px;border-bottom:2px solid #2a3a4f;}
+table.data-frame .stubheadLabel{color:#3d5068 !important;font-weight:400 !important;}
+table.data-frame .dataRow td{padding:5px 12px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.5);}
+table.data-frame .dataRow:hover td{background:rgba(86,212,160,.04);}
+table.data-frame .dataRow .rowLabel{color:#3d5068;font-weight:400;font-size:11px;padding-right:8px;border-right:1px solid #2a3a4f;}
+table.data-frame .dataRow:nth-child(even) td{background:rgba(255,255,255,.01);}
+/* DataFrames dimension label */
+.data-frame + .data-frame span,.cell-out > div > div > span{color:#6b7d93;font-size:12px;font-family:'JetBrains Mono',monospace;}
 </style>"""),
 
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
