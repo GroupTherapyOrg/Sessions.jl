@@ -138,14 +138,14 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
     } catch(e) {}
   });
 
-  // 3. SAVE: read BindBool data-state (the signal's output) every second
-  setInterval(function(){
-    var btns = document.querySelectorAll('.ab-btn[data-state]');
-    if (btns.length >= 3) {
-      localStorage.setItem('sessions-sidebar', btns[0].getAttribute('data-state') === 'on' ? '1' : '0');
-      localStorage.setItem('sessions-repl', btns[2].getAttribute('data-state') === 'on' ? '1' : '0');
-    }
-  }, 1000);
+  // 3. SAVE: MutationObserver on data-state (fires instantly when signal changes)
+  var btns = document.querySelectorAll('.ab-btn[data-state]');
+  if (btns.length >= 3) {
+    new MutationObserver(function(){ localStorage.setItem('sessions-sidebar', btns[0].getAttribute('data-state') === 'on' ? '1' : '0'); })
+      .observe(btns[0], {attributes: true, attributeFilter: ['data-state']});
+    new MutationObserver(function(){ localStorage.setItem('sessions-repl', btns[2].getAttribute('data-state') === 'on' ? '1' : '0'); })
+      .observe(btns[2], {attributes: true, attributeFilter: ['data-state']});
+  }
 })();
 </script>"""),
 
