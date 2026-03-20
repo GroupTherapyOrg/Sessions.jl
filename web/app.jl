@@ -84,6 +84,7 @@ app = App(
 
 Sessions.setup_web_notebook!(WEB_STATE[])
 Sessions.create_cell_signals!(WEB_STATE[])
+Sessions.start_web_watchers!(WEB_STATE[])
 
 on_ws_connect() do conn
     println("[WS] Client connected: $(conn.id)")

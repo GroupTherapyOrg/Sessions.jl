@@ -15,7 +15,11 @@ mutable struct WebTab
     workspace::Workspace
     label::String   # display name (filename)
     path::String    # absolute file path
+    last_disk_nb::Union{Notebook, Nothing}  # snapshot for external change detection
+    watcher::Union{DebouncedWatcher, Nothing}
 end
+
+WebTab(id, nb, ws, label, path) = WebTab(id, nb, ws, label, path, nothing, nothing)
 
 """Server-side notebook state for the web UI (multi-tab)."""
 mutable struct WebNotebookState
@@ -516,10 +520,11 @@ function handle_open_notebook!(state::WebNotebookState, conn, data)
     end
     ws = Workspace(; notebook_path=nb.path)
 
-    # Create new tab and switch to it
+    # Create new tab, start watcher, and switch to it
     tab = WebTab(uuid4(), nb, ws, basename(full_path), full_path)
     push!(state.tabs, tab)
     state.active_tab_idx = length(state.tabs)
+    _start_tab_watcher!(state, tab)
     create_cell_signals!(state)
 
     println("[WebNotebook] Opened tab: $(tab.label) ($(length(state.tabs)) tabs)")
@@ -563,6 +568,73 @@ function handle_close_tab!(state::WebNotebookState, conn, data)
     create_cell_signals!(state)
     println("[WebNotebook] Closed tab: $(closed_label) ($(length(state.tabs)) tabs)")
     broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+end
+
+# =============================================================================
+# File watcher — detect external changes (agent edits, git, IDE)
+# =============================================================================
+
+"""Snapshot a notebook for later diffing."""
+function _snapshot_notebook(nb::Notebook)
+    snap = Notebook(; path=nb.path)
+    for id in nb.cell_order
+        haskey(nb.cells, id) || continue
+        cell = nb.cells[id]
+        add_cell!(snap, Cell(; id=cell.id, code=cell.code, folded=cell.folded, disabled=cell.disabled))
+    end
+    snap.cell_order = copy(nb.cell_order)
+    snap
+end
+
+"""Start file watchers for all tabs."""
+function start_web_watchers!(state::WebNotebookState)
+    for tab in state.tabs
+        _start_tab_watcher!(state, tab)
+    end
+end
+
+"""Start a file watcher for a single tab."""
+function _start_tab_watcher!(state::WebNotebookState, tab::WebTab)
+    tab.watcher !== nothing && stop_watching!(tab.watcher)
+    (!isfile(tab.path) || isempty(tab.path)) && return
+
+    tab.last_disk_nb = _snapshot_notebook(tab.nb)
+    tab.watcher = DebouncedWatcher(tab.nb, _ -> _on_web_external_change!(state, tab);
+                                    delay=0.5, poll_interval=0.5)
+    start_watching!(tab.watcher)
+end
+
+"""Handle external file change for a web tab — reload, diff, broadcast."""
+function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
+    tab.last_disk_nb === nothing && return
+    state.executing && return  # don't reload during execution
+
+    try
+        old_order = copy(tab.last_disk_nb.cell_order)
+        diff = merge_external_changes!(tab.nb, tab.last_disk_nb)
+        tab.last_disk_nb = _snapshot_notebook(tab.nb)
+
+        reordered = diff.new_order != old_order
+        n_changes = length(diff.added) + length(diff.changed) + length(diff.removed) + length(diff.metadata_changed)
+        n_changes == 0 && !reordered && return
+
+        # Create signals for any new cells
+        create_cell_signals!(state)
+
+        # Broadcast stale state + structural change
+        _broadcast_stale!(state)
+
+        if !isempty(diff.added) || !isempty(diff.removed) || reordered
+            # Structural change — client needs to reload
+            println("[WebNotebook] External change: $(n_changes) cells changed in $(tab.label)")
+            broadcast_channel!("notebook", Dict("event" => "tabs_changed"))
+        else
+            # Code-only changes — just update stale indicators
+            println("[WebNotebook] External code change: $(n_changes) cells in $(tab.label)")
+        end
+    catch e
+        @warn "[WebNotebook] External change handler error" exception=(e, catch_backtrace())
+    end
 end
 
 # =============================================================================

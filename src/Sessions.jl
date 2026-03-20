@@ -57,9 +57,13 @@ include("web.jl")
 export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
+# Layer 1.5: File Watcher (needed by web_server.jl for DebouncedWatcher)
+include("watcher.jl")
+
 # Layer 1.5: Web Server (channel handlers for web UI)
 include("web_server.jl")
 export WebTab, WebNotebookState, active_tab, active_nb, active_workspace
+export setup_web_notebook!, send_full_state!, create_cell_signals!, start_web_watchers!
 export setup_web_notebook!, send_full_state!, create_cell_signals!
 export FileNode, _build_file_tree
 
@@ -80,8 +84,7 @@ export LspTextEdit, parse_workspace_edit, lsp_rename!, lsp_rename_with_timeout!
 include("formatting.jl")
 export format_code, format_code_available
 
-# Layer 2: Watcher (needed by TUI app for DebouncedWatcher type)
-include("watcher.jl")
+# Layer 2: Watcher already included above (before web_server.jl)
 
 # Layer 2: TUI
 include("tui/theme.jl")
