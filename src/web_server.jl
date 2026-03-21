@@ -512,26 +512,31 @@ function handle_set_bond!(state::WebNotebookState, conn, data)
             assign_expr = Expr(:(=), name_sym, val)
             Malt.remote_eval_wait(worker.worker, :(Core.eval(_workspace.mod, $(QuoteNode(assign_expr)))))
 
-            # Find the bond cell and its downstream dependents
+            # Find the bond cell — look for the cell whose code contains @bind <name>
             bond_cell = nothing
             for cell in ordered_cells(nb)
-                if cell.output.output_type == :bond || cell.output.output_type == :html
-                    # Check if this cell defines the bond variable
-                    defs = try cell_definitions(cell) catch; Set{Symbol}() end
-                    if name_sym in defs
-                        bond_cell = cell
-                        break
-                    end
+                # Simple text match: cell code contains "@bind <varname>"
+                if contains(cell.code, "@bind $(bond_name)")
+                    bond_cell = cell
+                    println("[WebNotebook] Found bond cell for :$(bond_name): $(cell.id)")
+                    break
                 end
             end
 
             if bond_cell !== nothing
                 # Find downstream cells that depend on this bond variable
-                deps = downstream_dependents(nb, [bond_cell])
+                deps = try
+                    downstream_dependents(nb, [bond_cell])
+                catch e
+                    @warn "[WebNotebook] downstream_dependents failed" exception=e
+                    Cell[]
+                end
+                println("[WebNotebook] Bond :$(bond_name) = $(val) → $(length(deps)) dependent cells")
                 if !isempty(deps)
-                    println("[WebNotebook] Bond :$(bond_name) = $(val) → re-executing $(length(deps)) dependent cells")
                     _execute_cells!(state, deps)
                 end
+            else
+                println("[WebNotebook] No bond cell found for :$(bond_name)")
             end
         catch e
             @warn "[WebNotebook] set_bond error" exception=(e, catch_backtrace())
