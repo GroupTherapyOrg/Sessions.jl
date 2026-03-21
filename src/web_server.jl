@@ -508,10 +508,9 @@ function handle_set_bond!(state::WebNotebookState, conn, data)
         state.executing = true
         try
             # Update bond value in the worker process
-            # Use worker-local functions (no Sessions module reference)
-            Malt.remote_eval_wait(worker.worker, :(
-                Core.eval(_workspace.mod, :($($name_sym) = $($val)))
-            ))
+            # Build the assignment expression explicitly to avoid nested interpolation issues
+            assign_expr = Expr(:(=), name_sym, val)
+            Malt.remote_eval_wait(worker.worker, :(Core.eval(_workspace.mod, $(QuoteNode(assign_expr)))))
 
             # Find the bond cell and its downstream dependents
             bond_cell = nothing

@@ -63,7 +63,7 @@ function SessionsApp(children...)
         RawHtml("<script>$(toggle_js)</script>"),
 
         # ── Workspace ──
-        Div(:id => "workspace", :class => "flex-1 flex gap-2.5 p-2.5 min-h-0 overflow-hidden",
+        Div(:id => "workspace", :class => "flex-1 flex gap-3 p-3 min-h-0 overflow-hidden",
 
             # ── Activity Bar ──
             Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl bg-surf border border-b1 shadow-lg shadow-black/25",
@@ -102,7 +102,7 @@ function SessionsApp(children...)
                 FileExplorer()),
 
             # ── Editor Area ──
-            Div(:class => "flex-1 flex flex-col gap-2 min-w-0 min-h-0 overflow-hidden",
+            Div(:class => "flex-1 flex flex-col gap-3 min-w-0 min-h-0 overflow-hidden",
                 children...,
                 # REPL (starts hidden, restored by JS)
                 Div(:id => "repl-panel", :style => "display:none;",
