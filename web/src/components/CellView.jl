@@ -39,6 +39,10 @@ function _render_cell_output_html(cell)
         end
         return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
     end
+    # Bond: render via coordinator's _render_bond_island_html
+    if output.output_type == :bond
+        return Main.Sessions._render_bond_island_html(output.text_representation)
+    end
     # HTML output: text_representation has the HTML directly
     if output.output_type == :html
         return output.text_representation

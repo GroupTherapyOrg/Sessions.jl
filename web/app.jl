@@ -11,11 +11,13 @@ if isdir(local_therapy)
     push!(LOAD_PATH, local_therapy)
 end
 
-# Use local Sessions.jl package
+# Use local Sessions.jl package + SessionsUI workspace subpackage
 push!(LOAD_PATH, dirname(@__DIR__))
+push!(LOAD_PATH, joinpath(dirname(@__DIR__), "SessionsUI"))
 
 using Therapy
 using Sessions
+using SessionsUI
 using UUIDs
 
 # Change to web directory for relative paths
@@ -86,6 +88,10 @@ Sessions.setup_web_notebook!(WEB_STATE[])
 Sessions.setup_file_explorer!(WEB_STATE[])
 Sessions.create_cell_signals!(WEB_STATE[])
 Sessions.start_web_watchers!(WEB_STATE[])
+
+# Terminal (xterm.js ↔ PTY)
+const TERM_STATE = Sessions.TerminalState()
+Sessions.setup_terminal!(TERM_STATE, WEB_STATE[])
 
 on_ws_connect() do conn
     println("[WS] Client connected: $(conn.id)")

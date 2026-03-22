@@ -14,10 +14,9 @@ Bind a Julia variable to an interactive widget.
 
 ## Examples
 ```julia
-using SessionsUI: @bind, Slider
-@bind x Slider(1:10)
-@bind name TextField(default="world")
-@bind flag CheckBox()
+using SessionsUI: @bind, BoundSlider
+@bind x BoundSlider(1:10)
+@bind w BoundSlider(2:20, default=8)
 ```
 """
 macro bind(var, expr)
@@ -36,6 +35,6 @@ macro bind(var, expr)
             Sessions.Bond(el, $(QuoteNode(var)))
         end
     else
-        :(throw(ArgumentError("""\nMacro example usage: \n\n\t@bind my_number Slider(1:10)\n\n""")))
+        :(throw(ArgumentError("""\nMacro example usage: \n\n\t@bind my_number BoundSlider(1:10)\n\n""")))
     end
 end

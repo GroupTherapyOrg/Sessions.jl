@@ -32,8 +32,10 @@ include("analysis.jl")
 export analyze_cell, cell_definitions, cell_references, update_topology!, execution_order, downstream_dependents
 
 include("bind.jl")
-export AbstractWidget, Slider, TextField, CheckBox, Select, NumberField, Button, CounterButton
-export Bond, @bind, set_bond_value!, initial_value, possible_values, validate_value
+# Widget types (Slider, Button, etc.) are engine internals — NOT exported.
+# Users interact via SessionsUI's Bound* wrappers (BoundSlider, etc.).
+# The TUI kernel injects widget types directly into workspace modules.
+export Bond, set_bond_value!, initial_value, possible_values, validate_value
 
 include("kernel.jl")
 export Workspace, execute_cell!, execute_notebook!, execute_changed!
@@ -57,6 +59,10 @@ include("web.jl")
 export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
+# Layer 1.5: PTY (standalone pseudo-terminal for web terminal)
+include("pty.jl")
+export PTY, pty_spawn, pty_write, pty_resize!, pty_close!, pty_alive
+
 # Layer 1.5: File Watcher (needed by web_server.jl for DebouncedWatcher)
 include("watcher.jl")
 
@@ -70,6 +76,10 @@ export WebTab, WebNotebookState, active_tab, active_nb, active_worker
 export setup_web_notebook!, send_full_state!, create_cell_signals!, start_web_watchers!
 export setup_file_explorer!
 export FileNode, _build_file_tree
+
+# Layer 1.5: Terminal Server (xterm.js ↔ PTY bridge)
+include("terminal_server.jl")
+export TerminalTab, TerminalState, setup_terminal!, stop_all_terminals!
 
 # Layer 1.5: Static Analysis (JET.jl + JETLS LSP)
 include("jet_analysis.jl")

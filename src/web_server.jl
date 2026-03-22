@@ -148,6 +148,54 @@ function _cell_to_dict(cell::Cell)
     )
 end
 
+"""Render a bond widget as a BoundSlider @island (SSR + WASM hydration)."""
+function _render_bond_island_html(bond_data::String)
+    # Parse: "slider:varname:min:max:step:default" or "widget:varname:type"
+    parts = split(bond_data, ":")
+    if length(parts) >= 6 && parts[1] == "slider"
+        var_name = String(parts[2])
+        min_v = parse(Int, parts[3])
+        max_v = parse(Int, parts[4])
+        step_v = parse(Int, parts[5])
+        def_v = parse(Int, parts[6])
+
+        # Render BoundSlider @island via Therapy SSR
+        # The @island is defined in web/src/components/BoundSlider.jl and loaded into
+        # Therapy's module scope by Therapy.load_app!. Registered in ISLAND_REGISTRY
+        # with Symbol key :BoundSlider.
+        try
+            island = get(Therapy.ISLAND_REGISTRY, :BoundSlider, nothing)
+            if island !== nothing
+                vnode = Base.invokelatest(island;
+                    min_val=min_v, max_val=max_v, value=def_v, step_val=step_v, var_name=var_name)
+                html = Therapy.render_to_string(vnode)
+                # JS bridge for server re-execution (alongside WASM signal).
+                # The @island's WASM on_input handles instant value display.
+                # This JS bridge sends the value to the server for re-executing
+                # dependent cells. Later: replaced by WASM channel.send() import.
+                bridge_js = """<script>(function(){var el=document.currentScript.previousElementSibling;if(!el)return;var inp=el.querySelector('input[type=range]');if(!inp)return;inp.addEventListener('input',function(){if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})})})();</script>"""
+                return html * bridge_js
+            end
+        catch e
+            @warn "[WebNotebook] BoundSlider SSR failed, falling back to plain HTML" exception=e
+        end
+
+        # Fallback: plain HTML slider (no WASM)
+        return """<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">
+            <span style="font-size:13px;font-family:monospace;color:#6b7d93;">$(var_name) =</span>
+            <input type="range" min="$(min_v)" max="$(max_v)" step="$(step_v)" value="$(def_v)"
+                style="flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;"
+                oninput="this.nextElementSibling.textContent=this.value;if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})">
+            <span style="font-size:13px;font-family:monospace;color:#56d4a0;min-width:2em;text-align:right;">$(def_v)</span>
+        </div>"""
+    elseif length(parts) >= 3 && parts[1] == "widget"
+        var_name = String(parts[2])
+        wtype = String(parts[3])
+        return """<span style="font-size:12px;font-family:monospace;color:#6b7d93;padding:4px 8px;border:1px solid #2a3a4f;border-radius:6px;">$(wtype) → :$(var_name)</span>"""
+    end
+    ""
+end
+
 """Render cell output to HTML string via Sessions._render_output + Therapy.render_to_string."""
 function _web_render_output_html(cell::Cell)
     # Markdown: HTML is in text_representation (from worker or session cache)
@@ -158,6 +206,11 @@ function _web_render_output_html(cell::Cell)
             cell.output.text_representation  # already HTML from worker/cache
         end
         return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
+    end
+    # Bond: parse worker data and render BoundSlider @island via SSR
+    if cell.output.output_type == :bond
+        bond_data = cell.output.text_representation
+        return _render_bond_island_html(bond_data)
     end
     # HTML output: text_representation has the HTML
     if cell.output.output_type == :html
