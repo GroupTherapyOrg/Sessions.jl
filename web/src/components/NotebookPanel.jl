@@ -126,6 +126,6 @@ function NotebookPanel()
         :class => "flex-1 flex flex-col bg-surf border border-b1 rounded-xl overflow-hidden min-h-0 shadow-lg shadow-black/25",
         tab_bar,
         Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
-            Div(:style => "max-width:900px;margin:0 auto;",
+            Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
                 rendered_cells...)))
 end

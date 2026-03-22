@@ -154,7 +154,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     # Assemble: output + CellFold @island (eye toggle + code-cell)
     # =======================================================================
 
-    Div(:class => "cell-wrap relative", :style => "margin-left:28px",
+    Div(:class => "cell-wrap relative",
         :data_cell_id => cell_id,
         out_div,
         CellIsland(code_cell; initial_open = cell.folded ? 0 : 1))
