@@ -587,7 +587,8 @@ function _broadcast_stale!(state::WebNotebookState)
     broadcast_channel!("notebook", Dict(
         "event" => "stale_update",
         "count" => length(sc),
-        "stale_ids" => stale_ids
+        "stale_ids" => stale_ids,
+        "total_cells" => length(ordered_cells(active_nb(state)))
     ))
 end
 
@@ -920,7 +921,8 @@ function _broadcast_nb_html!(state::WebNotebookState)
 
     broadcast_channel!("notebook", Dict(
         "event" => "nb_replaced",
-        "nb_html" => nb_html
+        "nb_html" => nb_html,
+        "total_cells" => length(ordered_cells(active_nb(state)))
     ))
 end
 

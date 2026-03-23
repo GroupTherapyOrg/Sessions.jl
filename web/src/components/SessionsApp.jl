@@ -58,7 +58,7 @@ function SessionsApp(children...)
     })();
     """
 
-    Div(:class => "flex-1 flex flex-col min-h-0",
+    Div(:class => "flex-1 flex flex-col min-h-0 overflow-hidden",
         # Toggle + restore scripts
         RawHtml("<script>$(toggle_js)</script>"),
 
@@ -111,12 +111,80 @@ function SessionsApp(children...)
         # Restore panels from localStorage (runs after DOM is ready)
         RawHtml("<script>$(restore_js)</script>"),
 
-        # ── Status Bar ──
-        Div(:class => "h-[26px] flex items-center px-4 gap-4 text-[10px] font-mono text-t4 bg-deep border-t border-b1 shrink-0",
+        # ── Status Bar (pinned to bottom, updated via JS) ──
+        Div(:id => "status-bar",
+            :class => "flex items-center px-4 gap-4 text-[10px] font-mono text-t4 bg-deep border-t border-b1",
+            :style => "height:26px;flex-shrink:0;",
             Span(:class => "flex items-center gap-1.5",
                 RawHtml(_JULIA_LOGO_SVG),
                 "Sessions.jl"),
-            Span("$(cell_count) cells"),
+            Span(:id => "status-cells", "$(cell_count) cells"),
             Span(:class => "flex-1"),
-            Span(:class => "text-jg", "● connected")))
+            Span(:id => "status-connection", :class => "text-jg", "● connected")),
+
+        # ── Status bar live update script ──
+        RawHtml("""<script>
+(function(){
+  if(window._statusBarInit) return;
+  window._statusBarInit=true;
+
+  var cellsEl=document.getElementById('status-cells');
+  var connEl=document.getElementById('status-connection');
+
+  // Update cell count from notebook events
+  function updateCells(count){
+    if(cellsEl) cellsEl.textContent=count+' cells';
+  }
+
+  // Track connection state
+  function setConnected(ok){
+    if(!connEl) return;
+    if(ok){
+      connEl.className='text-jg';
+      connEl.textContent='● connected';
+    } else {
+      connEl.className='';
+      connEl.style.color='#e06b65';
+      connEl.textContent='● disconnected';
+    }
+  }
+
+  // Listen for notebook events that change cell count
+  window.addEventListener('therapy:channel:notebook',function(e){
+    var d=e.detail;
+    if(!d||!d.event) return;
+    // Use server-provided total_cells when available
+    if(d.total_cells){
+      updateCells(d.total_cells);
+    } else if(d.event==='cell_added'||d.event==='cell_deleted'){
+      // Count cells in DOM after a tick (DOM may not be updated yet)
+      setTimeout(function(){
+        updateCells(document.querySelectorAll('.cell-wrap').length);
+      },50);
+    } else if(d.event==='nb_replaced'||d.event==='full_state'){
+      // After tab switch / full reload, count after DOM settles
+      setTimeout(function(){
+        updateCells(document.querySelectorAll('.cell-wrap').length);
+      },200);
+    }
+  });
+
+  // WebSocket connection status
+  if(window.TherapyWS){
+    var origOnOpen=TherapyWS._ws?TherapyWS._ws.onopen:null;
+    var origOnClose=TherapyWS._ws?TherapyWS._ws.onclose:null;
+
+    // Poll connection state
+    setInterval(function(){
+      if(window.TherapyWS&&TherapyWS._ws){
+        setConnected(TherapyWS._ws.readyState===1);
+      }
+    },2000);
+  }
+
+  // Also set connected on WS events
+  window.addEventListener('therapy:ws:open',function(){setConnected(true);});
+  window.addEventListener('therapy:ws:close',function(){setConnected(false);});
+})();
+</script>"""))
 end
