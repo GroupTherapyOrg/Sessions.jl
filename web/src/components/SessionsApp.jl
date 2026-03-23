@@ -41,7 +41,7 @@ function SessionsApp(children...)
                     children...,
                     # Terminal (inside editor area so it matches notebook width)
                     Div(:id => "repl-panel",
-                        :style => "display:none;flex-shrink:0;",
+                        :style => "display:none;flex-shrink:0;margin-top:10px;",
                         ReplPanel()))),
 
             # Row 3: Status bar (always visible, fixed height)
