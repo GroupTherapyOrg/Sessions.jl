@@ -32,16 +32,11 @@ WasmTarget = {url = "https://github.com/GroupTherapyOrg/WasmTarget.jl.git"}
 
 [compat]
 CommonMark = "1"
-Dates = "1.11"
-Distributed = "1.11.0"
 ExpressionExplorer = "1"
-Malt = "1.4.0"
-Markdown = "1.11"
+Malt = "1"
 OrderedCollections = "1"
-Pkg = "1.12"
 PlutoDependencyExplorer = "1"
-PrecompileTools = "1.3"
-TOML = "1"
+PrecompileTools = "1"
 Therapy = "0.1"
 julia = "1.10"
 
