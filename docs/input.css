@@ -7,50 +7,50 @@
 /* Enable class-based dark mode (toggle via .dark class on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Theme customizations */
+/* Theme customizations — matched to Sessions.jl web IDE palette */
 @theme {
   --font-sans: 'Optima', 'Palatino Linotype', 'Book Antiqua', 'EB Garamond', serif;
   --font-serif: 'EB Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
   --font-mono: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
 
-  /* Blue-gray neutral palette (Sessions.jl — islands-inspired) */
-  --color-warm-50: #f4f4f6;
-  --color-warm-100: #eaeaed;
-  --color-warm-200: #d4d5d9;
-  --color-warm-300: #bcbec4;
-  --color-warm-400: #9a9ea5;
-  --color-warm-500: #7a7e85;
-  --color-warm-600: #6f737a;
-  --color-warm-700: #4e5157;
-  --color-warm-800: #2b2d30;
-  --color-warm-900: #181a1d;
-  --color-warm-950: #121216;
+  /* Blue-tinted neutral palette — dark end matches app (deep/base/island/b1/b2/t4/t3/t2/t1) */
+  --color-warm-50:  #f0f4f8;
+  --color-warm-100: #e1e8ef;
+  --color-warm-200: #d4dce8;
+  --color-warm-300: #b8c5d4;
+  --color-warm-400: #9baabd;
+  --color-warm-500: #6b7d93;
+  --color-warm-600: #3d5068;
+  --color-warm-700: #2a3a4f;
+  --color-warm-800: #1a2332;
+  --color-warm-900: #0f1419;
+  --color-warm-950: #0a0e14;
 
-  /* Accent palette — Julia Green #389826 (Sessions.jl primary accent) */
-  --color-accent-50: #f0fdf0;
-  --color-accent-100: #dcfcdc;
-  --color-accent-200: #b4f6b4;
-  --color-accent-300: #7aeb7a;
-  --color-accent-400: #4ad64a;
-  --color-accent-500: #389826;
-  --color-accent-600: #2d7a1f;
-  --color-accent-700: #245f18;
-  --color-accent-800: #1c4a13;
-  --color-accent-900: #153b0f;
-  --color-accent-950: #0a2108;
+  /* Accent palette — teal #56d4a0 (matches app accent) */
+  --color-accent-50:  #eefbf4;
+  --color-accent-100: #d5f5e5;
+  --color-accent-200: #aeeacd;
+  --color-accent-300: #79dbb0;
+  --color-accent-400: #56d4a0;
+  --color-accent-500: #2fb882;
+  --color-accent-600: #219669;
+  --color-accent-700: #1e7855;
+  --color-accent-800: #1a5f43;
+  --color-accent-900: #184e38;
+  --color-accent-950: #0b2c1f;
 
-  /* Accent-secondary palette — Julia Red #cb3c33 (Sessions.jl secondary accent) */
-  --color-accent-secondary-50: #fdf2f1;
-  --color-accent-secondary-100: #f9dbd9;
-  --color-accent-secondary-200: #f0aba6;
-  --color-accent-secondary-300: #e47b74;
-  --color-accent-secondary-400: #d85a51;
-  --color-accent-secondary-500: #cb3c33;
-  --color-accent-secondary-600: #a8312a;
-  --color-accent-secondary-700: #832620;
-  --color-accent-secondary-800: #5f1b17;
-  --color-accent-secondary-900: #3d110f;
-  --color-accent-secondary-950: #240a09;
+  /* Accent-secondary palette — soft red #e06b65 (matches app error/jr) */
+  --color-accent-secondary-50:  #fef2f2;
+  --color-accent-secondary-100: #fee2e1;
+  --color-accent-secondary-200: #fcc9c7;
+  --color-accent-secondary-300: #f8a8a4;
+  --color-accent-secondary-400: #e06b65;
+  --color-accent-secondary-500: #d04a43;
+  --color-accent-secondary-600: #b83832;
+  --color-accent-secondary-700: #9a2d28;
+  --color-accent-secondary-800: #7f2825;
+  --color-accent-secondary-900: #6a2624;
+  --color-accent-secondary-950: #3a100f;
 
   /* Border radius tokens */
   --radius: 0.5rem;
@@ -65,32 +65,32 @@
   --shadow-md: 0 4px 8px -2px rgba(0,0,0,0.12), 0 2px 4px -2px rgba(0,0,0,0.08);
 }
 
-/* Design System CSS custom properties */
+/* Design System CSS custom properties — matched to app palette */
 @layer base {
   :root {
     color: var(--text-primary);
-    /* Blue-gray neutrals */
-    --bg-primary: #f4f4f6;
-    --bg-secondary: #eaeaed;
-    --bg-tertiary: #d4d5d9;
-    --text-primary: #1a1b1f;
-    --text-secondary: #5a5c63;
-    --text-tertiary: #7a7e85;
+    /* Light mode — blue-tinted neutrals */
+    --bg-primary:      #f0f4f8;
+    --bg-secondary:    #e1e8ef;
+    --bg-tertiary:     #d4dce8;
+    --text-primary:    #0f1419;
+    --text-secondary:  #3d5068;
+    --text-tertiary:   #6b7d93;
 
-    /* Julia palette */
-    --julia-red: #cb3c33;
-    --julia-purple: #9558b2;
-    --julia-blue: #4063d8;
-    --julia-green: #389826;
+    /* Julia palette (app-matched brighter variants) */
+    --julia-red:    #e06b65;
+    --julia-purple: #b08fd8;
+    --julia-blue:   #7bb8e8;
+    --julia-green:  #56d4a0;
 
-    /* Sessions.jl accent overrides */
-    --accent: var(--julia-green);
+    /* Accent aliases */
+    --accent:           var(--julia-green);
     --accent-secondary: var(--julia-red);
 
     /* .jl wordmark tri-colors */
-    --jl-dot: #9558b2;  /* Purple */
-    --jl-j: #389826;    /* Green */
-    --jl-l: #cb3c33;    /* Red */
+    --jl-dot: #b08fd8;  /* Purple */
+    --jl-j:   #56d4a0;  /* Green (teal) */
+    --jl-l:   #e06b65;  /* Red */
   }
 
   html {
@@ -103,15 +103,15 @@
   }
 }
 
-/* Dark mode custom properties */
+/* Dark mode — matches app's deep/base/island palette */
 @layer base {
   .dark {
-    --bg-primary: #121216;
-    --bg-secondary: #161619;
-    --bg-tertiary: #181a1d;
-    --text-primary: #bcbec4;
-    --text-secondary: #7a7e85;
-    --text-tertiary: #4e5157;
+    --bg-primary:     #0a0e14;
+    --bg-secondary:   #0f1419;
+    --bg-tertiary:    #1a2332;
+    --text-primary:   #d4dce8;
+    --text-secondary: #9baabd;
+    --text-tertiary:  #6b7d93;
     --shadow-sm: 0 2px 8px 0 rgba(0,0,0,0.3);
     --shadow-md: 0 4px 12px 0 rgba(0,0,0,0.4);
   }
@@ -186,15 +186,15 @@
   .notebook-prose a { @apply text-accent-600 dark:text-accent-400 hover:underline; }
 }
 
-/* Julia syntax highlighting */
+/* Julia syntax highlighting — matches app CodeMirror theme */
 @layer components {
-  .hl-keyword  { color: #c792ea; }
-  .hl-string   { color: #c3e88d; }
-  .hl-comment  { color: #6b6560; font-style: italic; }
-  .hl-number   { color: #f78c6c; }
-  .hl-funcall  { color: #82aaff; }
-  .hl-type     { color: #ffcb6b; }
-  .hl-symbol   { color: #ff5370; }
-  .hl-macro    { color: #c792ea; font-weight: 600; }
+  .hl-keyword  { color: #e06b65; }
+  .hl-string   { color: #56d4a0; }
+  .hl-comment  { color: #4a6178; font-style: italic; }
+  .hl-number   { color: #d4a056; }
+  .hl-funcall  { color: #7bb8e8; }
+  .hl-type     { color: #b08fd8; }
+  .hl-symbol   { color: #e06b65; }
+  .hl-macro    { color: #b08fd8; font-weight: 600; }
   .hl-operator { color: #89ddff; }
 }
