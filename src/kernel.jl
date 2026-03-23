@@ -410,6 +410,11 @@ let workspace_counter = Ref(0)
         # Pre-populate the workspace with Base
         Core.eval(mod, :(using Base))
 
+        # Set working directory to notebook's location so pwd() and @__DIR__ work
+        if !isempty(nb_abspath) && isfile(nb_abspath)
+            try cd(dirname(nb_abspath)) catch; end
+        end
+
         # Auto-activate nearest Project.toml environment so `using X` works
         # for any package in the notebook's project — like running a .jl file
         # from that project directory.

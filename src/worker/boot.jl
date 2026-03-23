@@ -22,9 +22,12 @@ function _create_workspace(; notebook_path::String="")
     # Pre-inject Markdown so md"..." works immediately
     Core.eval(mod, :(import Markdown))
 
-    # Activate notebook directory if Project.toml exists
+    # Set working directory to notebook's location so pwd() and @__DIR__ work
     if !isempty(notebook_path) && isfile(notebook_path)
         dir = dirname(abspath(notebook_path))
+        try cd(dir) catch; end
+
+        # Activate notebook directory if Project.toml exists
         proj = joinpath(dir, "Project.toml")
         if isfile(proj)
             try
