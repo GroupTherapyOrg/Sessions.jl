@@ -8,18 +8,23 @@ using Therapy
 using UUIDs
 # Note: Markdown is already imported by web.jl (included earlier in the module)
 
-"""A single notebook tab in the web UI."""
+"""A single tab in the web UI — either a notebook or a plain file."""
 mutable struct WebTab
     id::UUID
-    nb::Notebook
-    worker::NotebookWorker        # Malt worker process for this notebook
+    tab_type::Symbol              # :notebook or :file
+    nb::Union{Notebook, Nothing}  # Notebook (for :notebook tabs)
+    worker::Union{NotebookWorker, Nothing}  # Malt worker (for :notebook tabs)
     label::String                 # display name (filename)
     path::String                  # absolute file path
+    file_content::String          # raw file content (for :file tabs)
     last_disk_nb::Union{Notebook, Nothing}  # snapshot for external change detection
     watcher::Union{DebouncedWatcher, Nothing}
 end
 
-WebTab(id, nb, worker, label, path) = WebTab(id, nb, worker, label, path, nothing, nothing)
+# Notebook tab constructor
+WebTab(id, nb::Notebook, worker, label, path) = WebTab(id, :notebook, nb, worker, label, path, "", nothing, nothing)
+# File tab constructor
+WebTab(id, label, path, content::String) = WebTab(id, :file, nothing, nothing, label, path, content, nothing, nothing)
 
 """Server-side notebook state for the web UI (multi-tab)."""
 mutable struct WebNotebookState
@@ -31,11 +36,14 @@ end
 """Return the currently active tab."""
 active_tab(state::WebNotebookState) = state.tabs[state.active_tab_idx]
 
-"""Return the notebook of the currently active tab."""
+"""Return the notebook of the currently active tab (nothing for file tabs)."""
 active_nb(state::WebNotebookState) = active_tab(state).nb
 
-"""Return the worker of the currently active tab."""
+"""Return the worker of the currently active tab (nothing for file tabs)."""
 active_worker(state::WebNotebookState) = active_tab(state).worker
+
+"""Check if the active tab is a notebook."""
+is_notebook_tab(state::WebNotebookState) = active_tab(state).tab_type == :notebook
 
 """
     create_cell_signals!(state::WebNotebookState)
@@ -45,6 +53,7 @@ Signal names: `cell_{uuid}_state` with values like "idle", "running", "done".
 Therapy's WS client auto-updates DOM elements with `data-server-signal` attrs.
 """
 function create_cell_signals!(state::WebNotebookState)
+    active_tab(state).tab_type == :notebook || return
     for cell in ordered_cells(active_nb(state))
         sig_name = "cell_$(cell.id)_state"
         if !haskey(Therapy.SERVER_SIGNALS, sig_name)
@@ -103,6 +112,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_close_tab!(state, conn, data)
             elseif action == "set_bond"
                 handle_set_bond!(state, conn, data)
+            elseif action == "save_file"
+                handle_save_file!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -118,6 +129,17 @@ end
 
 """Send complete notebook state to a newly connected client."""
 function send_full_state!(state::WebNotebookState, conn)
+    tab = active_tab(state)
+    if tab.tab_type == :file
+        # File tab: send file content instead of cell state
+        send_channel!("notebook", conn, Dict(
+            "event" => "full_state",
+            "tab_type" => "file",
+            "file_path" => tab.path,
+            "file_content" => tab.file_content
+        ))
+        return
+    end
     nb = active_nb(state)
     cells_data = []
     for cell in ordered_cells(nb)
@@ -714,10 +736,26 @@ function handle_update_code!(state::WebNotebookState, conn, data)
     _broadcast_stale!(state)
 end
 
-"""Handle save request. Syncs codes from client first if provided."""
+"""Handle save request. Routes to notebook save or file save based on tab type."""
 function handle_save!(state::WebNotebookState, conn, data)
+    tab = active_tab(state)
+    if tab.tab_type == :file
+        # File tab: save raw content
+        content = get(data, "content", nothing)
+        if content !== nothing
+            tab.file_content = String(content)
+            write(tab.path, tab.file_content)
+            broadcast_channel!("notebook", Dict(
+                "event" => "saved",
+                "notebook_path" => tab.path
+            ))
+            println("[WebNotebook] Saved file: $(tab.path)")
+        end
+        return
+    end
+
+    # Notebook tab: sync codes and save
     nb = active_nb(state)
-    # Sync any codes sent with the save request
     codes = get(data, "codes", nothing)
     if codes !== nothing
         for (cid, code) in codes
@@ -733,6 +771,21 @@ function handle_save!(state::WebNotebookState, conn, data)
         "notebook_path" => nb.path
     ))
     println("[WebNotebook] Saved: $(nb.path)")
+end
+
+"""Handle save_file action — explicit file content save."""
+function handle_save_file!(state::WebNotebookState, conn, data)
+    tab = active_tab(state)
+    tab.tab_type == :file || return
+    content = get(data, "content", nothing)
+    content === nothing && return
+    tab.file_content = String(content)
+    write(tab.path, tab.file_content)
+    broadcast_channel!("notebook", Dict(
+        "event" => "saved",
+        "notebook_path" => tab.path
+    ))
+    println("[WebNotebook] Saved file: $(tab.path)")
 end
 
 """Handle run-stale request — execute only stale cells (like TUI's Ctrl+Shift+Enter)."""
@@ -831,56 +884,61 @@ end
 # Tab management handlers
 # =============================================================================
 
-"""Handle open-notebook request — deduplicates by absolute path."""
+"""Handle open file request — opens as notebook or plain file depending on format."""
 function handle_open_notebook!(state::WebNotebookState, conn, data)
     raw_path = get(data, "path", "")
     isempty(raw_path) && return
 
-    # Resolve path: if absolute, use as-is; if relative, resolve from notebook dir
+    # Resolve path
     full_path = if isabspath(raw_path)
         abspath(raw_path)
     else
-        nb_dir = dirname(abspath(active_nb(state).path))
-        abspath(joinpath(nb_dir, raw_path))
+        _active_dir = let t = active_tab(state)
+            dirname(abspath(t.path))
+        end
+        abspath(joinpath(_active_dir, raw_path))
     end
 
-    if !isfile(full_path)
-        @warn "[WebNotebook] File not found" path=full_path
-        return
-    end
-
-    if !endswith(full_path, ".jl")
-        @warn "[WebNotebook] Not a Julia file" path=full_path
-        return
-    end
+    !isfile(full_path) && (@warn "[WebNotebook] File not found" path=full_path; return)
 
     # Check if already open (dedup by absolute path)
     for (i, tab) in enumerate(state.tabs)
         if tab.path == full_path
-            # Already open — just switch to it
             state.active_tab_idx = i
-            create_cell_signals!(state)
+            if tab.tab_type == :notebook
+                create_cell_signals!(state)
+            end
             _broadcast_nb_html!(state)
             return
         end
     end
 
-    # Load notebook, create worker, restore session
-    nb = load_notebook(full_path)
-    session_data = load_session(session_path(nb.path))
-    if session_data !== nothing
-        apply_session!(nb, session_data)
+    # Determine if this is a Pluto notebook or a plain file
+    is_nb = endswith(full_path, ".jl") && is_notebook_file(full_path)
+
+    if is_nb
+        # Open as notebook (with worker, cell execution, etc.)
+        nb = load_notebook(full_path)
+        session_data = load_session(session_path(nb.path))
+        if session_data !== nothing
+            apply_session!(nb, session_data)
+        end
+        worker = NotebookWorker(; notebook_path=nb.path)
+        tab = WebTab(uuid4(), nb, worker, basename(full_path), full_path)
+        push!(state.tabs, tab)
+        state.active_tab_idx = length(state.tabs)
+        _start_tab_watcher!(state, tab)
+        create_cell_signals!(state)
+        println("[WebNotebook] Opened notebook tab: $(tab.label)")
+    else
+        # Open as plain file (read-only editor, no execution)
+        content = read(full_path, String)
+        tab = WebTab(uuid4(), basename(full_path), full_path, content)
+        push!(state.tabs, tab)
+        state.active_tab_idx = length(state.tabs)
+        println("[WebNotebook] Opened file tab: $(tab.label)")
     end
-    worker = NotebookWorker(; notebook_path=nb.path)
 
-    # Create new tab, start watcher, and switch to it
-    tab = WebTab(uuid4(), nb, worker, basename(full_path), full_path)
-    push!(state.tabs, tab)
-    state.active_tab_idx = length(state.tabs)
-    _start_tab_watcher!(state, tab)
-    create_cell_signals!(state)
-
-    println("[WebNotebook] Opened tab: $(tab.label) ($(length(state.tabs)) tabs)")
     _broadcast_nb_html!(state)
 end
 
@@ -939,7 +997,9 @@ function handle_close_tab!(state::WebNotebookState, conn, data)
     closed_tab = state.tabs[tab_idx]
     closed_label = closed_tab.label
     # Stop the worker process
-    try stop_worker!(closed_tab.worker) catch; end
+    if closed_tab.worker !== nothing
+        try stop_worker!(closed_tab.worker) catch; end
+    end
     # Stop file watcher
     if closed_tab.watcher !== nothing
         try stop_watching!(closed_tab.watcher) catch; end

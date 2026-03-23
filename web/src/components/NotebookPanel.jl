@@ -22,18 +22,20 @@ function NotebookPanel()
         nothing
     end
 
-    nb = state !== nothing ? Main.Sessions.active_nb(state) : nothing
+    _Sess = Main.Sessions
+    tab = state !== nothing ? _Sess.active_tab(state) : nothing
 
-    if nb === nothing
+    if tab === nothing
         return Div(:id => "nb-island",
             :class => "flex-1 flex flex-col bg-surf border border-b1 rounded-xl overflow-hidden min-h-0 shadow-lg shadow-black/25",
             Div(:class => "flex-1 flex items-center justify-content-center text-t3 text-sm",
                 :style => "justify-content:center",
-                "No notebook loaded"))
+                "No file loaded"))
     end
 
-    _Sess = Main.Sessions
-    cells = _Sess.ordered_cells(nb)
+    is_file_tab = tab.tab_type == :file
+    nb = is_file_tab ? nothing : _Sess.active_nb(state)
+    cells = is_file_tab ? _Sess.Cell[] : _Sess.ordered_cells(nb)
 
     # ===================================================================
     # Tab bar (38px) — render ALL tabs
@@ -74,49 +76,65 @@ function NotebookPanel()
 
     # Spacer + Toolbar
     push!(tab_items, Span(:class => "flex-1"))
-    push!(tab_items, Div(:class => "flex items-center gap-2 px-3.5",
-        # Run Stale button — always in DOM, hidden when no stale cells.
-        # Server broadcasts stale_count after execution to show/hide.
-        let sc = _Sess.stale_cells(nb), n = length(sc)
+    toolbar_items = Any[]
+    if !is_file_tab
+        # Notebook-only buttons: Run Stale, Run All
+        sc = nb !== nothing ? _Sess.stale_cells(nb) : _Sess.Cell[]
+        n = length(sc)
+        push!(toolbar_items,
             Button(:id => "run-stale-btn",
                 :class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] font-sans cursor-pointer hover:bg-hov transition-colors",
                 :style => "color:#d4a056;" * (n == 0 ? "display:none;" : ""),
                 :on_click => "window._sessionsRunStale()",
                 :title => "Run stale cells (Ctrl+Shift+Enter)",
                 RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""),
-                Span(:id => "run-stale-label", n > 0 ? " Run Stale ($n)" : " Run Stale"))
-        end,
-        # Run All button
-        Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
-            :on_click => "window._sessionsRunAll()",
-            :title => "Run all cells (Shift+R)",
-            RawHtml(_SVG_RUN_SMALL),
-            " Run All"),
-        # Save button
+                Span(:id => "run-stale-label", n > 0 ? " Run Stale ($n)" : " Run Stale")))
+        push!(toolbar_items,
+            Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
+                :on_click => "window._sessionsRunAll()",
+                :title => "Run all cells (Shift+R)",
+                RawHtml(_SVG_RUN_SMALL),
+                " Run All"))
+    end
+    # Save button — always shown (works for both notebooks and files)
+    push!(toolbar_items,
         Button(:id => "save-indicator",
             :class => "bg-island border border-b2 rounded px-3 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
             :on_click => "window._sessionsSave()",
             :title => "Save (Ctrl+S)",
-            "Save")))
+            "Save"))
+    push!(tab_items, Div(:class => "flex items-center gap-2 px-3.5", toolbar_items...))
 
     tab_bar = Div(:class => "h-[38px] flex items-stretch bg-deep border-b border-b1 shrink-0",
         tab_items...)
 
     # ===================================================================
-    # Cell list
+    # Content: file editor OR cell list
     # ===================================================================
-    rendered_cells = Any[]
-    cell_index = 0
-
-    # Initial gap
-    push!(rendered_cells, CellGap(after_cell_id=""))
-
-    for cell in cells
-        cell_index += 1
-        view = CellView(cell; index=cell_index)
-        view === nothing && continue
-        push!(rendered_cells, view)
-        push!(rendered_cells, CellGap(after_cell_id=string(cell.id)))
+    content_area = if is_file_tab
+        # Plain file editor — single large CodeMirror instance
+        Div(:class => "flex-1 overflow-y-auto", :id => "nb",
+            Div(:class => "file-editor-wrap",
+                :style => "height:100%;",
+                Div(:class => "cm-cell cm-file-editor",
+                    :data_file_path => tab.path,
+                    :data_src => tab.file_content,
+                    :style => "height:100%;overflow:auto;")))
+    else
+        # Notebook cell list
+        rendered_cells = Any[]
+        cell_index = 0
+        push!(rendered_cells, CellGap(after_cell_id=""))
+        for cell in cells
+            cell_index += 1
+            view = CellView(cell; index=cell_index)
+            view === nothing && continue
+            push!(rendered_cells, view)
+            push!(rendered_cells, CellGap(after_cell_id=string(cell.id)))
+        end
+        Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
+            Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
+                rendered_cells...))
     end
 
     # ===================================================================
@@ -125,7 +143,5 @@ function NotebookPanel()
     Div(:id => "nb-island",
         :class => "flex-1 flex flex-col bg-surf border border-b1 rounded-xl overflow-hidden min-h-0 shadow-lg shadow-black/25",
         tab_bar,
-        Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
-            Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
-                rendered_cells...)))
+        content_area)
 end

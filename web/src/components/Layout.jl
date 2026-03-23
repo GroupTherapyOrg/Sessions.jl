@@ -155,6 +155,10 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 .sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
 .sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
 .sst-more:hover{color:#56d4a0;}
+/* File editor — full-height CodeMirror for plain files */
+.file-editor-wrap{height:100%;display:flex;flex-direction:column;}
+.cm-file-editor{flex:1;min-height:0;}
+.cm-file-editor .cm-editor{height:100%;}
 </style>"""),
 
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
@@ -264,9 +268,15 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 
   // ── Save: sync codes then save .jl + .sessions.toml ──
   window._sessionsSave = function() {
-    if (window.TherapyWS && TherapyWS.sendMessage) {
-      TherapyWS.sendMessage('notebook', {action: 'save', codes: _collectCodes()});
+    if (!window.TherapyWS || !TherapyWS.sendMessage) return;
+    // File editor tab: send raw content
+    var fileEditor = window._fileEditorView;
+    if (fileEditor) {
+      TherapyWS.sendMessage('notebook', {action: 'save', content: fileEditor.state.doc.toString()});
+      return;
     }
+    // Notebook tab: send cell codes
+    TherapyWS.sendMessage('notebook', {action: 'save', codes: _collectCodes()});
   };
 
   // ── Debounced code sync: sends update_code to server on edit ──
@@ -302,15 +312,16 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   }
 
   // ── Initialize CM editors (callable for new cells too) ──
+  // Handles both notebook cell editors (.cm-cell with data-cell-id)
+  // and file editors (.cm-file-editor with data-file-path)
   function initCMEditors() {
     document.querySelectorAll('.cm-cell').forEach(function(host) {
       if (host.querySelector('.cm-editor')) return;
       var src = host.dataset.src || '';
       var cellId = host.dataset.cellId || '';
+      var isFileEditor = host.classList.contains('cm-file-editor');
 
-    var view = new C.EditorView({
-      doc: src,
-      extensions: [
+      var exts = [
         C.lineNumbers(), C.highlightActiveLineGutter(), C.highlightSpecialChars(),
         C.history(), C.drawSelection(),
         C.EditorState.allowMultipleSelections.of(true),
@@ -320,16 +331,30 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
           ...C.closeBracketsKeymap, ...C.defaultKeymap, ...C.searchKeymap,
           ...C.historyKeymap, ...C.completionKeymap, C.indentWithTab,
         ]),
-        shiftEnterKeymap(cellId),
-        editSyncExtension(cellId),
         C.julia(),
         C.syntaxHighlighting(hlTheme),
         edTheme,
-      ],
-      parent: host,
-    });
+      ];
 
-    if (cellId) editors[cellId] = view;
+      if (isFileEditor) {
+        // File editor: full-height, no cell execution
+        exts.push(C.EditorView.theme({
+          '&': { height: '100%' },
+          '.cm-scroller': { overflow: 'auto' }
+        }));
+      } else if (cellId) {
+        // Notebook cell: Shift+Enter executes, debounced sync
+        exts.push(shiftEnterKeymap(cellId));
+        exts.push(editSyncExtension(cellId));
+      }
+
+      var view = new C.EditorView({ doc: src, extensions: exts, parent: host });
+
+      if (isFileEditor) {
+        window._fileEditorView = view;
+      } else if (cellId) {
+        editors[cellId] = view;
+      }
     });
   }
   initCMEditors();
@@ -536,9 +561,10 @@ function _notebook_channel_script()
     else if (data.event === 'nb_replaced') {
       // Server rendered the full notebook panel — swap in-place
       var nbIsland = document.getElementById('nb-island');
+      window._fileEditorView = null;  // Clear file editor ref on tab switch
       if (nbIsland && data.nb_html) {
         nbIsland.outerHTML = data.nb_html;
-        // Re-init CM editors
+        // Re-init CM editors (handles both cell and file editors)
         window._sessionsInitNewCells && window._sessionsInitNewCells();
         // Re-hydrate WASM islands (CellIsland eye toggles, etc.)
         if (window.__hydrateTherapyIslands) {

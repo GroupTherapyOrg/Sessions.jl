@@ -142,7 +142,8 @@ function _file_explorer_js(root_dir::String)
 
   if (!tree) return;
 
-  // ── File selection: single click opens .jl files ──
+  // ── File selection: single click opens text files ──
+  var _openableTypes = {'jl':1, 'toml':1, 'md':1, 'yml':1, 'git':1, 'lic':1, 'generic':1};
   tree.addEventListener('sl-selection-change', function(e) {
     var items = e.detail.selection;
     if (!items || !items.length) return;
@@ -150,8 +151,7 @@ function _file_explorer_js(root_dir::String)
     if (item.hasAttribute('data-is-dir')) return;
     var fileType = item.dataset.fileType;
     var absPath = item.dataset.absPath;
-    if (fileType === 'jl' && absPath && window.TherapyWS) {
-      // Debounce to avoid firing during double-click rename
+    if (absPath && window.TherapyWS && _openableTypes[fileType]) {
       clearTimeout(_clickTimer);
       _clickTimer = setTimeout(function() {
         TherapyWS.sendMessage('notebook', {action: 'open_notebook', path: absPath});
