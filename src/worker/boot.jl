@@ -19,7 +19,8 @@ function _create_workspace(; notebook_path::String="")
     ns = Symbol("SW_", _ws_counter[])
     mod = Module(ns)
     Core.eval(mod, :(import Base))
-    # Pre-inject Markdown so md"..." works immediately
+    # Pre-inject Pkg and Markdown so they're immediately available in cells
+    Core.eval(mod, :(import Pkg))
     Core.eval(mod, :(import Markdown))
 
     # Set working directory to notebook's location so pwd() and @__DIR__ work
