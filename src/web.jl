@@ -7,6 +7,28 @@ using Therapy
 import Markdown
 import Base64
 
+# =============================================================================
+# Shared Helpers (used by both static export and live app)
+# =============================================================================
+
+"""Format runtime nanoseconds into a compact human string."""
+function _format_runtime(ns::UInt64)
+    ns == 0 && return ""
+    ms = ns / 1_000_000
+    if ms < 1
+        return "$(round(ns / 1000, digits=1))μs"
+    elseif ms < 1000
+        return "$(round(ms, digits=1))ms"
+    else
+        return "$(round(ms / 1000, digits=2))s"
+    end
+end
+
+# SVG icon constants (shared by static export and live app)
+const _SVG_RUN = """<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""
+const _SVG_MENU = """<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""
+const _SVG_PLUS = """<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>"""
+
 # Load CodeMirror 6 bundle at include time (same pattern as app Layout.jl)
 const _EDITOR_BUNDLE_JS = let
     p = joinpath(@__DIR__, "web", "static", "editor.js")
@@ -40,7 +62,7 @@ end
     is_open, set_is_open = create_signal(Int32(initial_open))
 
     Div(:class => "cell-island",
-        # Eye toggle — matches app CellIsland structure
+        # Eye toggle — fold/unfold code visibility
         Div(:class => "cell-eye",
             :on_click => () -> begin
                 if is_open() == Int32(1)
@@ -54,7 +76,7 @@ end
                 RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>"""),
                 # Open eye (layered on top, hidden when folded)
                 Show(is_open) do
-                    Div(:style => "position:absolute;inset:0;background:var(--bg-primary);",
+                    Div(:style => "position:absolute;inset:0;background:var(--bg-primary, #151c25);",
                         RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""))
                 end)),
 
@@ -68,18 +90,20 @@ end
 # WebSlider @island — wasm-compiled interactive slider for @bind
 # =============================================================================
 
-@island function WebSlider(; min_val=0, max_val=100, value=50, step_val=1)
-    current, set_current = create_signal(value)
+@island function WebSlider(; min_val=0, max_val=100, value=50, step_val=1, var_name="x")
+    current, set_current = create_signal(Int32(value))
 
-    Div(:class => "flex items-center gap-3",
+    Div(:style => "display:flex;align-items:center;gap:12px;padding:8px 0;",
+        Span(:style => "font-size:13px;font-family:'JetBrains Mono',ui-monospace,monospace;color:#6b7d93;",
+            string(var_name), " = "),
         Input(:type => "range",
             :min => string(min_val),
             :max => string(max_val),
-            :value => string(value),
             :step => string(step_val),
-            :class => "w-48 accent-accent-600 cursor-pointer",
+            :value => string(value),
+            :style => "flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;",
             :on_input => () -> set_current(unsafe_trunc(Int32, get_target_value_f64()))),
-        Span(:class => "text-sm font-mono text-warm-600 dark:text-warm-400 min-w-[3ch] text-right",
+        Span(:style => "font-size:13px;font-family:'JetBrains Mono',ui-monospace,monospace;color:#56d4a0;min-width:2em;text-align:right;",
             current))
 end
 
@@ -128,6 +152,239 @@ function _WebBadge(children...; variant::String="default", class::String="")
 end
 
 # =============================================================================
+# HTML String Renderers (shared: live app WS + static export fallback)
+# =============================================================================
+
+function _html_esc(s::AbstractString)
+    replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
+end
+
+function _parse_json_string_array(s::String)
+    results = String[]
+    i = 1
+    while i <= length(s)
+        if s[i] == '"'
+            j = i + 1
+            buf = IOBuffer()
+            while j <= length(s)
+                if s[j] == '\\' && j + 1 <= length(s)
+                    c = s[j+1]
+                    if c == '"'; write(buf, '"')
+                    elseif c == '\\'; write(buf, '\\')
+                    elseif c == 'n'; write(buf, '\n')
+                    elseif c == 'r'; write(buf, '\r')
+                    else write(buf, c)
+                    end
+                    j += 2
+                elseif s[j] == '"'
+                    break
+                else
+                    write(buf, s[j])
+                    j += 1
+                end
+            end
+            push!(results, String(take!(buf)))
+            i = j + 1
+        else
+            i += 1
+        end
+    end
+    results
+end
+
+function _extract_json_string_array(json::String, key::String)
+    pat = "\"$(key)\":["
+    idx = findfirst(pat, json)
+    idx === nothing && return String[]
+    start = last(idx) + 1
+    depth = 1
+    i = start
+    while i <= length(json) && depth > 0
+        c = json[i]
+        c == '[' && (depth += 1)
+        c == ']' && (depth -= 1)
+        i += 1
+    end
+    arr_str = json[start:i-2]
+    _parse_json_string_array(arr_str)
+end
+
+function _extract_json_nested_array(json::String, key::String)
+    pat = "\"$(key)\":["
+    idx = findfirst(pat, json)
+    idx === nothing && return String[]
+    start = last(idx) + 1
+    depth = 1
+    i = start
+    while i <= length(json) && depth > 0
+        c = json[i]
+        c == '[' && (depth += 1)
+        c == ']' && (depth -= 1)
+        i += 1
+    end
+    arr_content = json[start:i-2]
+    results = String[]
+    j = 1
+    while j <= length(arr_content)
+        if arr_content[j] == '['
+            d = 1
+            k = j + 1
+            while k <= length(arr_content) && d > 0
+                arr_content[k] == '[' && (d += 1)
+                arr_content[k] == ']' && (d -= 1)
+                k += 1
+            end
+            push!(results, arr_content[j+1:k-2])
+            j = k
+        else
+            j += 1
+        end
+    end
+    results
+end
+
+function _extract_json_int(json::String, key::String)
+    pat = "\"$(key)\":"
+    idx = findfirst(pat, json)
+    idx === nothing && return 0
+    start = last(idx) + 1
+    i = start
+    while i <= length(json) && (json[i] in ('0':'9'))
+        i += 1
+    end
+    parse(Int, json[start:i-1])
+end
+
+"""Simple JSON parser for table data. Returns Dict or nothing."""
+function _parse_table_json(json::String)
+    try
+        cols = _extract_json_string_array(json, "cols")
+        types = _extract_json_string_array(json, "types")
+        rows_str = _extract_json_nested_array(json, "rows")
+        nrow = _extract_json_int(json, "nrow")
+        ncol = _extract_json_int(json, "ncol")
+
+        rows = Vector{String}[]
+        for row_str in rows_str
+            push!(rows, _parse_json_string_array(row_str))
+        end
+
+        Dict(:cols => cols, :types => types, :rows => rows, :nrow => nrow, :ncol => ncol)
+    catch e
+        @warn "[Sessions] Failed to parse table JSON" exception=e
+        nothing
+    end
+end
+
+function _write_table_row(buf::IOBuffer, idx::Int, row::Vector{String}, ncol::Int)
+    print(buf, """<tr class="sst-row" data-row-idx="$(idx)">""")
+    print(buf, """<th class="sst-row-label">""", idx, "</th>")
+    for cell in row
+        print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+    end
+    print(buf, "</tr>")
+end
+
+"""Render a table from structured JSON into a Pluto-style HTML table."""
+function _render_table_html(table_json::String)
+    isempty(table_json) && return ""
+
+    data = _parse_table_json(table_json)
+    data === nothing && return ""
+
+    cols = data[:cols]
+    types = data[:types]
+    rows = data[:rows]
+    nrow = data[:nrow]
+    ncol = data[:ncol]
+    isempty(cols) && return ""
+
+    initial_visible = 10
+    total_serialized = length(rows)
+    truncated = total_serialized > initial_visible
+
+    buf = IOBuffer()
+
+    print(buf, """<div class="sst-wrap"><div style="font-size:13px;color:#6b7d93;padding:2px 0 8px;font-family:'JetBrains Mono',monospace;">$(nrow)×$(ncol) DataFrame</div>""")
+    print(buf, """<table class="sst-table"><thead>""")
+    print(buf, """<tr><th class="sst-th sst-row-label"></th>""")
+    for name in cols
+        print(buf, """<th class="sst-th">""", _html_esc(name), "</th>")
+    end
+    print(buf, "</tr>")
+    print(buf, """<tr class="sst-type-row"><th class="sst-type-th"></th>""")
+    for t in types
+        print(buf, """<th class="sst-type-th">""", _html_esc(t), "</th>")
+    end
+    print(buf, "</tr></thead><tbody>")
+
+    if truncated
+        for i in 1:initial_visible
+            _write_table_row(buf, i, rows[i], ncol)
+        end
+        for i in (initial_visible + 1):(total_serialized - 1)
+            print(buf, """<tr class="sst-row sst-hidden" data-row-idx="$(i)" style="display:none">""")
+            print(buf, """<th class="sst-row-label">""", i, "</th>")
+            for cell in rows[i]
+                print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+            end
+            print(buf, "</tr>")
+        end
+        hidden_count = total_serialized - initial_visible - 1
+        more_label = nrow > total_serialized ? "⋮ more" : "⋮ $(hidden_count) more"
+        print(buf, """<tr class="sst-more-row"><td colspan="$(ncol + 1)" class="sst-more" """)
+        print(buf, """onclick="this.closest('table').querySelectorAll('.sst-hidden').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'">""")
+        print(buf, more_label, "</td></tr>")
+        _write_table_row(buf, total_serialized, rows[end], ncol)
+    else
+        for (i, row) in enumerate(rows)
+            _write_table_row(buf, i, row, ncol)
+        end
+    end
+
+    print(buf, "</tbody></table></div>")
+    String(take!(buf))
+end
+
+"""Render a bond widget as a WebSlider @island (SSR + WASM hydration)."""
+function _render_bond_island_html(bond_data::String)
+    parts = split(bond_data, ":")
+    if length(parts) >= 6 && parts[1] == "slider"
+        var_name = String(parts[2])
+        min_v = parse(Int, parts[3])
+        max_v = parse(Int, parts[4])
+        step_v = parse(Int, parts[5])
+        def_v = parse(Int, parts[6])
+
+        try
+            island = get(Therapy.ISLAND_REGISTRY, :WebSlider, nothing)
+            if island !== nothing
+                vnode = Base.invokelatest(island;
+                    min_val=min_v, max_val=max_v, value=def_v, step_val=step_v, var_name=var_name)
+                html = Therapy.render_to_string(vnode)
+                bridge_js = """<script>(function(){var el=document.currentScript.previousElementSibling;if(!el)return;var inp=el.querySelector('input[type=range]');if(!inp)return;inp.addEventListener('input',function(){if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})})})();</script>"""
+                return html * bridge_js
+            end
+        catch e
+            @warn "[Sessions] WebSlider SSR failed, falling back to plain HTML" exception=e
+        end
+
+        return """<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">
+            <span style="font-size:13px;font-family:monospace;color:#6b7d93;">$(var_name) =</span>
+            <input type="range" min="$(min_v)" max="$(max_v)" step="$(step_v)" value="$(def_v)"
+                style="flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;"
+                oninput="this.nextElementSibling.textContent=this.value;if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})">
+            <span style="font-size:13px;font-family:monospace;color:#56d4a0;min-width:2em;text-align:right;">$(def_v)</span>
+        </div>"""
+    elseif length(parts) >= 3 && parts[1] == "widget"
+        var_name = String(parts[2])
+        wtype = String(parts[3])
+        return """<span style="font-size:12px;font-family:monospace;color:#6b7d93;padding:4px 8px;border:1px solid #2a3a4f;border-radius:6px;">$(wtype) → :$(var_name)</span>"""
+    end
+    ""
+end
+
+# =============================================================================
 # Notebook Helpers
 # =============================================================================
 
@@ -165,76 +422,6 @@ function _extract_markdown_content(code::AbstractString)
         return stripped[4:end-1]
     end
     stripped
-end
-
-# =============================================================================
-# Cell Rendering
-# =============================================================================
-
-"""Dispatch cell rendering by type."""
-function _render_cell(cell::Cell, index::Int, prerendered)
-    cell.disabled && return nothing
-    isempty(strip(cell.code)) && return nothing
-    # All cells (code + markdown) get CellToggle — initial state from cell.folded
-    _render_code_cell(cell, index, prerendered)
-end
-
-"""Render a visible code cell — matches app CellView visual structure."""
-function _render_code_cell(cell::Cell, index::Int, prerendered)
-    code = strip(cell.code)
-    output = cell.output
-
-    # Runtime string (matches app _format_runtime)
-    runtime_ms = output.runtime_ns / 1_000_000
-    runtime_str = if output.runtime_ns == 0
-        ""
-    elseif runtime_ms < 1
-        "$(round(output.runtime_ns / 1000, digits=1))μs"
-    elseif runtime_ms < 1000
-        "$(round(runtime_ms, digits=1))ms"
-    else
-        "$(round(runtime_ms / 1000, digits=2))s"
-    end
-
-    parts = []
-
-    # Output area — ABOVE code (matches app: cell-out before cell-island)
-    output_node = _render_output(cell, prerendered)
-    if output_node !== nothing
-        push!(parts, Div(:class => "cell-out", :style => "padding:4px 0 8px;overflow-x:auto;",
-            output_node))
-    end
-
-    # Stdout
-    if !isempty(output.stdout)
-        push!(parts,
-            Div(:class => "cell-out font-mono text-xs whitespace-pre overflow-x-auto",
-                :style => "padding:6px 0 10px;line-height:1.5;color:#7ca0bf;",
-                output.stdout))
-    end
-
-    # Hover controls (top-right) — runtime badge only (no run/menu in static export)
-    ctrl_children = Any[]
-    if !isempty(runtime_str)
-        push!(ctrl_children,
-            Span(:class => "rt-badge", runtime_str))
-    end
-    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
-        ctrl_children...)
-
-    # Code block — CM editor host (same as app CellView: cm-cell with data-src)
-    code_cell = Div(:class => "code-cell relative rounded-lg overflow-hidden",
-        ctrls,
-        Div(:class => "cm-cell",
-            :data_cell_id => string(cell.id),
-            :data_src => String(code)))
-
-    # CellToggle island (eye toggle + fold) wrapping the code-cell
-    push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
-        code_cell
-    end)
-
-    Div(:data_cell_id => string(cell.id), :class => "cell-wrap relative", parts...)
 end
 
 """
@@ -407,12 +594,11 @@ function _render_bond_output(result, cell::Cell, prerendered)
             def_v = Int(widget.default)
 
             slider_id = string(cell.id)
-            return Div(:class => "notebook-slider flex items-center gap-3 py-2",
+            return Div(:class => "notebook-slider",
                 :data_bind_var => string(var_name),
                 :data_bind_slider_id => slider_id,
-                Span(:class => "text-sm font-mono text-warm-500 dark:text-warm-400",
-                    string(var_name), " = "),
-                WebSlider(min_val=min_v, max_val=max_v, value=def_v, step_val=step_v))
+                WebSlider(min_val=min_v, max_val=max_v, value=def_v, step_val=step_v,
+                    var_name=string(var_name)))
         end
 
         widget_type = nameof(typeof(widget))
@@ -549,6 +735,196 @@ function _render_reactive_table(result, gallery::PrerenderedGallery)
 
     # Fallback for non-NamedTuple dataframes — static render
     _render_table_output(result)
+end
+
+# =============================================================================
+# render_output_html — single source of truth for cell output as HTML string
+# =============================================================================
+
+"""
+    render_output_html(cell::Cell; prerendered=Dict()) -> String
+
+Render cell output to an HTML string. Used by the live app (WS updates)
+and as a fallback in static export. Single source of truth — replaces both
+`_web_render_output_html` (web_server.jl) and `_render_cell_output_html` (CellView.jl).
+"""
+function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGallery}())
+    output = cell.output
+    # Markdown
+    if output.output_type == :markdown
+        md_html = if output.result !== nothing
+            try
+                sprint(io -> Markdown.html(io, output.result))
+            catch
+                output.text_representation
+            end
+        else
+            output.text_representation
+        end
+        return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
+    end
+    # Bond
+    if output.output_type == :bond
+        return _render_bond_island_html(output.text_representation)
+    end
+    # Table
+    if output.output_type == :table
+        return _render_table_html(output.text_representation)
+    end
+    # HTML
+    if output.output_type == :html
+        html = output.text_representation
+        return isempty(html) ? "" : html
+    end
+    # Fallback: VNode → string
+    vnode = _render_output(cell, prerendered)
+    vnode === nothing && return ""
+    Therapy.render_to_string(vnode)
+end
+
+# =============================================================================
+# render_cell — unified cell rendering (static export + live app)
+# =============================================================================
+
+"""
+    render_cell(cell::Cell; mode=:static, index=0, prerendered=Dict()) -> VNode
+
+Unified cell rendering function — single source of truth.
+
+**mode=:static** — Output as VNode via `_render_output()`, no run/menu buttons, no stale/idle states.
+**mode=:live** — Output as HTML string via `render_output_html()` → RawHtml, with run + menu buttons
+and stale/idle/executing CSS classes.
+
+Both modes share: CellToggle @island, CM editor host, runtime badge, cell-wrap/code-cell structure.
+"""
+function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
+                     prerendered=Dict{UUID, PrerenderedGallery}())
+    cell.disabled && return nothing
+    code = strip(cell.code)
+    isempty(code) && return nothing
+
+    output = cell.output
+    cell_id = string(cell.id)
+    runtime_str = _format_runtime(output.runtime_ns)
+
+    parts = Any[]
+
+    # =======================================================================
+    # Output area — ABOVE code (Pluto-style: output before code)
+    # =======================================================================
+    if mode == :static
+        output_node = _render_output(cell, prerendered)
+        if output_node !== nothing
+            push!(parts, Div(:class => "cell-out", :style => "padding:4px 0 8px;overflow-x:auto;",
+                output_node))
+        end
+        # Stdout (live mode gets stdout via WS)
+        if !isempty(output.stdout)
+            push!(parts,
+                Div(:class => "cell-out font-mono text-xs whitespace-pre overflow-x-auto",
+                    :style => "padding:6px 0 10px;line-height:1.5;color:#7ca0bf;",
+                    output.stdout))
+        end
+    else  # :live
+        output_html = render_output_html(cell)
+        has_text_output = !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
+        has_output = has_text_output || !isempty(output_html)
+        is_rich_output = output.output_type in (:markdown, :html, :dataframe, :table, :image_png, :image_svg, :bond)
+
+        out_div = if has_output
+            out_content = !isempty(output_html) ? RawHtml(output_html) :
+                          has_text_output ? output.text_representation : nothing
+            if out_content !== nothing
+                if is_rich_output
+                    Div(:class => "cell-out",
+                        :data_cell_id => cell_id,
+                        :style => "padding:4px 0 8px;overflow-x:auto;",
+                        out_content)
+                else
+                    Div(:class => "cell-out font-mono text-xs text-tout whitespace-pre overflow-x-auto",
+                        :data_cell_id => cell_id,
+                        :style => "padding:6px 0 10px;line-height:1.5;",
+                        out_content)
+                end
+            else
+                Div(:class => "cell-out", :data_cell_id => cell_id, :style => "display:none;")
+            end
+        else
+            Div(:class => "cell-out", :data_cell_id => cell_id, :style => "display:none;")
+        end
+        push!(parts, out_div)
+    end
+
+    # =======================================================================
+    # Hover controls (top-right)
+    # =======================================================================
+    ctrl_children = Any[]
+    if !isempty(runtime_str)
+        if mode == :static
+            push!(ctrl_children, Span(:class => "rt-badge", runtime_str))
+        else
+            push!(ctrl_children,
+                Span(:class => "rt-badge text-[10px] font-mono px-[7px] py-px rounded-full",
+                    :style => "color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12)",
+                    runtime_str))
+        end
+    end
+    if mode == :live
+        push!(ctrl_children,
+            Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125",
+                :style => "background:rgba(86,212,160,.1)",
+                :title => "Run cell (Shift+Enter)",
+                :on_click => "window._sessionsRunCell('$(cell_id)')",
+                RawHtml(_SVG_RUN)))
+        push!(ctrl_children,
+            Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
+                :style => "background:rgba(255,255,255,.04)",
+                :title => "Cell actions",
+                :on_click => "window._sessionsShowCellMenu(this,'$(cell_id)')",
+                RawHtml(_SVG_MENU)))
+    end
+    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
+        ctrl_children...)
+
+    # =======================================================================
+    # Code cell
+    # =======================================================================
+    code_cell_classes = if mode == :static
+        "code-cell relative rounded-lg overflow-hidden"
+    else
+        cls = "code-cell relative rounded-lg border border-b1 bg-island transition-all duration-200 hover:border-b2"
+        cell.state == cell_idle && (cls *= " idle")
+        is_stale(cell) && (cls *= " stale")
+        cls
+    end
+
+    code_cell = Div(:class => code_cell_classes,
+        ctrls,
+        Div(:class => "cm-cell",
+            :data_cell_id => cell_id,
+            :data_src => String(code)))
+
+    # CellToggle island (eye toggle + fold) wrapping the code-cell
+    push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
+        code_cell
+    end)
+
+    Div(:data_cell_id => cell_id, :class => "cell-wrap relative", parts...)
+end
+
+# =============================================================================
+# CellGap — divider between cells with "+ Code" button (live app)
+# =============================================================================
+
+function CellGap(; after_cell_id::String="")
+    Div(:class => "cdiv h-[18px] flex items-center justify-center",
+        Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
+            Div(:class => "h-px w-14 bg-b2"),
+            Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
+                :on_click => "TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: '$(after_cell_id)'})",
+                RawHtml(_SVG_PLUS),
+                "Code"),
+            Div(:class => "h-px w-14 bg-b2")))
 end
 
 function _slider_interaction_script()
@@ -789,15 +1165,13 @@ function _notebook_fonts()
 end
 
 """
-Self-contained CSS for notebook rendering — identical to the app's Layout.jl styles.
+Shared CSS for notebook rendering — single source of truth.
 
+Used by both `_notebook_stylesheet()` (static export) and `Layout.jl` (live app).
 Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
 Pluto-style tables (sst-*), CodeMirror overrides, slider widgets.
-Any Therapy.jl app that calls NotebookPage() gets the full app experience.
 """
-function _notebook_stylesheet()
-    RawHtml("""<style id="sessions-notebook-css">
-/* Cell chrome */
+const NOTEBOOK_CSS = """/* Cell chrome */
 .code-cell{background:#1a2332;border:1px solid #1c2736;transition:border-color .2s;}
 .code-cell:hover{border-color:#2a3a4f;}
 .code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
@@ -813,7 +1187,7 @@ function _notebook_stylesheet()
 /* Notebook slider */
 .notebook-slider{display:flex;align-items:center;gap:12px;padding:8px 0;}
 .notebook-plotly{border-radius:8px;overflow:hidden;}
-/* Markdown prose (matches app md-prose) */
+/* Markdown prose */
 .md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#9baabd;line-height:1.7;font-size:14.5px;}
 .md-prose h1{font-family:'Fraunces',Georgia,serif;font-size:2.2rem;font-weight:700;color:#d4dce8;margin:0.3em 0 0.6em;letter-spacing:-0.01em;padding-bottom:0.3em;border-bottom:3px solid #2a3a4f;}
 .md-prose h2{font-family:'Fraunces',Georgia,serif;font-size:1.8rem;font-weight:700;color:#d4dce8;margin:1.2em 0 0.4em;padding-bottom:0.3em;border-bottom:2px dotted #2a3a4f;}
@@ -847,11 +1221,13 @@ function _notebook_stylesheet()
 .sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
 .sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
 .sst-more:hover{color:#56d4a0;}
-/* CodeMirror overrides (matches app Layout.jl) */
+/* CodeMirror overrides */
 .cm-cell .cm-editor{background:transparent!important;}
 .cm-cell .cm-scroller{overflow-x:auto;}
-.cm-cell .cm-focused{outline:none!important;}
-</style>""")
+.cm-cell .cm-focused{outline:none!important;}"""
+
+function _notebook_stylesheet()
+    RawHtml("""<style id="sessions-notebook-css">$(NOTEBOOK_CSS)</style>""")
 end
 
 """CodeMirror 6 bundle (inlined) + read-only init script for static notebooks."""
@@ -940,14 +1316,9 @@ function NotebookPage(nb::Notebook;
         _notebook_fonts(),
         _notebook_stylesheet(),
     ]
-    cell_index = 0
-
     for cell in cells
-        node = _render_cell(cell, cell_index, prerendered)
-        if node !== nothing
-            push!(rendered, node)
-            cell_index += 1
-        end
+        node = render_cell(cell; mode=:static, prerendered=prerendered)
+        node !== nothing && push!(rendered, node)
     end
 
     # Add inline JS for slider/plotly interactivity

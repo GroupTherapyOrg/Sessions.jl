@@ -162,7 +162,7 @@ end
 
 """Convert a Cell to a serializable Dict for the client."""
 function _cell_to_dict(cell::Cell)
-    output_html = _web_render_output_html(cell)
+    output_html = render_output_html(cell)
     Dict(
         "cell_id" => string(cell.id),
         "code" => cell.code,
@@ -176,306 +176,9 @@ function _cell_to_dict(cell::Cell)
     )
 end
 
-"""Render a bond widget as a BoundSlider @island (SSR + WASM hydration)."""
-function _render_bond_island_html(bond_data::String)
-    # Parse: "slider:varname:min:max:step:default" or "widget:varname:type"
-    parts = split(bond_data, ":")
-    if length(parts) >= 6 && parts[1] == "slider"
-        var_name = String(parts[2])
-        min_v = parse(Int, parts[3])
-        max_v = parse(Int, parts[4])
-        step_v = parse(Int, parts[5])
-        def_v = parse(Int, parts[6])
-
-        # Render BoundSlider @island via Therapy SSR
-        # The @island is defined in web/src/components/BoundSlider.jl and loaded into
-        # Therapy's module scope by Therapy.load_app!. Registered in ISLAND_REGISTRY
-        # with Symbol key :BoundSlider.
-        try
-            island = get(Therapy.ISLAND_REGISTRY, :BoundSlider, nothing)
-            if island !== nothing
-                vnode = Base.invokelatest(island;
-                    min_val=min_v, max_val=max_v, value=def_v, step_val=step_v, var_name=var_name)
-                html = Therapy.render_to_string(vnode)
-                # JS bridge for server re-execution (alongside WASM signal).
-                # The @island's WASM on_input handles instant value display.
-                # This JS bridge sends the value to the server for re-executing
-                # dependent cells. Later: replaced by WASM channel.send() import.
-                bridge_js = """<script>(function(){var el=document.currentScript.previousElementSibling;if(!el)return;var inp=el.querySelector('input[type=range]');if(!inp)return;inp.addEventListener('input',function(){if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})})})();</script>"""
-                return html * bridge_js
-            end
-        catch e
-            @warn "[WebNotebook] BoundSlider SSR failed, falling back to plain HTML" exception=e
-        end
-
-        # Fallback: plain HTML slider (no WASM)
-        return """<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">
-            <span style="font-size:13px;font-family:monospace;color:#6b7d93;">$(var_name) =</span>
-            <input type="range" min="$(min_v)" max="$(max_v)" step="$(step_v)" value="$(def_v)"
-                style="flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;"
-                oninput="this.nextElementSibling.textContent=this.value;if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})">
-            <span style="font-size:13px;font-family:monospace;color:#56d4a0;min-width:2em;text-align:right;">$(def_v)</span>
-        </div>"""
-    elseif length(parts) >= 3 && parts[1] == "widget"
-        var_name = String(parts[2])
-        wtype = String(parts[3])
-        return """<span style="font-size:12px;font-family:monospace;color:#6b7d93;padding:4px 8px;border:1px solid #2a3a4f;border-radius:6px;">$(wtype) → :$(var_name)</span>"""
-    end
-    ""
-end
-
-"""Render a table from structured JSON into a Pluto-style HTML table.
-
-Matches Pluto's table layout:
-- Accent-colored top border, minimal horizontal rules
-- Column headers in accent color, types shown on hover
-- Bold row numbers, clean spacing
-- First 10 rows visible, then "⋮ more", then last row always shown
-"""
-function _render_table_html(table_json::String)
-    isempty(table_json) && return ""
-
-    data = _parse_table_json(table_json)
-    data === nothing && return ""
-
-    cols = data[:cols]
-    types = data[:types]
-    rows = data[:rows]
-    nrow = data[:nrow]
-    ncol = data[:ncol]
-    isempty(cols) && return ""
-
-    initial_visible = 10  # Pluto shows 10 rows initially
-    total_serialized = length(rows)
-    truncated = total_serialized > initial_visible
-
-    buf = IOBuffer()
-
-    # Dimension label (above table, like Pluto)
-    print(buf, """<div class="sst-wrap"><div style="font-size:13px;color:#6b7d93;padding:2px 0 8px;font-family:'JetBrains Mono',monospace;">$(nrow)×$(ncol) DataFrame</div>""")
-
-    # Table
-    print(buf, """<table class="sst-table"><thead>""")
-
-    # Column name row
-    print(buf, """<tr><th class="sst-th sst-row-label"></th>""")
-    for name in cols
-        print(buf, """<th class="sst-th">""", _html_esc(name), "</th>")
-    end
-    print(buf, "</tr>")
-
-    # Column type row (visible on hover, like Pluto)
-    print(buf, """<tr class="sst-type-row"><th class="sst-type-th"></th>""")
-    for t in types
-        print(buf, """<th class="sst-type-th">""", _html_esc(t), "</th>")
-    end
-    print(buf, "</tr></thead><tbody>")
-
-    # Data rows — Pluto pattern: first N rows, "⋮ more", last row
-    if truncated
-        # First N rows (visible)
-        for i in 1:initial_visible
-            _write_table_row(buf, i, rows[i], ncol)
-        end
-
-        # Hidden middle rows (revealed by "more" click)
-        for i in (initial_visible + 1):(total_serialized - 1)
-            print(buf, """<tr class="sst-row sst-hidden" data-row-idx="$(i)" style="display:none">""")
-            print(buf, """<th class="sst-row-label">""", i, "</th>")
-            for cell in rows[i]
-                print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
-            end
-            print(buf, "</tr>")
-        end
-
-        # "⋮ more" button row
-        hidden_count = total_serialized - initial_visible - 1
-        if nrow > total_serialized
-            more_label = "⋮ more"
-        else
-            more_label = "⋮ $(hidden_count) more"
-        end
-        print(buf, """<tr class="sst-more-row"><td colspan="$(ncol + 1)" class="sst-more" """)
-        print(buf, """onclick="this.closest('table').querySelectorAll('.sst-hidden').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'">""")
-        print(buf, more_label, "</td></tr>")
-
-        # Last row (always visible, like Pluto)
-        _write_table_row(buf, total_serialized, rows[end], ncol)
-    else
-        # All rows visible (small table)
-        for (i, row) in enumerate(rows)
-            _write_table_row(buf, i, row, ncol)
-        end
-    end
-
-    print(buf, "</tbody></table></div>")
-    String(take!(buf))
-end
-
-function _write_table_row(buf::IOBuffer, idx::Int, row::Vector{String}, ncol::Int)
-    print(buf, """<tr class="sst-row" data-row-idx="$(idx)">""")
-    print(buf, """<th class="sst-row-label">""", idx, "</th>")
-    for cell in row
-        print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
-    end
-    print(buf, "</tr>")
-end
-
-"""Simple JSON parser for table data. Returns Dict or nothing."""
-function _parse_table_json(json::String)
-    # Minimal parser for our specific format:
-    # {"cols":["a","b"],"types":["Int","String"],"nrow":N,"ncol":M,"rows":[["1","x"],["2","y"]]}
-    try
-        # Extract arrays and numbers by position
-        cols = _extract_json_string_array(json, "cols")
-        types = _extract_json_string_array(json, "types")
-        rows_str = _extract_json_nested_array(json, "rows")
-        nrow = _extract_json_int(json, "nrow")
-        ncol = _extract_json_int(json, "ncol")
-
-        rows = Vector{String}[]
-        for row_str in rows_str
-            push!(rows, _parse_json_string_array(row_str))
-        end
-
-        Dict(:cols => cols, :types => types, :rows => rows, :nrow => nrow, :ncol => ncol)
-    catch e
-        @warn "[WebNotebook] Failed to parse table JSON" exception=e
-        nothing
-    end
-end
-
-function _extract_json_string_array(json::String, key::String)
-    # Find "key":[...] and extract the string array
-    pat = "\"$(key)\":["
-    idx = findfirst(pat, json)
-    idx === nothing && return String[]
-    start = last(idx) + 1
-    depth = 1
-    i = start
-    while i <= length(json) && depth > 0
-        c = json[i]
-        c == '[' && (depth += 1)
-        c == ']' && (depth -= 1)
-        i += 1
-    end
-    arr_str = json[start:i-2]
-    _parse_json_string_array(arr_str)
-end
-
-function _extract_json_nested_array(json::String, key::String)
-    pat = "\"$(key)\":["
-    idx = findfirst(pat, json)
-    idx === nothing && return String[]
-    start = last(idx) + 1
-    depth = 1
-    i = start
-    while i <= length(json) && depth > 0
-        c = json[i]
-        c == '[' && (depth += 1)
-        c == ']' && (depth -= 1)
-        i += 1
-    end
-    arr_content = json[start:i-2]
-    # Split into sub-arrays
-    results = String[]
-    j = 1
-    while j <= length(arr_content)
-        if arr_content[j] == '['
-            d = 1
-            k = j + 1
-            while k <= length(arr_content) && d > 0
-                arr_content[k] == '[' && (d += 1)
-                arr_content[k] == ']' && (d -= 1)
-                k += 1
-            end
-            push!(results, arr_content[j+1:k-2])
-            j = k
-        else
-            j += 1
-        end
-    end
-    results
-end
-
-function _extract_json_int(json::String, key::String)
-    pat = "\"$(key)\":"
-    idx = findfirst(pat, json)
-    idx === nothing && return 0
-    start = last(idx) + 1
-    i = start
-    while i <= length(json) && (json[i] in ('0':'9'))
-        i += 1
-    end
-    parse(Int, json[start:i-1])
-end
-
-function _parse_json_string_array(s::String)
-    results = String[]
-    i = 1
-    while i <= length(s)
-        if s[i] == '"'
-            j = i + 1
-            buf = IOBuffer()
-            while j <= length(s)
-                if s[j] == '\\' && j + 1 <= length(s)
-                    c = s[j+1]
-                    if c == '"'; write(buf, '"')
-                    elseif c == '\\'; write(buf, '\\')
-                    elseif c == 'n'; write(buf, '\n')
-                    elseif c == 'r'; write(buf, '\r')
-                    else write(buf, c)
-                    end
-                    j += 2
-                elseif s[j] == '"'
-                    break
-                else
-                    write(buf, s[j])
-                    j += 1
-                end
-            end
-            push!(results, String(take!(buf)))
-            i = j + 1
-        else
-            i += 1
-        end
-    end
-    results
-end
-
-function _html_esc(s::AbstractString)
-    replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
-end
-
-"""Render cell output to HTML string via Sessions._render_output + Therapy.render_to_string."""
-function _web_render_output_html(cell::Cell)
-    # Markdown: HTML is in text_representation (from worker or session cache)
-    if cell.output.output_type == :markdown
-        md_html = if cell.output.result !== nothing
-            sprint(io -> Markdown.html(io, cell.output.result))
-        else
-            cell.output.text_representation  # already HTML from worker/cache
-        end
-        return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
-    end
-    # Bond: parse worker data and render BoundSlider @island via SSR
-    if cell.output.output_type == :bond
-        bond_data = cell.output.text_representation
-        return _render_bond_island_html(bond_data)
-    end
-    # Table: parse structured JSON and render styled table
-    if cell.output.output_type == :table
-        return _render_table_html(cell.output.text_representation)
-    end
-    # HTML output: text_representation has the HTML
-    if cell.output.output_type == :html
-        html = cell.output.text_representation
-        return isempty(html) ? "" : html
-    end
-    vnode = _render_output(cell)
-    vnode === nothing && return ""
-    Therapy.render_to_string(vnode)
-end
+# HTML rendering functions (_render_bond_island_html, _render_table_html, _html_esc,
+# JSON helpers, _web_render_output_html) have been moved to web.jl as the single
+# source of truth. Use render_output_html() from Sessions module.
 
 # =============================================================================
 # Cell execution handlers
@@ -546,7 +249,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_output",
                     "cell_id" => string(c.id),
-                    "output_html" => _web_render_output_html(c),
+                    "output_html" => render_output_html(c),
                     "runtime_ns" => c.output.runtime_ns,
                     "stdout" => c.output.stdout,
                     "state" => string(c.state)
@@ -607,7 +310,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         broadcast_channel!("notebook", Dict(
             "event" => "cell_output",
             "cell_id" => string(c.id),
-            "output_html" => _web_render_output_html(c),
+            "output_html" => render_output_html(c),
             "runtime_ns" => c.output.runtime_ns,
             "stdout" => c.output.stdout,
             "state" => string(c.state)
@@ -683,13 +386,10 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
 
     println("[WebNotebook] Added cell $(new_cell.id) after $(after_cell_id_str)")
 
-    # Render the new cell to HTML server-side (same as SSR)
-    # CellView and CellGap are loaded into Therapy's module scope by load_app!
+    # Render the new cell to HTML server-side (using Sessions.render_cell)
     cell_html = try
-        _CellView = getfield(Therapy, :CellView)
-        _CellGap = getfield(Therapy, :CellGap)
-        cell_vnode = Base.invokelatest(_CellView, new_cell; index=0)
-        gap_vnode = Base.invokelatest(_CellGap; after_cell_id=string(new_cell.id))
+        cell_vnode = render_cell(new_cell; mode=:live, index=0)
+        gap_vnode = CellGap(; after_cell_id=string(new_cell.id))
         cell_str = cell_vnode !== nothing ? Therapy.render_to_string(cell_vnode) : ""
         gap_str = Therapy.render_to_string(gap_vnode)
         cell_str * gap_str

@@ -1,9 +1,11 @@
 using Test
 using Sessions
 
+const _FIXTURES = joinpath(@__DIR__, "fixtures")
+
 @testset "run.jl" begin
     @testset "Sessions.run with file path" begin
-        nb = Sessions.run("test/fixtures/test_basic.jl")
+        nb = Sessions.run(joinpath(_FIXTURES, "test_basic.jl"))
         @test nb isa Sessions.Notebook
         @test length(nb) == 3
 
@@ -72,7 +74,7 @@ using Sessions
     end
 
     @testset "Sessions.run folded notebook" begin
-        nb = Sessions.run("test/fixtures/folded_notebook.jl")
+        nb = Sessions.run(joinpath(_FIXTURES, "folded_notebook.jl"))
         cells = ordered_cells(nb)
 
         @test cells[1].output.result == 42    # visible_var = 42

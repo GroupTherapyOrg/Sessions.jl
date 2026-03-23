@@ -61,19 +61,15 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #workspace>div{min-height:0;}
 /* Activity bar button: active highlight when panel is open.
    !important needed to override inline style from _AB_BTN_STYLE */
+/* Activity bar */
 .ab-btn[data-state="on"]{background:rgba(86,212,160,.08) !important;color:#56d4a0 !important;}
 .ab-btn:hover{background:rgba(86,212,160,.06) !important;color:#9baabd !important;}
-.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
-.code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
-.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
-.code-cell:hover::before{opacity:.7;}
+/* Shared notebook CSS (cell chrome, md-prose, sst-*, cm overrides) */
+$(Main.Sessions.NOTEBOOK_CSS)
+/* Layout-only cell state overrides */
 .code-cell.idle::before{background:#3d5068;opacity:.2;}
 .code-cell.executing::before{opacity:0 !important;}
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
-.cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
-.cell-wrap:hover .cell-eye{opacity:1;}
-.cell-eye svg{color:#3d5068;transition:color .15s;}
-.cell-eye:hover svg{color:#56d4a0;}
 .cell-collapsed .cm-cell{display:none;}
 .cell-collapsed .cell-ctrls{display:none;}
 .cell-collapsed::before{opacity:.15!important;}
@@ -89,11 +85,9 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 ::selection{background:rgba(86,212,160,.2);}
 @keyframes blink{50%{opacity:0}}
 .cblink{animation:blink 1s step-end infinite;}
-.cm-cell .cm-editor{background:transparent!important;}
-.cm-cell .cm-scroller{overflow-x:auto;}
-.cm-cell .cm-focused{outline:none!important;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .code-cell.stale::before{background:#d4a056;opacity:.5;}
+.md-prose h5,.md-prose h6{font-family:'Fraunces',Georgia,serif;font-size:1rem;font-weight:600;color:#d4dce8;margin:0.6em 0 0.2em;}
 /* Shoelace dark theme overrides — match Sessions.jl palette */
 :root{--sl-color-neutral-0:#0a0e14;--sl-color-neutral-50:#0f1419;--sl-color-neutral-100:#151c25;--sl-color-neutral-200:#1a2332;--sl-color-neutral-300:#1c2736;--sl-color-neutral-400:#2a3a4f;--sl-color-neutral-500:#3d5068;--sl-color-neutral-600:#6b7d93;--sl-color-neutral-700:#9baabd;--sl-color-neutral-800:#d4dce8;--sl-color-neutral-900:#d4dce8;--sl-color-neutral-1000:#ffffff;--sl-color-primary-600:#56d4a0;--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
 sl-tree{--indent-size:14px;--indent-guide-width:1px;--indent-guide-color:#1c2736;}
@@ -127,42 +121,6 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 .term-tab .close-x{opacity:0;font-size:9px;padding:1px 3px;border-radius:3px;transition:opacity .1s,background .1s;}
 .term-tab:hover .close-x,.term-tab.active .close-x{opacity:.6;}
 .term-tab .close-x:hover{opacity:1;background:rgba(224,107,101,.2);color:#e06b65;}
-/* Markdown prose — Pluto-style notebook text */
-/* Markdown prose — Pluto-style notebook text (dark theme adaptation) */
-.md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#9baabd;line-height:1.7;font-size:14.5px;}
-.md-prose h1{font-family:'Fraunces',Georgia,serif;font-size:2.2rem;font-weight:700;color:#d4dce8;margin:0.3em 0 0.6em;letter-spacing:-0.01em;padding-bottom:0.3em;border-bottom:3px solid #2a3a4f;}
-.md-prose h2{font-family:'Fraunces',Georgia,serif;font-size:1.8rem;font-weight:700;color:#d4dce8;margin:1.2em 0 0.4em;padding-bottom:0.3em;border-bottom:2px dotted #2a3a4f;}
-.md-prose h3{font-family:'Fraunces',Georgia,serif;font-size:1.4rem;font-weight:600;color:#d4dce8;margin:1em 0 0.3em;}
-.md-prose h4{font-family:'Fraunces',Georgia,serif;font-size:1.15rem;font-weight:600;color:#d4dce8;margin:0.8em 0 0.2em;}
-.md-prose h5,.md-prose h6{font-family:'Fraunces',Georgia,serif;font-size:1rem;font-weight:600;color:#d4dce8;margin:0.6em 0 0.2em;}
-.md-prose p{margin:0 0 1em;color:#9baabd;}
-.md-prose ul,.md-prose ol{margin:0 0 1em;padding-left:1.5em;color:#9baabd;line-height:1.6em;}
-.md-prose li{margin:0.25em 0;}
-.md-prose li p{margin:0 0 0.4em;}
-.md-prose blockquote{border-left:3px solid #b08fd8;padding:0.4em 0 0.4em 1em;margin:1em 0;color:#6b7d93;background:rgba(176,143,216,.04);border-radius:0 4px 4px 0;}
-.md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:#0a0e14;padding:0.15em 0.4em;border-radius:4px;color:#7bb8e8;}
-.md-prose pre{background:#0a0e14;border-radius:6px;padding:0.8em 1em;margin:1em 0;overflow-x:auto;tab-size:4;white-space:pre-wrap;}
-.md-prose pre code{background:none;padding:0;font-size:0.8rem;color:#d4dce8;white-space:pre;}
-.md-prose strong{color:#d4dce8;font-weight:600;}
-.md-prose em{font-style:italic;}
-.md-prose a{color:#56d4a0;text-decoration:none;}
-.md-prose a:hover{text-decoration:underline;}
-.md-prose hr{border:none;border-top:3px solid #2a3a4f;margin:1.5em 0;}
-.md-prose img{max-width:100%;border-radius:6px;}
-.md-prose table{border-collapse:collapse;margin:1em 0;width:auto;}
-.md-prose th{padding:6px 12px;border-bottom:2px solid #2a3a4f;color:#d4dce8;font-weight:600;text-align:left;}
-.md-prose td{padding:6px 12px;border-bottom:1px solid rgba(42,58,79,.4);color:#9baabd;}
-/* Sessions Table (sst-*) — Pluto-style table viewer for any Tables.jl type */
-.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:14px;overflow-x:auto;max-width:100%;}
-.sst-table{border-collapse:collapse;width:auto;border-top:2px solid #56d4a0;border-bottom:1px solid #2a3a4f;}
-.sst-th{padding:12px 20px;color:#56d4a0;font-weight:700;font-size:14px;text-align:left;border-bottom:1px solid #2a3a4f;white-space:nowrap;}
-.sst-type-row .sst-type-th{padding:0 20px 8px;color:#3d5068;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:1px solid #2a3a4f;opacity:0;transition:opacity .15s;}
-.sst-table thead:hover .sst-type-row .sst-type-th{opacity:1;}
-.sst-row-label{color:#d4dce8;font-weight:700;font-size:13px;text-align:right;padding:10px 16px 10px 12px;width:1%;white-space:nowrap;border-bottom:1px solid rgba(42,58,79,.3);}
-.sst-td{padding:10px 20px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.3);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
-.sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
-.sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
-.sst-more:hover{color:#56d4a0;}
 /* Undo toast — bottom-left notification for deleted cells */
 #undo-toast{position:fixed;bottom:20px;left:20px;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:8px;padding:10px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:#9baabd;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;}
 #undo-toast.show{opacity:1;transform:translateY(0);pointer-events:auto;}
@@ -376,8 +334,8 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   initCMEditors();
   window._sessionsInitNewCells = initCMEditors;
 
-  // ── Fold persistence: watch CellIsland WASM toggle and sync to server ──
-  // CellIsland @island handles the visual toggle via WASM signal + Show().
+  // ── Fold persistence: watch CellToggle WASM toggle and sync to server ──
+  // CellToggle @island handles the visual toggle via WASM signal + Show().
   // This observer detects when the Show wrapper hides/shows the code-cell
   // and sends the fold state to the server for .jl file persistence.
   document.querySelectorAll('.cell-island').forEach(function(island) {
@@ -498,7 +456,7 @@ function _notebook_channel_script()
           el.out.style.padding = '6px 0 10px';
 
           // innerHTML doesn't execute <script> tags — re-create them so they run.
-          // This is needed for the BoundSlider JS bridge (set_bond on input).
+          // This is needed for the WebSlider JS bridge (set_bond on input).
           el.out.querySelectorAll('script').forEach(function(oldScript) {
             var newScript = document.createElement('script');
             newScript.textContent = oldScript.textContent;
@@ -506,7 +464,7 @@ function _notebook_channel_script()
           });
 
           // Re-hydrate any @island components in the new output
-          // (BoundSlider WASM signal needs to be initialized)
+          // (WebSlider WASM signal needs to be initialized)
           if (window.__hydrateTherapyIslands) {
             window.__hydrateTherapyIslands(el.out);
           }
@@ -646,7 +604,7 @@ function _notebook_channel_script()
         nbIsland.outerHTML = data.nb_html;
         // Re-init CM editors (handles both cell and file editors)
         window._sessionsInitNewCells && window._sessionsInitNewCells();
-        // Re-hydrate WASM islands (CellIsland eye toggles, etc.)
+        // Re-hydrate WASM islands (CellToggle eye toggles, etc.)
         if (window.__hydrateTherapyIslands) {
           var newNb = document.getElementById('nb-island');
           if (newNb) window.__hydrateTherapyIslands(newNb);
@@ -749,7 +707,7 @@ function _notebook_channel_script()
             el.out.innerHTML = cell.output_html;
             el.out.style.display = '';
             el.out.style.padding = '6px 0 10px';
-            // Execute inline scripts (JS bridge for BoundSlider etc.)
+            // Execute inline scripts (JS bridge for WebSlider etc.)
             el.out.querySelectorAll('script').forEach(function(oldScript) {
               var newScript = document.createElement('script');
               newScript.textContent = oldScript.textContent;

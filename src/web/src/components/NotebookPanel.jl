@@ -1,7 +1,7 @@
 # NotebookPanel.jl — Renders the full notebook panel (SSR)
 #
 # Structure: tab bar (38px) + scrollable cell list
-# Contains: tab with .jl wordmark, Run All / Save toolbar, CellGap + CellView pairs
+# Contains: tab with .jl wordmark, Run All / Save toolbar, render_cell + CellGap pairs
 #
 # Color palette:
 #   deep=#0a0e14 base=#0f1419 surf=#151c25 island=#1a2332 hov=#1f2b3d
@@ -147,13 +147,13 @@ function NotebookPanel()
         # Notebook cell list
         rendered_cells = Any[]
         cell_index = 0
-        push!(rendered_cells, CellGap(after_cell_id=""))
+        push!(rendered_cells, Main.Sessions.CellGap(after_cell_id=""))
         for cell in cells
             cell_index += 1
-            view = CellView(cell; index=cell_index)
+            view = Main.Sessions.render_cell(cell; mode=:live, index=cell_index)
             view === nothing && continue
             push!(rendered_cells, view)
-            push!(rendered_cells, CellGap(after_cell_id=string(cell.id)))
+            push!(rendered_cells, Main.Sessions.CellGap(after_cell_id=string(cell.id)))
         end
         Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
             Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
