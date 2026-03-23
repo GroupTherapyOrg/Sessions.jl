@@ -265,9 +265,20 @@ function _terminal_js()
     }
 
     else if (data.event === 'terminal_list') {
-      // Server sent list of existing terminals
+      var serverIds = new Set((data.tabs || []).map(function(t){ return t.id; }));
+
+      // Remove client terminals that no longer exist on server
+      for (var id in terminals) {
+        if (!serverIds.has(id)) {
+          terminals[id].term.dispose();
+          delete terminals[id];
+          var el = document.getElementById('term-' + id);
+          if (el) el.remove();
+        }
+      }
+
       if (data.tabs && data.tabs.length > 0) {
-        // Reconnect: create xterm instances for existing server PTYs
+        // Create xterm instances for server tabs we don't have yet
         data.tabs.forEach(function(t) {
           if (!terminals[t.id]) {
             var info = createTerminal(t.id);
@@ -284,7 +295,7 @@ function _terminal_js()
         var activeId = data.active_tab_id || data.tabs[data.tabs.length - 1].id;
         showTab(activeId);
       } else {
-        // First time: no terminals exist on server — spawn one
+        // No terminals on server — spawn one
         if (window.TherapyWS && TherapyWS.sendMessage) {
           TherapyWS.sendMessage('terminal', {action: 'spawn', rows: 24, cols: 80});
         }
@@ -299,14 +310,8 @@ function _terminal_js()
     }
   });
 
-  // ── On panel show: request terminal list from server ──
-  // Server responds with existing tabs (reconnect) or empty (first time → spawn one).
-  // This is the ONLY path that creates terminals — no maybeAutoSpawn races.
-  var _listRequested = false;
-
-  function onPanelShow() {
-    if (_listRequested) return;
-    _listRequested = true;
+  // ── Request terminal list whenever panel is visible ──
+  function requestList() {
     if (window.TherapyWS && TherapyWS.sendMessage) {
       TherapyWS.sendMessage('terminal', {action: 'list'});
     }
@@ -315,15 +320,15 @@ function _terminal_js()
   // If panel is already visible (restored from localStorage), request list
   setTimeout(function() {
     if (replPanel && replPanel.style.display !== 'none') {
-      onPanelShow();
+      requestList();
     }
   }, 500);
 
-  // When panel becomes visible via toggle button
+  // When panel becomes visible via toggle
   if (replPanel) {
     var spawnObserver = new MutationObserver(function() {
       if (replPanel.style.display !== 'none') {
-        onPanelShow();
+        requestList();
       }
     });
     spawnObserver.observe(replPanel, {attributes: true, attributeFilter: ['style']});
