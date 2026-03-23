@@ -17,6 +17,22 @@ function _truncate(s::String, max_len::Int)
     s[1:max_len] * TRUNCATION_MARKER
 end
 
+"""Return a session-safe text representation (no raw HTML that truncation could corrupt)."""
+function _session_safe_text(output::CellOutput)
+    t = output.text_representation
+    # Image outputs store <img> tags with huge base64 data URIs.
+    # Truncation mid-tag produces broken HTML that corrupts the DOM.
+    # Store a placeholder instead — the image will re-render on execution.
+    if output.output_type in (:image_png, :image_svg) && startswith(t, "<")
+        return "[Image output — run cell to display]"
+    end
+    # HTML outputs can also contain large content that truncation breaks
+    if output.output_type == :html && length(t) > MAX_TEXT_REPRESENTATION
+        return "[HTML output — run cell to display]"
+    end
+    _truncate(t, MAX_TEXT_REPRESENTATION)
+end
+
 """Extract a cacheable error message from a CellOutput."""
 function _cached_error_message(output::CellOutput)
     output.error === nothing && return ""
@@ -38,7 +54,8 @@ function build_session_dict(nb::Notebook)
             "executed_at" => Dates.format(now(), dateformat"yyyy-mm-ddTHH:MM:SS"),
             "stdout" => _truncate(cell.output.stdout, MAX_STDOUT),
             "error_message" => _cached_error_message(cell.output),
-            "text_representation" => _truncate(cell.output.text_representation, MAX_TEXT_REPRESENTATION),
+            # Don't cache raw HTML img tags — truncation corrupts the DOM
+            "text_representation" => _session_safe_text(cell.output),
         )
     end
 
