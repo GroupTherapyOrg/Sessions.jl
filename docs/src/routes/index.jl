@@ -25,7 +25,7 @@ function Index()
                         "Reactive Julia notebooks in the browser")
                 ),
                 P(:class => "mt-8 text-lg sm:text-xl text-warm-600 dark:text-warm-400 max-w-2xl mx-auto leading-relaxed",
-                    "A web-native notebook IDE with Pluto-compatible reactivity, integrated terminal, and code formatting. Edit from the browser or any tool — changes sync in real time."
+                    "A Julia notebook IDE with Pluto-compatible reactivity, integrated terminal, and code formatting. Edit from the browser or any tool — changes sync in real time."
                 ),
                 Div(:class => "mt-10 flex flex-col sm:flex-row justify-center gap-4",
                     A(:href => "./getting-started/",

@@ -7,7 +7,7 @@
     <img alt="Sessions.jl" src="assets/sessions_light.svg" height="60">
   </picture>
 
-  **A web-native reactive Julia notebook IDE.**
+  **A reactive Julia notebook IDE.**
 
   [![Docs](https://img.shields.io/badge/docs-stable-blue)](https://grouptherapyorg.github.io/Sessions.jl/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
