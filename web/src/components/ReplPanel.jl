@@ -12,8 +12,8 @@ terminal container, and all client-side JS for PTY ↔ xterm.js bridging.
 """
 function ReplPanel()
     Div(:id => "repl",
-        :class => "flex flex-col overflow-hidden shrink-0",
-        :style => "height:220px; background:#0a0e14; border:1px solid #1c2736; border-radius:0.75rem; box-shadow:0 10px 15px -3px rgba(0,0,0,.25);",
+        :class => "flex flex-col overflow-hidden shrink-0 rounded-xl border border-b1 shadow-lg shadow-black/25",
+        :style => "height:220px; background:#0a0e14;",
 
         # Tab bar
         Div(:id => "term-tab-bar",
