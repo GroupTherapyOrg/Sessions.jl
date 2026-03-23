@@ -443,6 +443,25 @@ function _notebook_channel_script()
       setCellState(el, data.state);
     }
 
+    else if (data.event === 'format_started') {
+      // Show spinner on all Format buttons
+      document.querySelectorAll('[data-format-btn]').forEach(function(btn) {
+        btn.dataset.origText = btn.textContent;
+        btn.textContent = 'Formatting...';
+        btn.style.opacity = '0.6';
+        btn.style.pointerEvents = 'none';
+      });
+    }
+
+    else if (data.event === 'format_done') {
+      // Restore Format buttons
+      document.querySelectorAll('[data-format-btn]').forEach(function(btn) {
+        btn.textContent = btn.dataset.origText || 'Format';
+        btn.style.opacity = '';
+        btn.style.pointerEvents = '';
+      });
+    }
+
     else if (data.event === 'cell_formatted') {
       // Update CodeMirror editor with formatted code
       var eds = window._sessionsEditors || {};

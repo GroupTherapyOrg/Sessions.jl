@@ -44,13 +44,19 @@ function _ensure_runic_env!()::Bool
     isfile(manifest) && return true
     try
         mkpath(dir)
+        # Pin JuliaSyntax to 0.4 range — Runic requires ~0.4, not the 1.x/2.x
+        # that WasmTarget/JuliaLowering use. This isolated env avoids the conflict.
         write(joinpath(dir, "Project.toml"), """
 [deps]
 Runic = "62bfec6d-59d7-401d-8490-b29ee721c001"
+
+[compat]
+Runic = "1"
 """)
-        Base.run(`$(Base.julia_cmd()) --project=$dir --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'`)
+        Base.run(`$(Base.julia_cmd()) --project=$dir --startup-file=no -e 'using Pkg; Pkg.resolve(); Pkg.instantiate(); Pkg.precompile()'`)
         return true
-    catch
+    catch e
+        @warn "[Runic] Failed to create environment" exception=e
         return false
     end
 end
@@ -181,11 +187,9 @@ end
 
 # --- Public API ---
 
-"""Check if Runic.jl is available for formatting (in-process or subprocess)."""
+"""Check if Runic.jl is available for formatting (subprocess with isolated env)."""
 function format_code_available()::Bool
-    # Fast path: in-process
-    _load_runic() !== nothing && return true
-    # Subprocess path: test once
+    # Subprocess path: test once (in-process won't work due to JuliaSyntax version conflict)
     if _FORMATTER_AVAILABLE[] === nothing
         _FORMATTER_AVAILABLE[] = _ensure_runic_env!()
     end
@@ -202,22 +206,8 @@ Returns the original code unchanged if:
 """
 function format_code(code::String)::String
     isempty(code) && return code
-    # Fast path: try in-process Runic
-    runic = _load_runic()
-    if runic !== nothing
-        try
-            fmt_fn = getfield(runic, :format_string)
-            result = Base.invokelatest(fmt_fn, code)
-            dlog("format", "in-process OK"; changed=(result != code))
-            return result
-        catch e
-            dlog("format", "in-process FAILED"; err=sprint(showerror, e))
-        end
-    else
-        dlog("format", "Runic not loaded in-process")
-    end
-    # Fallback: persistent subprocess with isolated environment
+    # Use persistent subprocess with isolated Runic environment
+    # (in-process path disabled — JuliaSyntax version conflict with WasmTarget)
     result = _format_code_subprocess(code)
-    dlog("format", "subprocess"; changed=(result != code))
     result
 end

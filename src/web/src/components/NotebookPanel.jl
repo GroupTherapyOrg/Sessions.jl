@@ -120,7 +120,8 @@ function NotebookPanel()
     # Format All button (Runic.jl)
     if !is_file_tab
         push!(toolbar_items,
-            Button(:class => "bg-island border border-b2 rounded px-3 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
+            Button(Symbol("data-format-btn") => "1",
+                :class => "bg-island border border-b2 rounded px-3 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "if(window.TherapyWS&&TherapyWS.sendMessage)TherapyWS.sendMessage('notebook',{action:'format_all'})",
                 :title => "Format all cells (Runic.jl)",
                 "Format"))
