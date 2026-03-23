@@ -9,7 +9,7 @@
 #   sessions run notebook.jl              # Run headlessly (CI/scripts)
 #   sessions --help                       # Show usage
 
-(@main function main(args::Vector{String}=ARGS)
+function (@main)(args)
     if "--help" in args || "-h" in args
         println("""
         Sessions.jl — Web-native reactive Julia notebook
@@ -49,7 +49,7 @@
     end
 
     _launch_web(nb_path)
-end)
+end
 
 function _launch_web(nb_path::Union{String, Nothing})
     # Load Therapy.jl for web server
