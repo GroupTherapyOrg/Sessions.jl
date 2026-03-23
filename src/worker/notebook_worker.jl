@@ -22,7 +22,12 @@ function NotebookWorker(; notebook_path::String="")
     # Find the notebook's project environment (walk up to find Project.toml)
     proj_dir = _find_notebook_project(notebook_path)
     exeflags = proj_dir !== nothing ? ["--project=$(proj_dir)"] : String[]
-    w = Malt.Worker(; exeflags)
+
+    # Clear JULIA_LOAD_PATH — the sessions CLI shim sets it to the app env,
+    # which prevents the worker from finding packages in the notebook's project.
+    env = copy(ENV)
+    delete!(env, "JULIA_LOAD_PATH")
+    w = Malt.Worker(; exeflags, env)
     nw = NotebookWorker(w, notebook_path, false)
     _boot_worker!(nw)
     nw
