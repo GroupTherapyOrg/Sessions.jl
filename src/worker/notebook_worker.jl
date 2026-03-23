@@ -19,13 +19,29 @@ end
 
 """Create a new notebook worker process."""
 function NotebookWorker(; notebook_path::String="")
-    # Spawn worker WITHOUT --project. The boot script will Pkg.activate()
-    # the notebook's own environment (which has the user's packages).
-    # The default environment (@v1.12 or similar) has basic stdlibs available.
-    w = Malt.Worker()
+    # Find the notebook's project environment (walk up to find Project.toml)
+    proj_dir = _find_notebook_project(notebook_path)
+    exeflags = proj_dir !== nothing ? ["--project=$(proj_dir)"] : String[]
+    w = Malt.Worker(; exeflags)
     nw = NotebookWorker(w, notebook_path, false)
     _boot_worker!(nw)
     nw
+end
+
+"""Walk up from notebook path to find nearest Project.toml."""
+function _find_notebook_project(notebook_path::String)::Union{String, Nothing}
+    isempty(notebook_path) && return nothing
+    isfile(notebook_path) || return nothing
+    dir = dirname(abspath(notebook_path))
+    for _ in 1:5
+        if isfile(joinpath(dir, "Project.toml"))
+            return dir
+        end
+        parent = dirname(dir)
+        parent == dir && break
+        dir = parent
+    end
+    nothing
 end
 
 """Boot the worker — Pluto-style: send expressions, never function references."""
