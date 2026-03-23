@@ -1,4 +1,4 @@
-# Layer 1: Minimal PNG decoder — PNG bytes → Matrix{Tachikoma.ColorRGB}
+# Layer 1: Minimal PNG decoder — PNG bytes → Matrix{ColorRGB}
 #
 # Handles only the subset that plotting libraries produce:
 # - 8-bit RGB (color type 2)
@@ -7,7 +7,7 @@
 # - All 5 filter types (None, Sub, Up, Average, Paeth)
 #
 # Returns nothing on unsupported or corrupt PNGs.
-# Uses CodecZlib (transitive dep via Tachikoma) for zlib decompression.
+# Uses CodecZlib for zlib decompression.
 
 const _PNG_SIGNATURE = UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 
@@ -30,7 +30,7 @@ function decode_png_dimensions(bytes::Vector{UInt8})::Union{Tuple{Int,Int}, Noth
     (width, height)
 end
 
-# Locate CodecZlib from loaded modules (guaranteed available via Tachikoma dep)
+# Locate CodecZlib from loaded modules
 const _CODECZLIB_PKGID = Base.PkgId(Base.UUID("944b1d66-785c-5afd-91f1-9de20f533193"), "CodecZlib")
 
 function _zlib_decompress(data::Vector{UInt8})::Union{Vector{UInt8}, Nothing}
@@ -44,13 +44,13 @@ function _zlib_decompress(data::Vector{UInt8})::Union{Vector{UInt8}, Nothing}
 end
 
 """
-    decode_png(bytes::Vector{UInt8}) → Union{Matrix{Tachikoma.ColorRGB}, Nothing}
+    decode_png(bytes::Vector{UInt8}) → Union{Matrix{ColorRGB}, Nothing}
 
 Decode PNG bytes to a pixel matrix. Returns `nothing` on error or unsupported format.
 Only supports 8-bit RGB (color type 2) and RGBA (color type 6), non-interlaced.
 RGBA pixels are alpha-composited onto black background.
 """
-function decode_png(bytes::Vector{UInt8})::Union{Matrix{Tachikoma.ColorRGB}, Nothing}
+function decode_png(bytes::Vector{UInt8})::Union{Matrix{ColorRGB}, Nothing}
     length(bytes) < 8 && return nothing
     bytes[1:8] != _PNG_SIGNATURE && return nothing
 
@@ -96,7 +96,7 @@ function decode_png(bytes::Vector{UInt8})::Union{Matrix{Tachikoma.ColorRGB}, Not
     length(raw) < expected_len && return nothing
 
     # Unfilter rows
-    pixels = Matrix{Tachikoma.ColorRGB}(undef, height, width)
+    pixels = Matrix{ColorRGB}(undef, height, width)
     prev_row = zeros(UInt8, stride)
     curr_row = Vector{UInt8}(undef, stride)
 
@@ -133,7 +133,7 @@ function decode_png(bytes::Vector{UInt8})::Union{Matrix{Tachikoma.ColorRGB}, Not
                 g = UInt8(div(Int(g) * Int(a), 255))
                 b = UInt8(div(Int(b) * Int(a), 255))
             end
-            pixels[y, x] = Tachikoma.ColorRGB(r, g, b)
+            pixels[y, x] = ColorRGB(r, g, b)
         end
 
         # Current row becomes previous row for next iteration

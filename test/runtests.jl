@@ -12,35 +12,24 @@ using Sessions
     include("test_kernel.jl")
     include("test_output.jl")
     include("test_run.jl")
-    include("test_tui.jl")
-    include("test_cli.jl")
     include("test_session.jl")
     include("test_watcher.jl")
     include("test_e2e.jl")
     include("test_pluto_compat.jl")
-    include("test_formatting.jl")
-    include("test_inline_diagnostics.jl")
-    include("test_file_editor_parity.jl")
-    include("test_auto_indent.jl")
-    include("test_auto_close_brackets.jl")
-    include("test_bracket_matching.jl")
-    include("test_lsp_completion.jl")
-    include("test_completion_popup.jl")
-    include("test_hover.jl")
-    include("test_goto_definition.jl")
-    include("test_signature_help.jl")
-    include("test_scrollbar.jl")
-    include("test_rename.jl")
-    include("test_e2e_editing.jl")
-    include("test_image_pipeline.jl")
-    include("test_png_decoder.jl")
-    include("test_output_cache.jl")
-    include("test_encoded_cache.jl")
-    include("test_aspect_sizing.jl")
-    include("test_resize_cache.jl")
-    include("test_jpeg_decoder.jl")
-    include("test_svg_fallback.jl")
-    include("test_image_interact.jl")
     include("test_structured_error.jl")
-    include("test_repl_parity.jl")
+
+    # TUI-dependent tests — removed (TUI + Tachikoma deleted)
+    # These tested TUI rendering, cell widgets, file editor, REPL panel,
+    # image pipeline, scrollbar, LSP popups, etc. via Tachikoma.TestBackend.
+    # Web equivalents should be added as Playwright E2E tests.
+    #
+    # Removed: test_tui.jl, test_cli.jl, test_file_editor_parity.jl,
+    # test_auto_indent.jl, test_auto_close_brackets.jl, test_bracket_matching.jl,
+    # test_lsp_completion.jl, test_completion_popup.jl, test_hover.jl,
+    # test_goto_definition.jl, test_signature_help.jl, test_scrollbar.jl,
+    # test_rename.jl, test_e2e_editing.jl, test_image_pipeline.jl,
+    # test_png_decoder.jl, test_output_cache.jl, test_encoded_cache.jl,
+    # test_aspect_sizing.jl, test_resize_cache.jl, test_jpeg_decoder.jl,
+    # test_svg_fallback.jl, test_image_interact.jl, test_repl_parity.jl,
+    # test_inline_diagnostics.jl, test_formatting.jl
 end

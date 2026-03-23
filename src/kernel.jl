@@ -39,9 +39,9 @@ end
     _has_graphics_protocol() -> Bool
 
 Check if the terminal supports a graphics protocol (Kitty or Sixel).
-Uses Tachikoma's detected protocol (set at TUI startup).
+Web UI renders images via HTML, so this always returns false.
 """
-_has_graphics_protocol() = Tachikoma.GRAPHICS_PROTOCOL[] != Tachikoma.gfx_none
+_has_graphics_protocol() = false
 
 """
     classify_output(value) -> Symbol
@@ -496,13 +496,12 @@ function execute_cell!(workspace::Workspace, cell::Cell)
     # Snapshot LOAD_PATH entries that Sessions.jl needs.  A cell may call
     # Pkg.activate() which replaces LOAD_PATH entries — we re-inject any
     # missing host entries after execution so Sessions.jl's own deps
-    # (Tachikoma, PDE, etc.) remain loadable.
+    # (PDE, etc.) remain loadable.
     host_paths = copy(LOAD_PATH)
 
     try
         code = "begin\n$(cell.code)\nend"
-        # Stdout capture via redirect_stdout. Under Tachikoma TUI, the global
-        # stdout may already be redirected. This is process-wide and not
+        # Stdout capture via redirect_stdout. This is process-wide and not
         # thread-safe, so we use a lock to serialize redirects and a timeout
         # on read to prevent indefinite blocking.
         old_stdout = stdout

@@ -1,24 +1,18 @@
 module Sessions
 
-# Sessions.jl v2 — Terminal-Native Reactive Julia Notebook
-# Built on Tachikoma.jl (TUI framework)
-# NO browser dependencies (Therapy.jl, Suite.jl, HTTP.jl)
-
-# Dependencies will be added as stories are implemented:
-# - Tachikoma.jl (TUI)
-# - ExpressionExplorer.jl (reactive analysis)
-# - PlutoDependencyExplorer.jl (topological sort)
-# - UUIDs (cell identifiers)
-# - FileWatching (agent integration)
-# - OrderedCollections (ordered cell storage)
+# Sessions.jl — Web-Native Reactive Julia Notebook
+# Web UI via Therapy.jl + xterm.js + Shoelace + CodeMirror
+# Execution via Malt.jl workers, PTY terminals, WASM @islands
 
 using UUIDs
-import Tachikoma
 
 # Debug logging (enable with SESSIONS_DEBUG=1)
 include("debug_log.jl")
 
 # Layer 1: Engine
+include("color.jl")
+export ColorRGB
+
 include("types.jl")
 include("format.jl")
 
@@ -32,9 +26,6 @@ include("analysis.jl")
 export analyze_cell, cell_definitions, cell_references, update_topology!, execution_order, downstream_dependents
 
 include("bind.jl")
-# Widget types (Slider, Button, etc.) are engine internals — NOT exported.
-# Users interact via SessionsUI's Bound* wrappers (BoundSlider, etc.).
-# The TUI kernel injects widget types directly into workspace modules.
 export Bond, set_bond_value!, initial_value, possible_values, validate_value
 
 include("kernel.jl")
@@ -98,25 +89,6 @@ export LspTextEdit, parse_workspace_edit, lsp_rename!, lsp_rename_with_timeout!
 include("formatting.jl")
 export format_code, format_code_available
 
-# Layer 2: Watcher already included above (before web_server.jl)
-
-# Layer 2: TUI
-include("tui/theme.jl")
-include("tui/cell_widget.jl")
-include("tui/output_widget.jl")
-include("tui/notebook_view.jl")
-include("tui/file_editor_view.jl")
-include("tui/status_bar.jl")
-include("tui/file_panel.jl")
-include("tui/activity_bar.jl")
-include("tui/tab_bar.jl")
-include("tui/repl_panel.jl")
-include("tui/diagnostics_panel.jl")
-include("tui/app.jl")
-
-# Layer 3: CLI
-include("cli.jl")
-
 # Precompilation workload
 using PrecompileTools
 
@@ -148,17 +120,8 @@ y = x * 2
     end
 end
 
-# ── Monkey-patch: Kitty protocol extensions ───
-# 1. Add :shift_enter / :ctrl_enter
-# 2. Separate super (Cmd) from ctrl: Cmd+Arrow → Home/End, Cmd+letter → :ctrl+letter
-# 3. Alt/Option+Arrow → :alt_left/:alt_right (word jump on macOS)
-# 4. ESC b / ESC f (Meta sequences from Option+Arrow on legacy terminals)
-# 5. Modified arrow/nav keys: :shift_left, :ctrl_right, :ctrl_shift_left, etc.
-# 6. CSI arrow sequences with modifiers (ESC[1;2A = Shift+Up, etc.)
-# Must live in __init__ because Julia 1.12 forbids method overwriting
-# during precompilation.
 function __init__()
-    # Re-register islands into Therapy's ISLAND_REGISTRY at runtime
+    # Re-register @islands into Therapy's ISLAND_REGISTRY at runtime
     # (precompilation doesn't persist cross-module Dict mutations)
     for name in (:CellToggle, :WebSlider, :BoundValue)
         if isdefined(@__MODULE__, name)
@@ -168,9 +131,6 @@ function __init__()
             end
         end
     end
-
-    # TUI keyboard patches removed — they live in the TUI app layer, not the core module.
-    # The web UI fork doesn't need Tachikoma monkey-patching.
 end
 
 end # module

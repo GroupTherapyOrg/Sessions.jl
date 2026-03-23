@@ -1,4 +1,4 @@
-# Layer 1: Minimal JPEG decoder — JPEG bytes → Matrix{Tachikoma.ColorRGB}
+# Layer 1: Minimal JPEG decoder — JPEG bytes → Matrix{ColorRGB}
 #
 # Handles only baseline sequential (SOF0):
 # - 8-bit, 3-component YCbCr
@@ -54,13 +54,13 @@ function decode_jpeg_dimensions(bytes::Vector{UInt8})::Union{Tuple{Int,Int}, Not
 end
 
 """
-    decode_jpeg(bytes::Vector{UInt8}) → Union{Matrix{Tachikoma.ColorRGB}, Nothing}
+    decode_jpeg(bytes::Vector{UInt8}) → Union{Matrix{ColorRGB}, Nothing}
 
 Decode baseline JPEG (SOF0) to a pixel matrix.
 Returns `nothing` on error, progressive, or unsupported format.
 Only supports 8-bit YCbCr with 4:4:4 or 4:2:0 subsampling.
 """
-function decode_jpeg(bytes::Vector{UInt8})::Union{Matrix{Tachikoma.ColorRGB}, Nothing}
+function decode_jpeg(bytes::Vector{UInt8})::Union{Matrix{ColorRGB}, Nothing}
     length(bytes) < 4 && return nothing
     bytes[1:2] != _JPEG_SOI && return nothing
 
@@ -442,7 +442,7 @@ function _decode_jpeg_data(sos_data, width, height, ncomp,
     end
 
     # YCbCr → RGB conversion with chroma upsampling
-    pixels = Matrix{Tachikoma.ColorRGB}(undef, height, width)
+    pixels = Matrix{ColorRGB}(undef, height, width)
     y_data = comp_data[1]
     cb_data = comp_data[2]
     cr_data = comp_data[3]
@@ -462,7 +462,7 @@ function _decode_jpeg_data(sos_data, width, height, ncomp,
             g = y_val - 0.344136 * (cb_val - 128.0) - 0.714136 * (cr_val - 128.0)
             b = y_val + 1.772 * (cb_val - 128.0)
 
-            pixels[py, px] = Tachikoma.ColorRGB(
+            pixels[py, px] = ColorRGB(
                 UInt8(clamp(round(Int, r), 0, 255)),
                 UInt8(clamp(round(Int, g), 0, 255)),
                 UInt8(clamp(round(Int, b), 0, 255))
