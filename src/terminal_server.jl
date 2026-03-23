@@ -64,6 +64,8 @@ function setup_terminal!(term_state::TerminalState, web_state::WebNotebookState)
                 _handle_terminal_close!(term_state, conn, data)
             elseif action == "switch_tab"
                 _handle_terminal_switch!(term_state, conn, data)
+            elseif action == "list"
+                _handle_terminal_list!(term_state, conn, data)
             else
                 @warn "[Terminal] Unknown action" action=action
             end
@@ -174,6 +176,18 @@ function _handle_terminal_resize!(term_state::TerminalState, conn, data)
     tab === nothing && return
 
     pty_resize!(tab.pty, rows, cols)
+end
+
+"""List existing terminal tabs (for client reconnect/refresh)."""
+function _handle_terminal_list!(term_state::TerminalState, conn, data)
+    # Filter out dead terminals
+    filter!(t -> pty_alive(t.pty), term_state.tabs)
+
+    send_channel!("terminal", conn, Dict(
+        "event" => "terminal_list",
+        "tabs" => [Dict("id" => t.id, "label" => t.label, "active" => t.id == term_state.active_tab_id) for t in term_state.tabs],
+        "active_tab_id" => term_state.active_tab_id
+    ))
 end
 
 """Close a terminal tab."""

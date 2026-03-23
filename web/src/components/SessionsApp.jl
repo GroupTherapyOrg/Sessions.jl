@@ -35,15 +35,14 @@ function SessionsApp(children...)
                 # File Explorer (starts hidden)
                 _file_explorer_panel(),
 
-                # Editor Area (notebook)
+                # Editor Area (notebook + terminal)
                 Div(:id => "editor-area",
                     :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;",
-                    children...)),
-
-            # Row 2: Terminal (starts hidden, toggled via JS)
-            Div(:id => "repl-panel",
-                :style => "display:none;flex-shrink:0;padding:0 12px;",
-                ReplPanel()),
+                    children...,
+                    # Terminal (inside editor area so it matches notebook width)
+                    Div(:id => "repl-panel",
+                        :style => "display:none;flex-shrink:0;",
+                        ReplPanel()))),
 
             # Row 3: Status bar (always visible, fixed height)
             _status_bar(cell_count)),

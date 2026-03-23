@@ -264,6 +264,30 @@ function _terminal_js()
       showTab(data.tab_id);
     }
 
+    else if (data.event === 'terminal_list') {
+      // Server sent list of existing terminals (on reconnect/refresh)
+      if (data.tabs && data.tabs.length > 0) {
+        // Recreate xterm instances for existing server tabs
+        data.tabs.forEach(function(t) {
+          if (!terminals[t.id]) {
+            var info = createTerminal(t.id);
+            var div = document.createElement('div');
+            div.id = 'term-' + t.id;
+            div.style.cssText = 'height:100%;';
+            container.appendChild(div);
+            info.term.open(div);
+            setTimeout(function() { info.fitAddon.fit(); }, 50);
+          }
+        });
+        renderTabs(data.tabs);
+        var activeId = data.active_tab_id || data.tabs[data.tabs.length - 1].id;
+        showTab(activeId);
+      } else {
+        // No existing terminals — spawn one
+        maybeAutoSpawn();
+      }
+    }
+
     else if (data.event === 'tab_exited') {
       var t = terminals[data.tab_id];
       if (t) {
@@ -272,20 +296,39 @@ function _terminal_js()
     }
   });
 
-  // ── Auto-spawn first terminal when panel is opened ──
-  // Check if panel is visible and no terminals exist
+  // ── Request existing terminals from server (handles page refresh) ──
+  var _initialListDone = false;
+
+  function requestTerminalList() {
+    if (_initialListDone) return;
+    _initialListDone = true;
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage('terminal', {action: 'list'});
+    }
+  }
+
+  // On panel show: request list (server will send tab_opened for each existing terminal,
+  // or we spawn one if server reports 0)
   function maybeAutoSpawn() {
-    if (Object.keys(terminals).length === 0 && replPanel && replPanel.style.display !== 'none') {
-      if (window.TherapyWS && TherapyWS.sendMessage) {
-        TherapyWS.sendMessage('terminal', {action: 'spawn', rows: 24, cols: 80});
+    if (replPanel && replPanel.style.display !== 'none') {
+      if (!_initialListDone) {
+        requestTerminalList();
+      } else if (Object.keys(terminals).length === 0) {
+        if (window.TherapyWS && TherapyWS.sendMessage) {
+          TherapyWS.sendMessage('terminal', {action: 'spawn', rows: 24, cols: 80});
+        }
       }
     }
   }
 
-  // Try auto-spawn after a short delay (panel might be restored from localStorage)
-  setTimeout(maybeAutoSpawn, 500);
+  // Request list after short delay (panel may be restored from localStorage)
+  setTimeout(function() {
+    if (replPanel && replPanel.style.display !== 'none') {
+      requestTerminalList();
+    }
+  }, 500);
 
-  // Also spawn when panel becomes visible
+  // Also trigger when panel becomes visible
   if (replPanel) {
     var spawnObserver = new MutationObserver(function() {
       if (replPanel.style.display !== 'none') {
