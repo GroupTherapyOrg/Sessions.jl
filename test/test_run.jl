@@ -29,7 +29,7 @@ using Sessions
     end
 
     @testset "Sessions.run verbose output" begin
-        nb = Notebook(; path="test_verbose.jl")
+        nb = Notebook(; path=tempname() * ".jl")
         add_cell!(nb, "x = 42")
 
         old_stdout = stdout
