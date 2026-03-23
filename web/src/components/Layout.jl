@@ -55,12 +55,8 @@ tailwind.config = {
         RawHtml("""<style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;margin:0;padding:0;}
-/* Full height chain: every wrapper must pass through height.
-   html → body → #therapy-content → #app-root → #sessions-root */
-#therapy-content{height:100%;overflow:hidden;}
-#therapy-content>*{height:100%;}
-#app-root{height:100%;overflow:hidden;}
-#sessions-root{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+/* #sessions-root is the layout owner — uses 100vh to bypass all Therapy wrappers */
+#sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
 /* Activity bar button: active highlight when panel is open.
