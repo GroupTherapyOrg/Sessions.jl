@@ -67,47 +67,29 @@ function _boot_worker!(nw::NotebookWorker)
 
     nw.booted = true
 
-    # Inject @bind + widget types + BoundSlider into the workspace module
+    # Inject @bind + widget types into the workspace module
     # so users can immediately write @bind w BoundSlider(2:20) without setup cells.
-    # Same pattern as TUI kernel's _WORKSPACE_INJECTIONS but via Malt expressions.
     # Must be synchronous — cells expect @bind to be available immediately.
     _inject_notebook_api!(nw)
 
     println("[Worker] Booted for $(isempty(nw.notebook_path) ? "Untitled" : basename(nw.notebook_path))")
 end
 
-# Inject @bind, widget types, and BoundSlider into the worker's workspace module.
-# Expressions are built in the worker's Main scope (where Sessions is imported)
-# and actual objects are interpolated into the workspace module.
+# Inject @bind and Bound* widget types into the worker's workspace module.
 function _inject_notebook_api!(nw::NotebookWorker)
-    # Step 1: Inject Sessions @bind + widget types (Slider, CheckBox, etc.)
     try
         Malt.remote_eval_wait(nw.worker, :(try
             import Sessions
             _mod = _workspace.mod
-            # Interpolate values — $() evaluates in Main where Sessions exists
-            for name in [:Slider, :TextField, :CheckBox, :Select, :NumberField, :Button, :CounterButton]
+            # Inject all Bound* widget types from Sessions (re-exported from SessionsUI)
+            for name in [:BoundSlider, :BoundTextField, :BoundCheckBox, :BoundSelect,
+                         :BoundNumberField, :BoundButton, :BoundCounterButton]
                 Core.eval(_mod, Expr(:const, Expr(:(=), name, getfield(Sessions, name))))
             end
             Core.eval(_mod, :(var"@bind" = $(Sessions.var"@bind")))
         catch; end))
     catch e
         @warn "[Worker] Failed to inject Sessions types" exception=e
-    end
-
-    # Step 2: Inject SessionsUI BoundSlider (find it relative to Sessions)
-    try
-        Malt.remote_eval_wait(nw.worker, :(try
-            _sessions_root = dirname(dirname(pathof(Sessions)))
-            _sui_dir = joinpath(_sessions_root, "SessionsUI")
-            if isdir(_sui_dir) && _sui_dir ∉ LOAD_PATH
-                push!(LOAD_PATH, _sui_dir)
-            end
-            import SessionsUI
-            Core.eval(_workspace.mod, :(const BoundSlider = $(SessionsUI.BoundSlider)))
-        catch; end))
-    catch e
-        @warn "[Worker] Failed to inject SessionsUI BoundSlider" exception=e
     end
 end
 

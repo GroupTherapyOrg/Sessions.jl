@@ -1,7 +1,8 @@
 # widgets.jl — Interactive widget types + bond pipeline
 #
-# Mirrors PlutoUI's widget API. Self-contained — no external deps.
-# Sessions.jl imports these types via `using SessionsUI`.
+# All widget structs use Bound* prefix to avoid name clashes with
+# Therapy.jl VNode constructors (Button, Input, Select, etc.).
+# Self-contained — no external deps beyond UUIDs.
 
 # ── Widget protocol ──────────────────────────────────────────────
 
@@ -49,124 +50,124 @@ function downsample(x::AbstractVector{T}, max_steps::Integer) where T
     end
 end
 
-# ── Slider ───────────────────────────────────────────────────────
+# ── BoundSlider ──────────────────────────────────────────────────
 
 """A slider over the given values.
 
 ## Examples
 ```julia
-@bind x Slider(1:10)
-@bind x Slider(0.00:0.01:0.30)
-@bind x Slider(1:10; default=8, show_value=true)
+@bind x BoundSlider(1:10)
+@bind x BoundSlider(0.00:0.01:0.30)
+@bind x BoundSlider(1:10; default=8, show_value=true)
 ```
 """
-struct Slider{T <: Any} <: AbstractWidget
+struct BoundSlider{T <: Any} <: AbstractWidget
     values::AbstractVector{T}
     default::T
     show_value::Bool
 end
 
-function Slider(values::AbstractVector{T}; default=missing, show_value::Bool=true, max_steps::Integer=1_000) where T
+function BoundSlider(values::AbstractVector{T}; default=missing, show_value::Bool=true, max_steps::Integer=1_000) where T
     new_values = downsample(values, max_steps)
-    Slider(new_values, (default === missing) ? first(new_values) : let
+    BoundSlider(new_values, (default === missing) ? first(new_values) : let
         d = default
         d ∈ new_values ? convert(T, d) : closest(new_values, d)
     end, show_value)
 end
 
-Slider(range::AbstractRange; kwargs...) = Slider(collect(range); kwargs...)
+BoundSlider(range::AbstractRange; kwargs...) = BoundSlider(collect(range); kwargs...)
 
-initial_value(s::Slider) = s.default
-possible_values(s::Slider) = s.values
-validate_value(s::Slider{T}, val) where T = val isa T && val ∈ s.values
+initial_value(s::BoundSlider) = s.default
+possible_values(s::BoundSlider) = s.values
+validate_value(s::BoundSlider{T}, val) where T = val isa T && val ∈ s.values
 
 """Index of `val` in slider's values (1-based)."""
-function _slider_index(s::Slider, val)
+function _slider_index(s::BoundSlider, val)
     idx = findfirst(==(val), s.values)
     idx === nothing ? 1 : idx
 end
 
-# ── NumberField ──────────────────────────────────────────────────
+# ── BoundNumberField ─────────────────────────────────────────────
 
-struct NumberField <: AbstractWidget
+struct BoundNumberField <: AbstractWidget
     range::AbstractRange
     default::Number
 end
 
-function NumberField(range::AbstractRange{T}; default=missing) where T
-    NumberField(range, (default === missing) ? first(range) : let
+function BoundNumberField(range::AbstractRange{T}; default=missing) where T
+    BoundNumberField(range, (default === missing) ? first(range) : let
         d = default
         d ∈ range ? convert(T, d) : closest(range, d)
     end)
 end
 
-initial_value(nf::NumberField) = nf.default
-possible_values(nf::NumberField) = nf.range
-validate_value(nf::NumberField, val) = val isa Real && (minimum(nf.range) - 0.0001 <= val <= maximum(nf.range) + 0.0001)
+initial_value(nf::BoundNumberField) = nf.default
+possible_values(nf::BoundNumberField) = nf.range
+validate_value(nf::BoundNumberField, val) = val isa Real && (minimum(nf.range) - 0.0001 <= val <= maximum(nf.range) + 0.0001)
 
-# ── Button ───────────────────────────────────────────────────────
+# ── BoundButton ──────────────────────────────────────────────────
 
-struct Button <: AbstractWidget
+struct BoundButton <: AbstractWidget
     label::AbstractString
 end
 
-Button() = Button("Click")
+BoundButton() = BoundButton("Click")
 
-initial_value(b::Button) = b.label
-possible_values(b::Button) = [b.label]
-validate_value(b::Button, val) = val == b.label
+initial_value(b::BoundButton) = b.label
+possible_values(b::BoundButton) = [b.label]
+validate_value(b::BoundButton, val) = val == b.label
 
-# ── CounterButton ────────────────────────────────────────────────
+# ── BoundCounterButton ──────────────────────────────────────────
 
-struct CounterButton <: AbstractWidget
+struct BoundCounterButton <: AbstractWidget
     label::AbstractString
 end
 
-CounterButton() = CounterButton("Click")
+BoundCounterButton() = BoundCounterButton("Click")
 
-initial_value(::CounterButton) = 0
-possible_values(::CounterButton) = nothing
-validate_value(::CounterButton, val) = val isa Integer && val >= 0
+initial_value(::BoundCounterButton) = 0
+possible_values(::BoundCounterButton) = nothing
+validate_value(::BoundCounterButton, val) = val isa Integer && val >= 0
 
-# ── CheckBox ─────────────────────────────────────────────────────
+# ── BoundCheckBox ────────────────────────────────────────────────
 
-struct CheckBox <: AbstractWidget
+struct BoundCheckBox <: AbstractWidget
     default::Bool
 end
 
-CheckBox(; default::Bool=false) = CheckBox(default)
+BoundCheckBox(; default::Bool=false) = BoundCheckBox(default)
 
-initial_value(b::CheckBox) = b.default
-possible_values(::CheckBox) = [false, true]
-validate_value(::CheckBox, val) = val isa Bool
+initial_value(b::BoundCheckBox) = b.default
+possible_values(::BoundCheckBox) = [false, true]
+validate_value(::BoundCheckBox, val) = val isa Bool
 
-# ── TextField ────────────────────────────────────────────────────
+# ── BoundTextField ───────────────────────────────────────────────
 
-struct TextField <: AbstractWidget
+struct BoundTextField <: AbstractWidget
     default::AbstractString
 end
 
-TextField(; default::AbstractString="") = TextField(default)
+BoundTextField(; default::AbstractString="") = BoundTextField(default)
 
-initial_value(t::TextField) = t.default
-possible_values(::TextField) = nothing
-validate_value(::TextField, val) = val isa AbstractString
+initial_value(t::BoundTextField) = t.default
+possible_values(::BoundTextField) = nothing
+validate_value(::BoundTextField, val) = val isa AbstractString
 
-# ── Select ───────────────────────────────────────────────────────
+# ── BoundSelect ──────────────────────────────────────────────────
 
-struct Select <: AbstractWidget
+struct BoundSelect <: AbstractWidget
     options::AbstractVector{Pair}
     default::Union{Missing, Any}
 end
 
-Select(options::AbstractVector; default=missing) = Select([o => o for o in options], default)
-Select(options::AbstractVector{<:Pair}; default=missing) = Select(convert(Vector{Pair}, collect(options)), default)
+BoundSelect(options::AbstractVector; default=missing) = BoundSelect([o => o for o in options], default)
+BoundSelect(options::AbstractVector{<:Pair}; default=missing) = BoundSelect(convert(Vector{Pair}, collect(options)), default)
 
-function initial_value(s::Select)
+function initial_value(s::BoundSelect)
     ismissing(s.default) ? first(s.options).first : s.default
 end
-possible_values(s::Select) = [o.first for o in s.options]
-validate_value(s::Select, val) = any(o -> o.first == val, s.options)
+possible_values(s::BoundSelect) = [o.first for o in s.options]
+validate_value(s::BoundSelect, val) = any(o -> o.first == val, s.options)
 
 # ── Bond ─────────────────────────────────────────────────────────
 

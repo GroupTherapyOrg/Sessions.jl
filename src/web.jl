@@ -48,7 +48,7 @@ for each slider value, enabling client-side switching without server roundtrips.
 struct PrerenderedGallery
     slider_cell_id::UUID
     var_name::Symbol
-    slider::Slider
+    slider::BoundSlider
     images::Dict{Any, Vector{UInt8}}    # slider_value → PNG bytes (fallback)
     plotly_data::Dict{Any, String}      # slider_value → Plotly JSON string
     html_variants::Dict{Any, String}    # slider_value → rendered HTML string (text/dataframe/etc.)
@@ -586,7 +586,7 @@ function _render_bond_output(result, cell::Cell, prerendered)
         widget = result.element
         var_name = result.defines
 
-        if widget isa Slider
+        if widget isa BoundSlider
             vals = widget.values
             min_v = Int(first(vals))
             max_v = Int(last(vals))
@@ -871,13 +871,13 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     end
     if mode == :live
         push!(ctrl_children,
-            Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125",
+            Therapy.Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125",
                 :style => "background:rgba(86,212,160,.1)",
                 :title => "Run cell (Shift+Enter)",
                 :on_click => "window._sessionsRunCell('$(cell_id)')",
                 RawHtml(_SVG_RUN)))
         push!(ctrl_children,
-            Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
+            Therapy.Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
                 :style => "background:rgba(255,255,255,.04)",
                 :title => "Cell actions",
                 :on_click => "window._sessionsShowCellMenu(this,'$(cell_id)')",
@@ -920,7 +920,7 @@ function CellGap(; after_cell_id::String="")
     Div(:class => "cdiv h-[18px] flex items-center justify-center",
         Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
             Div(:class => "h-px w-14 bg-b2"),
-            Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
+            Therapy.Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
                 :on_click => "TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: '$(after_cell_id)'})",
                 RawHtml(_SVG_PLUS),
                 "Code"),
@@ -1059,7 +1059,7 @@ function execute_notebook_for_web(path; verbose=false)
         bond = cell.output.result
         bond isa Bond || continue
         slider = bond.element
-        slider isa Slider || continue
+        slider isa BoundSlider || continue
 
         var_name = bond.defines
         deps = downstream_dependents(nb, [cell])
@@ -1322,7 +1322,7 @@ function NotebookPage(nb::Notebook;
     end
 
     # Add inline JS for slider/plotly interactivity
-    has_sliders = any(c -> c.output.output_type == :bond && c.output.result isa Bond && c.output.result.element isa Slider, cells)
+    has_sliders = any(c -> c.output.output_type == :bond && c.output.result isa Bond && c.output.result.element isa BoundSlider, cells)
     has_plotly = any(c -> c.output.output_type == :plotly_json, cells)
 
     if has_sliders || has_plotly

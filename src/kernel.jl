@@ -365,13 +365,13 @@ notebook `Pkg.activate()` calls).
 const _SESSIONS_MODULE = @__MODULE__
 
 const _WORKSPACE_INJECTIONS = Pair{Symbol,Any}[
-    :Slider             => Slider,
-    :TextField          => TextField,
-    :CheckBox           => CheckBox,
-    :Select             => Select,
-    :NumberField        => NumberField,
-    :Button             => Button,
-    :CounterButton      => CounterButton,
+    :BoundSlider        => BoundSlider,
+    :BoundTextField     => BoundTextField,
+    :BoundCheckBox      => BoundCheckBox,
+    :BoundSelect        => BoundSelect,
+    :BoundNumberField   => BoundNumberField,
+    :BoundButton        => BoundButton,
+    :BoundCounterButton => BoundCounterButton,
 ]
 
 """
