@@ -147,17 +147,16 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 .md-prose hr{border:none;border-top:1px solid #1c2736;margin:1.2em 0;}
 .md-prose img{max-width:100%;border-radius:6px;}
 /* Sessions Table (sst-*) — Pluto-style table viewer for any Tables.jl type */
-.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;overflow-x:auto;max-width:100%;}
-.sst-table{border-collapse:separate;border-spacing:0;width:auto;min-width:50%;border:1px solid #2a3a4f;border-radius:8px;overflow:hidden;}
-.sst-th{padding:8px 16px;color:#56d4a0;font-weight:600;font-size:13px;text-align:left;border-bottom:1px solid #2a3a4f;background:#151c25;white-space:nowrap;position:sticky;top:0;z-index:1;}
-.sst-type-row .sst-type-th{padding:2px 16px 6px;color:#3d5068;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:2px solid #2a3a4f;background:#151c25;opacity:0;transition:opacity .15s;}
+.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:14px;overflow-x:auto;max-width:100%;}
+.sst-table{border-collapse:collapse;width:auto;border-top:2px solid #56d4a0;border-bottom:1px solid #2a3a4f;}
+.sst-th{padding:12px 20px;color:#56d4a0;font-weight:700;font-size:14px;text-align:left;border-bottom:1px solid #2a3a4f;white-space:nowrap;}
+.sst-type-row .sst-type-th{padding:0 20px 8px;color:#3d5068;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:1px solid #2a3a4f;opacity:0;transition:opacity .15s;}
 .sst-table thead:hover .sst-type-row .sst-type-th{opacity:1;}
-.sst-row-label{color:#3d5068 !important;font-weight:600;font-size:12px;text-align:right !important;padding:6px 12px 6px 8px !important;border-right:1px solid #2a3a4f;width:1%;white-space:nowrap;position:sticky;left:0;background:#0f1419;z-index:1;}
-.sst-td{padding:6px 16px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.4);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
+.sst-row-label{color:#d4dce8;font-weight:700;font-size:13px;text-align:right;padding:10px 16px 10px 12px;width:1%;white-space:nowrap;border-bottom:1px solid rgba(42,58,79,.3);}
+.sst-td{padding:10px 20px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.3);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
 .sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
-.sst-row:nth-child(even) .sst-td,.sst-row:nth-child(even) .sst-row-label{background:rgba(255,255,255,.015);}
-.sst-more{padding:8px 16px;color:#56d4a0;font-size:12px;text-align:center;cursor:pointer;background:rgba(86,212,160,.03);border-bottom:1px solid #2a3a4f;transition:background .15s;}
-.sst-more:hover{background:rgba(86,212,160,.08);}
+.sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
+.sst-more:hover{color:#56d4a0;}
 </style>"""),
 
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---

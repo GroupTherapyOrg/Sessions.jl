@@ -196,11 +196,17 @@ function _render_bond_island_html(bond_data::String)
     ""
 end
 
-"""Render a table from structured JSON into a beautiful Pluto-style HTML table."""
+"""Render a table from structured JSON into a Pluto-style HTML table.
+
+Matches Pluto's table layout:
+- Accent-colored top border, minimal horizontal rules
+- Column headers in accent color, types shown on hover
+- Bold row numbers, clean spacing
+- First 10 rows visible, then "⋮ more", then last row always shown
+"""
 function _render_table_html(table_json::String)
     isempty(table_json) && return ""
 
-    # Parse the JSON manually (no JSON dependency)
     data = _parse_table_json(table_json)
     data === nothing && return ""
 
@@ -211,11 +217,14 @@ function _render_table_html(table_json::String)
     ncol = data[:ncol]
     isempty(cols) && return ""
 
-    initial_visible = 25
+    initial_visible = 10  # Pluto shows 10 rows initially
+    total_serialized = length(rows)
+    truncated = total_serialized > initial_visible
+
     buf = IOBuffer()
 
-    # Dimension label
-    print(buf, """<div class="sst-wrap"><div style="font-size:12px;color:#6b7d93;padding:4px 0 6px;font-family:'JetBrains Mono',monospace;">$(nrow)×$(ncol) DataFrame</div>""")
+    # Dimension label (above table, like Pluto)
+    print(buf, """<div class="sst-wrap"><div style="font-size:13px;color:#6b7d93;padding:2px 0 8px;font-family:'JetBrains Mono',monospace;">$(nrow)×$(ncol) DataFrame</div>""")
 
     # Table
     print(buf, """<table class="sst-table"><thead>""")
@@ -227,40 +236,61 @@ function _render_table_html(table_json::String)
     end
     print(buf, "</tr>")
 
-    # Column type row (visible on hover)
+    # Column type row (visible on hover, like Pluto)
     print(buf, """<tr class="sst-type-row"><th class="sst-type-th"></th>""")
     for t in types
         print(buf, """<th class="sst-type-th">""", _html_esc(t), "</th>")
     end
     print(buf, "</tr></thead><tbody>")
 
-    # Data rows
-    for (i, row) in enumerate(rows)
-        hidden = i > initial_visible ? " style=\"display:none\"" : ""
-        print(buf, """<tr class="sst-row" data-row-idx="$(i)"$(hidden)>""")
-        print(buf, """<th class="sst-row-label">""", i, "</th>")
-        for cell in row
-            print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+    # Data rows — Pluto pattern: first N rows, "⋮ more", last row
+    if truncated
+        # First N rows (visible)
+        for i in 1:initial_visible
+            _write_table_row(buf, i, rows[i], ncol)
         end
-        print(buf, "</tr>")
-    end
 
-    # "Show more" row (if truncated)
-    if length(rows) > initial_visible
-        remaining = length(rows) - initial_visible
+        # Hidden middle rows (revealed by "more" click)
+        for i in (initial_visible + 1):(total_serialized - 1)
+            print(buf, """<tr class="sst-row sst-hidden" data-row-idx="$(i)" style="display:none">""")
+            print(buf, """<th class="sst-row-label">""", i, "</th>")
+            for cell in rows[i]
+                print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+            end
+            print(buf, "</tr>")
+        end
+
+        # "⋮ more" button row
+        hidden_count = total_serialized - initial_visible - 1
+        if nrow > total_serialized
+            more_label = "⋮ more"
+        else
+            more_label = "⋮ $(hidden_count) more"
+        end
         print(buf, """<tr class="sst-more-row"><td colspan="$(ncol + 1)" class="sst-more" """)
-        print(buf, """onclick="var t=this.closest('table');t.querySelectorAll('tr[style]').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'">""")
-        print(buf, "⋮ Show $(remaining) more rows</td></tr>")
-    end
+        print(buf, """onclick="this.closest('table').querySelectorAll('.sst-hidden').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'">""")
+        print(buf, more_label, "</td></tr>")
 
-    # If total rows exceed what we serialized
-    if nrow > length(rows)
-        print(buf, """<tr><td colspan="$(ncol + 1)" style="padding:6px 16px;color:#3d5068;font-size:12px;font-style:italic;">""")
-        print(buf, "$(nrow - length(rows)) rows not shown (total: $(nrow))</td></tr>")
+        # Last row (always visible, like Pluto)
+        _write_table_row(buf, total_serialized, rows[end], ncol)
+    else
+        # All rows visible (small table)
+        for (i, row) in enumerate(rows)
+            _write_table_row(buf, i, row, ncol)
+        end
     end
 
     print(buf, "</tbody></table></div>")
     String(take!(buf))
+end
+
+function _write_table_row(buf::IOBuffer, idx::Int, row::Vector{String}, ncol::Int)
+    print(buf, """<tr class="sst-row" data-row-idx="$(idx)">""")
+    print(buf, """<th class="sst-row-label">""", idx, "</th>")
+    for cell in row
+        print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+    end
+    print(buf, "</tr>")
 end
 
 """Simple JSON parser for table data. Returns Dict or nothing."""
