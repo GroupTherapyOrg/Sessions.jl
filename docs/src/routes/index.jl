@@ -14,9 +14,9 @@ function Index()
                     Span(:class => "text-xs font-medium text-accent-600 dark:text-accent-400", "Web IDE")
                 ),
                 H1(:class => "text-4xl sm:text-6xl lg:text-7xl font-serif font-semibold text-warm-800 dark:text-warm-300 tracking-tight leading-[1.1]",
-                    "A reactive Julia notebook",
+                    "Reactive Julia notebooks",
                     Br(),
-                    "IDE with ",
+                    "with ",
                     Span(:class => "text-accent-600 dark:text-accent-400", "Sessions"),
                     Span(:class => "text-4xl sm:text-5xl lg:text-6xl font-light",
                         Span(:style => "color:#b08fd8;", "."),
