@@ -1268,27 +1268,35 @@ function _notebook_editor_bundle()
     ".cm-cursor":{display:"none"},
   },{dark:true});
 
-  document.querySelectorAll('.cm-cell').forEach(function(host) {
-    if (host.querySelector('.cm-editor')) return;
-    var src = host.dataset.src || '';
-    var ev = new C.EditorView({
-      state: C.EditorState.create({
-        doc: src,
-        extensions: [
-          C.lineNumbers(),
-          C.highlightSpecialChars(),
-          C.drawSelection(),
-          C.bracketMatching(),
-          C.julia(),
-          C.syntaxHighlighting(hlTheme),
-          edTheme,
-          C.EditorState.readOnly.of(true),
-          C.EditorView.editable.of(false),
-        ]
-      }),
-      parent: host
+  function initSessionsCM() {
+    document.querySelectorAll('.cm-cell').forEach(function(host) {
+      if (host.querySelector('.cm-editor')) return;
+      var src = host.dataset.src || '';
+      new C.EditorView({
+        state: C.EditorState.create({
+          doc: src,
+          extensions: [
+            C.lineNumbers(),
+            C.highlightSpecialChars(),
+            C.drawSelection(),
+            C.bracketMatching(),
+            C.julia(),
+            C.syntaxHighlighting(hlTheme),
+            edTheme,
+            C.EditorState.readOnly.of(true),
+            C.EditorView.editable.of(false),
+          ]
+        }),
+        parent: host
+      });
     });
-  });
+  }
+
+  // Init on page load
+  initSessionsCM();
+
+  // Re-init after SPA navigation (Therapy.jl router swaps #page-content)
+  window.addEventListener('therapy:router:loaded', initSessionsCM);
 })();
 </script>"""))
 end
