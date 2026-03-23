@@ -9,6 +9,9 @@ begin
     Pkg.add("Statistics")
 end
 
+# ╔═╡ 82a0dde9-b888-4332-9bfd-3f069fef4e46
+using Statistics
+
 # ╔═╡ aa11bb22-cc33-dd44-ee55-ff6677889900
 using Markdown
 
@@ -106,9 +109,6 @@ md"""
 
 # ╔═╡ 08b9c0d1-e2f3-4567-1234-789012345678
 describe(planets[:, [:distance_au, :radius_km, :mass_earth, :moons]])
-
-# ╔═╡ 82a0dde9-b888-4332-9bfd-3f069fef4e46
-using Statistics
 
 # ╔═╡ Cell order:
 # ╠═76fc12d5-6bdd-4d55-aa2f-bfe8bf110ea7

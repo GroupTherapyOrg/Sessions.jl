@@ -1,10 +1,10 @@
-# FileExplorer.jl — Filesystem-backed file tree with folder toggle
+# FileExplorer.jl — Shoelace sl-tree file explorer with context menu
 #
-# Reads the real directory tree via _build_file_tree() and renders a nested
-# collapsible tree. Folders expand/collapse via inline JS (no WASM needed).
-# This is a plain function (not @island) since interactivity is pure DOM.
+# Uses Shoelace <sl-tree> web components for a robust, accessible file tree.
+# Features: lazy-load directories, right-click context menu (rename/delete/new),
+# inline rename, parent directory navigation, file type icons.
 
-# --- SVG icon strings ---
+# --- SVG icon strings (reused from original) ---
 
 const _ICON_JULIA = """<svg width="14" height="14" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>"""
 
@@ -28,20 +28,7 @@ const _ICON_STATUS_OK = """<svg width="7" height="7"><circle cx="3.5" cy="3.5" r
 
 const _ICON_MODIFIED = """<svg width="6" height="6" class="shrink-0"><circle cx="3" cy="3" r="3" fill="#56d4a0"/></svg>"""
 
-# Shared tree item base style
-const _TREE_ITEM = "display:flex;align-items:center;gap:6px;padding:2px 0;border-radius:4px;cursor:pointer;font-size:12px;font-family:'JetBrains Mono',ui-monospace,monospace;white-space:nowrap;overflow:hidden;user-select:none;transition:color .15s,background .15s;"
-
-# Chevron style
-const _CHV_STYLE = "width:12px;height:12px;font-size:8px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .15s;"
-
-# Inline JS for folder toggle (click handler) — also swaps folder icon SVG
-const _FOLDER_SVG_OPEN = """<svg width='14' height='14' viewBox='0 0 20 20' fill='none'><path d='M2 5.5A1.5 1.5 0 013.5 4H8l1.5 2h7A1.5 1.5 0 0118 7.5V9H4.5L2 15.5v-10z' fill='#3d5068' opacity='.4' stroke='#7bb8e8' stroke-width='1'/><path d='M2 15.5L4.5 9H18l-2.5 6.5H2z' fill='#1a2332' stroke='#7bb8e8' stroke-width='1'/></svg>"""
-const _FOLDER_SVG_CLOSED = """<svg width='14' height='14' viewBox='0 0 20 20' fill='none'><path d='M2 5.5A1.5 1.5 0 013.5 4H8l1.5 2h7A1.5 1.5 0 0118 7.5v7a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 14.5v-9z' fill='#3d5068' opacity='.5' stroke='#5a7a99' stroke-width='1'/></svg>"""
-const _FOLDER_TOGGLE_JS = "onclick=\"(function(e){e.stopPropagation();var c=this.nextElementSibling;var ch=this.querySelector('.chv');var ic=this.querySelectorAll('svg')[1];if(c.style.display==='none'){c.style.display='block';ch.classList.add('open');if(ic)ic.outerHTML='$(_FOLDER_SVG_OPEN)'}else{c.style.display='none';ch.classList.remove('open');if(ic)ic.outerHTML='$(_FOLDER_SVG_CLOSED)'}}).call(this,event)\""
-
-# Hover JS for non-active items
-const _HOVER_ENTER = "onmouseenter=\"this.style.background='rgba(255,255,255,.03)'\""
-const _HOVER_LEAVE = "onmouseleave=\"this.style.background=''\""
+# --- Helpers ---
 
 """Get SVG icon string for a file type."""
 function _icon_for_type(ft::Symbol)::String
@@ -54,86 +41,6 @@ function _icon_for_type(ft::Symbol)::String
     return _ICON_GENERIC
 end
 
-"""Check if a tree node (recursively) contains the active file path."""
-function _contains_active(node::Main.Sessions.FileNode, active_path::String)::Bool
-    node.path == active_path && return true
-    for child in node.children
-        _contains_active(child, active_path) && return true
-    end
-    false
-end
-
-"""Render a single tree node (file or directory) as an HTML string."""
-function _render_tree_node(node::Main.Sessions.FileNode, depth::Int, active_path::String; root_dir::String="")::String
-    pad = depth * 14 + 6
-    is_active = !node.is_dir && node.path == active_path
-
-    if node.is_dir
-        # Directory: clickable row + children container
-        # Only open folders that contain the active file
-        start_open = _contains_active(node, active_path)
-        children_display = start_open ? "block" : "none"
-        chv_class = start_open ? "chv open" : "chv"
-        folder_icon = start_open ? _ICON_FOLDER_OPEN : _ICON_FOLDER_CLOSED
-        # Chevron rotation via open class: .chv.open { transform: rotate(90deg) }
-        # We inline the transform since CSS class may not exist
-        chv_transform = start_open ? "transform:rotate(90deg);" : ""
-
-        row = string(
-            "<div style=\"", _TREE_ITEM, "padding-left:", pad, "px;color:#9baabd;\" ",
-            _FOLDER_TOGGLE_JS, " ", _HOVER_ENTER, " ", _HOVER_LEAVE, ">",
-            "<span class=\"", chv_class, "\" style=\"", _CHV_STYLE, chv_transform, "\">&#9656;</span>",
-            folder_icon,
-            "<span>", _html_escape(node.name), "</span>",
-            "</div>"
-        )
-
-        # Children container
-        children_html = IOBuffer()
-        write(children_html, "<div style=\"display:", children_display, ";\">")
-        for child in node.children
-            write(children_html, _render_tree_node(child, depth + 1, active_path; root_dir=root_dir))
-        end
-        write(children_html, "</div>")
-
-        return row * String(take!(children_html))
-    else
-        # File: single row
-        icon = _icon_for_type(node.file_type)
-
-        # .jl files: clickable to open in a new tab
-        jl_onclick = ""
-        if node.file_type === :jl && !isempty(root_dir)
-            # Use the absolute path so the server can resolve it
-            abs_file_path = _html_escape(joinpath(root_dir, node.path))
-            jl_onclick = " onclick=\"TherapyWS.sendMessage('notebook',{action:'open_notebook',path:'$(abs_file_path)'})\""
-        end
-
-        if is_active
-            # Active file: green left border, subtle green bg, bright text, modified dot
-            return string(
-                "<div style=\"", _TREE_ITEM, "padding-left:", pad, "px;",
-                "color:#d4dce8;border-left:2px solid #56d4a0;background:rgba(86,212,160,.06);\"",
-                jl_onclick, ">",
-                icon,
-                "<span>", _html_escape(node.name), "</span>",
-                "<span style=\"flex:1;\"></span>",
-                _ICON_MODIFIED,
-                "</div>"
-            )
-        else
-            return string(
-                "<div style=\"", _TREE_ITEM, "padding-left:", pad, "px;color:#6b7d93;\" ",
-                _HOVER_ENTER, " ", _HOVER_LEAVE,
-                jl_onclick, ">",
-                icon,
-                "<span>", _html_escape(node.name), "</span>",
-                "</div>"
-            )
-        end
-    end
-end
-
 """Escape HTML special characters."""
 function _html_escape(s::String)::String
     s = replace(s, "&" => "&amp;")
@@ -143,12 +50,327 @@ function _html_escape(s::String)::String
     return s
 end
 
+"""Check if a tree node (recursively) contains the active file path."""
+function _contains_active(node::Main.Sessions.FileNode, active_path::String)::Bool
+    node.path == active_path && return true
+    for child in node.children
+        _contains_active(child, active_path) && return true
+    end
+    false
+end
+
+# --- Shoelace sl-tree rendering ---
+
+"""Render a FileNode as a Shoelace `<sl-tree-item>` HTML string."""
+function _render_tree_item(node::Main.Sessions.FileNode, active_path::String; root_dir::String="")::String
+    esc_path = _html_escape(node.path)
+
+    if node.is_dir
+        start_open = _contains_active(node, active_path)
+        expanded_attr = start_open ? " expanded" : ""
+        # Directories not containing the active file use lazy loading
+        lazy_attr = (!start_open && !isempty(node.children)) ? " lazy" : ""
+
+        children_html = IOBuffer()
+        if start_open
+            for child in node.children
+                write(children_html, _render_tree_item(child, active_path; root_dir=root_dir))
+            end
+        end
+
+        return string(
+            "<sl-tree-item data-is-dir data-path=\"", esc_path, "\"",
+            " data-abs-path=\"", _html_escape(joinpath(root_dir, node.path)), "\"",
+            expanded_attr, lazy_attr, ">",
+            _ICON_FOLDER_CLOSED,
+            "<span class=\"tree-label\">", _html_escape(node.name), "</span>",
+            String(take!(children_html)),
+            "</sl-tree-item>"
+        )
+    else
+        icon = _icon_for_type(node.file_type)
+        selected_attr = (node.path == active_path) ? " selected" : ""
+        abs_path = _html_escape(joinpath(root_dir, node.path))
+
+        return string(
+            "<sl-tree-item data-path=\"", esc_path, "\"",
+            " data-abs-path=\"", abs_path, "\"",
+            " data-file-type=\"", node.file_type, "\"",
+            selected_attr, ">",
+            icon,
+            "<span class=\"tree-label\">", _html_escape(node.name), "</span>",
+            (node.path == active_path ? _ICON_MODIFIED : ""),
+            "</sl-tree-item>"
+        )
+    end
+end
+
+# --- Context menu HTML ---
+
+function _file_context_menu_html()
+    """<div id="file-context-menu" class="file-ctx-menu">
+<div class="file-ctx-item fm-new-file" data-action="new_file">
+<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z"/><path d="M9 1v4h4M8 7v6M5 10h6"/></svg>
+New File</div>
+<div class="file-ctx-item fm-new-folder" data-action="new_folder">
+<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M1 4a1 1 0 011-1h4l1.5 1.5H14a1 1 0 011 1V12a1 1 0 01-1 1H2a1 1 0 01-1-1V4z"/><path d="M8 7v4M6 9h4"/></svg>
+New Folder</div>
+<div class="file-ctx-sep"></div>
+<div class="file-ctx-item fm-rename" data-action="rename">
+<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/></svg>
+Rename</div>
+<div class="file-ctx-sep"></div>
+<div class="file-ctx-item fm-delete danger" data-action="delete">
+<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/></svg>
+Delete</div>
+</div>"""
+end
+
+# --- Client-side JavaScript ---
+
+function _file_explorer_js(root_dir::String)
+    esc_root = _html_escape(root_dir)
+    """
+(function() {
+  if (window._fileExplorerInit) return;
+  window._fileExplorerInit = true;
+
+  var tree = document.getElementById('file-tree');
+  var ctxMenu = document.getElementById('file-context-menu');
+  var _ctxTarget = null;      // sl-tree-item that was right-clicked
+  var _clickTimer = null;     // debounce single-click vs double-click
+
+  if (!tree) return;
+
+  // ── File selection: single click opens .jl files ──
+  tree.addEventListener('sl-selection-change', function(e) {
+    var items = e.detail.selection;
+    if (!items || !items.length) return;
+    var item = items[0];
+    if (item.hasAttribute('data-is-dir')) return;
+    var fileType = item.dataset.fileType;
+    var absPath = item.dataset.absPath;
+    if (fileType === 'jl' && absPath && window.TherapyWS) {
+      // Debounce to avoid firing during double-click rename
+      clearTimeout(_clickTimer);
+      _clickTimer = setTimeout(function() {
+        TherapyWS.sendMessage('notebook', {action: 'open_notebook', path: absPath});
+      }, 250);
+    }
+  });
+
+  // ── Lazy loading: fetch directory contents on expand ──
+  tree.addEventListener('sl-lazy-load', function(e) {
+    var item = e.target;
+    if (!item || !item.dataset || !item.dataset.path) return;
+    var dirPath = item.dataset.path;
+    if (window.TherapyWS) {
+      TherapyWS.sendMessage('file_explorer', {action: 'list_dir', path: dirPath});
+    }
+  });
+
+  // ── Context menu: right-click ──
+  tree.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    var item = e.target.closest('sl-tree-item');
+    if (!item) return;
+    _ctxTarget = item;
+    var isDir = item.hasAttribute('data-is-dir');
+
+    // Show/hide directory-only items
+    ctxMenu.querySelector('.fm-new-file').style.display = isDir ? '' : 'none';
+    ctxMenu.querySelector('.fm-new-folder').style.display = isDir ? '' : 'none';
+
+    // Position and show
+    var x = e.clientX, y = e.clientY;
+    ctxMenu.style.display = 'block';
+    // Clamp to viewport
+    var rect = ctxMenu.getBoundingClientRect();
+    if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 8;
+    if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 8;
+    ctxMenu.style.left = x + 'px';
+    ctxMenu.style.top = y + 'px';
+  });
+
+  // Close context menu on click outside
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#file-context-menu')) {
+      ctxMenu.style.display = 'none';
+    }
+  });
+  document.addEventListener('contextmenu', function(e) {
+    if (!e.target.closest('#file-tree')) {
+      ctxMenu.style.display = 'none';
+    }
+  });
+
+  // ── Context menu actions ──
+  ctxMenu.addEventListener('click', function(e) {
+    var item = e.target.closest('.file-ctx-item');
+    if (!item || !_ctxTarget) return;
+    var action = item.dataset.action;
+    ctxMenu.style.display = 'none';
+
+    if (action === 'rename') {
+      startInlineRename(_ctxTarget);
+    } else if (action === 'delete') {
+      var name = _ctxTarget.querySelector('.tree-label');
+      var displayName = name ? name.textContent : _ctxTarget.dataset.path;
+      var isDir = _ctxTarget.hasAttribute('data-is-dir');
+      if (confirm('Delete ' + (isDir ? 'folder' : 'file') + ' "' + displayName + '"?')) {
+        if (window.TherapyWS) {
+          TherapyWS.sendMessage('file_explorer', {
+            action: 'delete', path: _ctxTarget.dataset.path
+          });
+        }
+      }
+    } else if (action === 'new_file' || action === 'new_folder') {
+      var promptMsg = action === 'new_file' ? 'New file name:' : 'New folder name:';
+      var name = prompt(promptMsg);
+      if (name && name.trim()) {
+        if (window.TherapyWS) {
+          TherapyWS.sendMessage('file_explorer', {
+            action: action === 'new_file' ? 'create_file' : 'create_dir',
+            parent_path: _ctxTarget.dataset.path,
+            name: name.trim()
+          });
+        }
+      }
+    }
+  });
+
+  // ── Inline rename: double-click ──
+  tree.addEventListener('dblclick', function(e) {
+    var item = e.target.closest('sl-tree-item');
+    if (!item) return;
+    e.preventDefault();
+    clearTimeout(_clickTimer);  // cancel the single-click open
+    startInlineRename(item);
+  });
+
+  function startInlineRename(item) {
+    var label = item.querySelector('.tree-label');
+    if (!label) return;
+    var oldName = label.textContent;
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldName;
+    input.className = 'tree-rename-input';
+
+    label.style.display = 'none';
+    label.parentNode.insertBefore(input, label.nextSibling);
+    input.focus();
+    // Select name without extension for files
+    var dotIdx = oldName.lastIndexOf('.');
+    if (dotIdx > 0 && !item.hasAttribute('data-is-dir')) {
+      input.setSelectionRange(0, dotIdx);
+    } else {
+      input.select();
+    }
+
+    var committed = false;
+    function commit() {
+      if (committed) return;
+      committed = true;
+      var newName = input.value.trim();
+      input.remove();
+      label.style.display = '';
+      if (newName && newName !== oldName) {
+        label.textContent = newName;
+        if (window.TherapyWS) {
+          TherapyWS.sendMessage('file_explorer', {
+            action: 'rename', path: item.dataset.path, new_name: newName
+          });
+        }
+      }
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); input.value = oldName; commit(); }
+    });
+  }
+
+  // ── Navigate to parent directory ──
+  var upBtn = document.getElementById('tree-nav-up');
+  if (upBtn) {
+    upBtn.addEventListener('click', function() {
+      if (window.TherapyWS) {
+        TherapyWS.sendMessage('file_explorer', {action: 'navigate_up'});
+      }
+    });
+  }
+
+  // ── WebSocket response handler for file_explorer channel ──
+  window.addEventListener('therapy:channel:file_explorer', function(e) {
+    var data = e.detail;
+    if (!data || !data.event) return;
+
+    if (data.event === 'dir_contents') {
+      // Lazy-load response: find the tree item and inject children
+      var item = tree.querySelector('sl-tree-item[data-path="' + CSS.escape(data.path) + '"]');
+      if (item) {
+        // Remove the lazy attribute so it doesn't fire again
+        item.removeAttribute('lazy');
+        // Parse and append children
+        var tmp = document.createElement('div');
+        tmp.innerHTML = data.children_html;
+        while (tmp.firstChild) {
+          item.appendChild(tmp.firstChild);
+        }
+      }
+    }
+
+    else if (data.event === 'file_deleted') {
+      var item = tree.querySelector('sl-tree-item[data-path="' + CSS.escape(data.path) + '"]');
+      if (item) item.remove();
+    }
+
+    else if (data.event === 'file_renamed') {
+      var item = tree.querySelector('sl-tree-item[data-path="' + CSS.escape(data.old_path) + '"]');
+      if (item) {
+        item.dataset.path = data.new_path;
+        if (data.new_abs_path) item.dataset.absPath = data.new_abs_path;
+        var label = item.querySelector('.tree-label');
+        if (label) label.textContent = data.new_name;
+      }
+    }
+
+    else if (data.event === 'item_created') {
+      // Find parent and append the new item
+      var parent = tree.querySelector('sl-tree-item[data-path="' + CSS.escape(data.parent_path) + '"]');
+      if (parent) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = data.item_html;
+        while (tmp.firstChild) {
+          parent.appendChild(tmp.firstChild);
+        }
+        // Expand parent if collapsed
+        if (!parent.expanded) parent.expanded = true;
+      }
+    }
+
+    else if (data.event === 'tree_replaced') {
+      // Full tree refresh (e.g., after navigating to parent dir)
+      var wrapper = document.getElementById('file-tree-wrapper');
+      if (wrapper) wrapper.innerHTML = data.tree_html;
+      // Update breadcrumb
+      var crumb = document.querySelector('.tree-breadcrumb .crumb');
+      if (crumb && data.root_name) crumb.textContent = data.root_name;
+    }
+  });
+})();
+"""
+end
+
+# --- Main component ---
+
 """
     FileExplorer()
 
-Render a filesystem-backed file explorer tree. Reads the notebook directory
+Render a Shoelace sl-tree file explorer with lazy loading, context menu,
+inline rename, and parent directory navigation. Reads the notebook directory
 from `Main.WEB_STATE` and builds a real file tree using `_build_file_tree()`.
-Folder expand/collapse is handled via inline JavaScript (no WASM).
 """
 function FileExplorer()
     # Read notebook state
@@ -160,11 +382,9 @@ function FileExplorer()
 
     nb = state !== nothing ? Main.Sessions.active_nb(state) : nothing
     nb_path = nb !== nothing ? nb.path : "Untitled.jl"
-    nb_name = basename(nb_path)
 
     # Determine root directory to scan
     root_dir = if nb !== nothing && isfile(nb.path)
-        # Walk up to find project root (has Project.toml or src/)
         dir = dirname(abspath(nb.path))
         found = dir
         for _ in 1:5
@@ -198,21 +418,34 @@ function FileExplorer()
     # Build tree HTML
     tree_html = IOBuffer()
     for node in tree
-        write(tree_html, _render_tree_node(node, 0, active_rel; root_dir=root_dir))
+        write(tree_html, _render_tree_item(node, active_rel; root_dir=root_dir))
     end
 
-    # CSS for chevron rotation (inline style block)
-    chevron_css = """<style>.chv.open{transform:rotate(90deg);}</style>"""
+    root_name = basename(root_dir)
 
     Fragment(
-        # Chevron CSS
-        RawHtml(chevron_css),
+        # Breadcrumb: parent nav + current dir name
+        Div(:class => "tree-breadcrumb",
+            :style => "border-bottom:1px solid #1c2736;",
+            Button(:id => "tree-nav-up", :title => "Go to parent directory",
+                RawHtml("""<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 12V4M4 8l4-4 4 4"/></svg>""")),
+            Span(:class => "crumb", :title => root_dir, root_name)),
 
-        # File tree area
-        Div(:class => "flex-1 overflow-y-auto py-1.5 px-1",
-            RawHtml(String(take!(tree_html)))),
+        # Shoelace tree
+        Div(:id => "file-tree-wrapper", :class => "flex-1 overflow-y-auto py-1 px-1",
+            RawHtml(string(
+                "<sl-tree id=\"file-tree\" selection=\"leaf\" data-root-dir=\"",
+                _html_escape(root_dir), "\">",
+                String(take!(tree_html)),
+                "</sl-tree>"))),
 
-        # Status bar at bottom
+        # Context menu
+        RawHtml(_file_context_menu_html()),
+
+        # Client-side JS
+        RawHtml(string("<script>", _file_explorer_js(root_dir), "</script>")),
+
+        # Status bar
         Div(:class => "flex items-center gap-1.5 px-3 py-2 shrink-0",
             :style => "border-top:1px solid #1c2736; font-size:11px; color:#3d5068;",
             RawHtml(_ICON_STATUS_OK),
