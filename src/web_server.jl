@@ -1190,7 +1190,7 @@ function _explorer_root_dir(state::WebNotebookState)::String
         end
         return found
     end
-    return pwd()
+    return isdefined(Main, :USER_CWD) ? Main.USER_CWD : pwd()
 end
 
 # Mutable root so navigate_up can change it within a session

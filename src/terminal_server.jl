@@ -37,7 +37,8 @@ function _terminal_cwd(web_state)::String
             return dirname(abspath(nb.path))
         end
     catch; end
-    return pwd()
+    # Use the directory the user launched from, not the web app's cwd
+    return isdefined(Main, :USER_CWD) ? Main.USER_CWD : pwd()
 end
 
 """

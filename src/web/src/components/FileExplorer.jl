@@ -407,7 +407,8 @@ function FileExplorer()
         end
         found
     else
-        pwd()
+        # Use the directory the user launched from, not the web app's cwd
+        isdefined(Main, :USER_CWD) ? Main.USER_CWD : pwd()
     end
 
     # Build the file tree

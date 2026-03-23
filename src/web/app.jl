@@ -23,7 +23,10 @@ using Sessions
 using SessionsUI
 using UUIDs
 
-# Change to web directory for relative paths
+# Save user's launch directory (for file explorer + terminal)
+const USER_CWD = pwd()
+
+# Change to web directory for relative paths (Therapy needs this)
 cd(@__DIR__)
 
 # =============================================================================
