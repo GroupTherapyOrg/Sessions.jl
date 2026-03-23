@@ -19,10 +19,10 @@ end
 
 """Create a new notebook worker process."""
 function NotebookWorker(; notebook_path::String="")
-    # Pass --project flag so the worker inherits the same project environment.
-    # Without this, the worker uses the global Julia env and can't import Sessions.
-    proj_dir = dirname(Base.active_project())
-    w = Malt.Worker(; exeflags=["--project=$(proj_dir)"])
+    # Spawn worker WITHOUT --project. The boot script will Pkg.activate()
+    # the notebook's own environment (which has the user's packages).
+    # The default environment (@v1.12 or similar) has basic stdlibs available.
+    w = Malt.Worker()
     nw = NotebookWorker(w, notebook_path, false)
     _boot_worker!(nw)
     nw
