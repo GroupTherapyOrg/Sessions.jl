@@ -116,6 +116,10 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_save_file!(state, conn, data)
             elseif action == "interrupt"
                 handle_interrupt!(state, conn, data)
+            elseif action == "format_cell"
+                handle_format_cell!(state, conn, data)
+            elseif action == "format_all"
+                handle_format_all!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -913,6 +917,58 @@ function handle_interrupt!(state::WebNotebookState, conn, data)
     broadcast_channel!("notebook", Dict(
         "event" => "interrupted"
     ))
+end
+
+"""Handle format single cell — format code via Runic.jl and broadcast update."""
+function handle_format_cell!(state::WebNotebookState, conn, data)
+    cell_id_str = get(data, "cell_id", "")
+    isempty(cell_id_str) && return
+
+    nb = active_nb(state)
+    cell = get_cell(nb, UUID(cell_id_str))
+    cell === nothing && return
+
+    original = cell.code
+    formatted = format_code(original)
+    formatted == original && return  # no change
+
+    cell.code = formatted
+    update_topology!(nb)
+
+    broadcast_channel!("notebook", Dict(
+        "event" => "cell_formatted",
+        "cell_id" => cell_id_str,
+        "code" => formatted
+    ))
+    _broadcast_stale!(state)
+    println("[WebNotebook] Formatted cell $cell_id_str")
+end
+
+"""Handle format all cells — format every cell via Runic.jl."""
+function handle_format_all!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
+    cells = ordered_cells(nb)
+    changed = 0
+
+    for cell in cells
+        original = cell.code
+        formatted = format_code(original)
+        if formatted != original
+            cell.code = formatted
+            changed += 1
+            broadcast_channel!("notebook", Dict(
+                "event" => "cell_formatted",
+                "cell_id" => string(cell.id),
+                "code" => formatted
+            ))
+        end
+    end
+
+    if changed > 0
+        update_topology!(nb)
+        _broadcast_stale!(state)
+    end
+    println("[WebNotebook] Formatted $changed/$(length(cells)) cells")
 end
 
 """Handle bond value change — update bond in worker, re-execute downstream cells."""

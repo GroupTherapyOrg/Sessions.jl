@@ -442,6 +442,19 @@ function _notebook_channel_script()
       setCellState(el, data.state);
     }
 
+    else if (data.event === 'cell_formatted') {
+      // Update CodeMirror editor with formatted code
+      var ev = editors[data.cell_id];
+      if (ev && data.code !== undefined) {
+        var currentCode = ev.state.doc.toString();
+        if (data.code !== currentCode) {
+          ev.dispatch({
+            changes: {from: 0, to: currentCode.length, insert: data.code}
+          });
+        }
+      }
+    }
+
     else if (data.event === 'cell_output') {
       var el = cellEls(data.cell_id);
       if (!el) return;
@@ -730,6 +743,8 @@ function _notebook_channel_script()
     '<div class="cell-menu-up" style="' + _menuItemStyle + '"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M4 7l4-4 4 4"/></svg>Move up</div>' +
     '<div class="cell-menu-down" style="' + _menuItemStyle + '"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 13V3M4 9l4 4 4-4"/></svg>Move down</div>' +
     '<div style="height:1px;background:#2a3a4f;margin:2px 8px;"></div>' +
+    '<div class="cell-menu-format" style="' + _menuItemStyle + '"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2 3h12M2 6h8M2 9h10M2 12h6"/></svg>Format cell</div>' +
+    '<div style="height:1px;background:#2a3a4f;margin:2px 8px;"></div>' +
     '<div class="cell-menu-delete" style="' + _menuItemStyle + '"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M6 7v5M10 7v5"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/></svg>Delete cell</div>';
   document.body.appendChild(_cellMenu);
   var _menuCellId = '';
@@ -754,6 +769,12 @@ function _notebook_channel_script()
   _cellMenu.querySelector('.cell-menu-down').addEventListener('click', function(){
     _cellMenu.style.display = 'none';
     if (_menuCellId) TherapyWS.sendMessage('notebook', {action: 'move_cell', cell_id: _menuCellId, direction: 'down'});
+  });
+
+  // Format cell action
+  _cellMenu.querySelector('.cell-menu-format').addEventListener('click', function(){
+    _cellMenu.style.display = 'none';
+    if (_menuCellId) TherapyWS.sendMessage('notebook', {action: 'format_cell', cell_id: _menuCellId});
   });
 
   // Delete action (no confirm — undo available via Ctrl+Z)
