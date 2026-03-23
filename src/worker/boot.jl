@@ -24,15 +24,29 @@ function _create_workspace(; notebook_path::String="")
 
     # Set working directory to notebook's location so pwd() and @__DIR__ work
     if !isempty(notebook_path) && isfile(notebook_path)
-        dir = dirname(abspath(notebook_path))
-        try cd(dir) catch; end
+        nb_dir = dirname(abspath(notebook_path))
+        try cd(nb_dir) catch; end
 
-        # Activate notebook directory if Project.toml exists
-        proj = joinpath(dir, "Project.toml")
-        if isfile(proj)
+        # Walk up to find nearest Project.toml (notebook may be in a subdirectory)
+        dir = nb_dir
+        proj_dir = nothing
+        for _ in 1:5
+            if isfile(joinpath(dir, "Project.toml"))
+                proj_dir = dir
+                break
+            end
+            parent = dirname(dir)
+            parent == dir && break
+            dir = parent
+        end
+
+        if proj_dir !== nothing
             try
-                Core.eval(mod, :(import Pkg; Pkg.activate($(dir))))
-            catch; end
+                Core.eval(mod, :(import Pkg; Pkg.activate($(proj_dir)); Pkg.instantiate()))
+                println("[Worker $(getpid())]:   Activating project at $(repr(proj_dir))")
+            catch e
+                println("[Worker $(getpid())]:   Pkg.activate failed: $e")
+            end
         end
     end
 
