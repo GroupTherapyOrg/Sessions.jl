@@ -47,7 +47,7 @@ cd my_project/ && sessions""")
 
                 SectionH3("Run headlessly"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "Execute all cells in a notebook without the web UI. Useful for CI pipelines, batch processing, and agent workflows."
+                    "Execute all cells in a notebook without the web UI. Useful for CI pipelines, batch processing, and automation."
                 ),
                 Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
                     CodeBlock(language="bash", "sessions run my_notebook.jl")
@@ -106,7 +106,7 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
 
                 SectionH3("Integrated terminal"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "A real PTY-backed shell via xterm.js. Multiple tabs supported. Type ", Kbd("julia"), " to get a REPL, run build commands, or use agent tools. Terminal sessions survive page refreshes."
+                    "A real PTY-backed shell via xterm.js. Multiple tabs supported. Type ", Kbd("julia"), " to get a REPL, run build commands, or install packages. Terminal sessions survive page refreshes."
                 ),
 
                 SectionH3("Notebook toolbar"),
@@ -134,7 +134,7 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
                     "Every notebook produces two files:"
                 ),
                 Ul(:class => "list-disc list-inside space-y-2 text-warm-600 dark:text-warm-400 mb-4",
-                    Li(Kbd("notebook.jl"), " contains cell code, cell order, and fold/disabled metadata. This is the source of truth. Both humans and agents can edit it safely."),
+                    Li(Kbd("notebook.jl"), " contains cell code, cell order, and fold/disabled metadata. This is the source of truth — safe to edit from any tool."),
                     Li(Kbd("notebook.sessions.toml"), " contains cached outputs, stdout, runtimes, and error messages. It is optional, gitignored, and auto-regenerated when you run cells."),
                 ),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
@@ -142,22 +142,21 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
                 ),
             ),
 
-            # Human + Agent workflow
+            # Collaborative editing
             Div(
-                SectionH2("Human + Agent Collaboration"),
+                SectionH2("Collaborative Editing"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "Sessions.jl is designed for workflows where you and AI agents (Claude Code, Cursor, etc.) work on the same notebook simultaneously:"
+                    "Since notebooks are plain .jl files, they work naturally with any external tool — other editors, AI assistants, scripts, or CI pipelines:"
                 ),
                 Ol(:class => "list-decimal list-inside space-y-2 text-warm-600 dark:text-warm-400 mb-4",
-                    Li("You edit code in the browser IDE"),
-                    Li("An agent edits the .jl file from the terminal"),
-                    Li("The file watcher detects both kinds of changes in under a second"),
+                    Li("Edit code in the browser IDE"),
+                    Li("Modify the .jl file from any editor or terminal"),
+                    Li("The file watcher detects changes in under a second"),
                     Li("Modified cells are marked stale with an orange indicator"),
-                    Li("Either you or the agent triggers execution (Run Stale button or ", Kbd("sessions run"), ")"),
-                    Li("Outputs update for everyone"),
+                    Li("Click Run Stale or run ", Kbd("sessions run"), " to re-execute"),
                 ),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "The integrated terminal means agents can run commands, install packages, and interact with your project without leaving the IDE."
+                    "The integrated terminal lets you run commands, install packages, and interact with your project without leaving the IDE."
                 ),
             ),
 

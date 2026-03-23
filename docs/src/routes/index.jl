@@ -1,6 +1,6 @@
 # Sessions.jl docs landing page
 #
-# Web-native notebook IDE for humans and agents. Green accent, warm neutrals.
+# Web-native notebook IDE. Green accent, warm neutrals.
 # Uses local components from PageComponents.jl (no Suite.jl).
 
 function Index()
@@ -16,7 +16,7 @@ function Index()
                 H1(:class => "text-4xl sm:text-6xl lg:text-7xl font-serif font-semibold text-warm-800 dark:text-warm-300 tracking-tight leading-[1.1]",
                     "Reactive Julia notebooks",
                     Br(),
-                    "for humans and agents with ",
+                    "built on ",
                     Span(:class => "text-accent-600 dark:text-accent-400", "Sessions"),
                     Span(:class => "text-warm-400 dark:text-warm-600 text-4xl sm:text-5xl lg:text-6xl font-light",
                         Span(:style => "color: var(--jl-dot)", "."),
@@ -25,7 +25,7 @@ function Index()
                     )
                 ),
                 P(:class => "mt-8 text-lg sm:text-xl text-warm-600 dark:text-warm-400 max-w-2xl mx-auto leading-relaxed",
-                    "A web-native notebook IDE with Pluto-compatible reactivity, integrated terminal, code formatting, and seamless human+agent collaboration."
+                    "A web-native notebook IDE with Pluto-compatible reactivity, integrated terminal, code formatting, and collaborative file-based editing."
                 ),
                 Div(:class => "mt-10 flex flex-col sm:flex-row justify-center gap-4",
                     A(:href => "./getting-started/",
@@ -61,7 +61,7 @@ sessions my_notebook.jl
 # Start in your project directory
 cd my_project/ && sessions
 
-# Run headlessly (CI, scripts, agents)
+# Run headlessly (CI, scripts, automation)
 sessions run my_notebook.jl""")
             )
         ),
@@ -98,8 +98,8 @@ sessions run my_notebook.jl""")
                     "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 ),
                 _FeatureCard(
-                    "Human + Agent Collaboration",
-                    "Code/state separation lets you, LLMs, IDEs, and scripts all edit the same notebook. File watcher syncs changes in real time.",
+                    "Collaborative Editing",
+                    "Code/state separation lets you edit from the browser, terminal, or any tool. File watcher syncs changes in real time.",
                     "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                 )
             )
@@ -142,7 +142,7 @@ sessions run my_notebook.jl""")
                         Div(:class => "space-y-2 text-sm text-warm-600 dark:text-warm-400",
                             P("Cell code, cell order, fold/disabled metadata"),
                             P(:class => "font-medium text-warm-800 dark:text-warm-300",
-                                "Safe for humans, agents, IDEs, and scripts to modify directly."
+                                "Safe to modify from any editor, terminal, or tool."
                             ),
                             P("Pluto-compatible format. Version-controlled."),
                         ),
@@ -176,13 +176,13 @@ sessions run my_notebook.jl""")
             Div(:class => "max-w-3xl mx-auto",
                 Card(class="bg-warm-100/50 dark:bg-warm-900/50",
                     CardHeader(
-                        CardTitle("How human + agent collaboration works"),
+                        CardTitle("How collaborative editing works"),
                     ),
                     CardContent(
                         Div(:class => "space-y-4 text-sm text-warm-600 dark:text-warm-400",
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "1."),
-                                P("You write code in the browser IDE. An agent edits the .jl file from the terminal. Both at the same time."),
+                                P("Edit in the browser IDE, or modify the .jl file from any editor or tool. Both at the same time."),
                             ),
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "2."),
@@ -194,7 +194,7 @@ sessions run my_notebook.jl""")
                             ),
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "4."),
-                                P("Click Run Stale, or let the agent run 'sessions run notebook.jl' from the integrated terminal."),
+                                P("Click Run Stale, or run ", Code("sessions run notebook.jl"), " from the integrated terminal."),
                             ),
                         ),
                     ),

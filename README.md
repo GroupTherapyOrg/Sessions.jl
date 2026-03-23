@@ -7,7 +7,7 @@
     <img alt="Sessions.jl" src="assets/sessions_light.svg" height="60">
   </picture>
 
-  **A web-native reactive Julia notebook IDE built for humans and agents working together.**
+  **A web-native reactive Julia notebook IDE.**
 
   [![Docs](https://img.shields.io/badge/docs-stable-blue)](https://grouptherapyorg.github.io/Sessions.jl/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
@@ -15,16 +15,16 @@
 
 ---
 
-> **Warning: Experimental, alpha-quality software.** Largely built by AI agents (Claude Code). Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, collaborative human+agent development, and WebAssembly compilation.
+> **Warning: Experimental, alpha-quality software.** Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, file-based collaboration, and WebAssembly compilation.
 
 ## What is Sessions.jl?
 
-Sessions.jl is a reactive Julia notebook that runs in your browser as a local web IDE. It is designed for a workflow where **you and AI agents collaborate on the same notebook files simultaneously**. You write code in the browser, an agent edits the `.jl` file from the terminal, a file watcher picks up both kinds of changes, and the UI updates live.
+Sessions.jl is a reactive Julia notebook that runs in your browser as a local web IDE. It is designed around **plain `.jl` files that anyone can edit** — you in the browser, an AI assistant from the terminal, or a script in CI. A file watcher picks up all changes and the UI updates live.
 
 **Key ideas:**
 
-- **Human + agent collaboration.** The notebook is a plain `.jl` file. You edit in the browser IDE, agents edit from the terminal, scripts modify it programmatically. Everyone sees changes in real time via file watching.
-- **Code/state separation.** Pure code lives in `.jl`, cached outputs in `.sessions.toml`. Agents and editors never corrupt your execution state. Delete the cache anytime; re-run to regenerate.
+- **File-based collaboration.** The notebook is a plain `.jl` file. Edit in the browser, from the terminal, or programmatically. Changes from any source appear in real time via file watching.
+- **Code/state separation.** Pure code lives in `.jl`, cached outputs in `.sessions.toml`. External edits never corrupt your execution state. Delete the cache anytime; re-run to regenerate.
 - **Full IDE in the browser.** CodeMirror editor with Julia syntax highlighting, Shoelace file explorer with lazy loading, xterm.js terminal with real PTY shell. Everything in one window.
 - **Pluto-compatible.** Same `.jl` file format, same reactivity engine (ExpressionExplorer + PlutoDependencyExplorer). Open the same file in Pluto or Sessions.
 - **Integrated terminal.** Real PTY-backed shell via xterm.js. Type `julia` to get a REPL. Run build commands. Multiple tabs. All without leaving the notebook.
@@ -51,7 +51,7 @@ sessions my_notebook.jl
 # Start in a project directory (file explorer shows that directory)
 cd my_project/ && sessions
 
-# Run headlessly (CI, scripts, agents)
+# Run headlessly (CI, scripts, automation)
 sessions run my_notebook.jl
 ```
 
@@ -105,10 +105,10 @@ Sessions.jl splits your notebook into two files:
 
 | File | Contains | Role |
 |------|----------|------|
-| `notebook.jl` | Cell code, cell order, fold/disabled metadata | **Source of truth** for both humans and agents |
+| `notebook.jl` | Cell code, cell order, fold/disabled metadata | **Source of truth** — editable from anywhere |
 | `notebook.sessions.toml` | Cached outputs, stdout, runtime, errors | **Execution cache**, optional, deletable, auto-regenerated |
 
-You or an agent can freely edit the `.jl` file. The file watcher detects changes within a second, marks modified cells as stale, and the UI shows what needs re-execution.
+Anyone can freely edit the `.jl` file — the browser IDE, an external editor, or a script. The file watcher detects changes within a second, marks modified cells as stale, and the UI shows what needs re-execution.
 
 ## @bind Widgets
 
@@ -121,18 +121,17 @@ using SessionsUI: @bind, BoundSlider, BoundCheckBox, BoundTextField, BoundSelect
 @bind choice BoundSelect(["A", "B", "C"])
 ```
 
-## Human + Agent Workflow
+## Collaborative Editing
 
-Sessions.jl is built for seamless collaboration between you and AI agents (Claude Code, Cursor, Copilot, etc.):
+Since notebooks are plain `.jl` files, they work naturally with any external tool — AI assistants, other editors, scripts, CI pipelines:
 
-1. **You** write and run code in the browser IDE
-2. **An agent** edits `notebook.jl` from the terminal (adds cells, modifies code)
-3. **File watcher** detects both kinds of changes in under a second
+1. **Edit in the browser** — write and run code in the web IDE
+2. **Edit externally** — modify `notebook.jl` from any editor or tool
+3. **File watcher** detects changes in under a second
 4. **UI** marks modified cells as stale (orange indicator)
-5. **Either you or the agent** clicks "Run Stale" or runs `sessions run notebook.jl`
-6. **Outputs update**, both you and the agent see results
+5. **Run Stale** re-executes only what changed
 
-The `.sessions.toml` file caches execution state so reopening a notebook shows previous outputs without re-running everything. The integrated terminal lets you run agent commands, install packages, or start a Julia REPL without leaving the IDE.
+The `.sessions.toml` file caches execution state so reopening a notebook shows previous outputs without re-running everything. The integrated terminal lets you run commands, install packages, or start a Julia REPL without leaving the IDE.
 
 ## Built On
 
