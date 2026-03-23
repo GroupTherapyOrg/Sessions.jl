@@ -14,15 +14,15 @@ function Index()
                     Span(:class => "text-xs font-medium text-accent-600 dark:text-accent-400", "Web IDE")
                 ),
                 H1(:class => "text-4xl sm:text-6xl lg:text-7xl font-serif font-semibold text-warm-800 dark:text-warm-300 tracking-tight leading-[1.1]",
+                    "Reactive Julia notebooks",
+                    Br(),
+                    "with ",
                     Span(:class => "text-accent-600 dark:text-accent-400", "Sessions"),
                     Span(:class => "text-4xl sm:text-5xl lg:text-6xl font-light",
                         Span(:style => "color:#b08fd8;", "."),
                         Span(:class => "text-accent-600 dark:text-accent-400", "j"),
                         Span(:class => "text-accent-secondary-600 dark:text-accent-secondary-400", "l")
-                    ),
-                    Br(),
-                    Span(:class => "text-3xl sm:text-4xl lg:text-5xl text-warm-500 dark:text-warm-400 font-light",
-                        "Reactive Julia notebooks in the browser")
+                    )
                 ),
                 P(:class => "mt-8 text-lg sm:text-xl text-warm-600 dark:text-warm-400 max-w-2xl mx-auto leading-relaxed",
                     "A Julia notebook IDE with Pluto-compatible reactivity, integrated terminal, and code formatting. Edit from the browser or any tool — changes sync in real time."
