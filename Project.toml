@@ -23,12 +23,10 @@ SessionsUI = "d4e5f6a7-b8c9-0123-defa-234567890123"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
-WasmTarget = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 [sources]
 SessionsUI = {path = "SessionsUI"}
 Therapy = {url = "https://github.com/GroupTherapyOrg/Therapy.jl.git"}
-WasmTarget = {url = "https://github.com/GroupTherapyOrg/WasmTarget.jl.git"}
 
 [compat]
 CommonMark = "1"
