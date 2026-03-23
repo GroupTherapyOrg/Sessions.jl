@@ -89,6 +89,10 @@ export LspTextEdit, parse_workspace_edit, lsp_rename!, lsp_rename_with_timeout!
 include("formatting.jl")
 export format_code, format_code_available
 
+# CLI entry point (sessions command)
+include("cli.jl")
+export main
+
 # Precompilation workload
 using PrecompileTools
 

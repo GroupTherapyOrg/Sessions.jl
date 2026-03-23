@@ -7,7 +7,7 @@
     <img alt="Sessions.jl" src="assets/sessions_light.svg" height="60">
   </picture>
 
-  **A terminal-native Julia notebook built on [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s reactive engine and [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl).**
+  **A web-native reactive Julia notebook IDE. Pure Julia, agent-friendly, WASM-ready.**
 
   [![Docs](https://img.shields.io/badge/docs-stable-blue)](https://grouptherapyorg.github.io/Sessions.jl/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
@@ -15,25 +15,18 @@
 
 ---
 
-> **Warning: This is an experimental, alpha-quality project.** It was largely built by AI agents (Claude Code), is untested outside of its own test suite, has rough edges everywhere, and may never reach the goals described below. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl) -- it's excellent. This exists because building it is fun and the ideas are worth exploring.
+> **Warning: Experimental, alpha-quality software.** Largely built by AI agents (Claude Code). Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, agent-driven development, and WebAssembly compilation.
 
-<div align="center">
-  <img src="assets/2026-03-12 13.15.38.gif" alt="Sessions.jl demo" width="700">
-</div>
+## What is Sessions.jl?
 
-## Why This Exists
+Sessions.jl is a reactive Julia notebook that runs in your browser as a local web IDE. It's designed for a workflow where **you and AI agents edit the same notebook files** -- the agent modifies `.jl` files directly, a file watcher picks up changes, and the UI updates live.
 
-Over the past couple of months I've been shifting more and more toward agent-driven development -- LLMs writing code, running tests, iterating in the terminal. The terminal has become the center of my workflow, and I wanted Pluto's reactive model there too. Pluto is great, but having an agent edit a notebook externally gets clunky -- restarts, lost changes, package state getting out of sync. Sessions.jl splits the notebook into two files -- pure code in `.jl`, cached outputs in `.session.toml` -- so agents, scripts, and editors can freely modify cells without breaking anything.
-
-The other motivation is having a playground for ideas that are too experimental for Pluto itself. Pluto is a widely-used, carefully-maintained package -- it's not the place to test half-baked integrations with bleeding-edge tools. Sessions.jl is small enough and unimportant enough to be a testing ground. If something turns out well, maybe it can inform upstream work in the Pluto ecosystem.
-
-Sessions.jl is pure Julia through and through -- the TUI, the reactivity engine. No JavaScript, no Electron, no browser. Just Julia in a terminal.
-
-> **Note:** This could also be useful in cluster/HPC environments and headless servers -- anywhere you SSH in and there's no browser. Agents in a terminal, notebooks in a terminal, everything in a terminal. Whether it actually gets there is another question.
-
-## Built On
-
-Sessions.jl uses [Pluto.jl](https://github.com/fonsp/Pluto.jl)'s file format, [ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl) for reactive analysis, [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl) for cell ordering, and [AbstractPlutoDingetjes.jl](https://github.com/JuliaPluto/AbstractPlutoDingetjes.jl) for the `@bind` protocol. The TUI is built on [Tachikoma.jl](https://github.com/kahliburke/Tachikoma.jl). Notebooks are compatible with Pluto -- you can open the same `.jl` file in either.
+**Key ideas:**
+- **Code/state separation** -- pure code in `.jl`, cached outputs in `.sessions.toml`. Agents never corrupt your execution state.
+- **Web IDE** -- CodeMirror editor, Shoelace file explorer, xterm.js terminal, all served from a local Julia process.
+- **Pluto-compatible** -- same `.jl` file format, same reactivity engine (ExpressionExplorer + PlutoDependencyExplorer). Open the same file in Pluto or Sessions.
+- **Integrated terminal** -- real PTY-backed shell via xterm.js. Type `julia` to get a REPL. Run build commands. Everything in one window.
+- **WASM experiments** -- compiling notebook interactivity to WebAssembly via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl), so exported notebooks can run without a Julia server. Very early, barely works for sliders.
 
 ## Installation
 
@@ -44,59 +37,116 @@ using Pkg
 Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")
 ```
 
-This installs the `sessions` command to `~/.julia/bin/`. On first launch, JETLS (real-time diagnostics) is auto-installed.
+This installs the `sessions` command to `~/.julia/bin/`.
 
 ## Quick Start
 
 ```bash
-# Open a notebook
+# Open a notebook in the web IDE
 sessions my_notebook.jl
 
 # Create a new notebook
 sessions
 
-# Run headlessly (CI, scripts)
+# Run headlessly (CI, scripts, agents)
 sessions run my_notebook.jl
 ```
 
-Or from the Julia REPL:
+The web IDE opens at `http://127.0.0.1:8080`.
+
+Or from a Julia session:
 
 ```julia
 using Sessions
-Sessions.main("my_notebook.jl")
+Sessions.main(["my_notebook.jl"])
 ```
 
-## Code/State Separation: `.jl` + `.session.toml`
+## Architecture
+
+```
+Sessions.jl/
+├── src/
+│   ├── Sessions.jl          # Core module
+│   ├── types.jl             # Cell, Notebook, CellOutput
+│   ├── format.jl            # .jl notebook parser/serializer (Pluto-compatible)
+│   ├── analysis.jl          # Reactive dependency analysis
+│   ├── kernel.jl            # Cell execution engine
+│   ├── session.jl           # .sessions.toml cache read/write
+│   ├── pty.jl               # PTY management (terminal subprocess)
+│   ├── terminal_server.jl   # xterm.js <-> PTY WebSocket bridge
+│   ├── web_server.jl        # WebSocket channel handlers
+│   ├── web/                 # Web UI (Therapy.jl app)
+│   │   ├── app.jl           # Web app entry point
+│   │   └── src/components/  # Layout, NotebookPanel, FileExplorer, ReplPanel, etc.
+│   └── worker/              # Malt.jl notebook workers (isolated execution)
+├── SessionsUI/              # Lightweight notebook API (zero heavy deps)
+│   └── src/
+│       ├── SessionsUI.jl
+│       └── widgets.jl       # @bind, Slider, Bond, etc.
+└── test/
+```
+
+### Two Packages, One Repo
+
+| Package | Purpose | Deps | How to use |
+|---------|---------|------|-----------|
+| **Sessions.jl** | The IDE app | Therapy.jl, Malt.jl, WasmTarget.jl, HTTP... | `Pkg.Apps.add(url=...)` |
+| **SessionsUI** | Notebook API for `@bind` | UUIDs only (stdlib) | `using SessionsUI: @bind, BoundSlider` |
+
+SessionsUI is what notebook code imports. It has zero heavy dependencies -- compiles in ~300ms. Sessions.jl (the app) depends on SessionsUI, not the other way around.
+
+## Code/State Separation
 
 Sessions.jl splits your notebook into two files:
 
 | File | Contains | Role |
 |------|----------|------|
-| `notebook.jl` | Cell code, cell order, fold/disabled metadata | **Source of truth** -- safe for agents and tools to modify |
-| `notebook.session.toml` | Cached outputs, stdout, runtime, error messages | **Execution cache** -- optional, can be deleted and regenerated |
+| `notebook.jl` | Cell code, cell order, fold/disabled metadata | **Source of truth** -- safe for agents/editors to modify |
+| `notebook.sessions.toml` | Cached outputs, stdout, runtime, errors | **Execution cache** -- optional, deletable, auto-regenerated |
 
-The `.jl` file is pure code. An LLM agent, an IDE, or a shell script can modify cell code freely -- the cached outputs live separately in `.session.toml` and are never corrupted by code edits. A file watcher detects external changes within a second, marks modified cells as stale, and lets you re-run when ready.
+An agent or script can freely edit the `.jl` file. The file watcher detects changes within a second, marks modified cells as stale, and the UI shows what needs re-execution.
 
 ## @bind Widgets
 
-Sessions.jl implements the AbstractPlutoDingetjes `@bind` protocol:
-
 ```julia
-@bind x Slider(1:100)
-@bind name TextField()
-@bind flag CheckBox()
-@bind choice Select(["A", "B", "C"])
-@bind n NumberField(1:10)
+using SessionsUI: @bind, BoundSlider, BoundCheckBox, BoundTextField, BoundSelect
+
+@bind x BoundSlider(1:100)
+@bind name BoundTextField(default="world")
+@bind flag BoundCheckBox()
+@bind choice BoundSelect(["A", "B", "C"])
 ```
 
-## Other Experiments
+## Agent-Driven Development
 
-Things baked in or being explored -- none production-ready, all subject to being ripped out:
+Sessions.jl is built for the workflow where an AI agent (Claude Code, Cursor, etc.) edits your notebook files while you watch:
 
-- **JETLS integration** -- Real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP, catching type errors as you write
-- **Runic.jl formatting** -- Auto-format cells on save
-- **WebAssembly export** -- Compiling notebook interactivity to WASM via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl) so exported notebooks don't need a running Julia server. Right now it barely works for sliders. Compiling real Julia to WASM is really hard and this will probably not go anywhere, but it's fun to try.
-- etc.
+1. Agent edits `notebook.jl` (adds cells, modifies code)
+2. File watcher detects changes in <1 second
+3. UI marks modified cells as stale (orange indicator)
+4. You click "Run Stale" or the agent runs `sessions run notebook.jl`
+5. Outputs update, agent sees results
+
+The `.sessions.toml` file caches execution state so reopening a notebook shows previous outputs without re-running everything.
+
+## Built On
+
+- [Pluto.jl](https://github.com/fonsp/Pluto.jl) file format + reactive engine ([ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl), [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl))
+- [Therapy.jl](https://github.com/GroupTherapyOrg/Therapy.jl) web framework (SSR, WebSocket channels, @island hydration)
+- [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl) Julia-to-WebAssembly compiler
+- [Malt.jl](https://github.com/JuliaPluto/Malt.jl) isolated worker processes
+- [CodeMirror](https://codemirror.net/) code editor
+- [Shoelace](https://shoelace.style/) web components (file explorer)
+- [xterm.js](https://xtermjs.org/) terminal emulator
+
+## Experiments
+
+Things being explored -- none production-ready, all likely to change or be removed:
+
+- **JETLS integration** -- real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP
+- **Runic.jl formatting** -- auto-format cells on save
+- **WASM export** -- compiling @bind interactivity to WebAssembly so exported notebooks don't need a running Julia server
+- **Malt.jl workers** -- each notebook tab runs in its own process for isolation
 
 ## License
 
