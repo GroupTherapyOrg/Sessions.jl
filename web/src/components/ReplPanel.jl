@@ -265,9 +265,9 @@ function _terminal_js()
     }
 
     else if (data.event === 'terminal_list') {
-      // Server sent list of existing terminals (on reconnect/refresh)
+      // Server sent list of existing terminals
       if (data.tabs && data.tabs.length > 0) {
-        // Recreate xterm instances for existing server tabs
+        // Reconnect: create xterm instances for existing server PTYs
         data.tabs.forEach(function(t) {
           if (!terminals[t.id]) {
             var info = createTerminal(t.id);
@@ -276,6 +276,7 @@ function _terminal_js()
             div.style.cssText = 'height:100%;';
             container.appendChild(div);
             info.term.open(div);
+            info.term.writeln('\x1b[90m[reconnected]\x1b[0m');
             setTimeout(function() { info.fitAddon.fit(); }, 50);
           }
         });
@@ -283,8 +284,10 @@ function _terminal_js()
         var activeId = data.active_tab_id || data.tabs[data.tabs.length - 1].id;
         showTab(activeId);
       } else {
-        // No existing terminals — spawn one
-        maybeAutoSpawn();
+        // First time: no terminals exist on server — spawn one
+        if (window.TherapyWS && TherapyWS.sendMessage) {
+          TherapyWS.sendMessage('terminal', {action: 'spawn', rows: 24, cols: 80});
+        }
       }
     }
 
@@ -296,43 +299,31 @@ function _terminal_js()
     }
   });
 
-  // ── Request existing terminals from server (handles page refresh) ──
-  var _initialListDone = false;
+  // ── On panel show: request terminal list from server ──
+  // Server responds with existing tabs (reconnect) or empty (first time → spawn one).
+  // This is the ONLY path that creates terminals — no maybeAutoSpawn races.
+  var _listRequested = false;
 
-  function requestTerminalList() {
-    if (_initialListDone) return;
-    _initialListDone = true;
+  function onPanelShow() {
+    if (_listRequested) return;
+    _listRequested = true;
     if (window.TherapyWS && TherapyWS.sendMessage) {
       TherapyWS.sendMessage('terminal', {action: 'list'});
     }
   }
 
-  // On panel show: request list (server will send tab_opened for each existing terminal,
-  // or we spawn one if server reports 0)
-  function maybeAutoSpawn() {
-    if (replPanel && replPanel.style.display !== 'none') {
-      if (!_initialListDone) {
-        requestTerminalList();
-      } else if (Object.keys(terminals).length === 0) {
-        if (window.TherapyWS && TherapyWS.sendMessage) {
-          TherapyWS.sendMessage('terminal', {action: 'spawn', rows: 24, cols: 80});
-        }
-      }
-    }
-  }
-
-  // Request list after short delay (panel may be restored from localStorage)
+  // If panel is already visible (restored from localStorage), request list
   setTimeout(function() {
     if (replPanel && replPanel.style.display !== 'none') {
-      requestTerminalList();
+      onPanelShow();
     }
   }, 500);
 
-  // Also trigger when panel becomes visible
+  // When panel becomes visible via toggle button
   if (replPanel) {
     var spawnObserver = new MutationObserver(function() {
       if (replPanel.style.display !== 'none') {
-        setTimeout(maybeAutoSpawn, 100);
+        onPanelShow();
       }
     });
     spawnObserver.observe(replPanel, {attributes: true, attributeFilter: ['style']});

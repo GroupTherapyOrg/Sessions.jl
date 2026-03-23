@@ -178,21 +178,20 @@ function _handle_terminal_resize!(term_state::TerminalState, conn, data)
     pty_resize!(tab.pty, rows, cols)
 end
 
-"""Handle list request — clean slate on page refresh.
-Terminal state is ephemeral (xterm buffer is lost on refresh anyway),
-so we kill all existing PTYs and let the client spawn fresh."""
+"""List existing terminal tabs. Sent to the requesting client only."""
 function _handle_terminal_list!(term_state::TerminalState, conn, data)
-    # Kill all existing terminals — client lost its xterm state on refresh
-    for tab in term_state.tabs
-        try pty_close!(tab.pty) catch end
+    # Remove dead terminals
+    filter!(t -> pty_alive(t.pty), term_state.tabs)
+
+    # Fix active tab reference if it was removed
+    if !isempty(term_state.tabs) && !any(t -> t.id == term_state.active_tab_id, term_state.tabs)
+        term_state.active_tab_id = term_state.tabs[end].id
     end
-    empty!(term_state.tabs)
-    term_state.active_tab_id = ""
 
     send_channel!("terminal", conn, Dict(
         "event" => "terminal_list",
-        "tabs" => Dict{String,Any}[],
-        "active_tab_id" => ""
+        "tabs" => [Dict("id" => t.id, "label" => t.label, "active" => t.id == term_state.active_tab_id) for t in term_state.tabs],
+        "active_tab_id" => term_state.active_tab_id
     ))
 end
 
