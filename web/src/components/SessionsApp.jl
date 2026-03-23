@@ -23,13 +23,11 @@ function SessionsApp(children...)
         # ── Panel toggle JS (must be early so onclick handlers work) ──
         _panel_toggle_script(),
 
-        # ── Main layout: flex-col fills viewport, overflow hidden ──
+        # ── Main layout (CSS in Layout.jl handles flex-col + height) ──
         Div(:id => "sessions-root",
-            :style => "display:flex;flex-direction:column;height:100vh;width:100vw;overflow:hidden;",
 
-            # Row 1: Workspace (activity bar + sidebar + editor) — takes remaining space
+            # Row 1: Workspace (activity bar + sidebar + editor)
             Div(:id => "workspace",
-                :style => "flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;",
 
                 # Activity Bar
                 _activity_bar(),
@@ -37,8 +35,9 @@ function SessionsApp(children...)
                 # File Explorer (starts hidden)
                 _file_explorer_panel(),
 
-                # Editor Area (notebook + children)
-                Div(:style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;",
+                # Editor Area (notebook)
+                Div(:id => "editor-area",
+                    :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;",
                     children...)),
 
             # Row 2: Terminal (starts hidden, toggled via JS)

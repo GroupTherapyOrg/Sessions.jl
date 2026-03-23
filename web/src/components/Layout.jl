@@ -55,11 +55,13 @@ tailwind.config = {
         RawHtml("""<style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;margin:0;padding:0;}
-/* Full height chain: html → body → #therapy-content → #page-content → therapy-island → app.
-   Every wrapper in the chain must pass through height and flex constraints. */
-#therapy-content{display:flex;flex-direction:column;height:100%;overflow:hidden;}
-#page-content{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
-therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+/* Full height chain: every wrapper must pass through height.
+   html → body → #therapy-content → #app-root → #sessions-root */
+#therapy-content{height:100%;overflow:hidden;}
+#therapy-content>*{height:100%;}
+#app-root{height:100%;overflow:hidden;}
+#sessions-root{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+#workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
 /* Activity bar button: active highlight when panel is open.
    !important needed to override inline style from _AB_BTN_STYLE */
@@ -162,9 +164,10 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
         RawHtml(string("<script>", _EDITOR_BUNDLE_JS, "</script>")),
 
-        # --- Body wrapper with children ---
-        Div(:class => "bg-base text-t1 font-sans h-screen w-screen flex flex-col",
-            children...),
+        # --- Body: children render directly (no wrapper div — SessionsApp owns the layout) ---
+        RawHtml("""<div id="app-root" class="bg-base text-t1 font-sans">"""),
+        children...,
+        RawHtml("""</div>"""),
 
         # --- Panel state: persist to localStorage, restore after WASM hydration ---
         RawHtml("""<script>
