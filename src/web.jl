@@ -1,11 +1,17 @@
 # web.jl — Web export: notebook → Therapy.jl VNodes with WASM interactivity
 #
 # Provides: PrerenderedGallery, execute_notebook_for_web, NotebookPage,
-#           CellToggle @island, syntax highlighting, notebook helpers.
+#           CellToggle @island, CodeMirror read-only viewer, notebook helpers.
 
 using Therapy
 import Markdown
 import Base64
+
+# Load CodeMirror 6 bundle at include time (same pattern as app Layout.jl)
+const _EDITOR_BUNDLE_JS = let
+    p = joinpath(@__DIR__, "web", "static", "editor.js")
+    isfile(p) ? read(p, String) : "/* editor.js not found */"
+end
 
 # =============================================================================
 # Pre-rendered Gallery
@@ -99,77 +105,8 @@ end
             current))
 end
 
-# =============================================================================
-# Julia Syntax Highlighting (build-time tokenizer)
-# =============================================================================
-
-const _JULIA_KEYWORDS = Set([
-    "function", "end", "if", "else", "elseif", "for", "while", "return",
-    "begin", "let", "do", "try", "catch", "finally", "struct", "mutable",
-    "abstract", "primitive", "module", "import", "using", "export", "const",
-    "local", "global", "true", "false", "nothing", "in", "isa", "where",
-    "new", "break", "continue", "quote", "macro", "type", "baremodule",
-])
-
-const _JULIA_TOKEN_RE = Regex(join([
-    raw"(\#=(?:[^=]|=[^\#])*=\#)",
-    raw"(\#[^\n]*)",
-    raw"(\"\"\"[\s\S]*?\"\"\")",
-    raw"(\"(?:[^\"\\]|\\.)*\")",
-    raw"('(?:[^'\\]|\\.)?')",
-    raw"(@[a-zA-Z_]\w*!?)",
-    raw"(\b(?:" * join(collect(_JULIA_KEYWORDS), "|") * raw")\b)",
-    raw"(\b\d[\d_]*(?:\.[\d_]+)?(?:[eE][+-]?\d+)?\b)",
-    raw"(\b[a-zA-Z_]\w*!?(?=\s*[\({]))",
-    raw"(\b[A-Z]\w*\b)",
-    raw"(:[a-zA-Z_]\w*)",
-    raw"([+\-*/\\^%&|!<>=~≤≥≠÷∈∉⊆]+|\.{2,3}|=>|->|\|>|::)",
-    raw"([a-zA-Z_]\w*!?)",
-    raw"(\s+)",
-    raw"(.)",
-], "|"), "s")
-
-const _HL_CLASS_MAP = Dict{Symbol,String}(
-    :comment  => "hl-comment",
-    :string   => "hl-string",
-    :macro    => "hl-macro",
-    :keyword  => "hl-keyword",
-    :number   => "hl-number",
-    :funcall  => "hl-funcall",
-    :type     => "hl-type",
-    :symbol   => "hl-symbol",
-    :operator => "hl-operator",
-)
-
-"""Highlight Julia source code into VNodes with CSS syntax classes."""
-function _highlight_julia(code::String)
-    parts = []
-    for m in eachmatch(_JULIA_TOKEN_RE, code)
-        text = m.match
-        kind = if     m.captures[1] !== nothing; :comment
-        elseif m.captures[2] !== nothing; :comment
-        elseif m.captures[3] !== nothing; :string
-        elseif m.captures[4] !== nothing; :string
-        elseif m.captures[5] !== nothing; :string
-        elseif m.captures[6] !== nothing; :macro
-        elseif m.captures[7] !== nothing; :keyword
-        elseif m.captures[8] !== nothing; :number
-        elseif m.captures[9] !== nothing; :funcall
-        elseif m.captures[10] !== nothing; :type
-        elseif m.captures[11] !== nothing; :symbol
-        elseif m.captures[12] !== nothing; :operator
-        else; :plain
-        end
-
-        cls = get(_HL_CLASS_MAP, kind, "")
-        if isempty(cls)
-            push!(parts, text)
-        else
-            push!(parts, Span(:class => cls, text))
-        end
-    end
-    Fragment(Any[parts...])
-end
+# Syntax highlighting is handled by CodeMirror 6 (editor.js bundle).
+# No build-time tokenizer needed — CM provides proper Julia grammar parsing.
 
 # =============================================================================
 # Table Styling
@@ -285,13 +222,12 @@ function _render_code_cell(cell::Cell, index::Int, prerendered)
     ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
         ctrl_children...)
 
-    # Code block — matches app's code-cell structure
+    # Code block — CM editor host (same as app CellView: cm-cell with data-src)
     code_cell = Div(:class => "code-cell relative rounded-lg overflow-hidden",
-        Symbol("data-codeblock") => "",
         ctrls,
-        Pre(:class => "overflow-x-auto p-4 font-mono text-sm leading-relaxed",
-            :style => "color:#d4dce8;",
-            Code(:class => "block", _highlight_julia(String(code)))))
+        Div(:class => "cm-cell",
+            :data_cell_id => string(cell.id),
+            :data_src => String(code)))
 
     # CellToggle island (eye toggle + fold) wrapping the code-cell
     push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
@@ -856,7 +792,7 @@ end
 Self-contained CSS for notebook rendering — identical to the app's Layout.jl styles.
 
 Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
-Pluto-style tables (sst-*), syntax highlighting (hl-*), slider widgets.
+Pluto-style tables (sst-*), CodeMirror overrides, slider widgets.
 Any Therapy.jl app that calls NotebookPage() gets the full app experience.
 """
 function _notebook_stylesheet()
@@ -911,17 +847,74 @@ function _notebook_stylesheet()
 .sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
 .sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
 .sst-more:hover{color:#56d4a0;}
-/* Julia syntax highlighting (matches app CodeMirror) */
-.hl-keyword{color:#e06b65;}
-.hl-string{color:#56d4a0;}
-.hl-comment{color:#4a6178;font-style:italic;}
-.hl-number{color:#d4a056;}
-.hl-funcall{color:#7bb8e8;}
-.hl-type{color:#b08fd8;}
-.hl-symbol{color:#e06b65;}
-.hl-macro{color:#b08fd8;font-weight:600;}
-.hl-operator{color:#89ddff;}
+/* CodeMirror overrides (matches app Layout.jl) */
+.cm-cell .cm-editor{background:transparent!important;}
+.cm-cell .cm-scroller{overflow-x:auto;}
+.cm-cell .cm-focused{outline:none!important;}
 </style>""")
+end
+
+"""CodeMirror 6 bundle (inlined) + read-only init script for static notebooks."""
+function _notebook_editor_bundle()
+    Fragment(
+        RawHtml(string("<script>", _EDITOR_BUNDLE_JS, "</script>")),
+        RawHtml("""<script>
+(function() {
+  if (typeof C === 'undefined' || !C.EditorView) return;
+
+  var hlTheme = C.HighlightStyle.define([
+    {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
+    {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
+    {tag:C.t.moduleKeyword,color:"#e06b65"},
+    {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
+    {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
+    {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
+    {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
+    {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
+    {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
+    {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
+    {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
+    {tag:C.t.variableName,color:"#d4dce8"},
+    {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
+    {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
+    {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
+    {tag:C.t.macroName,color:"#d4a056"},
+  ]);
+
+  var edTheme = C.EditorView.theme({
+    "&":{backgroundColor:"transparent",color:"#d4dce8"},
+    ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
+    ".cm-activeLine":{backgroundColor:"transparent"},
+    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#3d5068"},
+    ".cm-content":{fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
+    ".cm-line":{paddingLeft:"4px"},
+    ".cm-cursor":{display:"none"},
+  },{dark:true});
+
+  document.querySelectorAll('.cm-cell').forEach(function(host) {
+    if (host.querySelector('.cm-editor')) return;
+    var src = host.dataset.src || '';
+    var ev = new C.EditorView({
+      state: C.EditorState.create({
+        doc: src,
+        extensions: [
+          C.lineNumbers(),
+          C.highlightSpecialChars(),
+          C.drawSelection(),
+          C.bracketMatching(),
+          C.julia(),
+          C.syntaxHighlighting(hlTheme),
+          edTheme,
+          C.EditorState.readOnly.of(true),
+          C.EditorView.editable.of(false),
+        ]
+      }),
+      parent: host
+    });
+  });
+})();
+</script>"""))
 end
 
 """
@@ -930,8 +923,8 @@ end
 Render a notebook as Therapy.jl VNodes with self-contained CSS, fonts, and JS.
 
 Any Therapy.jl app that calls this gets the full Sessions.jl notebook experience —
-cell chrome, accent bars, syntax highlighting, Pluto-style tables, markdown prose,
-interactive sliders — without any additional setup.
+cell chrome, accent bars, CodeMirror syntax highlighting, Pluto-style tables,
+markdown prose, interactive sliders — without any additional setup.
 
 ```julia
 using Sessions
@@ -964,6 +957,9 @@ function NotebookPage(nb::Notebook;
     if has_sliders || has_plotly
         push!(rendered, _slider_interaction_script())
     end
+
+    # CodeMirror bundle + init (after cells so DOM exists)
+    push!(rendered, _notebook_editor_bundle())
 
     Div(:class => "space-y-4 pl-8", rendered...)
 end
