@@ -191,8 +191,9 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 (function() {
   if (typeof C === 'undefined' || !C.EditorView) return;
 
-  // ── Registry: cell_id → CM EditorView ──
-  var editors = {};
+  // ── Registry: cell_id → CM EditorView (on window for cross-script access) ──
+  if (!window._sessionsEditors) window._sessionsEditors = {};
+  var editors = window._sessionsEditors;
 
   // ── Shared theme + highlight ──
   var hlTheme = C.HighlightStyle.define([
@@ -444,7 +445,8 @@ function _notebook_channel_script()
 
     else if (data.event === 'cell_formatted') {
       // Update CodeMirror editor with formatted code
-      var ev = editors[data.cell_id];
+      var eds = window._sessionsEditors || {};
+      var ev = eds[data.cell_id];
       if (ev && data.code !== undefined) {
         var currentCode = ev.state.doc.toString();
         if (data.code !== currentCode) {
