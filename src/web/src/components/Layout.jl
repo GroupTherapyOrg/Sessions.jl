@@ -68,6 +68,7 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 .code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
 .code-cell:hover::before{opacity:.7;}
 .code-cell.idle::before{background:#3d5068;opacity:.2;}
+.code-cell.executing::before{opacity:0 !important;}
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
 .cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
 .cell-wrap:hover .cell-eye{opacity:1;}
@@ -430,10 +431,11 @@ function _notebook_channel_script()
     if (!el) return;
     var cc = el.code;
     if (!cc) return;
-    cc.classList.remove('idle', 'stale');
-    // Queued/running: add a pulsing border
+    cc.classList.remove('idle', 'stale', 'executing');
+    // Queued/running: colored border + hide the green/orange side accent bar
     if (state === 'cell_queued' || state === 'cell_running') {
       cc.style.borderColor = state === 'cell_queued' ? '#d4a056' : '#7bb8e8';
+      cc.classList.add('executing');
     } else if (state === 'cell_errored') {
       cc.style.borderColor = '#e06b65';
     } else {
