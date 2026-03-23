@@ -52,9 +52,6 @@ function (@main)(args)
 end
 
 function _launch_web(nb_path::Union{String, Nothing})
-    # Load Therapy.jl for web server
-    @eval using Therapy
-
     # The web app entry point
     web_app_path = joinpath(@__DIR__, "web", "app.jl")
     if !isfile(web_app_path)
@@ -68,12 +65,13 @@ function _launch_web(nb_path::Union{String, Nothing})
         push!(web_args, nb_path)
     end
 
-    # Set ARGS and include the web app
+    # Run in Main so that `Main.Sessions` and `Main.WEB_STATE` are accessible
+    # to web components (they reference Main.Sessions.*, Main.WEB_STATE[], etc.)
     old_args = copy(ARGS)
     empty!(ARGS)
     append!(ARGS, web_args)
     try
-        include(web_app_path)
+        Main.eval(:(include($web_app_path)))
     finally
         empty!(ARGS)
         append!(ARGS, old_args)
