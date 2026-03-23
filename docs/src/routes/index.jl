@@ -18,10 +18,10 @@ function Index()
                     Br(),
                     "built on ",
                     Span(:class => "text-accent-600 dark:text-accent-400", "Sessions"),
-                    Span(:class => "text-warm-400 dark:text-warm-600 text-4xl sm:text-5xl lg:text-6xl font-light",
-                        Span(:style => "color: var(--jl-dot)", "."),
-                        Span(:style => "color: var(--jl-j)", "j"),
-                        Span(:style => "color: var(--jl-l)", "l")
+                    Span(:class => "text-4xl sm:text-5xl lg:text-6xl font-light",
+                        Span(:style => "color:#b08fd8;", "."),
+                        Span(:class => "text-accent-600 dark:text-accent-400", "j"),
+                        Span(:class => "text-accent-secondary-600 dark:text-accent-secondary-400", "l")
                     )
                 ),
                 P(:class => "mt-8 text-lg sm:text-xl text-warm-600 dark:text-warm-400 max-w-2xl mx-auto leading-relaxed",
@@ -50,7 +50,7 @@ function Index()
                 Div(:class => "flex items-center gap-2 mb-5",
                     Span(:class => "w-3 h-3 rounded-full bg-red-500/60"),
                     Span(:class => "w-3 h-3 rounded-full bg-yellow-500/60"),
-                    Span(:class => "w-3 h-3 rounded-full bg-green-500/60")
+                    Span(:class => "w-3 h-3 rounded-full bg-accent-500/60")
                 ),
                 CodeBlock(language="bash", """# Install as a Julia app
 julia -e 'using Pkg; Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")'
