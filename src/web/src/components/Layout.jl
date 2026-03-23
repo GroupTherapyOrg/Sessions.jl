@@ -155,6 +155,10 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 .sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
 .sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
 .sst-more:hover{color:#56d4a0;}
+/* Undo toast — bottom-left notification for deleted cells */
+#undo-toast{position:fixed;bottom:20px;left:20px;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:8px;padding:10px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:#9baabd;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;}
+#undo-toast.show{opacity:1;transform:translateY(0);pointer-events:auto;}
+#undo-toast kbd{background:#0f1419;border:1px solid #2a3a4f;border-radius:3px;padding:1px 5px;font-size:11px;color:#56d4a0;}
 /* File editor — full-height CodeMirror for plain files */
 .file-editor-wrap{height:100%;display:flex;flex-direction:column;}
 .cm-file-editor{flex:1;min-height:0;}
@@ -168,6 +172,9 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
         RawHtml("""<div id="app-root" class="bg-base text-t1 font-sans">"""),
         children...,
         RawHtml("""</div>"""),
+
+        # --- Undo toast (for deleted cells) ---
+        RawHtml("""<div id="undo-toast">Cell deleted &mdash; <kbd>Ctrl+Z</kbd> to undo</div>"""),
 
         # --- Panel state: persist to localStorage, restore after WASM hydration ---
         RawHtml("""<script>
@@ -514,6 +521,22 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_deleted') {
+      // Save deleted cell info for undo
+      window._recentlyDeleted = {
+        cell_id: data.cell_id,
+        code: data.code || '',
+        prev_cell_id: data.prev_cell_id || ''
+      };
+      // Show undo toast
+      var toast = document.getElementById('undo-toast');
+      if (toast) {
+        toast.classList.add('show');
+        if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
+        window._undoToastTimer = setTimeout(function() {
+          toast.classList.remove('show');
+          window._recentlyDeleted = null;
+        }, 8000);
+      }
       // Remove cell from DOM in-place (no page reload)
       var wrap = document.querySelector('.cell-wrap[data-cell-id="' + data.cell_id + '"]');
       if (wrap) {
@@ -611,6 +634,52 @@ function _notebook_channel_script()
       });
     }
 
+    else if (data.event === 'run_progress') {
+      var el = document.getElementById('run-progress');
+      if (el) {
+        if (data.running_index > 0 && data.total > 0) {
+          el.textContent = 'Running ' + data.running_index + '/' + data.total + '...';
+          el.style.display = '';
+        } else {
+          el.textContent = '';
+          el.style.display = 'none';
+        }
+      }
+      // Toggle Run All / Stop button visibility
+      var runAllBtn = document.getElementById('run-all-btn');
+      var stopBtn = document.getElementById('stop-btn');
+      if (runAllBtn && stopBtn) {
+        if (data.running_index > 0 && data.total > 0) {
+          runAllBtn.style.display = 'none';
+          stopBtn.style.display = '';
+        } else {
+          runAllBtn.style.display = '';
+          stopBtn.style.display = 'none';
+        }
+      }
+    }
+
+    else if (data.event === 'interrupted') {
+      var el = document.getElementById('run-progress');
+      if (el) {
+        el.textContent = 'Interrupted';
+        el.style.display = '';
+        el.style.color = '#e06b65';
+        setTimeout(function() {
+          el.textContent = '';
+          el.style.display = 'none';
+          el.style.color = '#56d4a0';
+        }, 2000);
+      }
+      // Restore Run All button
+      var runAllBtn = document.getElementById('run-all-btn');
+      var stopBtn = document.getElementById('stop-btn');
+      if (runAllBtn && stopBtn) {
+        runAllBtn.style.display = '';
+        stopBtn.style.display = 'none';
+      }
+    }
+
     else if (data.event === 'full_state') {
       console.log('[Sessions] Full state:', data.cells ? data.cells.length : 0, 'cells');
       if (data.cells) {
@@ -634,6 +703,22 @@ function _notebook_channel_script()
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       window._sessionsSave && window._sessionsSave();
+    }
+    // Ctrl+Z undo deleted cell (only when not focused in an editor)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && window._recentlyDeleted) {
+      var active = document.activeElement;
+      var inEditor = active && (active.closest('.cm-editor') || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if (!inEditor) {
+        e.preventDefault();
+        var del = window._recentlyDeleted;
+        window._recentlyDeleted = null;
+        var toast = document.getElementById('undo-toast');
+        if (toast) toast.classList.remove('show');
+        if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
+        if (window.TherapyWS && TherapyWS.sendMessage) {
+          TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: del.prev_cell_id, code: del.code});
+        }
+      }
     }
   });
 
@@ -671,10 +756,10 @@ function _notebook_channel_script()
     if (_menuCellId) TherapyWS.sendMessage('notebook', {action: 'move_cell', cell_id: _menuCellId, direction: 'down'});
   });
 
-  // Delete action
+  // Delete action (no confirm — undo available via Ctrl+Z)
   _cellMenu.querySelector('.cell-menu-delete').addEventListener('click', function(){
     _cellMenu.style.display = 'none';
-    if (_menuCellId && confirm('Delete this cell?')) {
+    if (_menuCellId) {
       TherapyWS.sendMessage('notebook', {action: 'delete_cell', cell_id: _menuCellId});
     }
   });

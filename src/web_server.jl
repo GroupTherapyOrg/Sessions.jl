@@ -114,6 +114,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_set_bond!(state, conn, data)
             elseif action == "save_file"
                 handle_save_file!(state, conn, data)
+            elseif action == "interrupt"
+                handle_interrupt!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -520,12 +522,19 @@ function handle_run_all!(state::WebNotebookState, conn, data)
             end
 
             # Execute in topological order
-            for c in order.runnable
+            n_total = length(order.runnable)
+            for (i, c) in enumerate(order.runnable)
                 c.state = cell_running
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_state",
                     "cell_id" => string(c.id),
                     "state" => "cell_running"
+                ))
+                broadcast_channel!("notebook", Dict(
+                    "event" => "run_progress",
+                    "running_index" => i,
+                    "total" => n_total,
+                    "cell_id" => string(c.id)
                 ))
 
                 remote_execute_cell!(active_worker(state), c)
@@ -539,6 +548,13 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                     "state" => string(c.state)
                 ))
             end
+
+            # Clear progress indicator
+            broadcast_channel!("notebook", Dict(
+                "event" => "run_progress",
+                "running_index" => 0,
+                "total" => 0
+            ))
 
             save_session!(nb)
         finally
@@ -565,13 +581,20 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     end
 
     # Execute in topological order
-    for c in order.runnable
+    n_total = length(order.runnable)
+    for (i, c) in enumerate(order.runnable)
         c.state = cell_running
         _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
             "event" => "cell_state",
             "cell_id" => string(c.id),
             "state" => "cell_running"
+        ))
+        broadcast_channel!("notebook", Dict(
+            "event" => "run_progress",
+            "running_index" => i,
+            "total" => n_total,
+            "cell_id" => string(c.id)
         ))
 
         remote_execute_cell!(active_worker(state), c)
@@ -586,6 +609,13 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
             "state" => string(c.state)
         ))
     end
+
+    # Clear progress indicator
+    broadcast_channel!("notebook", Dict(
+        "event" => "run_progress",
+        "running_index" => 0,
+        "total" => 0
+    ))
 
     # Broadcast errors
     for (c, _err) in order.errable
@@ -625,7 +655,8 @@ end
 function handle_add_cell!(state::WebNotebookState, conn, data)
     nb = active_nb(state)
     after_cell_id_str = get(data, "after_cell_id", "")
-    new_cell = Cell(; code="")
+    restore_code = get(data, "code", "")
+    new_cell = Cell(; code=restore_code)
 
     if isempty(after_cell_id_str)
         # Insert at beginning
@@ -676,15 +707,30 @@ function handle_delete_cell!(state::WebNotebookState, conn, data)
     cell_id_str = get(data, "cell_id", "")
     isempty(cell_id_str) && return
 
+    nb = active_nb(state)
     cell_id = UUID(cell_id_str)
-    removed = remove_cell!(active_nb(state), cell_id)
+
+    # Capture code and index before removal (for undo)
+    cell = get_cell(nb, cell_id)
+    deleted_code = cell !== nothing ? cell.code : ""
+    deleted_index = findfirst(==(cell_id), nb.cell_order)
+    prev_cell_id = if deleted_index !== nothing && deleted_index > 1
+        string(nb.cell_order[deleted_index - 1])
+    else
+        ""
+    end
+
+    removed = remove_cell!(nb, cell_id)
     removed === nothing && return
 
     println("[WebNotebook] Deleted cell $(cell_id_str)")
 
     broadcast_channel!("notebook", Dict(
         "event" => "cell_deleted",
-        "cell_id" => cell_id_str
+        "cell_id" => cell_id_str,
+        "code" => deleted_code,
+        "index" => deleted_index !== nothing ? deleted_index : 0,
+        "prev_cell_id" => prev_cell_id
     ))
 end
 
@@ -821,6 +867,52 @@ function handle_run_stale!(state::WebNotebookState, conn, data)
             state.executing = false
         end
     end
+end
+
+"""Handle interrupt request — sends SIGINT to the Malt worker, marks remaining cells as idle."""
+function handle_interrupt!(state::WebNotebookState, conn, data)
+    if !state.executing
+        @warn "[WebNotebook] Interrupt requested but nothing is executing"
+        return
+    end
+
+    worker = active_worker(state)
+    if worker !== nothing
+        try
+            Malt.interrupt(worker.worker)
+            println("[WebNotebook] Interrupted worker")
+        catch e
+            @warn "[WebNotebook] Interrupt failed" exception=e
+        end
+    end
+
+    state.executing = false
+
+    # Mark any queued/running cells as idle
+    nb = active_nb(state)
+    if nb !== nothing
+        for cell in ordered_cells(nb)
+            if cell.state == cell_queued || cell.state == cell_running
+                cell.state = cell_idle
+                _update_cell_signal!(cell)
+                broadcast_channel!("notebook", Dict(
+                    "event" => "cell_state",
+                    "cell_id" => string(cell.id),
+                    "state" => "cell_idle"
+                ))
+            end
+        end
+    end
+
+    # Clear progress and notify clients
+    broadcast_channel!("notebook", Dict(
+        "event" => "run_progress",
+        "running_index" => 0,
+        "total" => 0
+    ))
+    broadcast_channel!("notebook", Dict(
+        "event" => "interrupted"
+    ))
 end
 
 """Handle bond value change — update bond in worker, re-execute downstream cells."""

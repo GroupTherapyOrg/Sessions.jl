@@ -89,12 +89,26 @@ function NotebookPanel()
                 :title => "Run stale cells (Ctrl+Shift+Enter)",
                 RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""),
                 Span(:id => "run-stale-label", n > 0 ? " Run Stale ($n)" : " Run Stale")))
+        # Run All button (visible by default)
         push!(toolbar_items,
-            Button(:class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
+            Button(:id => "run-all-btn",
+                :class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] text-t2 font-sans cursor-pointer hover:bg-hov hover:text-t1 transition-colors",
                 :on_click => "window._sessionsRunAll()",
                 :title => "Run all cells (Shift+R)",
                 RawHtml(_SVG_RUN_SMALL),
                 " Run All"))
+        # Stop button (hidden by default, shown during execution)
+        push!(toolbar_items,
+            Button(:id => "stop-btn",
+                :class => "flex items-center gap-1.5 bg-island border border-b2 rounded px-2.5 py-[3px] text-[11px] font-sans cursor-pointer hover:bg-hov transition-colors",
+                :style => "display:none;color:#e06b65;",
+                :on_click => "if(window.TherapyWS&&TherapyWS.sendMessage)TherapyWS.sendMessage('notebook',{action:'interrupt'})",
+                :title => "Interrupt execution",
+                RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""),
+                " Stop"))
+        # Progress indicator
+        push!(toolbar_items,
+            RawHtml("""<span id="run-progress" style="display:none;font-size:11px;color:#56d4a0;font-family:'JetBrains Mono',monospace;"></span>"""))
     end
     # Save button — always shown (works for both notebooks and files)
     push!(toolbar_items,
