@@ -196,6 +196,199 @@ function _render_bond_island_html(bond_data::String)
     ""
 end
 
+"""Render a table from structured JSON into a beautiful Pluto-style HTML table."""
+function _render_table_html(table_json::String)
+    isempty(table_json) && return ""
+
+    # Parse the JSON manually (no JSON dependency)
+    data = _parse_table_json(table_json)
+    data === nothing && return ""
+
+    cols = data[:cols]
+    types = data[:types]
+    rows = data[:rows]
+    nrow = data[:nrow]
+    ncol = data[:ncol]
+    isempty(cols) && return ""
+
+    initial_visible = 25
+    buf = IOBuffer()
+
+    # Dimension label
+    print(buf, """<div class="sst-wrap"><div style="font-size:12px;color:#6b7d93;padding:4px 0 6px;font-family:'JetBrains Mono',monospace;">$(nrow)×$(ncol) DataFrame</div>""")
+
+    # Table
+    print(buf, """<table class="sst-table"><thead>""")
+
+    # Column name row
+    print(buf, """<tr><th class="sst-th sst-row-label"></th>""")
+    for name in cols
+        print(buf, """<th class="sst-th">""", _html_esc(name), "</th>")
+    end
+    print(buf, "</tr>")
+
+    # Column type row (visible on hover)
+    print(buf, """<tr class="sst-type-row"><th class="sst-type-th"></th>""")
+    for t in types
+        print(buf, """<th class="sst-type-th">""", _html_esc(t), "</th>")
+    end
+    print(buf, "</tr></thead><tbody>")
+
+    # Data rows
+    for (i, row) in enumerate(rows)
+        hidden = i > initial_visible ? " style=\"display:none\"" : ""
+        print(buf, """<tr class="sst-row" data-row-idx="$(i)"$(hidden)>""")
+        print(buf, """<th class="sst-row-label">""", i, "</th>")
+        for cell in row
+            print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+        end
+        print(buf, "</tr>")
+    end
+
+    # "Show more" row (if truncated)
+    if length(rows) > initial_visible
+        remaining = length(rows) - initial_visible
+        print(buf, """<tr class="sst-more-row"><td colspan="$(ncol + 1)" class="sst-more" """)
+        print(buf, """onclick="var t=this.closest('table');t.querySelectorAll('tr[style]').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'">""")
+        print(buf, "⋮ Show $(remaining) more rows</td></tr>")
+    end
+
+    # If total rows exceed what we serialized
+    if nrow > length(rows)
+        print(buf, """<tr><td colspan="$(ncol + 1)" style="padding:6px 16px;color:#3d5068;font-size:12px;font-style:italic;">""")
+        print(buf, "$(nrow - length(rows)) rows not shown (total: $(nrow))</td></tr>")
+    end
+
+    print(buf, "</tbody></table></div>")
+    String(take!(buf))
+end
+
+"""Simple JSON parser for table data. Returns Dict or nothing."""
+function _parse_table_json(json::String)
+    # Minimal parser for our specific format:
+    # {"cols":["a","b"],"types":["Int","String"],"nrow":N,"ncol":M,"rows":[["1","x"],["2","y"]]}
+    try
+        # Extract arrays and numbers by position
+        cols = _extract_json_string_array(json, "cols")
+        types = _extract_json_string_array(json, "types")
+        rows_str = _extract_json_nested_array(json, "rows")
+        nrow = _extract_json_int(json, "nrow")
+        ncol = _extract_json_int(json, "ncol")
+
+        rows = Vector{String}[]
+        for row_str in rows_str
+            push!(rows, _parse_json_string_array(row_str))
+        end
+
+        Dict(:cols => cols, :types => types, :rows => rows, :nrow => nrow, :ncol => ncol)
+    catch e
+        @warn "[WebNotebook] Failed to parse table JSON" exception=e
+        nothing
+    end
+end
+
+function _extract_json_string_array(json::String, key::String)
+    # Find "key":[...] and extract the string array
+    pat = "\"$(key)\":["
+    idx = findfirst(pat, json)
+    idx === nothing && return String[]
+    start = last(idx) + 1
+    depth = 1
+    i = start
+    while i <= length(json) && depth > 0
+        c = json[i]
+        c == '[' && (depth += 1)
+        c == ']' && (depth -= 1)
+        i += 1
+    end
+    arr_str = json[start:i-2]
+    _parse_json_string_array(arr_str)
+end
+
+function _extract_json_nested_array(json::String, key::String)
+    pat = "\"$(key)\":["
+    idx = findfirst(pat, json)
+    idx === nothing && return String[]
+    start = last(idx) + 1
+    depth = 1
+    i = start
+    while i <= length(json) && depth > 0
+        c = json[i]
+        c == '[' && (depth += 1)
+        c == ']' && (depth -= 1)
+        i += 1
+    end
+    arr_content = json[start:i-2]
+    # Split into sub-arrays
+    results = String[]
+    j = 1
+    while j <= length(arr_content)
+        if arr_content[j] == '['
+            d = 1
+            k = j + 1
+            while k <= length(arr_content) && d > 0
+                arr_content[k] == '[' && (d += 1)
+                arr_content[k] == ']' && (d -= 1)
+                k += 1
+            end
+            push!(results, arr_content[j+1:k-2])
+            j = k
+        else
+            j += 1
+        end
+    end
+    results
+end
+
+function _extract_json_int(json::String, key::String)
+    pat = "\"$(key)\":"
+    idx = findfirst(pat, json)
+    idx === nothing && return 0
+    start = last(idx) + 1
+    i = start
+    while i <= length(json) && (json[i] in ('0':'9'))
+        i += 1
+    end
+    parse(Int, json[start:i-1])
+end
+
+function _parse_json_string_array(s::String)
+    results = String[]
+    i = 1
+    while i <= length(s)
+        if s[i] == '"'
+            j = i + 1
+            buf = IOBuffer()
+            while j <= length(s)
+                if s[j] == '\\' && j + 1 <= length(s)
+                    c = s[j+1]
+                    if c == '"'; write(buf, '"')
+                    elseif c == '\\'; write(buf, '\\')
+                    elseif c == 'n'; write(buf, '\n')
+                    elseif c == 'r'; write(buf, '\r')
+                    else write(buf, c)
+                    end
+                    j += 2
+                elseif s[j] == '"'
+                    break
+                else
+                    write(buf, s[j])
+                    j += 1
+                end
+            end
+            push!(results, String(take!(buf)))
+            i = j + 1
+        else
+            i += 1
+        end
+    end
+    results
+end
+
+function _html_esc(s::AbstractString)
+    replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
+end
+
 """Render cell output to HTML string via Sessions._render_output + Therapy.render_to_string."""
 function _web_render_output_html(cell::Cell)
     # Markdown: HTML is in text_representation (from worker or session cache)
@@ -211,6 +404,10 @@ function _web_render_output_html(cell::Cell)
     if cell.output.output_type == :bond
         bond_data = cell.output.text_representation
         return _render_bond_island_html(bond_data)
+    end
+    # Table: parse structured JSON and render styled table
+    if cell.output.output_type == :table
+        return _render_table_html(cell.output.text_representation)
     end
     # HTML output: text_representation has the HTML
     if cell.output.output_type == :html

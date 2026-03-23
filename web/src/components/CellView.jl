@@ -43,6 +43,10 @@ function _render_cell_output_html(cell)
     if output.output_type == :bond
         return Main.Sessions._render_bond_island_html(output.text_representation)
     end
+    # Table: render styled table from structured JSON
+    if output.output_type == :table
+        return Main.Sessions._render_table_html(output.text_representation)
+    end
     # HTML output: text_representation has the HTML directly
     if output.output_type == :html
         return output.text_representation
@@ -125,7 +129,7 @@ function CellView(cell::_Sessions.Cell; index::Int=0)
     output_html = _render_cell_output_html(cell)
     has_output = has_text_output || !isempty(output_html)
     # Rich output types: render as HTML (no monospace pre wrapper)
-    is_rich_output = output.output_type in (:markdown, :html, :dataframe, :image_png, :image_svg, :bond)
+    is_rich_output = output.output_type in (:markdown, :html, :dataframe, :table, :image_png, :image_svg, :bond)
 
     out_div = if has_output
         out_content = !isempty(output_html) ? RawHtml(output_html) :

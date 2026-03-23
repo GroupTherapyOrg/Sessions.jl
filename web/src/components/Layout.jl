@@ -18,6 +18,17 @@ function Layout(children...; title="Sessions.jl")
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">"""),
 
+        # --- Shoelace Web Components (dark theme) ---
+        RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
+<script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+<script>document.documentElement.classList.add('sl-theme-dark');</script>"""),
+
+        # --- xterm.js (terminal emulator) ---
+        RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>"""),
+
         # --- Tailwind CDN + custom config ---
         RawHtml("""<script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -84,6 +95,39 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
 .cm-cell .cm-focused{outline:none!important;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 .code-cell.stale::before{background:#d4a056;opacity:.5;}
+/* Shoelace dark theme overrides — match Sessions.jl palette */
+:root{--sl-color-neutral-0:#0a0e14;--sl-color-neutral-50:#0f1419;--sl-color-neutral-100:#151c25;--sl-color-neutral-200:#1a2332;--sl-color-neutral-300:#1c2736;--sl-color-neutral-400:#2a3a4f;--sl-color-neutral-500:#3d5068;--sl-color-neutral-600:#6b7d93;--sl-color-neutral-700:#9baabd;--sl-color-neutral-800:#d4dce8;--sl-color-neutral-900:#d4dce8;--sl-color-neutral-1000:#ffffff;--sl-color-primary-600:#56d4a0;--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
+sl-tree{--indent-size:14px;--indent-guide-width:1px;--indent-guide-color:#1c2736;}
+sl-tree-item::part(label){font-size:12px;font-family:'JetBrains Mono',monospace;color:#6b7d93;display:flex;align-items:center;gap:6px;}
+sl-tree-item::part(item){border-radius:4px;padding:1px 4px;transition:background .12s,color .12s;}
+sl-tree-item::part(item--selected){background:rgba(86,212,160,.08);outline:none;}
+sl-tree-item::part(expand-button){color:#3d5068;padding-right:0;}
+sl-tree-item[selected]::part(label){color:#d4dce8;}
+sl-tree-item[selected]{border-left:2px solid #56d4a0;}
+sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
+.tree-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tree-rename-input{background:#1a2332;border:1px solid #56d4a0;border-radius:3px;color:#d4dce8;font-family:'JetBrains Mono',monospace;font-size:12px;padding:1px 4px;outline:none;width:100%;}
+.file-ctx-menu{display:none;position:fixed;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:8px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;padding:4px 0;}
+.file-ctx-item{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:#9baabd;font-family:'JetBrains Mono',monospace;transition:background .1s,color .1s;}
+.file-ctx-item:hover{background:rgba(86,212,160,.08);color:#d4dce8;}
+.file-ctx-item.danger:hover{background:rgba(224,107,101,.12);color:#e06b65;}
+.file-ctx-sep{height:1px;background:#2a3a4f;margin:4px 8px;}
+.tree-breadcrumb{display:flex;align-items:center;gap:4px;padding:4px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#3d5068;overflow:hidden;}
+.tree-breadcrumb button{background:none;border:none;color:#6b7d93;cursor:pointer;padding:2px 4px;border-radius:3px;display:flex;align-items:center;transition:color .12s,background .12s;}
+.tree-breadcrumb button:hover{color:#d4dce8;background:rgba(255,255,255,.05);}
+.tree-breadcrumb .crumb{color:#6b7d93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+/* xterm.js overrides */
+.xterm{height:100%;}
+.xterm .xterm-viewport{overflow-y:auto!important;}
+.xterm .xterm-viewport::-webkit-scrollbar{width:5px;}
+.xterm .xterm-viewport::-webkit-scrollbar-track{background:transparent;}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb{background:#2a3a4f;border-radius:3px;}
+.term-tab{display:flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#6b7d93;cursor:pointer;border-radius:4px 4px 0 0;transition:color .12s,background .12s;white-space:nowrap;user-select:none;}
+.term-tab:hover{color:#9baabd;background:rgba(255,255,255,.03);}
+.term-tab.active{color:#d4dce8;background:#0a0e14;border-bottom:2px solid #56d4a0;}
+.term-tab .close-x{opacity:0;font-size:9px;padding:1px 3px;border-radius:3px;transition:opacity .1s,background .1s;}
+.term-tab:hover .close-x,.term-tab.active .close-x{opacity:.6;}
+.term-tab .close-x:hover{opacity:1;background:rgba(224,107,101,.2);color:#e06b65;}
 /* Markdown prose — Pluto-style notebook text */
 .md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#9baabd;line-height:1.7;font-size:14px;}
 .md-prose h1{font-family:'Fraunces',Georgia,serif;font-size:1.8em;font-weight:600;color:#d4dce8;margin:0.3em 0 0.6em;letter-spacing:-0.01em;}
@@ -103,15 +147,16 @@ therapy-island{display:flex;flex-direction:column;flex:1;min-height:0;overflow:h
 .md-prose hr{border:none;border-top:1px solid #1c2736;margin:1.2em 0;}
 .md-prose img{max-width:100%;border-radius:6px;}
 /* Sessions Table (sst-*) — Pluto-style table viewer for any Tables.jl type */
-.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;}
-.sst-table{border-collapse:separate;border-spacing:0;width:auto;min-width:50%;margin:0 auto;border:1px solid #2a3a4f;border-radius:8px;overflow:hidden;}
-.sst-th{padding:8px 16px;color:#d4dce8;font-weight:600;font-size:13px;text-align:left;border-bottom:1px solid #2a3a4f;background:#151c25;white-space:nowrap;}
-.sst-type-th{padding:2px 16px 6px;color:#3d5068;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:2px solid #2a3a4f;background:#151c25;}
-.sst-row-label{color:#3d5068 !important;font-weight:600;font-size:12px;text-align:right !important;padding-right:12px !important;border-right:1px solid #2a3a4f;width:1%;white-space:nowrap;}
-.sst-td{padding:6px 16px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.4);text-align:left;white-space:nowrap;}
-.sst-row:hover .sst-td{background:rgba(86,212,160,.04);}
-.sst-row:nth-child(even) .sst-td{background:rgba(255,255,255,.01);}
-.sst-more{padding:8px 16px;color:#56d4a0;font-size:12px;text-align:center;cursor:pointer;background:rgba(86,212,160,.03);border-bottom:1px solid #2a3a4f;}
+.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;overflow-x:auto;max-width:100%;}
+.sst-table{border-collapse:separate;border-spacing:0;width:auto;min-width:50%;border:1px solid #2a3a4f;border-radius:8px;overflow:hidden;}
+.sst-th{padding:8px 16px;color:#56d4a0;font-weight:600;font-size:13px;text-align:left;border-bottom:1px solid #2a3a4f;background:#151c25;white-space:nowrap;position:sticky;top:0;z-index:1;}
+.sst-type-row .sst-type-th{padding:2px 16px 6px;color:#3d5068;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:2px solid #2a3a4f;background:#151c25;opacity:0;transition:opacity .15s;}
+.sst-table thead:hover .sst-type-row .sst-type-th{opacity:1;}
+.sst-row-label{color:#3d5068 !important;font-weight:600;font-size:12px;text-align:right !important;padding:6px 12px 6px 8px !important;border-right:1px solid #2a3a4f;width:1%;white-space:nowrap;position:sticky;left:0;background:#0f1419;z-index:1;}
+.sst-td{padding:6px 16px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.4);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
+.sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
+.sst-row:nth-child(even) .sst-td,.sst-row:nth-child(even) .sst-row-label{background:rgba(255,255,255,.015);}
+.sst-more{padding:8px 16px;color:#56d4a0;font-size:12px;text-align:center;cursor:pointer;background:rgba(86,212,160,.03);border-bottom:1px solid #2a3a4f;transition:background .15s;}
 .sst-more:hover{background:rgba(86,212,160,.08);}
 </style>"""),
 

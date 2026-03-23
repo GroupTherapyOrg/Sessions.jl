@@ -101,6 +101,14 @@ function _classify_and_capture(result, stdout_str, runtime)
     # Markdown
     result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
 
+    # Tables.jl — detect BEFORE text/html (DataFrames registers text/html but we want our own rendering)
+    if _is_table_like(result)
+        table_json = try _serialize_table(result) catch; "" end
+        if !isempty(table_json)
+            return (output_type=:table, text_representation=table_json, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+        end
+    end
+
     # text/html
     if _try_showable(MIME"text/html"(), result)
         html = try
@@ -134,6 +142,111 @@ function _classify_and_capture(result, stdout_str, runtime)
     text = _text_repr(result)
     return (output_type=:text, text_representation=text, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
 end
+
+# ── Table detection + serialization ──
+
+"""Detect Tables.jl-compatible objects (DataFrames, CSV results, etc.)."""
+function _is_table_like(result)
+    # Find Tables module from loaded packages (not Main — it's in workspace module scope)
+    tables_mod = _find_tables_module()
+    tables_mod === nothing && return false
+    try
+        Base.invokelatest(getfield(tables_mod, :rowaccess), result)::Bool
+    catch
+        false
+    end
+end
+
+function _find_tables_module()
+    for (id, mod) in Base.loaded_modules
+        id.name == "Tables" && return mod
+    end
+    nothing
+end
+
+"""Serialize a Tables.jl-compatible object as JSON for the coordinator."""
+function _serialize_table(result)
+    T = _find_tables_module()
+    T === nothing && return ""
+    rows_iter = Base.invokelatest(getfield(T, :rows), result)
+    schema = Base.invokelatest(getfield(T, :schema), rows_iter)
+
+    col_names = string.(schema.names)
+    col_types = [_compact_type_name(t) for t in schema.types]
+    ncol = length(col_names)
+
+    # Count total rows (may iterate)
+    nrow = try
+        length(Base.invokelatest(getfield(T, :rows), result))
+    catch
+        0
+    end
+
+    # Extract first N rows as string arrays
+    max_rows = 100
+    buf = IOBuffer()
+    print(buf, "{\"cols\":[")
+    for (i, n) in enumerate(col_names)
+        i > 1 && print(buf, ",")
+        print(buf, "\"", _json_esc(n), "\"")
+    end
+    print(buf, "],\"types\":[")
+    for (i, t) in enumerate(col_types)
+        i > 1 && print(buf, ",")
+        print(buf, "\"", _json_esc(t), "\"")
+    end
+    print(buf, "],\"nrow\":", nrow, ",\"ncol\":", ncol, ",\"rows\":[")
+
+    row_count = 0
+    for row in Base.invokelatest(getfield(T, :rows), result)
+        row_count += 1
+        row_count > max_rows && break
+        row_count > 1 && print(buf, ",")
+        print(buf, "[")
+        for (j, name) in enumerate(schema.names)
+            j > 1 && print(buf, ",")
+            val = try
+                Base.invokelatest(getproperty, row, name)
+            catch
+                nothing
+            end
+            print(buf, "\"", _json_esc(_cell_str(val)), "\"")
+        end
+        print(buf, "]")
+    end
+    print(buf, "]}")
+    String(take!(buf))
+end
+
+function _json_esc(s::AbstractString)
+    replace(replace(replace(replace(s,
+        '\\' => "\\\\"),
+        '"' => "\\\""),
+        '\n' => "\\n"),
+        '\r' => "\\r")
+end
+
+function _compact_type_name(T::Type)
+    s = string(T)
+    # Strip module prefixes for common types
+    s = replace(s, r"^.*\." => "")
+    # Shorten Union{Missing, X} to X?
+    m = match(r"^Union\{Missing,\s*(.+)\}$", s)
+    m !== nothing && return m.captures[1] * "?"
+    m = match(r"^Union\{(.+),\s*Missing\}$", s)
+    m !== nothing && return m.captures[1] * "?"
+    s
+end
+
+function _cell_str(val)
+    val === nothing && return ""
+    val === missing && return "missing"
+    val isa AbstractString && return val
+    val isa Bool && return val ? "true" : "false"
+    sprint(show, val; context=IOContext(devnull, :compact => true, :limit => true))
+end
+
+# ── Bond serialization ──
 
 """Serialize bond widget info for the coordinator to render with @island SSR."""
 function _serialize_bond(widget, var_name)
