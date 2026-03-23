@@ -604,13 +604,16 @@ end
 
 """Broadcast stale cell info to all clients (Run Stale button + cell accent bars)."""
 function _broadcast_stale!(state::WebNotebookState)
-    sc = stale_cells(active_nb(state))
+    active_tab(state).tab_type == :notebook || return
+    nb = active_nb(state)
+    nb === nothing && return
+    sc = stale_cells(nb)
     stale_ids = [string(c.id) for c in sc]
     broadcast_channel!("notebook", Dict(
         "event" => "stale_update",
         "count" => length(sc),
         "stale_ids" => stale_ids,
-        "total_cells" => length(ordered_cells(active_nb(state)))
+        "total_cells" => length(ordered_cells(nb))
     ))
 end
 
@@ -977,10 +980,15 @@ function _broadcast_nb_html!(state::WebNotebookState)
         ""
     end
 
+    total = if active_tab(state).tab_type == :notebook && active_nb(state) !== nothing
+        length(ordered_cells(active_nb(state)))
+    else
+        0
+    end
     broadcast_channel!("notebook", Dict(
         "event" => "nb_replaced",
         "nb_html" => nb_html,
-        "total_cells" => length(ordered_cells(active_nb(state)))
+        "total_cells" => total
     ))
 end
 
