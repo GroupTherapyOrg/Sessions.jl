@@ -23,11 +23,10 @@ function NotebookWorker(; notebook_path::String="")
     proj_dir = _find_notebook_project(notebook_path)
     exeflags = proj_dir !== nothing ? ["--project=$(proj_dir)"] : String[]
 
-    # Clear JULIA_LOAD_PATH — the sessions CLI shim sets it to the app env,
+    # Override JULIA_LOAD_PATH — the sessions CLI shim sets it to the app env,
     # which prevents the worker from finding packages in the notebook's project.
-    env = copy(ENV)
-    delete!(env, "JULIA_LOAD_PATH")
-    w = Malt.Worker(; exeflags, env)
+    # Malt's env is addenv (Vector{String}), so we override with the default value.
+    w = Malt.Worker(; exeflags, env=["JULIA_LOAD_PATH=@:@v#.#:@stdlib"])
     nw = NotebookWorker(w, notebook_path, false)
     _boot_worker!(nw)
     nw
