@@ -30,50 +30,32 @@ end
 # CellToggle @island — wasm-compiled code visibility toggle
 # =============================================================================
 
-@island function CellToggle(; initial_open=1)
-    is_open, set_is_open = create_signal(initial_open)
+@island function CellToggle(children...; initial_open=1)
+    is_open, set_is_open = create_signal(Int32(initial_open))
 
-    Div(:class => "flex items-start gap-2",
-        # Left gutter — eye icon toggle
-        Div(:class => "flex items-center pt-4 shrink-0",
-            Therapy.Button(:class => "group/eye p-1 rounded hover:bg-warm-200/50 dark:hover:bg-warm-800/50 transition-colors cursor-pointer opacity-0 group-hover/cell:opacity-100",
-                :on_click => () -> begin
-                    if is_open() == Int32(1)
-                        set_is_open(Int32(0))
-                    else
-                        set_is_open(Int32(1))
-                    end
-                end,
-                # Stacked eye icons — closed eye always rendered, open eye layered on top via Show
-                Div(:class => "relative w-3.5 h-3.5",
-                    # Closed eye (always in DOM, visible when open eye is hidden)
-                    Svg(:class => "w-3.5 h-3.5 text-warm-600 group-hover/eye:text-warm-400 transition-colors",
-                        :viewBox => "0 0 24 24",
-                        :fill => "none",
-                        :stroke => "currentColor",
-                        :stroke_width => "2",
-                        :stroke_linecap => "round",
-                        :stroke_linejoin => "round",
-                        Path(:d => "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"),
-                        Path(:d => "M1 1L23 23")),
-                    # Open eye (layered on top, hidden when code is folded)
-                    Show(is_open) do
-                        Svg(:class => "absolute inset-0 w-3.5 h-3.5 text-warm-400 group-hover/eye:text-warm-600 dark:text-warm-500 dark:group-hover/eye:text-warm-300 transition-colors bg-warm-50 dark:bg-warm-950",
-                            :viewBox => "0 0 24 24",
-                            :fill => "none",
-                            :stroke => "currentColor",
-                            :stroke_width => "2",
-                            :stroke_linecap => "round",
-                            :stroke_linejoin => "round",
-                            Path(:d => "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"),
-                            Circle(:cx => "12", :cy => "12", :r => "3"))
-                    end))),
-        # Code block — takes remaining width, visibility controlled by signal
-        Div(:class => "flex-1 min-w-0",
-            Show(is_open) do
-                children
-            end)
-    )
+    Div(:class => "cell-island",
+        # Eye toggle — matches app CellIsland structure
+        Div(:class => "cell-eye",
+            :on_click => () -> begin
+                if is_open() == Int32(1)
+                    set_is_open(Int32(0))
+                else
+                    set_is_open(Int32(1))
+                end
+            end,
+            Div(:style => "position:relative;width:14px;height:14px;",
+                # Closed eye (always in DOM)
+                RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>"""),
+                # Open eye (layered on top, hidden when folded)
+                Show(is_open) do
+                    Div(:style => "position:absolute;inset:0;background:var(--bg-primary);",
+                        RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""))
+                end)),
+
+        # Code cell — shown/hidden by is_open signal
+        Show(is_open) do
+            Div(children...)
+        end)
 end
 
 # =============================================================================
@@ -260,52 +242,63 @@ function _render_cell(cell::Cell, index::Int, prerendered)
     _render_code_cell(cell, index, prerendered)
 end
 
-"""Render a visible code cell — scan-line design with CellToggle island."""
+"""Render a visible code cell — matches app CellView visual structure."""
 function _render_code_cell(cell::Cell, index::Int, prerendered)
     code = strip(cell.code)
     output = cell.output
 
-    # Runtime string
+    # Runtime string (matches app _format_runtime)
     runtime_ms = output.runtime_ns / 1_000_000
-    runtime_str = if runtime_ms < 1
-        "$(round(output.runtime_ns / 1000, digits=1)) μs"
+    runtime_str = if output.runtime_ns == 0
+        ""
+    elseif runtime_ms < 1
+        "$(round(output.runtime_ns / 1000, digits=1))μs"
     elseif runtime_ms < 1000
-        "$(round(runtime_ms, digits=1)) ms"
+        "$(round(runtime_ms, digits=1))ms"
     else
-        "$(round(runtime_ms / 1000, digits=2)) s"
+        "$(round(runtime_ms / 1000, digits=2))s"
     end
 
     parts = []
 
-    # Code block wrapped in CellToggle island (wasm-based hide/show)
-    code_block = Div(:class => "group relative rounded-lg bg-warm-950 ring-1 ring-warm-800 overflow-hidden",
-        Symbol("data-codeblock") => "",
-        Pre(:class => "overflow-x-auto p-5 font-mono text-sm leading-6 text-warm-200",
-            Code(:class => "block", _highlight_julia(String(code)))),
-        Div(:class => "absolute bottom-[10px] left-3 right-3 h-px bg-warm-700/30 opacity-0 group-hover:opacity-100 transition-opacity duration-150"),
-        Span(:class => "absolute bottom-3 right-3 text-[10px] font-mono text-warm-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100",
-            runtime_str))
+    # Output area — ABOVE code (matches app: cell-out before cell-island)
+    output_node = _render_output(cell, prerendered)
+    if output_node !== nothing
+        push!(parts, Div(:class => "cell-out", :style => "padding:4px 0 8px;overflow-x:auto;",
+            output_node))
+    end
 
-    # Pass folded state to CellToggle island — determines initial visibility
-    # Always pass initial_open explicitly so the wasm prop hydration receives the value
-    push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
-        code_block
-    end)
-
-    # Stdout — indented to align with code block (past the gutter)
+    # Stdout
     if !isempty(output.stdout)
         push!(parts,
-            Pre(:class => "mt-3 ml-7 pl-5 text-xs font-mono text-warm-500 whitespace-pre-wrap",
+            Div(:class => "cell-out font-mono text-xs whitespace-pre overflow-x-auto",
+                :style => "padding:6px 0 10px;line-height:1.5;color:#7ca0bf;",
                 output.stdout))
     end
 
-    # Output — indented to align with code block
-    output_node = _render_output(cell, prerendered)
-    if output_node !== nothing
-        push!(parts, Div(:class => "mt-3 ml-7 pl-5", output_node))
+    # Hover controls (top-right) — runtime badge only (no run/menu in static export)
+    ctrl_children = Any[]
+    if !isempty(runtime_str)
+        push!(ctrl_children,
+            Span(:class => "rt-badge", runtime_str))
     end
+    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
+        ctrl_children...)
 
-    Div(:data_cell_id => string(cell.id), :class => "group/cell", parts...)
+    # Code block — matches app's code-cell structure
+    code_cell = Div(:class => "code-cell relative rounded-lg overflow-hidden",
+        Symbol("data-codeblock") => "",
+        ctrls,
+        Pre(:class => "overflow-x-auto p-4 font-mono text-sm leading-relaxed",
+            :style => "color:#d4dce8;",
+            Code(:class => "block", _highlight_julia(String(code)))))
+
+    # CellToggle island (eye toggle + fold) wrapping the code-cell
+    push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
+        code_cell
+    end)
+
+    Div(:data_cell_id => string(cell.id), :class => "cell-wrap relative", parts...)
 end
 
 """
@@ -347,7 +340,7 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
 
     elseif output.output_type == :markdown
         html_str = sprint(io -> Markdown.html(io, result))
-        return Div(:class => "notebook-prose", RawHtml(html_str))
+        return Div(:class => "md-prose", RawHtml(html_str))
 
     elseif output.output_type == :error
         err_msg = output.text_representation
@@ -851,15 +844,94 @@ function execute_notebook_for_web(path; verbose=false)
 end
 
 # =============================================================================
-# NotebookPage — main entry point
+# NotebookPage — main entry point (self-contained: includes all CSS/fonts/JS)
 # =============================================================================
+
+"""Google Fonts needed by notebook rendering (DM Sans, Fraunces, JetBrains Mono)."""
+function _notebook_fonts()
+    RawHtml("""<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">""")
+end
+
+"""
+Self-contained CSS for notebook rendering — identical to the app's Layout.jl styles.
+
+Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
+Pluto-style tables (sst-*), syntax highlighting (hl-*), slider widgets.
+Any Therapy.jl app that calls NotebookPage() gets the full app experience.
+"""
+function _notebook_stylesheet()
+    RawHtml("""<style id="sessions-notebook-css">
+/* Cell chrome */
+.code-cell{background:#1a2332;border:1px solid #1c2736;transition:border-color .2s;}
+.code-cell:hover{border-color:#2a3a4f;}
+.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
+.code-cell:hover::before{opacity:.7;}
+.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
+.code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
+.rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);}
+.cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
+.cell-wrap:hover .cell-eye{opacity:1;}
+.cell-eye svg{color:#3d5068;transition:color .15s;}
+.cell-eye:hover svg{color:#56d4a0;}
+.cell-out{overflow-x:auto;}
+/* Notebook slider */
+.notebook-slider{display:flex;align-items:center;gap:12px;padding:8px 0;}
+.notebook-plotly{border-radius:8px;overflow:hidden;}
+/* Markdown prose (matches app md-prose) */
+.md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#9baabd;line-height:1.7;font-size:14.5px;}
+.md-prose h1{font-family:'Fraunces',Georgia,serif;font-size:2.2rem;font-weight:700;color:#d4dce8;margin:0.3em 0 0.6em;letter-spacing:-0.01em;padding-bottom:0.3em;border-bottom:3px solid #2a3a4f;}
+.md-prose h2{font-family:'Fraunces',Georgia,serif;font-size:1.8rem;font-weight:700;color:#d4dce8;margin:1.2em 0 0.4em;padding-bottom:0.3em;border-bottom:2px dotted #2a3a4f;}
+.md-prose h3{font-family:'Fraunces',Georgia,serif;font-size:1.4rem;font-weight:600;color:#d4dce8;margin:1em 0 0.3em;}
+.md-prose h4{font-family:'Fraunces',Georgia,serif;font-size:1.15rem;font-weight:600;color:#d4dce8;margin:0.8em 0 0.2em;}
+.md-prose p{margin:0 0 1em;color:#9baabd;}
+.md-prose ul,.md-prose ol{margin:0 0 1em;padding-left:1.5em;color:#9baabd;line-height:1.6em;}
+.md-prose li{margin:0.25em 0;}
+.md-prose li p{margin:0 0 0.4em;}
+.md-prose blockquote{border-left:3px solid #b08fd8;padding:0.4em 0 0.4em 1em;margin:1em 0;color:#6b7d93;background:rgba(176,143,216,.04);border-radius:0 4px 4px 0;}
+.md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:#0a0e14;padding:0.15em 0.4em;border-radius:4px;color:#7bb8e8;}
+.md-prose pre{background:#0a0e14;border-radius:6px;padding:0.8em 1em;margin:1em 0;overflow-x:auto;tab-size:4;white-space:pre-wrap;}
+.md-prose pre code{background:none;padding:0;font-size:0.8rem;color:#d4dce8;white-space:pre;}
+.md-prose strong{color:#d4dce8;font-weight:600;}
+.md-prose em{font-style:italic;}
+.md-prose a{color:#56d4a0;text-decoration:none;}
+.md-prose a:hover{text-decoration:underline;}
+.md-prose hr{border:none;border-top:3px solid #2a3a4f;margin:1.5em 0;}
+.md-prose img{max-width:100%;border-radius:6px;}
+.md-prose table{border-collapse:collapse;margin:1em 0;width:auto;}
+.md-prose th{padding:6px 12px;border-bottom:2px solid #2a3a4f;color:#d4dce8;font-weight:600;text-align:left;}
+.md-prose td{padding:6px 12px;border-bottom:1px solid rgba(42,58,79,.4);color:#9baabd;}
+/* Sessions Table (sst-*) — Pluto-style */
+.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:14px;overflow-x:auto;max-width:100%;}
+.sst-table{border-collapse:collapse;width:auto;border-top:2px solid #56d4a0;border-bottom:1px solid #2a3a4f;}
+.sst-th{padding:12px 20px;color:#56d4a0;font-weight:700;font-size:14px;text-align:left;border-bottom:1px solid #2a3a4f;white-space:nowrap;}
+.sst-type-row .sst-type-th{padding:0 20px 8px;color:#3d5068;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:1px solid #2a3a4f;opacity:0;transition:opacity .15s;}
+.sst-table thead:hover .sst-type-row .sst-type-th{opacity:1;}
+.sst-row-label{color:#d4dce8;font-weight:700;font-size:13px;text-align:right;padding:10px 16px 10px 12px;width:1%;white-space:nowrap;border-bottom:1px solid rgba(42,58,79,.3);}
+.sst-td{padding:10px 20px;color:#d4dce8;border-bottom:1px solid rgba(42,58,79,.3);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
+.sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
+.sst-more{padding:10px 20px;color:#6b7d93;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(42,58,79,.3);transition:color .15s;}
+.sst-more:hover{color:#56d4a0;}
+/* Julia syntax highlighting (matches app CodeMirror) */
+.hl-keyword{color:#e06b65;}
+.hl-string{color:#56d4a0;}
+.hl-comment{color:#4a6178;font-style:italic;}
+.hl-number{color:#d4a056;}
+.hl-funcall{color:#7bb8e8;}
+.hl-type{color:#b08fd8;}
+.hl-symbol{color:#e06b65;}
+.hl-macro{color:#b08fd8;font-weight:600;}
+.hl-operator{color:#89ddff;}
+</style>""")
+end
 
 """
     NotebookPage(nb::Notebook; prerendered=Dict()) -> VNode
 
-Render a notebook as Therapy.jl VNodes (cells + outputs + interactivity scripts).
+Render a notebook as Therapy.jl VNodes with self-contained CSS, fonts, and JS.
 
-Returns a `Div` containing all rendered cells. Wrap in your own layout:
+Any Therapy.jl app that calls this gets the full Sessions.jl notebook experience —
+cell chrome, accent bars, syntax highlighting, Pluto-style tables, markdown prose,
+interactive sliders — without any additional setup.
 
 ```julia
 using Sessions
@@ -871,7 +943,10 @@ MyLayout(Sessions.NotebookPage(nb; prerendered=pre))
 function NotebookPage(nb::Notebook;
         prerendered=Dict{UUID, PrerenderedGallery}())
     cells = ordered_cells(nb)
-    rendered = []
+    rendered = Any[
+        _notebook_fonts(),
+        _notebook_stylesheet(),
+    ]
     cell_index = 0
 
     for cell in cells
@@ -886,10 +961,9 @@ function NotebookPage(nb::Notebook;
     has_sliders = any(c -> c.output.output_type == :bond && c.output.result isa Bond && c.output.result.element isa Slider, cells)
     has_plotly = any(c -> c.output.output_type == :plotly_json, cells)
 
-    content_parts = rendered
     if has_sliders || has_plotly
-        push!(content_parts, _slider_interaction_script())
+        push!(rendered, _slider_interaction_script())
     end
 
-    Div(:class => "space-y-6", content_parts...)
+    Div(:class => "space-y-4 pl-8", rendered...)
 end

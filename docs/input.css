@@ -157,44 +157,5 @@
   background: transparent !important;
 }
 
-/* Notebook slider widget styles */
-@layer components {
-  .notebook-slider { @apply flex items-center gap-3 py-2; }
-  .notebook-slider .slider-label { @apply text-sm font-mono font-medium text-warm-700 dark:text-warm-300 min-w-[2rem]; }
-  .notebook-slider input[type="range"] { @apply flex-1 h-2 bg-warm-200 dark:bg-warm-700 rounded-lg appearance-none cursor-pointer accent-accent-500; }
-  .notebook-slider .slider-value { @apply text-sm font-mono text-accent-600 dark:text-accent-400 min-w-[2rem] text-right; }
-}
-
-/* Notebook Plotly plot containers */
-@layer components {
-  .notebook-plotly { @apply rounded-lg overflow-hidden; }
-}
-
-/* Notebook prose styles — rendered markdown content */
-@layer components {
-  .notebook-prose h1 { @apply text-3xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-4 mt-2; }
-  .notebook-prose h2 { @apply text-2xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-3 mt-6; }
-  .notebook-prose h3 { @apply text-xl font-serif font-semibold text-warm-800 dark:text-warm-300 mb-2 mt-4; }
-  .notebook-prose p { @apply text-warm-600 dark:text-warm-400 leading-relaxed mb-4; }
-  .notebook-prose ul { @apply list-disc list-inside space-y-1 text-warm-600 dark:text-warm-400 mb-4; }
-  .notebook-prose ol { @apply list-decimal list-inside space-y-1 text-warm-600 dark:text-warm-400 mb-4; }
-  .notebook-prose blockquote { @apply border-l-4 border-accent-400 pl-4 italic text-warm-500 dark:text-warm-500 mb-4; }
-  .notebook-prose code { @apply font-mono text-sm bg-warm-200 dark:bg-warm-800 px-1.5 py-0.5 rounded; }
-  .notebook-prose pre code { @apply bg-transparent p-0; }
-  .notebook-prose strong { @apply font-semibold text-warm-800 dark:text-warm-300; }
-  .notebook-prose em { @apply italic; }
-  .notebook-prose a { @apply text-accent-600 dark:text-accent-400 hover:underline; }
-}
-
-/* Julia syntax highlighting — matches app CodeMirror theme */
-@layer components {
-  .hl-keyword  { color: #e06b65; }
-  .hl-string   { color: #56d4a0; }
-  .hl-comment  { color: #4a6178; font-style: italic; }
-  .hl-number   { color: #d4a056; }
-  .hl-funcall  { color: #7bb8e8; }
-  .hl-type     { color: #b08fd8; }
-  .hl-symbol   { color: #e06b65; }
-  .hl-macro    { color: #b08fd8; font-weight: 600; }
-  .hl-operator { color: #89ddff; }
-}
+/* Notebook rendering CSS is self-injected by Sessions.NotebookPage().
+   No notebook-specific styles needed here — Sessions.jl owns it all. */
