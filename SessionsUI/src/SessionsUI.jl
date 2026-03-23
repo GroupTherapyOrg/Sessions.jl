@@ -1,28 +1,30 @@
 module SessionsUI
 
-# SessionsUI provides the user-facing notebook API for @bind + widget constructors.
+# SessionsUI — Lightweight notebook API for @bind + interactive widgets.
 #
-# Naming convention: "Bound*" prefix for all widgets to avoid clashes with
-# HTML elements (Button), Makie (Slider), or other packages.
-#   @bind        — macro that connects a widget to a Julia variable
-#   BoundSlider  — interactive range slider
-#   (future: BoundCheckBox, BoundTextField, BoundSelect, BoundButton, etc.)
+# ZERO heavy deps. Only stdlib (UUIDs). This is what notebook users import:
+#   using SessionsUI: @bind, BoundSlider
 #
-# The raw Sessions.jl types (Slider, TextField, etc.) are NOT re-exported.
-# Users interact with the Bound* wrappers, which internally use Sessions types.
-#
-# This package is intentionally lightweight (only depends on Sessions.jl)
-# so it can be loaded in Malt.jl worker processes. The @island rendering
-# components live in the web app (web/src/components/), not here.
+# Sessions.jl (the app) depends on SessionsUI and knows how to render
+# these widgets. This package just defines the types and bond pipeline.
 
-import Sessions
+using UUIDs
 
-# @bind macro — creates a Bond that connects a widget to a variable
+# Widget types + bond registry + @bind macro
+include("widgets.jl")
+
+export AbstractWidget, initial_value, possible_values, validate_value
+export Slider, NumberField, Button, CounterButton, CheckBox, TextField, Select
+export Bond, set_bond_value!, get_bond_names
 export @bind
-include("Bind.jl")
 
-# Widget constructors (lightweight wrappers around Sessions types)
-export BoundSlider
-include("widgets/BoundSlider.jl")
+# User-friendly aliases (Bound* prefix to avoid name clashes with Makie etc.)
+const BoundSlider = Slider
+const BoundNumberField = NumberField
+const BoundButton = Button
+const BoundCheckBox = CheckBox
+const BoundTextField = TextField
+const BoundSelect = Select
+export BoundSlider, BoundNumberField, BoundButton, BoundCheckBox, BoundTextField, BoundSelect
 
 end # module
