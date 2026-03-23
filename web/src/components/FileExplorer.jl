@@ -160,12 +160,21 @@ function _file_explorer_js(root_dir::String)
   });
 
   // ── Lazy loading: fetch directory contents on expand ──
+  // sl-lazy-load fires on the sl-tree-item itself; use closest() for safety
   tree.addEventListener('sl-lazy-load', function(e) {
-    var item = e.target;
-    if (!item || !item.dataset || !item.dataset.path) return;
+    var item = e.target.closest ? e.target.closest('sl-tree-item[lazy]') : e.target;
+    if (!item || !item.dataset || !item.dataset.path) {
+      console.warn('[FileExplorer] sl-lazy-load: no item or path', e.target);
+      return;
+    }
     var dirPath = item.dataset.path;
-    if (window.TherapyWS) {
+    console.log('[FileExplorer] lazy-load:', dirPath);
+    if (window.TherapyWS && TherapyWS.sendMessage) {
       TherapyWS.sendMessage('file_explorer', {action: 'list_dir', path: dirPath});
+    } else {
+      console.warn('[FileExplorer] TherapyWS not ready');
+      // Remove lazy so spinner stops — will show empty folder
+      item.removeAttribute('lazy');
     }
   });
 

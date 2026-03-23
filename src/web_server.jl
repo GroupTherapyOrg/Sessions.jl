@@ -1231,9 +1231,16 @@ end
 function _handle_list_dir!(state::WebNotebookState, conn, data)
     rel_path = get(data, "path", "")
     root_dir = _get_explorer_root(state)
+    println("[FileExplorer] list_dir: rel_path=$rel_path root_dir=$root_dir")
     full_path = _safe_path(root_dir, rel_path)
-    full_path === nothing && return
-    isdir(full_path) || return
+    if full_path === nothing
+        println("[FileExplorer] list_dir: path traversal blocked")
+        return
+    end
+    if !isdir(full_path)
+        println("[FileExplorer] list_dir: not a directory: $full_path")
+        return
+    end
 
     # Build one level of children
     children = _build_tree_recursive(full_path, root_dir, 0, 1)
