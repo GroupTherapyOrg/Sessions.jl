@@ -2,7 +2,7 @@
 # Sessions.jl Documentation Site
 #
 # Usage (from Sessions.jl root directory):
-#   julia +1.12 --project=. docs/app.jl dev    # Development server with HMR
+#   julia +1.12 --project=. docs/app.jl dev    # Development server
 #   julia +1.12 --project=. docs/app.jl build  # Build static site to docs/dist
 
 # Use local Therapy.jl if available (sibling directory)

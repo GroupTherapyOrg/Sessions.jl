@@ -1,6 +1,6 @@
 # Sessions.jl docs landing page
 #
-# Terminal-native notebook IDE. Green accent, warm neutrals.
+# Web-native notebook IDE for humans and agents. Green accent, warm neutrals.
 # Uses local components from PageComponents.jl (no Suite.jl).
 
 function Index()
@@ -11,12 +11,12 @@ function Index()
                 Div(:class => "inline-flex items-center gap-2 border border-warm-200 dark:border-warm-700 bg-warm-100 dark:bg-warm-900 rounded-full px-4 py-1.5 mb-8",
                     Span(:class => "text-xs font-medium text-warm-600 dark:text-warm-400", "Open Source"),
                     Span(:class => "text-warm-300 dark:text-warm-600", "/"),
-                    Span(:class => "text-xs font-medium text-accent-600 dark:text-accent-400", "Terminal IDE")
+                    Span(:class => "text-xs font-medium text-accent-600 dark:text-accent-400", "Web IDE")
                 ),
                 H1(:class => "text-4xl sm:text-6xl lg:text-7xl font-serif font-semibold text-warm-800 dark:text-warm-300 tracking-tight leading-[1.1]",
-                    "Terminal-native",
+                    "Reactive Julia notebooks",
                     Br(),
-                    "Julia notebooks with ",
+                    "for humans and agents with ",
                     Span(:class => "text-accent-600 dark:text-accent-400", "Sessions"),
                     Span(:class => "text-warm-400 dark:text-warm-600 text-4xl sm:text-5xl lg:text-6xl font-light",
                         Span(:style => "color: var(--jl-dot)", "."),
@@ -25,7 +25,7 @@ function Index()
                     )
                 ),
                 P(:class => "mt-8 text-lg sm:text-xl text-warm-600 dark:text-warm-400 max-w-2xl mx-auto leading-relaxed",
-                    "Reactive notebooks in your terminal. Pluto-compatible format, full IDE experience, real-time diagnostics."
+                    "A web-native notebook IDE with Pluto-compatible reactivity, integrated terminal, code formatting, and seamless human+agent collaboration."
                 ),
                 Div(:class => "mt-10 flex flex-col sm:flex-row justify-center gap-4",
                     A(:href => "./getting-started/",
@@ -38,13 +38,13 @@ function Index()
             )
         ),
 
-        # Terminal Code Showcase
+        # Install Showcase
         Div(:class => "py-16",
             H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-4",
-                "Your notebook, in the terminal"
+                "One command to start"
             ),
             P(:class => "text-center text-warm-600 dark:text-warm-400 mb-10 max-w-lg mx-auto",
-                "One command to open, edit, and run reactive Julia notebooks. No browser required."
+                "Install as a Julia app. Open any notebook in the browser. Run headlessly for CI."
             ),
             Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-xl border border-warm-800 dark:border-warm-800 p-8 max-w-3xl mx-auto overflow-x-auto shadow-xl",
                 Div(:class => "flex items-center gap-2 mb-5",
@@ -55,13 +55,13 @@ function Index()
                 CodeBlock(language="bash", """# Install as a Julia app
 julia -e 'using Pkg; Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")'
 
-# Open a notebook
+# Open a notebook in the web IDE
 sessions my_notebook.jl
 
-# Create a new notebook
-sessions
+# Start in your project directory
+cd my_project/ && sessions
 
-# Run headlessly (CI, scripts)
+# Run headlessly (CI, scripts, agents)
 sessions run my_notebook.jl""")
             )
         ),
@@ -83,14 +83,14 @@ sessions run my_notebook.jl""")
                     "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 ),
                 _FeatureCard(
-                    "Terminal IDE",
-                    "File browser, REPL panel, diagnostics panel, tab bar, activity bar, status bar. A full IDE in your terminal.",
+                    "Web IDE",
+                    "CodeMirror editor, Shoelace file explorer, xterm.js terminal. A full IDE in the browser served from a local Julia process.",
                     "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                 ),
                 _FeatureCard(
-                    "Real-time Diagnostics",
-                    "JETLS (JET.jl LSP) integration catches type errors and undefined variables as you type.",
-                    "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                    "Code Formatting",
+                    "Format individual cells or the entire notebook with Runic.jl. One-click formatting in the toolbar and cell menu.",
+                    "M4 6h16M4 10h16M4 14h10M4 18h12"
                 ),
                 _FeatureCard(
                     "@bind Widgets",
@@ -98,8 +98,8 @@ sessions run my_notebook.jl""")
                     "M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 ),
                 _FeatureCard(
-                    "Agent-first Notebook",
-                    "Code/state separation lets LLMs, IDEs, and scripts safely modify notebooks while the TUI watches and reacts.",
+                    "Human + Agent Collaboration",
+                    "Code/state separation lets you, LLMs, IDEs, and scripts all edit the same notebook. File watcher syncs changes in real time.",
                     "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                 )
             )
@@ -108,17 +108,17 @@ sessions run my_notebook.jl""")
         # Stats bar
         Div(:class => "py-12 border-y border-warm-200 dark:border-warm-700",
             Div(:class => "grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto text-center",
-                _StatItem("3600+", "Tests"),
-                _StatItem("5+", "Widgets"),
-                _StatItem("20+", "TUI Components"),
-                _StatItem("3", "Layers")
+                _StatItem("2000+", "Tests"),
+                _StatItem("6+", "Widgets"),
+                _StatItem("Pure", "Julia"),
+                _StatItem("2", "Packages")
             )
         ),
 
         # Code/State Separation Section
         Div(:class => "py-16",
             H2(:class => "text-3xl font-serif font-semibold text-center text-warm-800 dark:text-warm-300 mb-4",
-                "Agent-ready architecture"
+                "Built for collaboration"
             ),
             P(:class => "text-center text-warm-600 dark:text-warm-400 mb-12 max-w-2xl mx-auto",
                 "Sessions.jl separates code from execution state. Your notebook is two files, not one."
@@ -142,7 +142,7 @@ sessions run my_notebook.jl""")
                         Div(:class => "space-y-2 text-sm text-warm-600 dark:text-warm-400",
                             P("Cell code, cell order, fold/disabled metadata"),
                             P(:class => "font-medium text-warm-800 dark:text-warm-300",
-                                "Safe for agents, LLMs, IDEs, and scripts to modify directly."
+                                "Safe for humans, agents, IDEs, and scripts to modify directly."
                             ),
                             P("Pluto-compatible format. Version-controlled."),
                         ),
@@ -155,7 +155,7 @@ sessions run my_notebook.jl""")
                                 Span(:class => "text-warm-600 dark:text-warm-400 font-mono text-sm font-bold", ".toml")
                             ),
                             Div(
-                                CardTitle("notebook.session.toml"),
+                                CardTitle("notebook.sessions.toml"),
                                 CardDescription("Execution cache"),
                             ),
                         ),
@@ -172,29 +172,29 @@ sessions run my_notebook.jl""")
                 ),
             ),
 
-            # Agent workflow
+            # Workflow
             Div(:class => "max-w-3xl mx-auto",
                 Card(class="bg-warm-100/50 dark:bg-warm-900/50",
                     CardHeader(
-                        CardTitle("How agent-driven development works"),
+                        CardTitle("How human + agent collaboration works"),
                     ),
                     CardContent(
                         Div(:class => "space-y-4 text-sm text-warm-600 dark:text-warm-400",
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "1."),
-                                P("An external tool (LLM agent, IDE, script) modifies cell code in the .jl file."),
+                                P("You write code in the browser IDE. An agent edits the .jl file from the terminal. Both at the same time."),
                             ),
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "2."),
-                                P("The built-in file watcher detects the change within ~0.5 seconds."),
+                                P("The built-in file watcher detects all changes within ~0.5 seconds."),
                             ),
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "3."),
-                                P("Changed cells are marked stale — old outputs remain visible for reference."),
+                                P("Changed cells are marked stale. Old outputs remain visible for reference."),
                             ),
                             Div(:class => "flex gap-3",
                                 Span(:class => "text-accent-600 dark:text-accent-400 font-mono font-bold shrink-0", "4."),
-                                P("You re-run stale cells. New outputs are cached to .session.toml."),
+                                P("Click Run Stale, or let the agent run 'sessions run notebook.jl' from the integrated terminal."),
                             ),
                         ),
                     ),
@@ -222,17 +222,17 @@ sessions run my_notebook.jl""")
                         ),
                         Tr(:class => _TR_CLS,
                             Td(:class => _TD_LABEL_CLS, "Output storage"),
-                            Td(:class => _TD_CLS, ".session.toml (separate file)"),
+                            Td(:class => _TD_CLS, ".sessions.toml (separate file)"),
                             Td(:class => _TD_CLS, "In-memory only (recomputed on open)"),
                         ),
                         Tr(:class => _TR_CLS,
                             Td(:class => _TD_LABEL_CLS, "External edits"),
-                            Td(:class => _TD_CLS, "Safe — file watcher auto-detects changes"),
-                            Td(:class => _TD_CLS, "Risky — may break embedded metadata"),
+                            Td(:class => _TD_CLS, "Safe: file watcher auto-detects changes"),
+                            Td(:class => _TD_CLS, "Risky: may break embedded metadata"),
                         ),
                         Tr(:class => _TR_CLS,
                             Td(:class => _TD_LABEL_CLS, "Startup"),
-                            Td(:class => _TD_CLS, "Instant — outputs restored from cache"),
+                            Td(:class => _TD_CLS, "Instant: outputs restored from cache"),
                             Td(:class => _TD_CLS, "Full re-execution on every open"),
                         ),
                         Tr(:class => _TR_CLS,
@@ -247,8 +247,13 @@ sessions run my_notebook.jl""")
                         ),
                         Tr(:class => _TR_CLS,
                             Td(:class => _TD_LABEL_CLS, "Interface"),
-                            Td(:class => _TD_CLS, "Terminal TUI (Tachikoma.jl)"),
+                            Td(:class => _TD_CLS, "Browser (web IDE with integrated terminal)"),
                             Td(:class => _TD_CLS, "Browser (HTTP server)"),
+                        ),
+                        Tr(:class => _TR_CLS,
+                            Td(:class => _TD_LABEL_CLS, "Formatting"),
+                            Td(:class => _TD_CLS, "Runic.jl (per-cell and notebook-wide)"),
+                            Td(:class => _TD_CLS, "None built-in"),
                         ),
                     ),
                 ),
