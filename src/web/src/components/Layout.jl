@@ -496,6 +496,20 @@ function _notebook_channel_script()
           el.out.innerHTML = html;
           el.out.style.display = '';
           el.out.style.padding = '6px 0 10px';
+
+          // innerHTML doesn't execute <script> tags — re-create them so they run.
+          // This is needed for the BoundSlider JS bridge (set_bond on input).
+          el.out.querySelectorAll('script').forEach(function(oldScript) {
+            var newScript = document.createElement('script');
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+          });
+
+          // Re-hydrate any @island components in the new output
+          // (BoundSlider WASM signal needs to be initialized)
+          if (window.__hydrateTherapyIslands) {
+            window.__hydrateTherapyIslands(el.out);
+          }
         } else {
           el.out.innerHTML = '';
           el.out.style.display = 'none';
@@ -725,19 +739,30 @@ function _notebook_channel_script()
 
     else if (data.event === 'full_state') {
       console.log('[Sessions] Full state:', data.cells ? data.cells.length : 0, 'cells');
+      var needsHydration = false;
       if (data.cells) {
         data.cells.forEach(function(cell) {
           var el = cellEls(cell.cell_id);
           if (!el) return;
-          // Update cell state
           setCellState(el, cell.state);
-          // Fill empty output containers with cached output
           if (cell.output_html && el.out && !el.out.innerHTML) {
             el.out.innerHTML = cell.output_html;
             el.out.style.display = '';
             el.out.style.padding = '6px 0 10px';
+            // Execute inline scripts (JS bridge for BoundSlider etc.)
+            el.out.querySelectorAll('script').forEach(function(oldScript) {
+              var newScript = document.createElement('script');
+              newScript.textContent = oldScript.textContent;
+              oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+            if (el.out.querySelector('therapy-island')) needsHydration = true;
           }
         });
+      }
+      // Re-hydrate any @island components inserted via full_state
+      if (needsHydration && window.__hydrateTherapyIslands) {
+        var nb = document.getElementById('nb');
+        if (nb) window.__hydrateTherapyIslands(nb);
       }
     }
   });
