@@ -110,11 +110,15 @@ md"""
 # ╔═╡ 08b9c0d1-e2f3-4567-1234-789012345678
 describe(planets[:, [:distance_au, :radius_km, :mass_earth, :moons]])
 
+# ╔═╡ f0b9894b-f920-4ab9-9607-43149750abd5
+# this is a stale cell
+
 # ╔═╡ Cell order:
 # ╠═76fc12d5-6bdd-4d55-aa2f-bfe8bf110ea7
 # ╠═82a0dde9-b888-4332-9bfd-3f069fef4e46
 # ╠═aa11bb22-cc33-dd44-ee55-ff6677889900
 # ╠═a0b1c2d3-e4f5-6789-abcd-ef0123456789
+# ╠═f0b9894b-f920-4ab9-9607-43149750abd5
 # ╟─bb22cc33-dd44-ee55-ff66-778899001122
 # ╟─cc33dd44-ee55-ff66-7788-99aabbccdd00
 # ╠═dd44ee55-ff66-7788-99aa-bbccddee0011

@@ -2,18 +2,21 @@
 # Sessions.jl Web UI
 #
 # Usage (from Sessions.jl root directory):
-#   julia +1.12 --project=. web/app.jl dev                            # Empty notebook
-#   julia +1.12 --project=. web/app.jl dev test/fixtures/basic_notebook.jl  # Load notebook
+#   julia +1.12 --project=. src/web/app.jl dev                            # Empty notebook
+#   julia +1.12 --project=. src/web/app.jl dev test/fixtures/basic_notebook.jl  # Load notebook
+
+# Project root is two levels up: src/web/ → src/ → root
+const _PROJECT_ROOT = dirname(dirname(@__DIR__))
 
 # Use local Therapy.jl if available (sibling directory)
-local_therapy = joinpath(dirname(@__DIR__), "..", "Therapy.jl")
+local_therapy = joinpath(_PROJECT_ROOT, "..", "Therapy.jl")
 if isdir(local_therapy)
     push!(LOAD_PATH, local_therapy)
 end
 
 # Use local Sessions.jl package + SessionsUI workspace subpackage
-push!(LOAD_PATH, dirname(@__DIR__))
-push!(LOAD_PATH, joinpath(dirname(@__DIR__), "SessionsUI"))
+push!(LOAD_PATH, _PROJECT_ROOT)
+push!(LOAD_PATH, joinpath(_PROJECT_ROOT, "SessionsUI"))
 
 using Therapy
 using Sessions
@@ -33,7 +36,7 @@ _notebook_path = let path = nothing
         if endswith(arg, ".jl") && isfile(arg)
             path = arg
         elseif endswith(arg, ".jl")
-            root_path = joinpath(dirname(@__DIR__), arg)
+            root_path = joinpath(_PROJECT_ROOT, arg)
             if isfile(root_path)
                 path = root_path
             end
