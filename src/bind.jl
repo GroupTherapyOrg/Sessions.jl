@@ -13,3 +13,4 @@ using SessionsUI: Bond, set_bond_value!, get_bond_names
 using SessionsUI: _BOND_REGISTRY, _CELL_BOND_NAMES, _EXECUTING_CELL_ID
 using SessionsUI: _register_bond!, _bond_cell_id, _clear_bonds!, _slider_index
 using SessionsUI: closest, downsample
+using SessionsUI: BoundSlider, BoundNumberField, BoundButton, BoundCheckBox, BoundTextField, BoundSelect

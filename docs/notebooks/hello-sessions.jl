@@ -10,7 +10,7 @@ md"""
 
 Welcome to your first Sessions.jl notebook! This notebook demonstrates the basics of reactive notebooks in Julia.
 
-Sessions.jl notebooks are **Pluto-compatible** — they use the same `.jl` file format and reactive execution model. You can write them in the terminal TUI or export them as static web pages like this one.
+Sessions.jl notebooks are **Pluto-compatible** — they use the same `.jl` file format and reactive execution model. You can write them in the browser-based IDE or export them as static web pages like this one.
 """
 
 # ╔═╡ b2c3d4e5-f6a7-8901-bcde-f12345678901

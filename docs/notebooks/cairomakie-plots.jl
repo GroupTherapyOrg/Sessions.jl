@@ -5,7 +5,7 @@
 using Markdown
 
 # ╔═╡ 00000010-0000-0000-0000-000000000002
-import Sessions: @bind, Slider
+using SessionsUI: @bind, BoundSlider
 
 # ╔═╡ 00000010-0000-0000-0000-000000000003
 import CairoMakie as Mke
@@ -14,7 +14,7 @@ import CairoMakie as Mke
 md"""
 # Makie Interactive Plots
 
-Backend-swappable: `import CairoMakie as Mke` for TUI (PNG), `import WGLMakie as Mke` for web (WebGL).
+Backend-swappable: `import CairoMakie as Mke` for static (PNG), `import WGLMakie as Mke` for web (WebGL).
 
 Each slider pre-renders all frames at build time — no server round-trip needed.
 """
@@ -29,7 +29,7 @@ Drag the slider to change wave frequency **w**.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000011
-@bind w Slider(2:2:16, default=6)
+@bind w BoundSlider(2:2:16, default=6)
 
 # ╔═╡ 00000010-0000-0000-0000-000000000012
 let
@@ -51,7 +51,7 @@ Adjust the number of visible **periods**.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000021
-@bind periods Slider(1:6, default=2)
+@bind periods BoundSlider(1:6, default=2)
 
 # ╔═╡ 00000010-0000-0000-0000-000000000022
 let
@@ -73,7 +73,7 @@ Slider controls frequency multiplier **k** in `sin(kx) * cos(ky)`.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000031
-@bind k Slider(1:8, default=2)
+@bind k BoundSlider(1:8, default=2)
 
 # ╔═╡ 00000010-0000-0000-0000-000000000032
 let
@@ -96,7 +96,7 @@ Slider controls point count **n**.
 """
 
 # ╔═╡ 00000010-0000-0000-0000-000000000041
-@bind n_pts Slider(50:50:500, default=200)
+@bind n_pts BoundSlider(50:50:500, default=200)
 
 # ╔═╡ 00000010-0000-0000-0000-000000000042
 let
