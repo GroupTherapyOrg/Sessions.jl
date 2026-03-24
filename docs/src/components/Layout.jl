@@ -78,12 +78,71 @@ end
 
 # --- Main Layout ---
 
+const _SESSIONS_EDITOR_JS = let
+    p = joinpath(dirname(dirname(dirname(@__DIR__))), "src", "web", "static", "editor.js")
+    isfile(p) ? read(p, String) : "/* editor.js not found */"
+end
+
 function Layout(children...; title="Sessions.jl")
     Div(:class => "min-h-screen flex flex-col bg-warm-50 dark:bg-warm-950 transition-colors duration-200",
         # FOUC prevention — apply saved theme before paint (matches Therapy.jl key format)
         RawHtml("""<script>(function(){try{var bp=document.documentElement.getAttribute('data-base-path')||'';var sk=bp?'therapy-theme:'+bp:'therapy-theme';var t=localStorage.getItem(sk);if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();</script>"""),
         # Plotly.js CDN
         RawHtml("""<script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js"></script>"""),
+        # CodeMirror bundle + init (always loaded so SPA nav to notebooks works)
+        RawHtml(string("<script>", _SESSIONS_EDITOR_JS, "</script>")),
+        RawHtml("""<script>
+(function() {
+  if (typeof C === 'undefined' || !C.EditorView) return;
+  var hlTheme = C.HighlightStyle.define([
+    {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
+    {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
+    {tag:C.t.moduleKeyword,color:"#e06b65"},
+    {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
+    {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
+    {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
+    {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
+    {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
+    {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
+    {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
+    {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
+    {tag:C.t.variableName,color:"#d4dce8"},
+    {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
+    {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
+    {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
+    {tag:C.t.macroName,color:"#d4a056"},
+  ]);
+  var edTheme = C.EditorView.theme({
+    "&":{backgroundColor:"transparent",color:"#d4dce8"},
+    ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
+    ".cm-activeLine":{backgroundColor:"transparent"},
+    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#3d5068"},
+    ".cm-content":{fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
+    ".cm-line":{paddingLeft:"4px"},
+    ".cm-cursor":{display:"none"},
+  },{dark:true});
+  function initSessionsCM() {
+    document.querySelectorAll('.cm-cell').forEach(function(host) {
+      if (host.querySelector('.cm-editor')) return;
+      var src = host.dataset.src || '';
+      new C.EditorView({
+        state: C.EditorState.create({
+          doc: src,
+          extensions: [
+            C.lineNumbers(), C.highlightSpecialChars(), C.drawSelection(),
+            C.bracketMatching(), C.julia(), C.syntaxHighlighting(hlTheme),
+            edTheme, C.EditorState.readOnly.of(true), C.EditorView.editable.of(false),
+          ]
+        }),
+        parent: host
+      });
+    });
+  }
+  initSessionsCM();
+  window.addEventListener('therapy:router:loaded', initSessionsCM);
+})();
+</script>"""),
         # Navigation bar
         Header(:class => "bg-warm-100 dark:bg-warm-900 border-b border-warm-200 dark:border-warm-700 transition-colors duration-200",
             Div(:class => "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",

@@ -69,25 +69,18 @@ function Separator(; class::String="", kwargs...)
     Hr(:class => "border-warm-200 dark:border-warm-700 $(class)", kwargs...)
 end
 
-# Theme toggle @island — persists to localStorage via Therapy's set_dark_mode Wasm import.
-@island function ThemeToggle()
-    dark, set_dark = create_signal(Int32(0))
-
-    Div(:dark_mode => dark,
-        Button(
+# TEMP: Plain JS theme toggle. The @island ThemeToggle compiles correctly
+# (handler_0 exported, add_event_listener in hydrate) but the v2 cursor-based
+# hydration doesn't attach the click handler — Therapy.jl framework bug.
+# Switch back to @island once Therapy.jl hydration is fixed.
+function ThemeToggle(; kwargs...)
+    id = "theme-toggle-" * string(rand(UInt32), base=16)
+    Div(:class => "inline-flex items-center", kwargs...,
+        Button(:id => id,
             :class => "cursor-pointer p-2 rounded-md text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-warm-200 hover:bg-warm-200 dark:hover:bg-warm-800 transition-colors",
-            :title => "Toggle dark mode",
-            :on_click => () -> begin
-                if dark() == Int32(0)
-                    set_dark(Int32(1))
-                else
-                    set_dark(Int32(0))
-                end
-            end,
-            Svg(:class => "h-5 w-5", :fill => "none", :viewBox => "0 0 24 24",
-                :stroke => "currentColor", :stroke_width => "2",
-                Path(:stroke_linecap => "round", :stroke_linejoin => "round",
-                     :d => "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"))))
+            :aria_label => "Toggle dark mode", :type => "button",
+            RawHtml("""<svg class="h-5 w-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg><svg class="h-5 w-5 block dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>""")),
+        RawHtml("""<script>(function(){var b=document.getElementById('$(id)');if(!b)return;b.addEventListener('click',function(){var d=document.documentElement.classList.toggle('dark');try{var bp=document.documentElement.getAttribute('data-base-path')||'';var sk=bp?'therapy-theme:'+bp:'therapy-theme';localStorage.setItem(sk,d?'dark':'light')}catch(e){}})})();</script>"""))
 end
 
 """Site footer with brand, links, and tagline."""
