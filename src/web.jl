@@ -1009,6 +1009,7 @@ function execute_notebook_for_web(path; verbose=false)
 
     for (cell, err) in order.errable
         cell.state = cell_errored
+        mark_executed!(cell)
         cell.output = CellOutput()
         cell.output.error = CapturedException(
             ErrorException("Reactivity error: $(typeof(err))"),

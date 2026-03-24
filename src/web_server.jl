@@ -324,9 +324,10 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         "total" => 0
     ))
 
-    # Broadcast errors
+    # Broadcast errors (mark executed so they don't appear stale)
     for (c, _err) in order.errable
         c.state = cell_errored
+        mark_executed!(c)
         _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
             "event" => "cell_state",

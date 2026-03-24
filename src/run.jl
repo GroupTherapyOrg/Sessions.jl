@@ -27,9 +27,10 @@ function run(nb::Notebook; verbose::Bool=false)
 
     order = execution_order(nb)
 
-    # Mark errable cells
+    # Mark errable cells (mark executed so they don't appear stale)
     for (cell, err) in order.errable
         cell.state = cell_errored
+        mark_executed!(cell)
         cell.output = CellOutput()
         cell.output.error = CapturedException(
             ErrorException("Reactivity error: $(typeof(err))"),
