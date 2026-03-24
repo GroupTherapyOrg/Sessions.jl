@@ -889,14 +889,12 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     # =======================================================================
     # Code cell
     # =======================================================================
-    code_cell_classes = if mode == :static
-        "code-cell relative rounded-lg overflow-hidden"
-    else
-        cls = "code-cell relative rounded-lg border border-b1 bg-island transition-all duration-200 hover:border-b2"
+    cls = "code-cell relative overflow-hidden"
+    if mode == :live
         cell.state == cell_idle && (cls *= " idle")
         is_stale(cell) && (cls *= " stale")
-        cls
     end
+    code_cell_classes = cls
 
     code_cell = Div(:class => code_cell_classes,
         ctrls,
@@ -1171,18 +1169,25 @@ Used by both `_notebook_stylesheet()` (static export) and `Layout.jl` (live app)
 Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
 Pluto-style tables (sst-*), CodeMirror overrides, slider widgets.
 """
-const NOTEBOOK_CSS = """/* Cell chrome */
-.code-cell{background:#1a2332;border:1px solid #1c2736;transition:border-color .2s;}
-.code-cell:hover{border-color:#2a3a4f;}
-.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#56d4a0;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
+const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
+.code-cell{background:#f7f8fa;border:1px solid #e2e8f0;border-radius:8px;transition:border-color .2s;}
+.code-cell:hover{border-color:#cbd5e0;}
+.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#219669;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
 .code-cell:hover::before{opacity:.7;}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
-.rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);}
+.rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#219669;opacity:.8;background:rgba(33,150,105,.08);border:1px solid rgba(33,150,105,.12);}
 .cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
 .cell-wrap:hover .cell-eye{opacity:1;}
-.cell-eye svg{color:#3d5068;transition:color .15s;}
-.cell-eye:hover svg{color:#56d4a0;}
+.cell-eye svg{color:#a0aec0;transition:color .15s;}
+.cell-eye:hover svg{color:#219669;}
+/* Cell chrome — dark overrides */
+.dark .code-cell{background:#1a2332;border-color:#1c2736;}
+.dark .code-cell:hover{border-color:#2a3a4f;}
+.dark .code-cell::before{background:#56d4a0;}
+.dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
+.dark .cell-eye svg{color:#3d5068;}
+.dark .cell-eye:hover svg{color:#56d4a0;}
 .cell-out{overflow-x:auto;}
 /* Notebook slider */
 .notebook-slider{display:flex;align-items:center;gap:12px;padding:8px 0;}
