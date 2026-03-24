@@ -917,7 +917,7 @@ end
 # =============================================================================
 
 function CellGap(; after_cell_id::String="")
-    Div(:class => "cdiv h-[18px] flex items-center justify-center",
+    Div(:class => "cdiv h-[26px] flex items-center justify-center my-[2px]",
         Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
             Div(:class => "h-px w-14 bg-b2"),
             Therapy.Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
