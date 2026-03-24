@@ -57,12 +57,10 @@ tailwind.config = {
 html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 /* #sessions-root is the layout owner — uses 100vh to bypass all Therapy wrappers */
 #sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;}
-/* IDE theme: Dark (neutral gray workspace) */
-#sessions-root[data-ide-theme="dark"]{background:#222222;}
-#sessions-root[data-ide-theme="dark"] #status-bar{border-top-color:#2a2a2a;}
-#sessions-root[data-ide-theme="dark"] .ab-btn:hover{background:rgba(255,255,255,.06) !important;}
-#sessions-root[data-ide-theme="dark"] .ab-btn[data-state="on"]{background:rgba(255,255,255,.08) !important;}
-[data-ide-theme="dark"] #app-root{background:#222222 !important;}
+/* IDE theme: Dark (neutral gray workspace — t3 #6b7d93 as bg) */
+#sessions-root[data-ide-theme="dark"]{background:#6b7d93;}
+#sessions-root[data-ide-theme="dark"] #status-bar{border-top-color:rgba(0,0,0,.15);color:#1c2736;}
+[data-ide-theme="dark"] #app-root{background:#6b7d93 !important;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
 /* Activity bar button: active highlight when panel is open.
