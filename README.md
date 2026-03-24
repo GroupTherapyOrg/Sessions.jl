@@ -11,14 +11,13 @@
 
 ![Sessions.jl demo](https://raw.githubusercontent.com/GroupTherapyOrg/Sessions.jl/main/assets/2026-03-23%2020.58.23.gif)
 
-<p align="center">
-  <img src="assets/image2.png" width="49%" alt="Sessions.jl screenshot 1" />
-  <img src="assets/image.png" width="49%" alt="Sessions.jl screenshot 2" />
-</p>
+> **Warning: Experimental, alpha-quality software.** Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, file-based collaboration, and WebAssembly compilation.
+
+![Sessions.jl screenshot 1](assets/image2.png)
+
+![Sessions.jl screenshot 2](assets/image.png)
 
 ---
-
-> **Warning: Experimental, alpha-quality software.** Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, file-based collaboration, and WebAssembly compilation.
 
 ## What is Sessions.jl?
 
