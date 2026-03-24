@@ -545,12 +545,27 @@ end
 """Handle run-stale request — execute only stale cells (like TUI's Ctrl+Shift+Enter)."""
 function handle_run_stale!(state::WebNotebookState, conn, data)
     nb = active_nb(state)
-    # Sync codes from client first
+    # Sync codes from client first.
+    # Guard: if a cell is stale on the server (external edit updated cell.code)
+    # but the client sends code that matches produced_by_hash (old pre-edit code),
+    # the client hasn't received the cell_code_updated event yet — skip the
+    # overwrite to preserve the external edit.
     codes = get(data, "codes", nothing)
     if codes !== nothing
         for (cid, code) in codes
             cell = get_cell(nb, UUID(String(cid)))
-            cell !== nothing && (cell.code = String(code))
+            cell === nothing && continue
+            client_code = String(code)
+            if is_stale(cell) && client_code != cell.code
+                # Server has newer code (external edit). Only accept client code
+                # if it's NOT just the old pre-edit version.
+                client_hash = string(hash(strip(client_code)), base=16)
+                if client_hash == cell.produced_by_hash
+                    # Client is sending pre-edit code → would revert the external change
+                    continue
+                end
+            end
+            cell.code = client_code
         end
     end
 
@@ -942,7 +957,26 @@ function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
             println("[WebNotebook] External change: $(n_changes) cells changed in $(tab.label)")
             _broadcast_nb_html!(state)
         else
-            # Code-only changes — just update stale indicators
+            # Code-only changes — push new code to client CM editors
+            # Without this, CM editors keep old code and "Run Stale" sends
+            # stale editor content back, overwriting the server's updated code.
+            for (id, new_code) in diff.changed
+                haskey(tab.nb.cells, id) || continue
+                broadcast_channel!("notebook", Dict(
+                    "event" => "cell_code_updated",
+                    "cell_id" => string(id),
+                    "code" => new_code
+                ))
+            end
+            for (id, new_folded, new_disabled) in diff.metadata_changed
+                haskey(tab.nb.cells, id) || continue
+                broadcast_channel!("notebook", Dict(
+                    "event" => "cell_code_updated",
+                    "cell_id" => string(id),
+                    "folded" => new_folded,
+                    "disabled" => new_disabled
+                ))
+            end
             println("[WebNotebook] External code change: $(n_changes) cells in $(tab.label)")
         end
     catch e

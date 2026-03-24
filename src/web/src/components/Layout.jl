@@ -262,7 +262,9 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   // This is the bridge that keeps server in sync with client edits —
   // same result as agent editing the .jl file (file watcher path).
   var _syncTimers = {};
+  var _suppressSync = {};  // suppress sync-back when server pushes code updates
   function syncCodeToServer(cellId) {
+    if (_suppressSync[cellId]) { delete _suppressSync[cellId]; return; }
     if (window._sessionsMarkUnsaved) window._sessionsMarkUnsaved();
     if (_syncTimers[cellId]) clearTimeout(_syncTimers[cellId]);
     _syncTimers[cellId] = setTimeout(function() {
@@ -466,6 +468,23 @@ function _notebook_channel_script()
       if (ev && data.code !== undefined) {
         var currentCode = ev.state.doc.toString();
         if (data.code !== currentCode) {
+          _suppressSync[data.cell_id] = true;  // don't echo back to server
+          ev.dispatch({
+            changes: {from: 0, to: currentCode.length, insert: data.code}
+          });
+        }
+      }
+    }
+
+    else if (data.event === 'cell_code_updated') {
+      // External edit (agent, git, IDE) changed cell code on the server.
+      // Push the new code into the CM editor so Run Stale sends the right content.
+      var eds = window._sessionsEditors || {};
+      var ev = eds[data.cell_id];
+      if (ev && data.code !== undefined) {
+        var currentCode = ev.state.doc.toString();
+        if (data.code !== currentCode) {
+          _suppressSync[data.cell_id] = true;  // don't echo back to server
           ev.dispatch({
             changes: {from: 0, to: currentCode.length, insert: data.code}
           });
