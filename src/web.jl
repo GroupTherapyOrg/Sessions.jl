@@ -1170,8 +1170,8 @@ Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
 Pluto-style tables (sst-*), CodeMirror overrides, slider widgets.
 """
 const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
-.code-cell{background:#f7f8fa;border:1px solid #e2e8f0;border-radius:8px;transition:border-color .2s;}
-.code-cell:hover{border-color:#cbd5e0;}
+.code-cell{background:#ffffff;border:1px solid #d4d8e0;border-radius:8px;transition:border-color .2s;}
+.code-cell:hover{border-color:#bec4cf;}
 .code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#219669;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
 .code-cell:hover::before{opacity:.7;}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
@@ -1203,9 +1203,9 @@ const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
 .md-prose li{margin:0.25em 0;}
 .md-prose li p{margin:0 0 0.4em;}
 .md-prose blockquote{border-left:3px solid #b08fd8;padding:0.4em 0 0.4em 1em;margin:1em 0;color:#718096;background:rgba(176,143,216,.04);border-radius:0 4px 4px 0;}
-.md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:#f7f8fa;padding:0.15em 0.4em;border-radius:4px;color:#2b6cb0;}
-.md-prose pre{background:#f7f8fa;border-radius:6px;padding:0.8em 1em;margin:1em 0;overflow-x:auto;tab-size:4;white-space:pre-wrap;}
-.md-prose pre code{background:none;padding:0;font-size:0.8rem;color:#1a202c;white-space:pre;}
+.md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:#eaecf0;padding:0.15em 0.4em;border-radius:4px;color:#2b6cb0;}
+.md-prose pre{background:#eaecf0;border-radius:6px;padding:0.8em 1em;margin:1em 0;overflow-x:auto;tab-size:4;white-space:pre-wrap;}
+.md-prose pre code{background:none;padding:0;font-size:0.8rem;color:#1a2332;white-space:pre;}
 .md-prose strong{color:#1a202c;font-weight:600;}
 .md-prose em{font-style:italic;}
 .md-prose a{color:#1e7855;text-decoration:none;}
@@ -1366,8 +1366,10 @@ function NotebookPage(nb::Notebook;
         push!(rendered, _slider_interaction_script())
     end
 
-    # CodeMirror bundle + init (after cells so DOM exists)
-    push!(rendered, _notebook_editor_bundle())
+    # NOTE: CodeMirror bundle + init is NOT included here.
+    # The consuming Layout (docs Layout.jl, or any Therapy app layout) is
+    # responsible for loading the editor.js bundle and running initSessionsCM().
+    # This keeps NotebookPage purely structural (HTML + CSS).
 
     Div(:class => "space-y-4 pl-8", rendered...)
 end

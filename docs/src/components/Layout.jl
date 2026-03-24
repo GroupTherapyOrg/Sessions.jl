@@ -94,7 +94,12 @@ function Layout(children...; title="Sessions.jl")
         RawHtml("""<script>
 (function() {
   if (typeof C === 'undefined' || !C.EditorView) return;
-  var hlTheme = C.HighlightStyle.define([
+
+  // Detect current mode at init time
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+
+  // Dark theme highlight colors (Sessions IDE palette)
+  var darkHL = C.HighlightStyle.define([
     {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
     {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
     {tag:C.t.moduleKeyword,color:"#e06b65"},
@@ -112,7 +117,28 @@ function Layout(children...; title="Sessions.jl")
     {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
     {tag:C.t.macroName,color:"#d4a056"},
   ]);
-  var edTheme = C.EditorView.theme({
+
+  // Light theme highlight colors (readable on white bg)
+  var lightHL = C.HighlightStyle.define([
+    {tag:C.t.keyword,color:"#c4352b"},{tag:C.t.controlKeyword,color:"#c4352b"},
+    {tag:C.t.operatorKeyword,color:"#c4352b"},{tag:C.t.definitionKeyword,color:"#c4352b"},
+    {tag:C.t.moduleKeyword,color:"#c4352b"},
+    {tag:C.t.string,color:"#1e7855"},{tag:C.t.character,color:"#1e7855"},
+    {tag:C.t.comment,color:"#7b8a9e",fontStyle:"italic"},
+    {tag:C.t.lineComment,color:"#7b8a9e",fontStyle:"italic"},
+    {tag:C.t.number,color:"#b5831b"},{tag:C.t.integer,color:"#b5831b"},
+    {tag:C.t.float,color:"#b5831b"},{tag:C.t.bool,color:"#b5831b"},
+    {tag:C.t.function(C.t.variableName),color:"#2b6cb0"},
+    {tag:C.t.definition(C.t.variableName),color:"#2b6cb0"},
+    {tag:C.t.typeName,color:"#7c3aed"},{tag:C.t.className,color:"#7c3aed"},
+    {tag:C.t.variableName,color:"#1a2332"},
+    {tag:C.t.punctuation,color:"#7b8a9e"},{tag:C.t.paren,color:"#7b8a9e"},
+    {tag:C.t.squareBracket,color:"#7b8a9e"},{tag:C.t.brace,color:"#7b8a9e"},
+    {tag:C.t.operator,color:"#1a2332"},{tag:C.t.special(C.t.string),color:"#2b6cb0"},
+    {tag:C.t.macroName,color:"#b5831b"},
+  ]);
+
+  var darkEdTheme = C.EditorView.theme({
     "&":{backgroundColor:"transparent",color:"#d4dce8"},
     ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
     ".cm-activeLine":{backgroundColor:"transparent"},
@@ -122,7 +148,20 @@ function Layout(children...; title="Sessions.jl")
     ".cm-line":{paddingLeft:"4px"},
     ".cm-cursor":{display:"none"},
   },{dark:true});
+
+  var lightEdTheme = C.EditorView.theme({
+    "&":{backgroundColor:"transparent",color:"#1a2332"},
+    ".cm-gutters":{backgroundColor:"transparent",color:"#b0bac8",border:"none",minWidth:"38px"},
+    ".cm-activeLine":{backgroundColor:"transparent"},
+    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#b0bac8"},
+    ".cm-content":{fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
+    ".cm-line":{paddingLeft:"4px"},
+    ".cm-cursor":{display:"none"},
+  },{dark:false});
+
   function initSessionsCM() {
+    var dark = isDark();
     document.querySelectorAll('.cm-cell').forEach(function(host) {
       if (host.querySelector('.cm-editor')) return;
       var src = host.dataset.src || '';
@@ -131,16 +170,32 @@ function Layout(children...; title="Sessions.jl")
           doc: src,
           extensions: [
             C.lineNumbers(), C.highlightSpecialChars(), C.drawSelection(),
-            C.bracketMatching(), C.julia(), C.syntaxHighlighting(hlTheme),
-            edTheme, C.EditorState.readOnly.of(true), C.EditorView.editable.of(false),
+            C.bracketMatching(), C.julia(),
+            C.syntaxHighlighting(dark ? darkHL : lightHL),
+            dark ? darkEdTheme : lightEdTheme,
+            C.EditorState.readOnly.of(true), C.EditorView.editable.of(false),
           ]
         }),
         parent: host
       });
     });
   }
+
+  // Reinit CM on theme toggle (destroy + recreate with correct theme)
+  function reinitAllCM() {
+    document.querySelectorAll('.cm-cell .cm-editor').forEach(function(ed) { ed.remove(); });
+    initSessionsCM();
+  }
+
   initSessionsCM();
   window.addEventListener('therapy:router:loaded', initSessionsCM);
+
+  // Watch for dark class toggle and reinit CM with correct theme
+  var _lastDark = isDark();
+  new MutationObserver(function() {
+    var now = isDark();
+    if (now !== _lastDark) { _lastDark = now; reinitAllCM(); }
+  }).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
 })();
 </script>"""),
         # Navigation bar
