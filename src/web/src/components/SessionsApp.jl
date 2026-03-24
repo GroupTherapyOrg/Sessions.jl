@@ -10,7 +10,7 @@
 
 const _JULIA_LOGO_SVG = """<svg width="16" height="14" viewBox="0 0 40 34" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="6" r="5.5" fill="#56d4a0"/><circle cx="10" cy="28" r="5.5" fill="#e06b65"/><circle cx="30" cy="28" r="5.5" fill="#b08fd8"/></svg>"""
 
-const _AB_BTN_STYLE = "width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:#3d5068;transition:all .15s;"
+const _AB_BTN_STYLE = "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:#3d5068;transition:all .15s;"
 
 function SessionsApp(children...)
     cell_count = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
@@ -59,7 +59,7 @@ end
 # ═══════════════════════════════════════════════════════════════
 
 function _activity_bar()
-    Div(:class => "flex flex-col items-center gap-1 py-2 w-[50px] shrink-0 self-start rounded-xl bg-surf border border-b1 shadow-lg shadow-black/25",
+    Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl bg-surf border border-b1 shadow-lg shadow-black/25",
         Div(:class => "flex items-center justify-center w-8 h-8 mb-2",
             RawHtml(_JULIA_LOGO_SVG)),
 
