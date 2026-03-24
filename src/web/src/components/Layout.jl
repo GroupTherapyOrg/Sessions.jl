@@ -263,6 +263,7 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   // same result as agent editing the .jl file (file watcher path).
   var _syncTimers = {};
   function syncCodeToServer(cellId) {
+    if (window._sessionsMarkUnsaved) window._sessionsMarkUnsaved();
     if (_syncTimers[cellId]) clearTimeout(_syncTimers[cellId]);
     _syncTimers[cellId] = setTimeout(function() {
       var ev = editors[cellId];
@@ -370,6 +371,30 @@ function _notebook_channel_script()
   if (window._sessionsNotebookHandler) return;
   window._sessionsNotebookHandler = true;
 
+  // ── Unsaved changes indicator ──
+  window._sessionsUnsaved = false;
+  function markUnsaved() {
+    if (window._sessionsUnsaved) return;
+    window._sessionsUnsaved = true;
+    var btn = document.getElementById('save-indicator');
+    if (btn) {
+      btn.textContent = '\u25CF Save';
+      btn.style.color = '#d4a056';
+      btn.style.borderColor = '#d4a056';
+    }
+  }
+  function markSaved() {
+    window._sessionsUnsaved = false;
+    var btn = document.getElementById('save-indicator');
+    if (btn) {
+      btn.textContent = 'Saved';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+      setTimeout(function(){ if (!window._sessionsUnsaved) btn.textContent = 'Save'; }, 2000);
+    }
+  }
+  window._sessionsMarkUnsaved = markUnsaved;
+
   // ── Helper: find cell elements by ID ──
   function cellEls(cellId) {
     var wrap = document.querySelector('.cell-wrap[data-cell-id="' + cellId + '"]');
@@ -434,6 +459,7 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_formatted') {
+      markUnsaved();
       // Update CodeMirror editor with formatted code
       var eds = window._sessionsEditors || {};
       var ev = eds[data.cell_id];
@@ -494,6 +520,7 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_added') {
+      markUnsaved();
       // Server renders the cell HTML — just insert it and init CM
       var html = data.cell_html || '';
       if (!html) return;
@@ -540,6 +567,7 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_deleted') {
+      markUnsaved();
       // Save deleted cell info for undo
       window._recentlyDeleted = {
         cell_id: data.cell_id,
@@ -569,6 +597,7 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'cell_moved') {
+      markUnsaved();
       // Swap cell DOM nodes in-place (no reload)
       var container = document.querySelector('#nb > div'); // max-width wrapper
       if (!container) return;
@@ -624,8 +653,7 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'saved') {
-      var ind = document.getElementById('save-indicator');
-      if (ind) { ind.textContent = 'Saved'; setTimeout(function(){ ind.textContent = 'Save'; }, 2000); }
+      markSaved();
     }
 
     else if (data.event === 'stale_update') {
