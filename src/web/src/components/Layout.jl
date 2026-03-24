@@ -798,13 +798,18 @@ function _notebook_channel_script()
     }
   });
 
-  // Show dropdown next to a menu button
+  // Show dropdown next to a menu button (flip above if near bottom of viewport)
   window._sessionsShowCellMenu = function(btn, cellId) {
     _menuCellId = cellId;
     var r = btn.getBoundingClientRect();
-    _cellMenu.style.top = (r.bottom + 4) + 'px';
-    _cellMenu.style.left = (r.right - 130) + 'px';
     _cellMenu.style.display = 'block';
+    var menuH = _cellMenu.offsetHeight || 150;
+    if (window.innerHeight - r.bottom < menuH + 8) {
+      _cellMenu.style.top = (r.top - menuH - 4) + 'px';
+    } else {
+      _cellMenu.style.top = (r.bottom + 4) + 'px';
+    }
+    _cellMenu.style.left = (r.right - 130) + 'px';
   };
 
   // Close on click outside
