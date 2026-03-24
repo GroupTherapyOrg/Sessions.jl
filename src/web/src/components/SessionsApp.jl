@@ -105,7 +105,13 @@ function _status_bar(cell_count::Int)
             "Sessions.jl"),
         Span(:id => "status-cells", "$(cell_count) cells"),
         Span(:style => "flex:1;"),
-        Span(:id => "status-connection", :style => "color:#56d4a0;", "\u25CF connected"))
+        Span(:id => "status-connection", :style => "color:#56d4a0;", "\u25CF connected"),
+        # Theme picker
+        Span(:id => "theme-picker",
+            :style => "position:relative;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background .12s;",
+            :title => "Switch IDE theme",
+            RawHtml("""<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><path d="M8 3a5 5 0 000 10"/></svg>"""),
+            Span(:id => "theme-picker-label", :style => "margin-left:4px;", "Dark+")))
 end
 
 # ═══════════════════════════════════════════════════════════════
@@ -190,6 +196,52 @@ function _status_bar_script()
 
   window.addEventListener('therapy:ws:open', function(){ setConnected(true); });
   window.addEventListener('therapy:ws:close', function(){ setConnected(false); });
+
+  // ── Theme picker ──
+  var _themes = [
+    {id:'dark+', label:'Dark+'},
+    {id:'dark', label:'Dark'}
+  ];
+  var _picker = document.getElementById('theme-picker');
+  var _pickerLabel = document.getElementById('theme-picker-label');
+  var _popup = null;
+
+  // Restore saved theme
+  var saved = localStorage.getItem('sessions-ide-theme') || 'dark+';
+  _applyTheme(saved);
+
+  function _applyTheme(id) {
+    var root = document.getElementById('sessions-root');
+    if (root) {
+      if (id === 'dark+') root.removeAttribute('data-ide-theme');
+      else root.setAttribute('data-ide-theme', id);
+    }
+    if (_pickerLabel) _pickerLabel.textContent = _themes.find(function(t){return t.id===id;}).label;
+    localStorage.setItem('sessions-ide-theme', id);
+  }
+
+  if (_picker) {
+    _picker.addEventListener('mouseenter', function(){ _picker.style.background='rgba(255,255,255,.06)'; });
+    _picker.addEventListener('mouseleave', function(){ _picker.style.background=''; });
+    _picker.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (_popup) { _popup.remove(); _popup = null; return; }
+      var r = _picker.getBoundingClientRect();
+      _popup = document.createElement('div');
+      _popup.style.cssText = 'position:fixed;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:6px;min-width:100px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;padding:3px 0;bottom:'+(window.innerHeight-r.top+4)+'px;right:'+(window.innerWidth-r.right)+'px;';
+      _themes.forEach(function(t) {
+        var item = document.createElement('div');
+        item.textContent = t.label;
+        item.style.cssText = 'padding:5px 12px;font-size:11px;cursor:pointer;color:#9baabd;transition:background .1s,color .1s;';
+        item.addEventListener('mouseenter', function(){ item.style.background='rgba(86,212,160,.08)'; item.style.color='#d4dce8'; });
+        item.addEventListener('mouseleave', function(){ item.style.background=''; item.style.color='#9baabd'; });
+        item.addEventListener('click', function(){ _applyTheme(t.id); _popup.remove(); _popup = null; });
+        _popup.appendChild(item);
+      });
+      document.body.appendChild(_popup);
+    });
+    document.addEventListener('click', function(){ if(_popup){ _popup.remove(); _popup=null; } });
+  }
 })();
 </script>""")
 end
