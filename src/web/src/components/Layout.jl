@@ -424,9 +424,43 @@ function _notebook_channel_script()
     var ms = ns / 1e6;
     return ms < 1 ? (ns / 1e3).toFixed(1) + '\u00b5s' : ms < 1000 ? ms.toFixed(1) + 'ms' : (ms / 1000).toFixed(2) + 's';
   }
+  function fmtSeconds(s) {
+    return s < 1 ? s.toFixed(2) + 's' : s < 60 ? s.toFixed(1) + 's' : (s / 60).toFixed(1) + 'min';
+  }
+
+  // ── Live stopwatch for running cells ──
+  var _cellTimers = {};  // cellId → {interval, startTime}
+
+  function startCellTimer(cellId, el) {
+    stopCellTimer(cellId);
+    if (!el || !el.ctrls) return;
+    var startTime = performance.now();
+    // Create or reuse the badge
+    var badge = el.ctrls.querySelector('.rt-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'rt-badge';
+      el.ctrls.insertBefore(badge, el.ctrls.firstChild);
+    }
+    badge.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);';
+    badge.textContent = '0.0s';
+    var interval = setInterval(function() {
+      var elapsed = (performance.now() - startTime) / 1000;
+      badge.textContent = fmtSeconds(elapsed);
+    }, 100);
+    _cellTimers[cellId] = {interval: interval, startTime: startTime};
+  }
+
+  function stopCellTimer(cellId) {
+    var timer = _cellTimers[cellId];
+    if (timer) {
+      clearInterval(timer.interval);
+      delete _cellTimers[cellId];
+    }
+  }
 
   // ── Helper: update cell CSS state (accent bar color) ──
-  function setCellState(el, state) {
+  function setCellState(el, state, cellId) {
     if (!el) return;
     var cc = el.code;
     if (!cc) return;
@@ -435,10 +469,17 @@ function _notebook_channel_script()
     if (state === 'cell_queued' || state === 'cell_running') {
       cc.style.borderColor = state === 'cell_queued' ? '#d4a056' : '#7bb8e8';
       cc.classList.add('executing');
-    } else if (state === 'cell_errored') {
-      cc.style.borderColor = '#e06b65';
+      // Start live stopwatch when cell begins running
+      if (state === 'cell_running' && cellId) {
+        startCellTimer(cellId, el);
+      }
     } else {
-      cc.style.borderColor = '';  // revert to CSS default
+      if (cellId) stopCellTimer(cellId);
+      if (state === 'cell_errored') {
+        cc.style.borderColor = '#e06b65';
+      } else {
+        cc.style.borderColor = '';  // revert to CSS default
+      }
     }
   }
 
@@ -448,7 +489,7 @@ function _notebook_channel_script()
 
     if (data.event === 'cell_state') {
       var el = cellEls(data.cell_id);
-      setCellState(el, data.state);
+      setCellState(el, data.state, data.cell_id);
     }
 
     else if (data.event === 'format_started') {
@@ -533,16 +574,18 @@ function _notebook_channel_script()
         }
       }
 
-      // Update cell state (done/errored)
-      setCellState(el, data.state);
+      // Update cell state (done/errored) — stops live timer
+      setCellState(el, data.state, data.cell_id);
 
-      // Update runtime badge
+      // Update runtime badge with final server-measured time
       if (el.ctrls && data.runtime_ns && data.runtime_ns > 0) {
         var old = el.ctrls.querySelector('.rt-badge');
         if (old) old.remove();
         var badge = document.createElement('span');
         badge.className = 'rt-badge';
-        badge.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12);';
+        var isErr = data.state === 'cell_errored';
+        var c = isErr ? '#e06b65' : '#56d4a0';
+        badge.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;opacity:.8;color:'+c+';background:rgba('+(isErr?'224,107,101':'86,212,160')+',.08);border:1px solid rgba('+(isErr?'224,107,101':'86,212,160')+',.12);';
         badge.textContent = fmtRuntime(data.runtime_ns);
         el.ctrls.insertBefore(badge, el.ctrls.firstChild);
       }
@@ -769,7 +812,7 @@ function _notebook_channel_script()
         data.cells.forEach(function(cell) {
           var el = cellEls(cell.cell_id);
           if (!el) return;
-          setCellState(el, cell.state);
+          setCellState(el, cell.state, cell.cell_id);
           if (cell.output_html && el.out && !el.out.innerHTML) {
             el.out.innerHTML = cell.output_html;
             el.out.style.display = '';
