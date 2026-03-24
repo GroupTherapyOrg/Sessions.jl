@@ -285,11 +285,18 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   }
 
   // ── Shift+Enter keybinding for CM ──
+  // Uses DOM-level handler to guarantee capture — CM6 keymap dispatch
+  // can miss Shift-Enter depending on extension ordering and platform.
   function shiftEnterKeymap(cellId) {
-    return C.keymap.of([{
-      key: 'Shift-Enter',
-      run: function() { window._sessionsRunCell(cellId); return true; }
-    }]);
+    return C.EditorView.domEventHandlers({
+      keydown: function(event) {
+        if (event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          window._sessionsRunCell(cellId);
+          return true;
+        }
+      }
+    });
   }
 
   // ── Initialize CM editors (callable for new cells too) ──
@@ -302,7 +309,11 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
       var cellId = host.dataset.cellId || '';
       var isFileEditor = host.classList.contains('cm-file-editor');
 
+      // Shift+Enter must come BEFORE defaultKeymap — CM6 checks keymaps in
+      // extension order, and defaultKeymap's Enter handler would swallow it.
+      var cellKeymaps = (!isFileEditor && cellId) ? [shiftEnterKeymap(cellId)] : [];
       var exts = [
+        ...cellKeymaps,
         C.lineNumbers(), C.highlightActiveLineGutter(), C.highlightSpecialChars(),
         C.history(), C.drawSelection(),
         C.EditorState.allowMultipleSelections.of(true),
@@ -324,8 +335,7 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
           '.cm-scroller': { overflow: 'auto' }
         }));
       } else if (cellId) {
-        // Notebook cell: Shift+Enter executes, debounced sync
-        exts.push(shiftEnterKeymap(cellId));
+        // Debounced sync (Shift+Enter already added above)
         exts.push(editSyncExtension(cellId));
       }
 
