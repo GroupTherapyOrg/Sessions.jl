@@ -207,7 +207,7 @@ function _status_bar_script()
   var _popup = null;
 
   // Restore saved theme
-  var saved = localStorage.getItem('sessions-ide-theme') || 'dark+';
+  var saved = localStorage.getItem('sessions-ide-theme') || 'dark';
   _applyTheme(saved);
 
   function _applyTheme(id) {
