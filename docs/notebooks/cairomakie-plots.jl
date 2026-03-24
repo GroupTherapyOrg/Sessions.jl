@@ -1,6 +1,14 @@
 ### A Pluto.jl notebook ###
 # v0.19.0
 
+# ╔═╡ 00000010-0000-0000-0000-000000000000
+begin
+    import Pkg
+    Pkg.activate(; temp=true)
+    Pkg.develop(; path=joinpath(@__DIR__, "..", "..", "SessionsUI"))
+    Pkg.add("CairoMakie")
+end
+
 # ╔═╡ 00000010-0000-0000-0000-000000000001
 using Markdown
 
@@ -37,7 +45,7 @@ let
     ys = range(-2, 2; length=60)
     zs = [cos(w * sqrt(x^2 + y^2)) * exp(-0.3 * sqrt(x^2 + y^2)) for x in xs, y in ys]
 
-    fig = Mke.Figure(; size=(480, 320))
+    fig = Mke.Figure(; size=(1200, 800))
     ax = Mke.Axis3(fig[1, 1]; title="w = $w ripple", xlabel="x", ylabel="y", zlabel="z")
     Mke.surface!(ax, xs, ys, zs; colormap=:magma)
     fig
@@ -83,8 +91,8 @@ let
 
     fig = Mke.Figure(; size=(420, 360))
     ax = Mke.Axis(fig[1, 1]; title="sin($(k)x) · cos($(k)y)", xlabel="x", ylabel="y")
-    Mke.heatmap!(ax, xs, ys, zs; colormap=:magma)
-    Mke.Colorbar(fig[1, 2]; colormap=:magma, limits=(-1, 1))
+    Mke.heatmap!(ax, xs, ys, zs; colormap=:viridis)
+    Mke.Colorbar(fig[1, 2]; colormap=:viridis, limits=(-1, 1))
     fig
 end
 
@@ -111,6 +119,7 @@ let
 end
 
 # ╔═╡ Cell order:
+# ╠═00000010-0000-0000-0000-000000000000
 # ╠═00000010-0000-0000-0000-000000000001
 # ╠═00000010-0000-0000-0000-000000000002
 # ╠═00000010-0000-0000-0000-000000000003

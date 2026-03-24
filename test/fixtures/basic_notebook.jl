@@ -112,10 +112,6 @@ function strict_undef()
     return i
 end
 
-# ╔═╡ 0ab3d0c8-b8c7-4723-8d53-e50d221ec3a7
-
-# ╔═╡ 265a22e7-9448-4e94-a667-bcbed2268af6
-
 # ╔═╡ Cell order:
 # ╟─f7a1b2c3-4d5e-6f78-9a0b-c1d2e3f4a5b6
 # ╠═66ef225a-dd9b-4b36-880c-5e777688f37a
@@ -136,5 +132,3 @@ end
 # ╠═2c624f59-53d4-462a-8ed1-fb6a0d982c64
 # ╟─b236809c-50e5-45e4-8158-f41bad0e9103
 # ╠═bc9c0418-fe44-47a5-a7fa-c6c26c776d3c
-# ╠═0ab3d0c8-b8c7-4723-8d53-e50d221ec3a7
-# ╠═265a22e7-9448-4e94-a667-bcbed2268af6

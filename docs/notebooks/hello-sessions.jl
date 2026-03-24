@@ -4,6 +4,13 @@
 # ╔═╡ 00000001-0000-0000-0000-000000000001
 using Markdown
 
+# ╔═╡ 11111111-2222-3333-4444-555555555555
+md"""
+> "Any sufficiently advanced notebook is indistinguishable from magic." — Arthur C. Clarke (probably)
+
+🎉 **You just opened a reactive notebook in your terminal.** No browser, no Electron, just pure Julia wizardry. Sit back, edit a cell, and watch the dependency graph do its thing.
+"""
+
 # ╔═╡ a1b2c3d4-e5f6-7890-abcd-ef1234567890
 md"""
 # Hello, Sessions.jl
@@ -48,6 +55,7 @@ fib_sequence = [fibonacci(i) for i in 1:10]
 
 # ╔═╡ Cell order:
 # ╠═00000001-0000-0000-0000-000000000001
+# ╠═11111111-2222-3333-4444-555555555555
 # ╟─a1b2c3d4-e5f6-7890-abcd-ef1234567890
 # ╠═b2c3d4e5-f6a7-8901-bcde-f12345678901
 # ╠═c3d4e5f6-a7b8-9012-cdef-123456789012
