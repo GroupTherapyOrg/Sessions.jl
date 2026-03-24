@@ -395,7 +395,7 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
         gap_str = Therapy.render_to_string(gap_vnode)
         cell_str * gap_str
     catch e
-        @warn "[WebNotebook] Failed to render new cell" exception=e
+        @warn "[WebNotebook] Failed to render new cell" exception=(e, catch_backtrace())
         ""
     end
 

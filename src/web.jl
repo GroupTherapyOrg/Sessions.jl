@@ -801,7 +801,9 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
                      prerendered=Dict{UUID, PrerenderedGallery}())
     cell.disabled && return nothing
     code = strip(cell.code)
-    isempty(code) && return nothing
+    # Static export: skip empty cells (nothing to show in docs)
+    # Live app: always render (user needs the empty cell to type in)
+    mode == :static && isempty(code) && return nothing
 
     output = cell.output
     cell_id = string(cell.id)
