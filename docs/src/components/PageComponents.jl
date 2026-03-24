@@ -145,7 +145,7 @@ end
 # Notebooks Layout
 # =============================================================================
 
-const _INTERACTIVE_SLUGS = Set(["cairomakie-plots"])
+const _INTERACTIVE_SLUGS = Set(["cairomakie-plots", "data-exploration", "interactive-plots"])
 const _NOTEBOOK_ORDER = ["hello-sessions", "data-exploration", "interactive-plots", "cairomakie-plots"]
 
 """Order notebook slugs: preferred order first, then alphabetical remainder."""
