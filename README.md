@@ -9,7 +9,12 @@
 
 ---
 
-![Sessions.jl demo](https://raw.githubusercontent.com/GroupTherapyOrg/Sessions.jl/main/assets/2026-03-23%2020.58.23.gif)  
+![Sessions.jl demo](https://raw.githubusercontent.com/GroupTherapyOrg/Sessions.jl/main/assets/2026-03-23%2020.58.23.gif)
+
+<p align="center">
+  <img src="assets/image2.png" width="49%" alt="Sessions.jl screenshot 1" />
+  <img src="assets/image.png" width="49%" alt="Sessions.jl screenshot 2" />
+</p>
 
 ---
 
