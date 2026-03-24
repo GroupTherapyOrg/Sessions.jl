@@ -99,7 +99,7 @@ end
 
 function _status_bar(cell_count::Int)
     Div(:id => "status-bar",
-        :style => "height:26px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:#3d5068;background:transparent;border-top:1px solid #1c2736;",
+        :style => "height:26px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:#3d5068;background:transparent;box-shadow:0 -4px 8px rgba(0,0,0,.15);",
         Span(:style => "display:flex;align-items:center;gap:6px;",
             RawHtml(_JULIA_LOGO_SVG),
             "Sessions.jl"),
