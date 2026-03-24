@@ -59,7 +59,7 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;}
 /* IDE theme: Dark (neutral gray workspace — t3 #4a5568 as bg) */
 #sessions-root[data-ide-theme="dark"]{background:#4a5568;}
-#sessions-root[data-ide-theme="dark"] #status-bar{border-top-color:#d4dce8;color:#d4dce8 !important;}
+#sessions-root[data-ide-theme="dark"] #status-bar{border-top-color:#d4dce8 !important;color:#d4dce8 !important;}
 [data-ide-theme="dark"] #app-root{background:#4a5568 !important;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
