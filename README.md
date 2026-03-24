@@ -11,7 +11,11 @@
 
 ![Sessions.jl demo](https://raw.githubusercontent.com/GroupTherapyOrg/Sessions.jl/main/assets/2026-03-23%2020.58.23.gif)
 
+---
+
 > **Warning: Experimental, alpha-quality software.** Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, file-based collaboration, and WebAssembly compilation.
+
+---
 
 ![Sessions.jl screenshot 1](assets/image2.png)
 
