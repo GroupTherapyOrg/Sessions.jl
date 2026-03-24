@@ -108,10 +108,10 @@ function _status_bar(cell_count::Int)
         Span(:id => "status-connection", :style => "color:#56d4a0;", "\u25CF connected"),
         # Theme picker
         Span(:id => "theme-picker",
-            :style => "position:relative;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background .12s;",
+            :style => "position:relative;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background .12s;display:flex;align-items:center;gap:4px;",
             :title => "Switch IDE theme",
-            RawHtml("""<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><path d="M8 3a5 5 0 000 10"/></svg>"""),
-            Span(:id => "theme-picker-label", :style => "margin-left:4px;", "Dark+")))
+            RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.2a5.8 5.8 0 010 11.6V2.2z"/></svg>"""),
+            Span(:id => "theme-picker-label", "Dark+")))
 end
 
 # ═══════════════════════════════════════════════════════════════
