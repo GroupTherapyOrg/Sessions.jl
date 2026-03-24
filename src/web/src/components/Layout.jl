@@ -38,7 +38,7 @@ tailwind.config = {
       colors: {
         deep:'#0a0e14', base:'#0f1419', surf:'#151c25', island:'#1a2332', hov:'#1f2b3d',
         b1:'#1c2736', b2:'#2a3a4f',
-        t1:'#d4dce8', t2:'#9baabd', t3:'#6b7d93', t4:'#3d5068', tout:'#7ca0bf',
+        t1:'#d4dce8', t2:'#9baabd', t3:'#4a5568', t4:'#3d5068', tout:'#7ca0bf',
         accent:'#56d4a0', jr:'#e06b65', jg:'#56d4a0', jp:'#b08fd8',
       },
       fontFamily: {
@@ -57,10 +57,10 @@ tailwind.config = {
 html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 /* #sessions-root is the layout owner — uses 100vh to bypass all Therapy wrappers */
 #sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;}
-/* IDE theme: Dark (neutral gray workspace — t3 #6b7d93 as bg) */
-#sessions-root[data-ide-theme="dark"]{background:#6b7d93;}
+/* IDE theme: Dark (neutral gray workspace — t3 #4a5568 as bg) */
+#sessions-root[data-ide-theme="dark"]{background:#4a5568;}
 #sessions-root[data-ide-theme="dark"] #status-bar{border-top-color:rgba(0,0,0,.15);color:#1c2736;}
-[data-ide-theme="dark"] #app-root{background:#6b7d93 !important;}
+[data-ide-theme="dark"] #app-root{background:#4a5568 !important;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
 /* Activity bar button: active highlight when panel is open.
@@ -93,9 +93,9 @@ $(Main.Sessions.NOTEBOOK_CSS)
 .code-cell.stale::before{background:#d4a056;opacity:.5;}
 .md-prose h5,.md-prose h6{font-family:'Fraunces',Georgia,serif;font-size:1rem;font-weight:600;color:#d4dce8;margin:0.6em 0 0.2em;}
 /* Shoelace dark theme overrides — match Sessions.jl palette */
-:root{--sl-color-neutral-0:#0a0e14;--sl-color-neutral-50:#0f1419;--sl-color-neutral-100:#151c25;--sl-color-neutral-200:#1a2332;--sl-color-neutral-300:#1c2736;--sl-color-neutral-400:#2a3a4f;--sl-color-neutral-500:#3d5068;--sl-color-neutral-600:#6b7d93;--sl-color-neutral-700:#9baabd;--sl-color-neutral-800:#d4dce8;--sl-color-neutral-900:#d4dce8;--sl-color-neutral-1000:#ffffff;--sl-color-primary-600:#56d4a0;--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
+:root{--sl-color-neutral-0:#0a0e14;--sl-color-neutral-50:#0f1419;--sl-color-neutral-100:#151c25;--sl-color-neutral-200:#1a2332;--sl-color-neutral-300:#1c2736;--sl-color-neutral-400:#2a3a4f;--sl-color-neutral-500:#3d5068;--sl-color-neutral-600:#4a5568;--sl-color-neutral-700:#9baabd;--sl-color-neutral-800:#d4dce8;--sl-color-neutral-900:#d4dce8;--sl-color-neutral-1000:#ffffff;--sl-color-primary-600:#56d4a0;--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
 sl-tree{--indent-size:14px;--indent-guide-width:1px;--indent-guide-color:#1c2736;}
-sl-tree-item::part(label){font-size:12px;font-family:'JetBrains Mono',monospace;color:#6b7d93;display:flex;align-items:center;gap:6px;}
+sl-tree-item::part(label){font-size:12px;font-family:'JetBrains Mono',monospace;color:#4a5568;display:flex;align-items:center;gap:6px;}
 sl-tree-item::part(item){border-radius:4px;padding:1px 4px;transition:background .12s,color .12s;}
 sl-tree-item::part(item--selected){background:rgba(86,212,160,.08);outline:none;}
 sl-tree-item::part(expand-button){color:#3d5068;padding-right:0;}
@@ -110,16 +110,16 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
 .file-ctx-item.danger:hover{background:rgba(224,107,101,.12);color:#e06b65;}
 .file-ctx-sep{height:1px;background:#2a3a4f;margin:4px 8px;}
 .tree-breadcrumb{display:flex;align-items:center;gap:4px;padding:4px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#3d5068;overflow:hidden;}
-.tree-breadcrumb button{background:none;border:none;color:#6b7d93;cursor:pointer;padding:2px 4px;border-radius:3px;display:flex;align-items:center;transition:color .12s,background .12s;}
+.tree-breadcrumb button{background:none;border:none;color:#4a5568;cursor:pointer;padding:2px 4px;border-radius:3px;display:flex;align-items:center;transition:color .12s,background .12s;}
 .tree-breadcrumb button:hover{color:#d4dce8;background:rgba(255,255,255,.05);}
-.tree-breadcrumb .crumb{color:#6b7d93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+.tree-breadcrumb .crumb{color:#4a5568;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
 /* xterm.js overrides */
 .xterm{height:100%;}
 .xterm .xterm-viewport{overflow-y:auto!important;}
 .xterm .xterm-viewport::-webkit-scrollbar{width:5px;}
 .xterm .xterm-viewport::-webkit-scrollbar-track{background:transparent;}
 .xterm .xterm-viewport::-webkit-scrollbar-thumb{background:#2a3a4f;border-radius:3px;}
-.term-tab{display:flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#6b7d93;cursor:pointer;border-radius:4px 4px 0 0;transition:color .12s,background .12s;white-space:nowrap;user-select:none;}
+.term-tab{display:flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#4a5568;cursor:pointer;border-radius:4px 4px 0 0;transition:color .12s,background .12s;white-space:nowrap;user-select:none;}
 .term-tab:hover{color:#9baabd;background:rgba(255,255,255,.03);}
 .term-tab.active{color:#d4dce8;background:#0a0e14;border-bottom:2px solid #56d4a0;}
 .term-tab .close-x{opacity:0;font-size:9px;padding:1px 3px;border-radius:3px;transition:opacity .1s,background .1s;}
@@ -179,8 +179,8 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
     {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
     {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
     {tag:C.t.variableName,color:"#d4dce8"},
-    {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
-    {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
+    {tag:C.t.punctuation,color:"#4a5568"},{tag:C.t.paren,color:"#4a5568"},
+    {tag:C.t.squareBracket,color:"#4a5568"},{tag:C.t.brace,color:"#4a5568"},
     {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
     {tag:C.t.macroName,color:"#d4a056"},
   ]);
@@ -191,7 +191,7 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
     ".cm-activeLine":{backgroundColor:"transparent"},
     "&.cm-focused .cm-activeLine":{backgroundColor:"rgba(86,212,160,.03)"},
     ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#3d5068"},
-    "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"#6b7d93"},
+    "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"#4a5568"},
     "&.cm-focused .cm-cursor":{borderLeftColor:"#56d4a0"},
     "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"rgba(86,212,160,.15) !important"},
     ".cm-content":{caretColor:"#56d4a0",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
