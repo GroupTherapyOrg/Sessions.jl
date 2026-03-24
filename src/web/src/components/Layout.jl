@@ -262,9 +262,9 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   // This is the bridge that keeps server in sync with client edits —
   // same result as agent editing the .jl file (file watcher path).
   var _syncTimers = {};
-  var _suppressSync = {};  // suppress sync-back when server pushes code updates
+  if (!window._sessSuppressSync) window._sessSuppressSync = {};
   function syncCodeToServer(cellId) {
-    if (_suppressSync[cellId]) { delete _suppressSync[cellId]; return; }
+    if (window._sessSuppressSync[cellId]) { delete window._sessSuppressSync[cellId]; return; }
     if (window._sessionsMarkUnsaved) window._sessionsMarkUnsaved();
     if (_syncTimers[cellId]) clearTimeout(_syncTimers[cellId]);
     _syncTimers[cellId] = setTimeout(function() {
@@ -468,7 +468,7 @@ function _notebook_channel_script()
       if (ev && data.code !== undefined) {
         var currentCode = ev.state.doc.toString();
         if (data.code !== currentCode) {
-          _suppressSync[data.cell_id] = true;  // don't echo back to server
+          window._sessSuppressSync[data.cell_id] = true;  // don't echo back to server
           ev.dispatch({
             changes: {from: 0, to: currentCode.length, insert: data.code}
           });
@@ -484,7 +484,7 @@ function _notebook_channel_script()
       if (ev && data.code !== undefined) {
         var currentCode = ev.state.doc.toString();
         if (data.code !== currentCode) {
-          _suppressSync[data.cell_id] = true;  // don't echo back to server
+          window._sessSuppressSync[data.cell_id] = true;  // don't echo back to server
           ev.dispatch({
             changes: {from: 0, to: currentCode.length, insert: data.code}
           });
