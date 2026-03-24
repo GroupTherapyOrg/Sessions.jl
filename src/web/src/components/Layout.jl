@@ -676,11 +676,11 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'stale_update') {
-      // Show/hide Run Stale button
+      // Show/hide Run Stale button (but keep hidden during execution)
       var btn = document.getElementById('run-stale-btn');
       var label = document.getElementById('run-stale-label');
       if (btn) {
-        if (data.count > 0) {
+        if (data.count > 0 && !window._sessionsExecuting) {
           btn.style.display = '';
           if (label) label.textContent = ' Run Stale (' + data.count + ')';
         } else {
@@ -701,9 +701,11 @@ function _notebook_channel_script()
     }
 
     else if (data.event === 'run_progress') {
+      var isRunning = data.running_index > 0 && data.total > 0;
+      window._sessionsExecuting = isRunning;
       var el = document.getElementById('run-progress');
       if (el) {
-        if (data.running_index > 0 && data.total > 0) {
+        if (isRunning) {
           el.textContent = 'Running ' + data.running_index + '/' + data.total + '...';
           el.style.display = '';
         } else {
@@ -711,21 +713,25 @@ function _notebook_channel_script()
           el.style.display = 'none';
         }
       }
-      // Toggle Run All / Stop button visibility
+      // Toggle Run All / Stop / Run Stale button visibility
       var runAllBtn = document.getElementById('run-all-btn');
       var stopBtn = document.getElementById('stop-btn');
+      var runStaleBtn = document.getElementById('run-stale-btn');
       if (runAllBtn && stopBtn) {
-        if (data.running_index > 0 && data.total > 0) {
+        if (isRunning) {
           runAllBtn.style.display = 'none';
           stopBtn.style.display = '';
+          if (runStaleBtn) runStaleBtn.style.display = 'none';
         } else {
           runAllBtn.style.display = '';
           stopBtn.style.display = 'none';
+          // Run Stale restored by the stale_update event that follows
         }
       }
     }
 
     else if (data.event === 'interrupted') {
+      window._sessionsExecuting = false;
       var el = document.getElementById('run-progress');
       if (el) {
         el.textContent = 'Interrupted';
@@ -737,7 +743,7 @@ function _notebook_channel_script()
           el.style.color = '#56d4a0';
         }, 2000);
       }
-      // Restore Run All button
+      // Restore Run All + Run Stale buttons
       var runAllBtn = document.getElementById('run-all-btn');
       var stopBtn = document.getElementById('stop-btn');
       if (runAllBtn && stopBtn) {
