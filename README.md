@@ -1,10 +1,10 @@
-<div align="center">                                                                                                                                                                                                                       
-  <img alt="Sessions.jl" src="upload://iKyoNZkMklGIVWOTAByS7A9xRTY.svg" height="60">                                                                                                                                                       
-                                                                                                                                                                                                                                           
+<div align="center">
+  <img alt="Sessions.jl" src="assets/sessions_dark.svg" height="60">
+
   **A reactive Julia notebook IDE.**
 
-[![Docs](upload://u0hmwZpwnHXbti9iBj69VMrpCta.svg)](https://grouptherapyorg.github.io/Sessions.jl/)
-[![License: MIT](upload://bPrDdHXDUiUneB14XQZTTZ4E0JR.svg)](LICENSE.md)                                                                                          
+  [![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://grouptherapyorg.github.io/Sessions.jl/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 </div>
 
 ---
