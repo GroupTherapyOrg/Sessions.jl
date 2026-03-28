@@ -171,27 +171,31 @@
   .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
   .tab-spacer { flex: 1; }
 
-  /* Toolbar: subtle tint strip — between tab chrome and notebook white */
-  .toolbar-strip {
+  /* Toolbar: lives INSIDE the tab bar, right-aligned */
+  /* Tabs take left half (max), toolbar takes right half (always visible) */
+  .tab-area {
+    display: flex; overflow-x: auto; overflow-y: hidden;
+    max-width: 50%; flex-shrink: 1; min-width: 0;
+  }
+  .tab-area::-webkit-scrollbar { height: 0; }
+  .toolbar {
     display: flex; align-items: center; gap: 6px;
-    padding: 5px 12px;
-    background: var(--warm-50); /* halfway between warm-100 tabs and white notebook */
-    border-bottom: 1px solid var(--cell-border);
+    padding: 0 10px; margin-left: auto; flex-shrink: 0;
   }
-  .dark .toolbar-strip {
-    background: #111820; /* halfway between #080b10 tabs and #0f1419 notebook */
+  .toolbar .sep {
+    width: 1px; height: 16px; background: var(--cell-border); margin: 0 2px;
   }
-  .toolbar-strip .spacer { flex: 1; }
 
-  /* Toolbar buttons */
+  /* Toolbar buttons — slightly different bg from tab bar to distinguish */
   .tb-btn {
     display: flex; align-items: center; gap: 5px;
     padding: 3px 10px; border-radius: 5px;
     font-size: 11px; font-family: -apple-system, sans-serif;
     border: 1px solid var(--cell-border);
     background: var(--panel-bg); color: var(--text-2);
-    cursor: pointer; transition: all .15s;
+    cursor: pointer; transition: all .15s; white-space: nowrap;
   }
+  .dark .tb-btn { background: #151c25; }
   .tb-btn:hover { color: var(--text-1); border-color: var(--cell-border-hov); }
   .tb-btn svg { width: 9px; height: 9px; }
   .tb-btn.stale { color: var(--status-running); }
@@ -366,26 +370,25 @@
     <!-- Notebook (floating panel) -->
     <div class="notebook panel">
       <div class="tab-bar">
-        <div class="tab"><span class="dot-mod"></span> analysis.jl</div>
-        <div class="tab-inactive"><span class="dot-ok"></span> helpers.jl</div>
-      </div>
-      <!-- Toolbar: recessed strip below tabs, above notebook content -->
-      <div class="toolbar-strip">
-        <button class="tb-btn stale">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
-          Run Stale (2)
-        </button>
-        <button class="tb-btn">
-          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
-          Run All
-        </button>
-        <button class="tb-btn stop">
-          <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
-          Stop
-        </button>
-        <div class="spacer"></div>
-        <button class="tb-btn">Save</button>
-        <button class="tb-btn">Format</button>
+        <!-- Tabs: left half, scrollable -->
+        <div class="tab-area">
+          <div class="tab"><span class="dot-mod"></span> analysis.jl</div>
+          <div class="tab-inactive"><span class="dot-ok"></span> helpers.jl</div>
+        </div>
+        <!-- Toolbar: right half, always visible -->
+        <div class="toolbar">
+          <button class="tb-btn stale">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
+            Run Stale (2)
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
+            Run All
+          </button>
+          <div class="sep"></div>
+          <button class="tb-btn">Save</button>
+          <button class="tb-btn">Format</button>
+        </div>
       </div>
       <div class="nb-scroll"><div class="nb-content">
 
