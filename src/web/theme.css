@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Sessions.jl Theme — Single source of truth for ALL colors.
+
+   Every component references these CSS custom properties.
+   Change a color here → entire IDE updates instantly.
+
+   Shared warm neutrals with Therapy.jl ecosystem.
+   Rose accent unique to Sessions.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Warm Neutrals (shared with Therapy.jl) ── */
+  --warm-50:  #f8f7f4;
+  --warm-100: #f0ece4;
+  --warm-200: #e8e3d9;
+  --warm-300: #d4d0c8;
+  --warm-400: #9a9590;
+  --warm-500: #8a8680;
+  --warm-600: #6b6560;
+  --warm-700: #5a5855;
+  --warm-800: #2a2520;
+  --warm-900: #1a1918;
+  --warm-950: #111110;
+
+  /* ── Sessions Accent — Rose ── */
+  --accent:     #d4759a;
+  --accent-dim: rgba(212, 117, 154, 0.08);
+  --accent-hov: rgba(212, 117, 154, 0.18);
+
+  /* ── Status Colors (semantic, not accent) ── */
+  --status-done:    #56d4a0;   /* green — cell executed successfully */
+  --status-running: #d4a056;   /* amber — cell currently running */
+  --status-stale:   #d4a056;   /* amber — cell needs re-run */
+  --status-error:   #dc3545;   /* red — cell errored */
+
+  /* ── Light Mode Surfaces ── */
+  --workspace-bg:    var(--warm-50);    /* beige workspace background */
+  --panel-bg:        #ffffff;           /* white notebook/explorer panels */
+  --cell-bg:         var(--warm-50);    /* beige code cells = workspace */
+  --cell-border:     var(--warm-200);
+  --cell-border-hov: var(--warm-300);
+  --chrome-bg:       var(--warm-100);   /* tab bars, terminal headers */
+  --chrome-active:   #ffffff;           /* active tab matches panel-bg */
+  --divider:         var(--warm-200);
+  --term-bg:         var(--warm-100);   /* terminal body — distinct from notebook */
+  --term-border:     #ffffff;           /* bright border so term doesn't blend */
+
+  /* ── Light Mode Text ── */
+  --text-1: var(--warm-800);   /* primary text */
+  --text-2: var(--warm-600);   /* secondary text */
+  --text-3: var(--warm-400);   /* tertiary / muted */
+  --output-text: var(--warm-600);
+
+  /* ── Light Mode Misc ── */
+  --selection-bg: rgba(86, 212, 160, 0.15);
+  --panel-shadow: none;
+  --scrollbar-thumb: var(--warm-300);
+}
+
+/* ── Dark Mode Overrides ── */
+.dark {
+  --workspace-bg:    #1a2332;
+  --panel-bg:        #0f1419;
+  --cell-bg:         #1a2332;          /* = workspace */
+  --cell-border:     #1c2736;
+  --cell-border-hov: #2a3a4f;
+  --chrome-bg:       #050709;          /* near-black — tabs, terminal header */
+  --chrome-active:   #0f1419;          /* active tab = notebook bg */
+  --divider:         #1c2736;
+  --term-bg:         #050709;          /* matches chrome-bg */
+  --term-border:     #2a3a4f;
+
+  --text-1: #d4dce8;
+  --text-2: #9baabd;
+  --text-3: #6b7d93;
+  --output-text: #7ca0bf;
+
+  --selection-bg: rgba(86, 212, 160, 0.15);
+  --panel-shadow: none;
+  --scrollbar-thumb: #2a3a4f;
+}

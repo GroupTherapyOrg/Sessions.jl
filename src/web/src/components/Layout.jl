@@ -11,6 +11,12 @@ const _EDITOR_BUNDLE_JS = let
     isfile(p) ? read(p, String) : "/* editor.js not found */"
 end
 
+# Load theme CSS — single source of truth for all colors
+const _THEME_CSS = let
+    p = joinpath(@__DIR__, "..", "..", "theme.css")
+    isfile(p) ? read(p, String) : "/* theme.css not found */"
+end
+
 function Layout(children...; title="Sessions.jl")
     Fragment(
         # --- Theme init: MUST be first — read localStorage, set .dark before any rendering ---
@@ -43,7 +49,10 @@ function Layout(children...; title="Sessions.jl")
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>"""),
 
-        # --- Tailwind CDN + custom config (dual light/dark mode) ---
+        # --- Theme CSS (single source of truth for all colors) ---
+        RawHtml(string("<style>", _THEME_CSS, "</style>")),
+
+        # --- Tailwind CDN + config (references CSS vars from theme.css) ---
         RawHtml("""<script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
@@ -51,17 +60,26 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        /* Dark mode palette (original Sessions colors, used via dark: prefix) */
-        deep:'#0a0e14', base:'#0f1419', surf:'#151c25', island:'#1a2332', hov:'#1f2b3d',
-        b1:'#1c2736', b2:'#2a3a4f',
-        t1:'#d4dce8', t2:'#9baabd', t3:'#4a5568', t4:'#3d5068', tout:'#7ca0bf',
-        /* Shared warm neutrals (Therapy.jl ecosystem) */
-        'warm-50':'#f8f7f4', 'warm-100':'#f0ece4', 'warm-200':'#e8e3d9',
-        'warm-300':'#d4d0c8', 'warm-400':'#9a9590', 'warm-500':'#8a8680',
-        'warm-600':'#6b6560', 'warm-700':'#5a5855', 'warm-800':'#2a2520',
-        /* Status + accent */
-        accent:'#56d4a0', jr:'#e06b65', jg:'#56d4a0', jp:'#b08fd8',
-        rose:'#d4759a',
+        /* All colors reference CSS vars from theme.css */
+        workspace: 'var(--workspace-bg)',
+        panel: 'var(--panel-bg)',
+        cell: 'var(--cell-bg)',
+        chrome: 'var(--chrome-bg)',
+        divider: 'var(--divider)',
+        accent: 'var(--accent)',
+        rose: 'var(--accent)',
+        'status-done': 'var(--status-done)',
+        'status-running': 'var(--status-running)',
+        'status-error': 'var(--status-error)',
+        /* Warm neutrals for Tailwind utility classes */
+        'warm-50':'var(--warm-50)', 'warm-100':'var(--warm-100)', 'warm-200':'var(--warm-200)',
+        'warm-300':'var(--warm-300)', 'warm-400':'var(--warm-400)', 'warm-500':'var(--warm-500)',
+        'warm-600':'var(--warm-600)', 'warm-700':'var(--warm-700)', 'warm-800':'var(--warm-800)',
+      },
+      textColor: {
+        1: 'var(--text-1)',
+        2: 'var(--text-2)',
+        3: 'var(--text-3)',
       },
       fontFamily: {
         sans:['DM Sans','system-ui','sans-serif'],
@@ -75,49 +93,7 @@ tailwind.config = {
 
         # --- Full CSS (dual light/dark via CSS custom properties) ---
         RawHtml("""<style>
-/* ═══ CSS Custom Properties: Light/Dark ═══ */
-:root {
-  --workspace-bg: #f8f7f4;    /* warm-50 */
-  --panel-bg: #ffffff;
-  --cell-bg: #f8f7f4;         /* warm-50 = workspace */
-  --cell-border: #e8e3d9;     /* warm-200 */
-  --cell-border-hov: #d4d0c8; /* warm-300 */
-  --chrome-bg: #f0ece4;       /* warm-100 */
-  --chrome-active: #ffffff;
-  --divider: #e8e3d9;
-  --text-1: #2a2520;
-  --text-2: #6b6560;
-  --text-3: #9a9590;
-  --output-text: #6b6560;
-  --term-bg: #f0ece4;         /* warm-100, distinct from notebook */
-  --term-border: #ffffff;
-  --selection-bg: rgba(86,212,160,.15);
-  --accent: #d4759a;          /* rose */
-  --status-done: #56d4a0;
-  --status-running: #d4a056;
-  --status-error: #dc3545;
-  --panel-shadow: none;
-  --scrollbar-thumb: #d4d0c8;
-}
-.dark {
-  --workspace-bg: #1a2332;
-  --panel-bg: #0f1419;
-  --cell-bg: #1a2332;
-  --cell-border: #1c2736;
-  --cell-border-hov: #2a3a4f;
-  --chrome-bg: #050709;       /* near-black — tab bar + terminal header */
-  --chrome-active: #0f1419;   /* matches notebook bg for active tab */
-  --divider: #1c2736;
-  --text-1: #d4dce8;
-  --text-2: #9baabd;
-  --text-3: #6b7d93;
-  --output-text: #7ca0bf;
-  --term-bg: #050709;          /* matches chrome-bg — near black */
-  --term-border: #2a3a4f;
-  --selection-bg: rgba(86,212,160,.15);
-  --panel-shadow: none;
-  --scrollbar-thumb: #2a3a4f;
-}
+/* Colors defined in theme.css (inlined above) — do not duplicate here */
 
 /* ═══ Reset + Layout ═══ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}

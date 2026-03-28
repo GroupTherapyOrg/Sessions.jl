@@ -140,6 +140,49 @@ Sessions.main(["my_notebook.jl"])
 
 ## Architecture
 
+### Component Tree
+
+```
+Layout (SSR — HTML shell, CSS, theme init, script tags)
+├── StatusBar (@island — theme toggle, connection status, cell count)
+├── ActivityBar (@island — sidebar/terminal toggles via shared signals)
+├── FileExplorer (@island — Shoelace tree, WS file operations)
+├── NotebookPanel (@island — tabs, toolbar: Run All / Save / Format)
+│   ├── Notebook (@island, nested — THE PUBLISHABLE UNIT)
+│   │   └── cells, eye toggles, @bind widgets, outputs, all signals
+│   └── FileEditor (@island, nested — CodeMirror for non-notebook files)
+└── Terminal (@island — xterm.js, PTY bridge, multi-tab)
+```
+
+**Key: Notebook is its own @island** so the export pipeline can extract it standalone.
+In live IDE mode it receives cell outputs via WebSocket. In published mode,
+@bind signals drive JST-compiled dependent cells — same component, two modes.
+
+### Theme System
+
+All colors defined in one file: `src/web/theme.css`. Every component references
+CSS custom properties — never hardcoded hex values. Change a color once,
+the entire IDE updates.
+
+```css
+:root {                              /* Light mode */
+  --workspace-bg: #f8f7f4;          /* warm-50 */
+  --panel-bg: #ffffff;
+  --cell-bg: #f8f7f4;               /* = workspace */
+  --accent: #d4759a;                /* rose */
+  --status-done: #56d4a0;           /* green */
+  --status-error: #dc3545;          /* red */
+}
+.dark {                              /* Dark mode */
+  --workspace-bg: #1a2332;
+  --panel-bg: #0f1419;
+  --cell-bg: #1a2332;               /* = workspace */
+  --chrome-bg: #050709;             /* near-black (tabs, terminal) */
+}
+```
+
+### File Structure
+
 ```
 Sessions.jl/
 ├── src/
@@ -155,7 +198,8 @@ Sessions.jl/
 │   ├── web_server.jl        # WebSocket channel handlers
 │   ├── web/                 # Web UI (Therapy.jl app)
 │   │   ├── app.jl           # Web app entry point
-│   │   └── src/components/  # Layout, NotebookPanel, FileExplorer, ReplPanel, etc.
+│   │   ├── theme.css        # Single source of truth for all colors
+│   │   └── src/components/  # Layout, NotebookPanel, Notebook, Terminal, etc.
 │   └── worker/              # Malt.jl notebook workers (isolated execution)
 ├── SessionsUI/              # Lightweight notebook API (zero heavy deps)
 │   └── src/
