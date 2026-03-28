@@ -13,25 +13,29 @@ end
 
 function Layout(children...; title="Sessions.jl")
     Fragment(
+        # --- Theme init: MUST be first — read localStorage, set .dark before any rendering ---
+        RawHtml("""<script>
+(function(){
+  var t = localStorage.getItem('sessions-theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  if (t === 'dark') {
+    document.documentElement.classList.add('dark', 'sl-theme-dark');
+  } else {
+    document.documentElement.classList.remove('dark', 'sl-theme-dark');
+    document.documentElement.classList.add('sl-theme-light');
+  }
+})();
+</script>"""),
+
         # --- Google Fonts ---
         RawHtml("""<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">"""),
 
-        # --- Shoelace Web Components (load both themes, apply based on mode) ---
+        # --- Shoelace Web Components ---
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
-<script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
-<script>
-(function(){
-  var isDark = localStorage.getItem('sessions-theme') !== 'light';
-  if (isDark) {
-    document.documentElement.classList.add('dark', 'sl-theme-dark');
-  } else {
-    document.documentElement.classList.add('sl-theme-light');
-  }
-})();
-</script>"""),
+<script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>"""),
 
         # --- xterm.js (terminal emulator) ---
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
