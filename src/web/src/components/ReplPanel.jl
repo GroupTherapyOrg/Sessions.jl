@@ -12,13 +12,13 @@ terminal container, and all client-side JS for PTY ↔ xterm.js bridging.
 """
 function ReplPanel()
     Div(:id => "repl",
-        :class => "flex flex-col overflow-hidden shrink-0 rounded-xl border border-b1 shadow-lg shadow-black/25",
-        :style => "height:220px; background:#0a0e14;",
+        :class => "flex flex-col overflow-hidden shrink-0 rounded-xl",
+        :style => "height:220px;background:var(--term-bg);border:1px solid var(--term-border);box-shadow:var(--panel-shadow);",
 
         # Tab bar
         Div(:id => "term-tab-bar",
             :class => "flex items-center shrink-0",
-            :style => "padding:0 4px; border-bottom:1px solid #1c2736; height:30px; gap:0;",
+            :style => "padding:0 4px;border-bottom:1px solid var(--divider);height:30px;gap:0;background:var(--chrome-bg);border-radius:12px 12px 0 0;",
 
             # Tabs go here (populated by JS)
             Div(:id => "term-tabs", :class => "flex items-center gap-0 flex-1 overflow-x-auto",
@@ -27,7 +27,7 @@ function ReplPanel()
             # Add terminal button
             Button(:id => "term-add-btn",
                 :class => "shrink-0",
-                :style => "background:none;border:none;cursor:pointer;color:#3d5068;padding:4px 8px;font-size:14px;font-family:ui-monospace,monospace;transition:color .12s;",
+                :style => "background:none;border:none;cursor:pointer;color:var(--text-3);padding:4px 8px;font-size:14px;font-family:ui-monospace,monospace;transition:color .12s;",
                 :title => "New Terminal",
                 RawHtml("""<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>"""))),
 
@@ -57,30 +57,32 @@ function _terminal_js()
   var addBtn = document.getElementById('term-add-btn');
   if (!container || !tabBar) return;
 
-  // Theme matching Sessions.jl palette
-  var termTheme = {
-    background: '#0a0e14',
+  // Theme — adapts to light/dark mode
+  var isDark = document.documentElement.classList.contains('dark');
+  var termTheme = isDark ? {
+    background: '#080b10',
     foreground: '#d4dce8',
-    cursor: '#56d4a0',
-    cursorAccent: '#0a0e14',
-    selectionBackground: 'rgba(86,212,160,.2)',
+    cursor: '#d4759a',
+    cursorAccent: '#080b10',
+    selectionBackground: 'rgba(212,117,154,.2)',
     selectionForeground: '#d4dce8',
-    black: '#0a0e14',
-    red: '#e06b65',
-    green: '#56d4a0',
-    yellow: '#d4a056',
-    blue: '#7bb8e8',
-    magenta: '#b08fd8',
-    cyan: '#56d4a0',
-    white: '#d4dce8',
-    brightBlack: '#3d5068',
-    brightRed: '#e06b65',
-    brightGreen: '#56d4a0',
-    brightYellow: '#d4a056',
-    brightBlue: '#7bb8e8',
-    brightMagenta: '#b08fd8',
-    brightCyan: '#7bb8e8',
-    brightWhite: '#ffffff'
+    black: '#080b10', red: '#dc3545', green: '#56d4a0', yellow: '#d4a056',
+    blue: '#7bb8e8', magenta: '#b08fd8', cyan: '#56d4a0', white: '#d4dce8',
+    brightBlack: '#6b7d93', brightRed: '#dc3545', brightGreen: '#56d4a0',
+    brightYellow: '#d4a056', brightBlue: '#7bb8e8', brightMagenta: '#b08fd8',
+    brightCyan: '#7bb8e8', brightWhite: '#ffffff'
+  } : {
+    background: '#f0ece4',
+    foreground: '#2a2520',
+    cursor: '#d4759a',
+    cursorAccent: '#f0ece4',
+    selectionBackground: 'rgba(212,117,154,.15)',
+    selectionForeground: '#2a2520',
+    black: '#2a2520', red: '#dc3545', green: '#219669', yellow: '#b8860b',
+    blue: '#2563eb', magenta: '#9558b2', cyan: '#0d9488', white: '#f8f7f4',
+    brightBlack: '#9a9590', brightRed: '#dc3545', brightGreen: '#219669',
+    brightYellow: '#b8860b', brightBlue: '#2563eb', brightMagenta: '#9558b2',
+    brightCyan: '#0d9488', brightWhite: '#ffffff'
   };
 
   // Terminal instances per tab: { tabId: { term, fitAddon } }
