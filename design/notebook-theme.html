@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sessions.jl — Full IDE Theme Prototype</title>
+<title>Sessions.jl — Full IDE Theme</title>
 <style>
   :root {
-    /* Warm neutrals (shared with Therapy.jl) */
     --warm-50:  #f8f7f4;
     --warm-100: #f0ece4;
     --warm-200: #e8e3d9;
@@ -16,60 +15,47 @@
     --warm-600: #6b6560;
     --warm-700: #5a5855;
     --warm-800: #2a2520;
-    --warm-900: #1a1918;
-    --warm-950: #111110;
 
-    /* Sessions accent — true Rose (pink-leaning, NOT red) */
-    --rose-300: #f2b8ce;
     --rose-400: #e896b4;
     --rose-500: #d4759a;
     --rose-600: #be5a82;
 
-    /* Status colors — clearly distinct from rose */
-    --status-done:    #56d4a0;  /* green */
-    --status-running: #d4a056;  /* amber */
-    --status-stale:   #d4a056;  /* amber */
-    --status-error:   #dc3545;  /* true red — clearly NOT rose */
+    --status-done:    #56d4a0;
+    --status-running: #d4a056;
+    --status-error:   #dc3545;
 
     /* Light mode */
-    --workspace-bg:    var(--warm-50);
-    --notebook-bg:     #ffffff;
-    --cell-bg:         var(--warm-50);
-    --cell-border:     var(--warm-200);
+    --workspace-bg: var(--warm-50);
+    --panel-bg:     #ffffff;
+    --cell-bg:      var(--warm-50);
+    --cell-border:  var(--warm-200);
     --cell-border-hov: var(--warm-300);
-    --text-1:          var(--warm-800);
-    --text-2:          var(--warm-600);
-    --text-3:          var(--warm-400);
-    --output-text:     var(--warm-600);
-    --chrome-bg:       var(--warm-100);   /* tab bar, terminal bg, activity bar */
-    --chrome-active:   #ffffff;           /* active tab = notebook bg */
-    --terminal-text:   var(--warm-700);
-    --explorer-bg:     var(--warm-50);
-    --explorer-hover:  var(--warm-100);
-    --explorer-active: var(--warm-200);
-    --divider:         var(--warm-200);
+    --text-1: var(--warm-800);
+    --text-2: var(--warm-600);
+    --text-3: var(--warm-400);
+    --output-text: var(--warm-600);
+    --chrome-bg:  var(--warm-100);
+    --chrome-active: #ffffff;
+    --divider: var(--warm-200);
+    --panel-shadow: 0 2px 12px rgba(0,0,0,.06);
   }
-
   .dark {
-    --workspace-bg:    #1a2332;
-    --notebook-bg:     #0f1419;
-    --cell-bg:         #1a2332;
-    --cell-border:     #1c2736;
+    --workspace-bg: #1a2332;
+    --panel-bg:     #0f1419;
+    --cell-bg:      #1a2332;
+    --cell-border:  #1c2736;
     --cell-border-hov: #2a3a4f;
-    --text-1:          #d4dce8;
-    --text-2:          #9baabd;
-    --text-3:          #6b7d93;
-    --output-text:     #7ca0bf;
-    --chrome-bg:       #080b10;
-    --chrome-active:   #0f1419;
-    --terminal-text:   #9baabd;
-    --explorer-bg:     #0d1117;
-    --explorer-hover:  #151c25;
-    --explorer-active: #1a2332;
-    --divider:         #1c2736;
+    --text-1: #d4dce8;
+    --text-2: #9baabd;
+    --text-3: #6b7d93;
+    --output-text: #7ca0bf;
+    --chrome-bg:  #080b10;
+    --chrome-active: #0f1419;
+    --divider: #1c2736;
+    --panel-shadow: 0 4px 24px rgba(0,0,0,.3);
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin:0; padding:0; box-sizing:border-box; }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -81,102 +67,112 @@
   }
 
   .theme-toggle {
-    position: fixed; top: 8px; right: 12px;
+    position: fixed; top: 16px; right: 16px;
     padding: 4px 12px; border-radius: 9999px;
     border: 1px solid var(--cell-border);
-    background: var(--chrome-bg); color: var(--text-3);
-    font-size: 11px; cursor: pointer; transition: all .2s; z-index: 200;
+    background: var(--panel-bg); color: var(--text-3);
+    font-size: 11px; cursor: pointer; z-index: 200;
   }
   .theme-toggle:hover { color: var(--rose-500); border-color: var(--rose-500); }
 
-  /* ═══════════════════════════════════════════════════════════
-     IDE LAYOUT
-     ═══════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════
+     FLOATING PANEL LAYOUT (Sessions.jl style)
+     gap + padding on workspace, panels float
+     ═══════════════════════════════════════════════ */
 
-  /* Activity bar (left edge) */
+  .workspace {
+    flex: 1; display: flex;
+    gap: 12px; padding: 12px;
+    min-height: 0; overflow: hidden;
+  }
+
+  /* Shared floating panel style */
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--cell-border);
+    border-radius: 12px;
+    box-shadow: var(--panel-shadow);
+    overflow: hidden;
+    transition: background .2s, border-color .2s;
+  }
+
+  /* ── Activity Bar (floating pill) ── */
   .activity-bar {
     width: 42px; display: flex; flex-direction: column;
     align-items: center; gap: 4px; padding: 8px 0;
-    background: var(--chrome-bg);
-    border-right: 1px solid var(--divider);
+    align-self: flex-start; /* don't stretch full height */
   }
-  .activity-btn {
-    width: 32px; height: 32px; border-radius: 6px;
+  .ab-btn {
+    width: 30px; height: 30px; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
-    color: var(--text-3); cursor: pointer; transition: all .15s;
-    border: none; background: transparent;
+    color: var(--text-3); cursor: pointer; border: none;
+    background: transparent; transition: all .15s;
   }
-  .activity-btn:hover { color: var(--text-2); background: var(--explorer-hover); }
-  .activity-btn.active { color: var(--rose-500); background: var(--explorer-active); }
+  .ab-btn:hover { color: var(--text-2); background: rgba(128,128,128,.1); }
+  .ab-btn.active { color: var(--rose-500); background: rgba(212,117,154,.1); }
+  .ab-logo { margin-bottom: 8px; }
 
-  /* Main area (horizontal) */
-  .main { display: flex; flex: 1; min-height: 0; }
-
-  /* File explorer sidebar */
+  /* ── File Explorer (floating panel) ── */
   .explorer {
-    width: 220px; background: var(--explorer-bg);
-    border-right: 1px solid var(--divider);
-    display: flex; flex-direction: column;
-    font-size: 12px; overflow-y: auto;
+    width: 200px; display: flex; flex-direction: column;
+    font-size: 12px; align-self: stretch;
   }
   .explorer-header {
     padding: 10px 12px; font-size: 10px; text-transform: uppercase;
     letter-spacing: .5px; color: var(--text-3); font-weight: 600;
     border-bottom: 1px solid var(--divider);
   }
+  .explorer-body { flex: 1; overflow-y: auto; padding: 4px 0; }
   .file-item {
     display: flex; align-items: center; gap: 6px;
-    padding: 4px 12px 4px 20px; cursor: pointer;
+    padding: 3px 12px 3px 24px; cursor: pointer;
     color: var(--text-2); transition: background .1s;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
   }
-  .file-item:hover { background: var(--explorer-hover); }
-  .file-item.active { background: var(--explorer-active); color: var(--text-1); }
-  .file-item .icon { font-size: 13px; width: 16px; text-align: center; }
+  .file-item:hover { background: rgba(128,128,128,.06); }
+  .file-item.active { background: rgba(128,128,128,.1); color: var(--text-1); }
   .folder-item {
     display: flex; align-items: center; gap: 6px;
-    padding: 4px 12px; cursor: pointer; font-weight: 500;
-    color: var(--text-1); transition: background .1s;
+    padding: 3px 12px; cursor: pointer; font-weight: 500;
+    color: var(--text-1); font-family: 'JetBrains Mono', monospace; font-size: 12px;
   }
-  .folder-item:hover { background: var(--explorer-hover); }
-  .folder-item .arrow { font-size: 10px; width: 12px; color: var(--text-3); }
+  .folder-item .arrow { font-size: 9px; color: var(--text-3); width: 10px; }
+  .file-icon { font-size: 11px; width: 14px; text-align: center; color: var(--text-3); }
 
-  /* Editor area (notebook + terminal stacked) */
+  /* ── Editor Area (notebook + terminal, floating panel) ── */
   .editor-area {
-    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    flex: 1; display: flex; flex-direction: column;
+    gap: 12px; /* gap between notebook and terminal */
+    min-width: 0;
   }
 
-  /* ═══ NOTEBOOK ═══ */
-  .notebook {
-    flex: 1; min-height: 0; overflow: hidden;
-    background: var(--notebook-bg);
-    display: flex; flex-direction: column;
-    transition: background .2s;
-  }
-
+  /* ── Notebook Panel ── */
+  .notebook { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .tab-bar {
     height: 38px; display: flex; align-items: stretch; flex-shrink: 0;
-    background: var(--chrome-bg);
-    border-bottom: 1px solid var(--divider);
-    font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px;
+    background: var(--chrome-bg); border-bottom: 1px solid var(--divider);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    border-radius: 12px 12px 0 0;
   }
   .tab {
     display: flex; align-items: center; gap: 6px;
     padding: 0 14px; border-right: 1px solid var(--divider);
     color: var(--text-1); background: var(--chrome-active);
+    border-radius: 12px 0 0 0;
   }
   .tab-inactive {
     display: flex; align-items: center; gap: 6px;
     padding: 0 14px; border-right: 1px solid var(--divider);
-    color: var(--text-3); background: transparent; cursor: pointer;
+    color: var(--text-3); cursor: pointer;
   }
   .tab-inactive:hover { color: var(--text-2); }
-  .tab .dot-mod { width: 5px; height: 5px; border-radius: 50%; background: var(--rose-500); }
-  .tab .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
+  .dot-mod { width: 5px; height: 5px; border-radius: 50%; background: var(--rose-500); }
+  .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
 
-  .nb-scroll { flex: 1; overflow-y: auto; padding: 20px 24px 32px; }
-  .nb-content { max-width: 780px; margin: 0 auto; padding-left: 28px; }
+  .nb-scroll { flex: 1; overflow-y: auto; padding: 20px 24px 40px; }
+  .nb-content { max-width: 750px; margin: 0 auto; padding-left: 28px; }
 
-  /* Cell */
+  /* Cells */
   .cell { position: relative; padding: 3px 0; }
   .cell:hover .gutter { opacity: 1; }
   .cell:hover .cell-ctrls { opacity: 1; transform: translateY(0); }
@@ -197,20 +193,17 @@
   }
   .code-cell:hover { border-color: var(--cell-border-hov); }
   .code-cell::before {
-    content: ''; position: absolute;
-    left: 0; top: 0; bottom: 0; width: 3px;
-    background: var(--rose-500); opacity: .3;
-    transition: opacity .2s; border-radius: 2px 0 0 2px;
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--rose-500); opacity: .3; transition: opacity .2s;
   }
   .cell:hover .code-cell::before { opacity: .7; }
   .code-cell.done::before    { background: var(--status-done); }
   .code-cell.running::before { background: var(--status-running); opacity: .8; }
-  .code-cell.stale::before   { background: var(--status-stale); }
   .code-cell.error::before   { background: var(--status-error); }
 
   .code-cell code {
     display: block; padding: 10px 12px 10px 14px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono', monospace;
     font-size: 13px; line-height: 1.6; white-space: pre;
     overflow-x: auto; color: var(--text-1); background: transparent;
   }
@@ -227,216 +220,184 @@
     font-size: 10px; font-family: 'JetBrains Mono', monospace;
     padding: 1px 7px; border-radius: 9999px;
     color: var(--status-done); opacity: .8;
-    background: rgba(86, 212, 160, .08); border: 1px solid rgba(86, 212, 160, .15);
+    background: rgba(86,212,160,.08); border: 1px solid rgba(86,212,160,.15);
   }
   .rt-badge.running { color: var(--status-running); background: rgba(212,160,86,.08); border-color: rgba(212,160,86,.15); }
-  .rt-badge.error   { color: var(--status-error);   background: rgba(220,53,69,.08);  border-color: rgba(220,53,69,.15); }
+  .rt-badge.error   { color: var(--status-error); background: rgba(220,53,69,.06); border-color: rgba(220,53,69,.15); }
 
-  .cell-out {
-    padding: 4px 2px 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px; line-height: 1.5;
-    color: var(--output-text); overflow-x: auto;
-  }
-  .cell-out.error-out {
-    color: var(--status-error);
-    background: rgba(220, 53, 69, .06);
-    border-radius: 6px; padding: 8px 10px;
-  }
-
+  .cell-out { padding: 4px 2px 8px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.5; color: var(--output-text); }
+  .cell-out.error-out { color: var(--status-error); background: rgba(220,53,69,.05); border-radius: 6px; padding: 8px 10px; }
   .md-cell { padding: 8px 4px; font-size: 14px; line-height: 1.7; color: var(--text-2); }
   .md-cell h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
 
-  .cell-gap { height: 26px; display: flex; align-items: center; justify-content: center; margin: 2px 0; }
+  .cell-gap { height: 24px; display: flex; align-items: center; justify-content: center; margin: 2px 0; }
   .cell-gap:hover .gap-inner { opacity: 1; }
   .gap-inner { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity .15s; }
-  .gap-line { height: 1px; width: 56px; background: var(--divider); }
+  .gap-line { height: 1px; width: 48px; background: var(--divider); }
   .gap-btn {
     display: flex; align-items: center; gap: 4px;
     padding: 1px 10px; border-radius: 9999px; font-size: 10px;
     border: 1px solid var(--divider); background: transparent;
-    color: var(--text-3); cursor: pointer; transition: all .15s;
+    color: var(--text-3); cursor: pointer;
   }
-  .gap-btn:hover { color: var(--text-1); border-color: var(--cell-border-hov); }
+  .gap-btn:hover { color: var(--text-1); }
   .gap-btn svg { width: 8px; height: 8px; }
-
-  .badge-static {
-    font-size: 10px; font-family: monospace; padding: 1px 7px;
-    border-radius: 9999px; color: var(--text-3);
-    border: 1px solid var(--divider); background: var(--cell-bg);
-  }
 
   .slider-row { display: flex; align-items: center; gap: 12px; padding: 6px 2px; }
   .slider-row input[type="range"] { flex: 1; accent-color: var(--rose-500); }
   .slider-row .val { font-family: monospace; font-size: 13px; color: var(--output-text); min-width: 2ch; text-align: right; }
 
-  .plot-placeholder {
-    width: 100%; height: 180px; border: 1px solid var(--cell-border);
+  .plot-box {
+    width: 100%; height: 160px; border: 1px solid var(--cell-border);
     border-radius: 8px; margin: 4px 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 12px; color: var(--text-3); background: var(--notebook-bg);
+    font-size: 11px; color: var(--text-3); background: var(--panel-bg);
   }
 
-  /* ═══ TERMINAL ═══ */
-  .terminal-panel {
-    height: 180px; flex-shrink: 0;
-    background: var(--chrome-bg);
-    border-top: 1px solid var(--divider);
+  .badge-static {
+    font-size: 10px; font-family: monospace; padding: 1px 7px; border-radius: 9999px;
+    color: var(--text-3); border: 1px solid var(--divider);
+  }
+
+  /* ── Terminal (floating panel, separate from notebook) ── */
+  .terminal {
+    height: 170px; flex-shrink: 0;
     display: flex; flex-direction: column;
   }
-  .terminal-tabs {
-    height: 28px; display: flex; align-items: stretch;
-    border-bottom: 1px solid var(--divider); font-size: 11px;
+  .term-header {
+    height: 28px; display: flex; align-items: center;
+    padding: 0 12px; border-bottom: 1px solid var(--divider);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+    background: var(--chrome-bg); border-radius: 12px 12px 0 0;
+    gap: 6px;
   }
-  .terminal-tab {
-    display: flex; align-items: center; gap: 4px;
-    padding: 0 12px; color: var(--text-2);
-    border-right: 1px solid var(--divider);
-    font-family: 'JetBrains Mono', monospace;
-  }
-  .terminal-tab .shell-icon { font-size: 10px; }
-  .terminal-body {
+  .term-body {
     flex: 1; padding: 8px 12px; overflow-y: auto;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12px; line-height: 1.5; color: var(--terminal-text);
-  }
-  .terminal-body .prompt { color: var(--rose-500); }
-  .terminal-body .cmd { color: var(--text-1); }
-  .terminal-body .out { color: var(--text-3); }
-
-  /* ═══ STATUS BAR ═══ */
-  .status-bar {
-    height: 22px; display: flex; align-items: center;
-    padding: 0 10px; gap: 12px; flex-shrink: 0;
-    background: var(--rose-600);
-    font-size: 11px; color: #fff;
     font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; line-height: 1.5; color: var(--text-2);
+  }
+  .prompt { color: var(--rose-500); }
+  .cmd { color: var(--text-1); }
+  .out-dim { color: var(--text-3); }
+
+  /* ── Status bar (bottom, not floating — spans full width) ── */
+  .status-bar {
+    height: 24px; flex-shrink: 0;
+    display: flex; align-items: center; padding: 0 16px; gap: 16px;
+    background: var(--rose-600);
+    font-size: 10px; font-family: 'JetBrains Mono', monospace; color: #fff;
   }
   .status-bar .spacer { flex: 1; }
-
-  /* Legend */
-  .legend {
-    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 14px; font-size: 10px; color: var(--text-3);
-    background: var(--notebook-bg); padding: 4px 12px;
-    border-radius: 9999px; border: 1px solid var(--divider);
-    z-index: 100;
-  }
-  .legend-item { display: flex; align-items: center; gap: 4px; }
-  .legend-dot { width: 7px; height: 7px; border-radius: 2px; }
 </style>
 </head>
 <body>
 
 <button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">Toggle</button>
 
-<div style="display:flex;flex:1;min-height:0;">
+<!-- ═══ WORKSPACE (floating panels with gaps) ═══ -->
+<div class="workspace">
 
-  <!-- Activity Bar -->
-  <div class="activity-bar">
-    <button class="activity-btn active" title="File Explorer">
+  <!-- Activity Bar (floating pill, self-start) -->
+  <div class="activity-bar panel">
+    <div class="ab-logo">
+      <svg width="16" height="14" viewBox="0 0 40 34" fill="none"><circle cx="20" cy="6" r="5.5" fill="#56d4a0"/><circle cx="10" cy="28" r="5.5" fill="#e06b65"/><circle cx="30" cy="28" r="5.5" fill="#b08fd8"/></svg>
+    </div>
+    <button class="ab-btn active" title="Explorer">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
     </button>
-    <button class="activity-btn" title="Terminal">
+    <button class="ab-btn" title="Terminal">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
     </button>
-    <button class="activity-btn" title="Settings">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-    </button>
   </div>
 
-  <!-- File Explorer -->
-  <div class="explorer">
+  <!-- File Explorer (floating panel) -->
+  <div class="explorer panel">
     <div class="explorer-header">Explorer</div>
-    <div class="folder-item"><span class="arrow">▾</span> my_project/</div>
-    <div class="file-item active"><span class="icon">◇</span> analysis.jl</div>
-    <div class="file-item"><span class="icon">◇</span> helpers.jl</div>
-    <div class="file-item"><span class="icon">◇</span> data.csv</div>
-    <div class="folder-item"><span class="arrow">▸</span> plots/</div>
-    <div class="file-item"><span class="icon">⚙</span> Project.toml</div>
-    <div class="file-item"><span class="icon">⚙</span> Manifest.toml</div>
+    <div class="explorer-body">
+      <div class="folder-item"><span class="arrow">▾</span> my_project/</div>
+      <div class="file-item active"><span class="file-icon">◇</span> analysis.jl</div>
+      <div class="file-item"><span class="file-icon">◇</span> helpers.jl</div>
+      <div class="file-item"><span class="file-icon">◇</span> data.csv</div>
+      <div class="folder-item"><span class="arrow">▸</span> plots/</div>
+      <div class="file-item"><span class="file-icon">⚙</span> Project.toml</div>
+    </div>
   </div>
 
-  <!-- Editor Area -->
+  <!-- Editor Area (notebook + terminal, both floating) -->
   <div class="editor-area">
 
-    <!-- Notebook -->
-    <div class="notebook">
+    <!-- Notebook (floating panel) -->
+    <div class="notebook panel">
       <div class="tab-bar">
         <div class="tab"><span class="dot-mod"></span> analysis.jl</div>
         <div class="tab-inactive"><span class="dot-ok"></span> helpers.jl</div>
       </div>
-      <div class="nb-scroll">
-        <div class="nb-content">
+      <div class="nb-scroll"><div class="nb-content">
 
-          <div class="cell">
-            <div class="gutter"><span class="num">1</span></div>
-            <div class="md-cell">
-              <h2>2D Wave Analysis</h2>
-              Interactive heatmap of sin(x*f) * cos(y*f). Adjust the frequency below.
-            </div>
-          </div>
-
-          <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
-
-          <div class="cell">
-            <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
-            <div class="slider-row"><input type="range" min="1" max="15" value="8"><span class="val">8</span></div>
-            <div class="code-cell done"><div class="cell-ctrls"><span class="rt-badge">0.2 ms</span></div><code>@bind freq Slider(1:15)</code></div>
-          </div>
-
-          <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
-
-          <div class="cell">
-            <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
-            <div class="plot-placeholder">[ Plotly heatmap ]</div>
-            <div class="code-cell done"><div class="cell-ctrls"><span class="rt-badge">8.4 ms</span></div><code>heatmap(z, colorscale="Viridis")</code></div>
-          </div>
-
-          <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
-
-          <div class="cell">
-            <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
-            <div class="code-cell running"><div class="cell-ctrls"><span class="rt-badge running">running...</span></div><code>heavy_computation(freq, data)</code></div>
-          </div>
-
-          <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
-
-          <div class="cell">
-            <div class="gutter"><span class="num">5</span></div>
-            <div class="cell-out error-out">MethodError: no method matching +(::String, ::Int64)</div>
-            <div class="code-cell error"><div class="cell-ctrls"><span class="rt-badge error">error</span></div><code>"hello" + 42</code></div>
-          </div>
-
-          <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
-
-          <div class="cell">
-            <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
-            <div class="cell-out">(3.0, 3.0, 1.5811388300841898)</div>
-            <div class="code-cell done"><div class="cell-ctrls"><span class="rt-badge">0.8 ms</span></div><code>mean(x), median(x), std(x)</code></div>
-          </div>
-
+        <div class="cell">
+          <div class="gutter"><span class="num">1</span></div>
+          <div class="md-cell"><h2>2D Wave Analysis</h2>Interactive heatmap. Adjust frequency below.</div>
         </div>
-      </div>
+
+        <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
+
+        <div class="cell">
+          <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <div class="slider-row"><input type="range" min="1" max="15" value="8"><span class="val">8</span></div>
+          <div class="code-cell done"><div class="cell-ctrls"><span class="rt-badge">0.2 ms</span></div><code>@bind freq Slider(1:15)</code></div>
+        </div>
+
+        <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
+
+        <div class="cell">
+          <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <div class="plot-box">[ Plotly heatmap ]</div>
+          <div class="code-cell done"><div class="cell-ctrls"><span class="rt-badge">8.4 ms</span></div><code>heatmap(z, colorscale="Viridis")</code></div>
+        </div>
+
+        <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
+
+        <div class="cell">
+          <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <div class="code-cell running"><div class="cell-ctrls"><span class="rt-badge running">running...</span></div><code>heavy_computation(freq, data)</code></div>
+        </div>
+
+        <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
+
+        <div class="cell">
+          <div class="gutter"><span class="num">5</span></div>
+          <div class="cell-out error-out">MethodError: no method matching +(::String, ::Int64)</div>
+          <div class="code-cell error"><div class="cell-ctrls"><span class="rt-badge error">error</span></div><code>"hello" + 42</code></div>
+        </div>
+
+        <div class="cell-gap"><div class="gap-inner"><div class="gap-line"></div><button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button><div class="gap-line"></div></div></div>
+
+        <div class="cell">
+          <div class="gutter"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <div class="cell-out">(3.0, 3.0, 1.58)</div>
+          <div class="code-cell done"><div class="cell-ctrls"><span class="rt-badge">0.8 ms</span></div><code>mean(x), median(x), std(x)</code></div>
+        </div>
+
+      </div></div>
     </div>
 
-    <!-- Terminal Panel -->
-    <div class="terminal-panel">
-      <div class="terminal-tabs">
-        <div class="terminal-tab"><span class="shell-icon">❯</span> zsh</div>
+    <!-- Terminal (separate floating panel) -->
+    <div class="terminal panel">
+      <div class="term-header">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        zsh
       </div>
-      <div class="terminal-body">
+      <div class="term-body">
         <div><span class="prompt">~/my_project ❯</span> <span class="cmd">julia --project</span></div>
-        <div class="out">               _</div>
-        <div class="out">   _       _ _(_)_     |  Documentation: https://docs.julialang.org</div>
-        <div class="out">  (_)     | (_) (_)    |</div>
-        <div class="out">   _ _   _| |_  __ _   |  Type "?" for help, "]?" for Pkg help.</div>
-        <div class="out">  | | | | | | |/ _` |  |</div>
-        <div class="out">  | | |_| | | | (_| |  |  Version 1.12.4 (2026-03-01)</div>
-        <div class="out"> _/ |\__'_|_|_|\__'_|  |  Official https://julialang.org/ release</div>
-        <div class="out">|__/                   |</div>
-        <div><br></div>
-        <div><span class="prompt">julia&gt;</span> <span class="cmd" style="border-right:1px solid var(--text-3);padding-right:1px;animation:blink 1s step-end infinite;"> </span></div>
+        <div class="out-dim">               _</div>
+        <div class="out-dim">   _       _ _(_)_     |  Documentation: https://docs.julialang.org</div>
+        <div class="out-dim">  (_)     | (_) (_)    |</div>
+        <div class="out-dim">   _ _   _| |_  __ _   |  Type "?" for help, "]?" for Pkg help.</div>
+        <div class="out-dim">  | | | | | | |/ _` |  |</div>
+        <div class="out-dim">  | | |_| | | | (_| |  |  Version 1.12.4</div>
+        <div class="out-dim"> _/ |\__'_|_|_|\__'_|  |</div>
+        <div class="out-dim">|__/                   |</div>
+        <div style="margin-top:4px"><span class="prompt">julia&gt;</span> <span class="cmd" style="border-right:1px solid var(--text-3);padding-right:1px;animation:blink 1s step-end infinite;"> </span></div>
       </div>
     </div>
 
@@ -452,15 +413,6 @@
   <span>Julia 1.12.4</span>
 </div>
 
-<!-- Legend -->
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:var(--status-done)"></div> Done</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--status-running)"></div> Running</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--status-error)"></div> Error</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--rose-500)"></div> Rose</div>
-</div>
-
 <style>@keyframes blink { 50% { border-color: transparent; } }</style>
-
 </body>
 </html>
