@@ -24,10 +24,10 @@
     --warm-900: #1a1918;
     --warm-950: #111110;
 
-    /* Sessions accent — Rose/Pink */
-    --accent-400: #fb7185;
-    --accent-500: #f43f5e;
-    --accent-600: #e11d48;
+    /* Sessions accent — Rose */
+    --accent-400: #e8a0b4;
+    --accent-500: #d4748e;
+    --accent-600: #c0506e;
 
     /* Code cell colors */
     --cell-bg:      #1a2332;  /* dark blue-tint */
@@ -39,9 +39,9 @@
     --output-text: #7ca0bf;
 
     /* ── Light mode ── */
-    --workspace-bg:  var(--warm-100);  /* beige workspace */
+    --workspace-bg:  var(--warm-50);   /* beige workspace */
     --notebook-bg:   #ffffff;          /* white notebook panel */
-    --cell-bg-light: var(--warm-50);   /* beige code cells */
+    --cell-bg-light: var(--warm-50);   /* beige code cells = workspace */
     --cell-border-light: var(--warm-200);
     --cell-hover-light: var(--warm-300);
     --text-primary:   var(--warm-800);
@@ -53,9 +53,9 @@
   }
 
   .dark {
-    --workspace-bg:  #0d1117;          /* near-black workspace */
+    --workspace-bg:  #1a2332;          /* blue-tint workspace */
     --notebook-bg:   #0f1419;          /* deep dark notebook */
-    --cell-bg-light: #1a2332;          /* blue-tint code cells */
+    --cell-bg-light: #1a2332;          /* blue-tint code cells = workspace */
     --cell-border-light: #1c2736;
     --cell-hover-light: #2a3a4f;
     --text-primary:   #d4dce8;
@@ -204,8 +204,8 @@
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     padding: 1px 7px; border-radius: 9999px;
     color: var(--accent-500); opacity: .8;
-    background: rgba(244, 63, 94, .08);
-    border: 1px solid rgba(244, 63, 94, .15);
+    background: rgba(212, 116, 142, .08);
+    border: 1px solid rgba(212, 116, 142, .15);
   }
 
   /* ── Output ── */
