@@ -13,7 +13,7 @@
 
 ---
 
-> **Warning: Experimental, alpha-quality software.** Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, file-based collaboration, and WebAssembly compilation.
+> **Warning: Experimental, alpha-quality software.** Untested outside its own test suite. Rough edges everywhere. Everything is subject to breaking changes. If you need a reliable reactive notebook today, use [Pluto.jl](https://github.com/fonsp/Pluto.jl). This exists to explore ideas at the intersection of reactive notebooks, file-based collaboration, and one-click interactive publishing.
 
 ---
 
@@ -33,9 +33,77 @@ Sessions.jl is a reactive Julia notebook that runs in your browser as a local we
 - **Code/state separation.** Pure code lives in `.jl`, cached outputs in `.sessions.toml`. External edits never corrupt your execution state. Delete the cache anytime; re-run to regenerate.
 - **Full IDE in the browser.** CodeMirror editor with Julia syntax highlighting, Shoelace file explorer with lazy loading, xterm.js terminal with real PTY shell. Everything in one window.
 - **Pluto-compatible.** Same `.jl` file format, same reactivity engine (ExpressionExplorer + PlutoDependencyExplorer). Open the same file in Pluto or Sessions.
-- **Integrated terminal.** Real PTY-backed shell via xterm.js. Type `julia` to get a REPL. Run build commands. Multiple tabs. All without leaving the notebook.
-- **Runic.jl formatting.** Format individual cells or the entire notebook with one click via an isolated Runic.jl subprocess.
-- **WASM experiments.** Compiling notebook interactivity to WebAssembly via [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl), so exported notebooks can run without a Julia server. Very early, barely works for sliders.
+- **One-click interactive publishing.** Export notebooks as static HTML with interactive `@bind` widgets compiled to JavaScript. No Julia server needed. Host on GitHub Pages, Netlify, anywhere.
+
+## One-Click Publish Architecture
+
+Sessions.jl publishes notebooks as [Therapy.jl](https://github.com/GroupTherapyOrg/Therapy.jl) apps. Each notebook becomes a single `@island` component with the full reactive graph compiled to JavaScript via [JavaScriptTarget.jl](https://github.com/GroupTherapyOrg/JavaScriptTarget.jl).
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Published Notebook                  │
+│                                                     │
+│  ┌─ Cell 1 (markdown) ─────────────────────── SSR ─┐│
+│  │  # Analysis Title                               ││
+│  │  Some prose explaining the work.                 ││
+│  └──────────────────────────────────────────────────┘│
+│                                                     │
+│  ┌─ Cell 2 (setup, folded) ────── server-hidden ───┐│
+│  │  using Statistics;  # code NOT in DOM            ││
+│  └──────────────────────────────────────────────────┘│
+│                                                     │
+│  ┌─ Cell 3 (@bind) ──────────────── @island ───────┐│
+│  │  @bind freq Slider(1:20)                         ││
+│  │  ┌──────────────────────┐                        ││
+│  │  │ ●━━━━━━━━━○━━━━━━━━━│  7                     ││
+│  │  └──────────────────────┘                        ││
+│  ├─ Cell 4 (depends on freq) ──── compiled to JS ──┤│
+│  │  output: sin wave plot (reactive)                ││
+│  │  code: plot(sin.(x .* freq))  [eye toggle]       ││
+│  ├─ Cell 5 (static) ──────────── cached output ────┤│
+│  │  output: "CSV written: 1,200 rows"  [static]     ││
+│  │  code: CSV.write("out.csv", df)  [not compilable]││
+│  └──────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────┘
+```
+
+**How it works:**
+
+1. **Default: every cell is static HTML.** Markdown renders to HTML. DataFrames render to styled tables. Plots render to Plotly JSON. Code outputs render as preformatted text. Zero JS.
+
+2. **`@bind` cells and their dependents get compiled to JS.** Sessions knows the reactive dependency graph. When it sees `@bind freq Slider(1:20)`, it traces downstream: "which cells read `freq`?" Those cells get compiled to JavaScript via JST and wrapped in a Therapy `@island`.
+
+3. **Graceful fallback for non-compilable cells.** If a dependent cell uses Julia features JST can't transpile (file I/O, unregistered packages), it stays static with cached output and a diagnostic badge explaining why.
+
+**Three cell visibility modes in published notebooks:**
+
+| Mode | What renders | How |
+|------|-------------|-----|
+| **Toggleable** (default) | Output + code with eye icon | `Show()` + `create_signal` — reader can hide/show |
+| **Server-hidden** (`folded=true`) | Output only, code not in DOM | Code omitted at build time — truly protected |
+| **Suppressed** (ends with `;`) | No output shown | Standard Julia semantics |
+
+**Reactive primitives** (all from [Therapy.jl](https://github.com/GroupTherapyOrg/Therapy.jl), inspired by [SolidJS](https://solidjs.com)):
+
+| Primitive | Purpose |
+|-----------|---------|
+| `create_signal(initial)` | Reactive state — `@bind` widget values |
+| `create_memo(() -> ...)` | Derived computation — dependent cells |
+| `create_effect(() -> ...)` | Side effects — plot rendering, console logging |
+| `on_mount(() -> ...)` | One-time initialization after hydration |
+| `Show(signal) do ... end` | Conditional rendering — code visibility toggle |
+| `batch(() -> ...)` | Coalesce multiple signal updates |
+| `For(items) do ... end` | Reactive list rendering |
+
+**One architecture for both modes:**
+
+| | Live IDE | Published Notebook |
+|---|---------|-------------------|
+| **Structure** | One `@island` per notebook | Same |
+| **Reactivity** | Server-side Julia + WebSocket | Client-side JS (compiled by JST) |
+| **`@bind` sliders** | Signal → WS → server eval → WS → output | Signal → JS effect → output |
+| **Eye toggles** | Per-cell `Show()` + signal | Same |
+| **Cell gaps** | `+ Code` buttons (add cells) | Static dividers |
 
 ## Installation
 
@@ -100,7 +168,7 @@ Sessions.jl/
 
 | Package | Purpose | Deps | How to use |
 |---------|---------|------|-----------|
-| **Sessions.jl** | The IDE app | Therapy.jl, Malt.jl, WasmTarget.jl, HTTP... | `Pkg.Apps.add(url=...)` |
+| **Sessions.jl** | The IDE app | Therapy.jl, Malt.jl, HTTP... | `Pkg.Apps.add(url=...)` |
 | **SessionsUI** | Notebook API for `@bind` | UUIDs only (stdlib) | `using SessionsUI: @bind, BoundSlider` |
 
 SessionsUI is what notebook code imports. It has zero heavy dependencies and compiles in ~300ms. Sessions.jl (the app) depends on SessionsUI, not the other way around.
@@ -127,36 +195,16 @@ using SessionsUI: @bind, BoundSlider, BoundCheckBox, BoundTextField, BoundSelect
 @bind choice BoundSelect(["A", "B", "C"])
 ```
 
-## Collaborative Editing
-
-Since notebooks are plain `.jl` files, they work naturally with any external tool — AI assistants, other editors, scripts, CI pipelines:
-
-1. **Edit in the browser** — write and run code in the web IDE
-2. **Edit externally** — modify `notebook.jl` from any editor or tool
-3. **File watcher** detects changes in under a second
-4. **UI** marks modified cells as stale (orange indicator)
-5. **Run Stale** re-executes only what changed
-
-The `.sessions.toml` file caches execution state so reopening a notebook shows previous outputs without re-running everything. The integrated terminal lets you run commands, install packages, or start a Julia REPL without leaving the IDE.
-
 ## Built On
 
+- [Therapy.jl](https://github.com/GroupTherapyOrg/Therapy.jl) — signals-based web framework, inspired by [SolidJS](https://solidjs.com) (signals) and [Astro](https://astro.build) (islands)
+- [JavaScriptTarget.jl](https://github.com/GroupTherapyOrg/JavaScriptTarget.jl) — Julia-to-JavaScript transpiler for `@bind` interactivity
 - [Pluto.jl](https://github.com/fonsp/Pluto.jl) file format and reactive engine ([ExpressionExplorer.jl](https://github.com/JuliaPluto/ExpressionExplorer.jl), [PlutoDependencyExplorer.jl](https://github.com/JuliaPluto/PlutoDependencyExplorer.jl))
-- [Therapy.jl](https://github.com/GroupTherapyOrg/Therapy.jl) web framework (SSR, WebSocket channels, @island hydration)
-- [WasmTarget.jl](https://github.com/GroupTherapyOrg/WasmTarget.jl) Julia-to-WebAssembly compiler
 - [Malt.jl](https://github.com/JuliaPluto/Malt.jl) isolated worker processes
 - [Runic.jl](https://github.com/fredrikekre/Runic.jl) code formatter
 - [CodeMirror](https://codemirror.net/) code editor
 - [Shoelace](https://shoelace.style/) web components (file explorer)
 - [xterm.js](https://xtermjs.org/) terminal emulator
-
-## Experiments
-
-Things being explored, none production-ready, all likely to change or be removed:
-
-- **JETLS integration:** real-time [JET.jl](https://github.com/aviatesk/JET.jl) diagnostics via LSP
-- **WASM export:** compiling @bind interactivity to WebAssembly so exported notebooks run without a Julia server
-- **Malt.jl workers:** each notebook tab runs in its own process for isolation
 
 ## License
 
