@@ -6,12 +6,13 @@
 <title>Sessions.jl — Notebook Theme Prototype</title>
 <style>
   /* ═══════════════════════════════════════════════════════════
-     SESSIONS.JL THEME — Shared palette with Therapy.jl
-     Same warm neutrals, unique accent color (rose/pink)
+     SESSIONS.JL THEME
+     Shared warm neutrals with Therapy.jl ecosystem.
+     Unique rose accent. Semantic status colors for cell states.
      ═══════════════════════════════════════════════════════════ */
 
   :root {
-    /* Warm neutrals (shared with Therapy.jl ecosystem) */
+    /* Warm neutrals (shared with Therapy.jl) */
     --warm-50:  #f8f7f4;
     --warm-100: #f0ece4;
     --warm-200: #e8e3d9;
@@ -25,45 +26,45 @@
     --warm-950: #111110;
 
     /* Sessions accent — Rose */
-    --accent-400: #e8a0b4;
-    --accent-500: #d4748e;
-    --accent-600: #c0506e;
+    --rose-300: #f0b4c8;
+    --rose-400: #e48fa8;
+    --rose-500: #d46a88;
+    --rose-600: #bf4d6e;
 
-    /* Code cell colors */
-    --cell-bg:      #1a2332;  /* dark blue-tint */
-    --cell-border:  #1c2736;
-    --cell-hover:   #2a3a4f;
-    --accent-bar:   #f43f5e;  /* rose accent for left bar */
-
-    /* Output text */
-    --output-text: #7ca0bf;
+    /* Status colors — semantic, not accent */
+    --status-done:    #56d4a0;  /* green — cell executed successfully */
+    --status-running: #d4a056;  /* amber — cell currently running */
+    --status-stale:   #d4a056;  /* amber — cell needs re-run */
+    --status-error:   #e06b65;  /* red — cell errored */
 
     /* ── Light mode ── */
-    --workspace-bg:  var(--warm-50);   /* beige workspace */
-    --notebook-bg:   #ffffff;          /* white notebook panel */
-    --cell-bg-light: var(--warm-50);   /* beige code cells = workspace */
-    --cell-border-light: var(--warm-200);
-    --cell-hover-light: var(--warm-300);
-    --text-primary:   var(--warm-800);
-    --text-secondary: var(--warm-600);
-    --text-tertiary:  var(--warm-400);
-    --output-text-light: var(--warm-600);
-    --tab-bg: var(--warm-100);
-    --tab-active-bg: #ffffff;
+    --workspace-bg:    var(--warm-50);   /* beige workspace */
+    --notebook-bg:     #ffffff;          /* white notebook panel */
+    --cell-bg:         var(--warm-50);   /* beige code cells = workspace */
+    --cell-border:     var(--warm-200);
+    --cell-border-hov: var(--warm-300);
+    --text-1:          var(--warm-800);
+    --text-2:          var(--warm-600);
+    --text-3:          var(--warm-400);
+    --output-text:     var(--warm-600);
+    --tab-bar-bg:      var(--warm-100);  /* slightly darker than workspace */
+    --tab-active-bg:   #ffffff;          /* matches notebook bg */
+    --tab-inactive-bg: transparent;
   }
 
   .dark {
-    --workspace-bg:  #1a2332;          /* blue-tint workspace */
-    --notebook-bg:   #0f1419;          /* deep dark notebook */
-    --cell-bg-light: #1a2332;          /* blue-tint code cells = workspace */
-    --cell-border-light: #1c2736;
-    --cell-hover-light: #2a3a4f;
-    --text-primary:   #d4dce8;
-    --text-secondary: #9baabd;
-    --text-tertiary:  #6b7d93;
-    --output-text-light: #7ca0bf;
-    --tab-bg: #0a0e14;
-    --tab-active-bg: #151c25;
+    --workspace-bg:    #1a2332;          /* blue-tint workspace */
+    --notebook-bg:     #0f1419;          /* deep dark notebook */
+    --cell-bg:         #1a2332;          /* blue-tint = workspace */
+    --cell-border:     #1c2736;
+    --cell-border-hov: #2a3a4f;
+    --text-1:          #d4dce8;
+    --text-2:          #9baabd;
+    --text-3:          #6b7d93;
+    --output-text:     #7ca0bf;
+    --tab-bar-bg:      #080b10;          /* near-black tab bar */
+    --tab-active-bg:   #0f1419;          /* matches notebook bg */
+    --tab-inactive-bg: transparent;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,11 +72,9 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--workspace-bg);
-    color: var(--text-primary);
+    color: var(--text-1);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    display: flex; flex-direction: column; align-items: center;
     padding: 40px 20px;
     transition: background .2s, color .2s;
   }
@@ -84,21 +83,17 @@
   .theme-toggle {
     position: fixed; top: 16px; right: 16px;
     padding: 6px 14px; border-radius: 9999px;
-    border: 1px solid var(--cell-border-light);
-    background: var(--notebook-bg);
-    color: var(--text-secondary);
-    font-size: 12px; cursor: pointer;
-    transition: all .2s;
-    z-index: 100;
+    border: 1px solid var(--cell-border);
+    background: var(--notebook-bg); color: var(--text-2);
+    font-size: 12px; cursor: pointer; transition: all .2s; z-index: 100;
   }
-  .theme-toggle:hover { color: var(--accent-500); border-color: var(--accent-500); }
+  .theme-toggle:hover { color: var(--rose-500); border-color: var(--rose-500); }
 
-  /* ── Title ── */
   .page-title {
-    font-size: 13px; font-weight: 500; color: var(--text-tertiary);
+    font-size: 13px; font-weight: 500; color: var(--text-3);
     margin-bottom: 24px; letter-spacing: 0.5px; text-transform: uppercase;
   }
-  .page-title span { color: var(--accent-500); }
+  .page-title span { color: var(--rose-500); }
 
   /* ═══════════════════════════════════════════════════════════
      NOTEBOOK PANEL
@@ -106,106 +101,119 @@
   .notebook {
     width: 100%; max-width: 900px;
     background: var(--notebook-bg);
-    border: 1px solid var(--cell-border-light);
-    border-radius: 12px;
-    overflow: hidden;
+    border: 1px solid var(--cell-border);
+    border-radius: 12px; overflow: hidden;
     box-shadow: 0 4px 24px rgba(0,0,0,.08);
     transition: background .2s, border-color .2s, box-shadow .2s;
   }
   .dark .notebook { box-shadow: 0 4px 24px rgba(0,0,0,.3); }
 
-  /* ── Tab bar ── */
+  /* ── Tab bar (same bg as terminal will be) ── */
   .tab-bar {
     height: 38px; display: flex; align-items: stretch;
-    background: var(--tab-bg);
-    border-bottom: 1px solid var(--cell-border-light);
+    background: var(--tab-bar-bg);
+    border-bottom: 1px solid var(--cell-border);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 12px;
   }
   .tab {
     display: flex; align-items: center; gap: 6px;
-    padding: 0 14px;
-    border-right: 1px solid var(--cell-border-light);
-    color: var(--text-primary);
-    background: var(--tab-active-bg);
+    padding: 0 14px; border-right: 1px solid var(--cell-border);
+    color: var(--text-1); background: var(--tab-active-bg);
   }
-  .tab .dot {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--accent-500);
+  .tab-inactive {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 14px; border-right: 1px solid var(--cell-border);
+    color: var(--text-3); background: var(--tab-inactive-bg);
+    cursor: pointer;
   }
+  .tab-inactive:hover { color: var(--text-2); }
+  .tab .dot-modified { width: 5px; height: 5px; border-radius: 50%; background: var(--rose-500); }
+  .tab .dot-saved    { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
 
   /* ── Notebook content ── */
   .nb-content {
     padding: 20px 24px 32px;
-    max-width: 780px; margin: 0 auto;
-    padding-left: 52px; /* gutter space */
+    max-width: 780px; margin: 0 auto; padding-left: 52px;
   }
 
-  /* ── Cell wrapper ── */
-  .cell {
-    position: relative;
-    padding: 3px 0;
-  }
+  /* ── Cell ── */
+  .cell { position: relative; padding: 3px 0; }
   .cell:hover .gutter { opacity: 1; }
   .cell:hover .cell-ctrls { opacity: 1; transform: translateY(0); }
 
-  /* ── Gutter (cell number / eye icon) ── */
+  /* ── Gutter ── */
   .gutter {
     position: absolute; left: -28px; top: 0; bottom: 0;
     width: 24px; display: flex; align-items: center; justify-content: center;
     opacity: 0; transition: opacity .15s; cursor: pointer; z-index: 5;
   }
-  .gutter svg { color: var(--text-tertiary); transition: color .15s; }
-  .gutter:hover svg { color: var(--accent-500); }
-  .gutter .num { font-size: 10px; font-family: monospace; color: var(--text-tertiary); }
+  .gutter svg { color: var(--text-3); transition: color .15s; }
+  .gutter:hover svg { color: var(--rose-500); }
+  .gutter .num { font-size: 10px; font-family: monospace; color: var(--text-3); }
 
   /* ── Code cell ── */
   .code-cell {
     position: relative; overflow: hidden;
-    background: var(--cell-bg-light);
-    border: 1px solid var(--cell-border-light);
-    border-radius: 8px;
-    transition: border-color .2s;
+    background: var(--cell-bg);
+    border: 1px solid var(--cell-border);
+    border-radius: 8px; transition: border-color .2s;
   }
-  .code-cell:hover { border-color: var(--cell-hover-light); }
+  .code-cell:hover { border-color: var(--cell-border-hov); }
 
-  /* Accent bar (left edge) */
+  /* Accent bar — rose by default */
   .code-cell::before {
     content: ''; position: absolute;
     left: 0; top: 0; bottom: 0; width: 3px;
-    background: var(--accent-500);
+    background: var(--rose-500);
     opacity: .3; transition: opacity .2s;
     border-radius: 2px 0 0 2px;
   }
   .cell:hover .code-cell::before { opacity: .7; }
 
+  /* Status-colored accent bars */
+  .code-cell.done::before    { background: var(--status-done); }
+  .code-cell.running::before { background: var(--status-running); opacity: .8; }
+  .code-cell.stale::before   { background: var(--status-stale); }
+  .code-cell.error::before   { background: var(--status-error); }
+
   .code-cell code {
-    display: block;
-    padding: 10px 12px 10px 14px;
+    display: block; padding: 10px 12px 10px 14px;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 13px; line-height: 1.6;
     white-space: pre; overflow-x: auto;
-    color: var(--text-primary);
-    background: transparent;
+    color: var(--text-1); background: transparent;
   }
 
-  /* ── Cell controls (runtime badge) ── */
+  /* ── Cell controls ── */
   .cell-ctrls {
     position: absolute; top: 4px; right: 6px;
     display: flex; align-items: center; gap: 6px; z-index: 10;
-    opacity: 0; transform: translateY(-3px);
-    pointer-events: none;
+    opacity: 0; transform: translateY(-3px); pointer-events: none;
     transition: opacity .15s, transform .15s;
   }
   .cell:hover .cell-ctrls { pointer-events: auto; }
 
+  /* Runtime badge — green for completed */
   .rt-badge {
     font-size: 10px;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     padding: 1px 7px; border-radius: 9999px;
-    color: var(--accent-500); opacity: .8;
-    background: rgba(212, 116, 142, .08);
-    border: 1px solid rgba(212, 116, 142, .15);
+    color: var(--status-done); opacity: .8;
+    background: rgba(86, 212, 160, .08);
+    border: 1px solid rgba(86, 212, 160, .15);
+  }
+  /* Running badge — amber */
+  .rt-badge.running {
+    color: var(--status-running);
+    background: rgba(212, 160, 86, .08);
+    border-color: rgba(212, 160, 86, .15);
+  }
+  /* Error badge — red */
+  .rt-badge.error {
+    color: var(--status-error);
+    background: rgba(224, 107, 101, .08);
+    border-color: rgba(224, 107, 101, .15);
   }
 
   /* ── Output ── */
@@ -213,21 +221,22 @@
     padding: 4px 2px 8px;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 13px; line-height: 1.5;
-    color: var(--output-text-light);
-    overflow-x: auto;
+    color: var(--output-text); overflow-x: auto;
+  }
+
+  /* ── Error output ── */
+  .cell-out.error-out {
+    color: var(--status-error);
+    background: rgba(224, 107, 101, .05);
+    border-radius: 6px; padding: 8px 10px;
   }
 
   /* ── Markdown cell ── */
   .md-cell {
-    padding: 8px 4px;
-    font-size: 14px; line-height: 1.7;
-    color: var(--text-secondary);
+    padding: 8px 4px; font-size: 14px; line-height: 1.7;
+    color: var(--text-2);
   }
-  .md-cell h2 {
-    font-size: 16px; font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
+  .md-cell h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
 
   /* ── Cell gap ── */
   .cell-gap {
@@ -239,46 +248,52 @@
     display: flex; align-items: center; gap: 4px;
     opacity: 0; transition: opacity .15s;
   }
-  .gap-line { height: 1px; width: 56px; background: var(--cell-border-light); }
+  .gap-line { height: 1px; width: 56px; background: var(--cell-border); }
   .gap-btn {
     display: flex; align-items: center; gap: 4px;
     padding: 1px 10px; border-radius: 9999px;
-    font-size: 10px; border: 1px solid var(--cell-border-light);
-    background: transparent; color: var(--text-tertiary);
+    font-size: 10px; border: 1px solid var(--cell-border);
+    background: transparent; color: var(--text-3);
     cursor: pointer; transition: all .15s;
   }
-  .gap-btn:hover { color: var(--text-primary); border-color: var(--cell-hover-light); }
+  .gap-btn:hover { color: var(--text-1); border-color: var(--cell-border-hov); }
   .gap-btn svg { width: 8px; height: 8px; }
 
-  /* ── Static badge ── */
+  /* ── Badges ── */
   .badge-static {
     font-size: 10px; font-family: monospace;
     padding: 1px 7px; border-radius: 9999px;
-    color: var(--text-tertiary);
-    border: 1px solid var(--cell-border-light);
-    background: var(--cell-bg-light);
+    color: var(--text-3); border: 1px solid var(--cell-border);
+    background: var(--cell-bg);
   }
 
   /* ── Slider ── */
   .slider-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 6px 2px;
+    display: flex; align-items: center; gap: 12px; padding: 6px 2px;
   }
-  .slider-row input[type="range"] { flex: 1; accent-color: var(--accent-500); }
+  .slider-row input[type="range"] { flex: 1; accent-color: var(--rose-500); }
   .slider-row .val {
     font-family: monospace; font-size: 13px;
-    color: var(--output-text-light);
-    min-width: 2ch; text-align: right;
+    color: var(--output-text); min-width: 2ch; text-align: right;
   }
 
   /* ── Plot placeholder ── */
   .plot-placeholder {
     width: 100%; height: 220px;
-    border: 1px solid var(--cell-border-light);
+    border: 1px solid var(--cell-border);
     border-radius: 8px; margin: 4px 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 12px; color: var(--text-tertiary);
-    background: var(--notebook-bg);
+    font-size: 12px; color: var(--text-3); background: var(--notebook-bg);
+  }
+
+  /* ── Status legend ── */
+  .legend {
+    margin-top: 24px; display: flex; gap: 16px; flex-wrap: wrap;
+    font-size: 11px; color: var(--text-3);
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot {
+    width: 8px; height: 8px; border-radius: 2px;
   }
 </style>
 </head>
@@ -293,11 +308,15 @@
 <!-- ═══ NOTEBOOK ═══ -->
 <div class="notebook">
 
-  <!-- Tab bar -->
+  <!-- Tab bar (same bg as terminal) -->
   <div class="tab-bar">
     <div class="tab">
-      <span class="dot"></span>
+      <span class="dot-modified"></span>
       analysis.jl
+    </div>
+    <div class="tab-inactive">
+      <span class="dot-saved"></span>
+      helpers.jl
     </div>
   </div>
 
@@ -309,118 +328,121 @@
       <div class="gutter"><span class="num">1</span></div>
       <div class="md-cell">
         <h2>2D Wave Analysis</h2>
-        Interactive heatmap of sin(x*f) * cos(y*f). Adjust the frequency parameter below.
+        Interactive heatmap of sin(x*f) * cos(y*f). Adjust the frequency below.
       </div>
     </div>
 
-    <!-- Gap -->
-    <div class="cell-gap">
-      <div class="gap-inner">
-        <div class="gap-line"></div>
-        <button class="gap-btn">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
-          Code
-        </button>
-        <div class="gap-line"></div>
-      </div>
-    </div>
+    <div class="cell-gap"><div class="gap-inner">
+      <div class="gap-line"></div>
+      <button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button>
+      <div class="gap-line"></div>
+    </div></div>
 
-    <!-- Cell 2: @bind slider -->
+    <!-- Cell 2: @bind slider — DONE state (green bar) -->
     <div class="cell">
       <div class="gutter">
-        <!-- Eye icon -->
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
         </svg>
       </div>
-      <!-- Output above code -->
       <div class="slider-row">
         <input type="range" min="1" max="15" value="8">
         <span class="val">8</span>
       </div>
-      <!-- Code cell -->
-      <div class="code-cell">
+      <div class="code-cell done">
         <div class="cell-ctrls"><span class="rt-badge">0.2 ms</span></div>
         <code>@bind freq Slider(1:15)</code>
       </div>
     </div>
 
-    <!-- Gap -->
-    <div class="cell-gap">
-      <div class="gap-inner">
-        <div class="gap-line"></div>
-        <button class="gap-btn">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
-          Code
-        </button>
-        <div class="gap-line"></div>
-      </div>
-    </div>
+    <div class="cell-gap"><div class="gap-inner">
+      <div class="gap-line"></div>
+      <button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button>
+      <div class="gap-line"></div>
+    </div></div>
 
-    <!-- Cell 3: Plot output -->
+    <!-- Cell 3: Plot — DONE state (green bar) -->
     <div class="cell">
       <div class="gutter">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
         </svg>
       </div>
-      <!-- Plot output above code -->
-      <div class="plot-placeholder">[ Plotly heatmap renders here ]</div>
-      <!-- Code cell -->
-      <div class="code-cell">
+      <div class="plot-placeholder">[ Plotly heatmap ]</div>
+      <div class="code-cell done">
         <div class="cell-ctrls"><span class="rt-badge">8.4 ms</span></div>
         <code>heatmap(z, colorscale="Viridis")</code>
       </div>
     </div>
 
-    <!-- Gap -->
-    <div class="cell-gap">
-      <div class="gap-inner">
-        <div class="gap-line"></div>
-        <button class="gap-btn">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
-          Code
-        </button>
-        <div class="gap-line"></div>
+    <div class="cell-gap"><div class="gap-inner">
+      <div class="gap-line"></div>
+      <button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button>
+      <div class="gap-line"></div>
+    </div></div>
+
+    <!-- Cell 4: RUNNING state (amber bar + badge) -->
+    <div class="cell">
+      <div class="gutter">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div class="code-cell running">
+        <div class="cell-ctrls"><span class="rt-badge running">running...</span></div>
+        <code>heavy_computation(freq, data)</code>
       </div>
     </div>
 
-    <!-- Cell 4: Static cell -->
+    <div class="cell-gap"><div class="gap-inner">
+      <div class="gap-line"></div>
+      <button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button>
+      <div class="gap-line"></div>
+    </div></div>
+
+    <!-- Cell 5: ERROR state (red bar + badge + error output) -->
     <div class="cell">
-      <div class="gutter"><span class="num">4</span></div>
+      <div class="gutter"><span class="num">5</span></div>
+      <div class="cell-out error-out">MethodError: no method matching +(::String, ::Int64)</div>
+      <div class="code-cell error">
+        <div class="cell-ctrls"><span class="rt-badge error">error</span></div>
+        <code>"hello" + 42</code>
+      </div>
+    </div>
+
+    <div class="cell-gap"><div class="gap-inner">
+      <div class="gap-line"></div>
+      <button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button>
+      <div class="gap-line"></div>
+    </div></div>
+
+    <!-- Cell 6: Static cell — DONE (green bar) -->
+    <div class="cell">
+      <div class="gutter"><span class="num">6</span></div>
       <div class="cell-out">
         CSV written: 1,200 rows <span class="badge-static">static</span>
       </div>
-      <div class="code-cell">
+      <div class="code-cell done">
         <div class="cell-ctrls"><span class="rt-badge">45.2 ms</span></div>
         <code>CSV.write("output.csv", df)</code>
       </div>
     </div>
 
-    <!-- Gap -->
-    <div class="cell-gap">
-      <div class="gap-inner">
-        <div class="gap-line"></div>
-        <button class="gap-btn">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
-          Code
-        </button>
-        <div class="gap-line"></div>
-      </div>
-    </div>
+    <div class="cell-gap"><div class="gap-inner">
+      <div class="gap-line"></div>
+      <button class="gap-btn"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg> Code</button>
+      <div class="gap-line"></div>
+    </div></div>
 
-    <!-- Cell 5: Another code cell -->
+    <!-- Cell 7: Regular DONE cell -->
     <div class="cell">
       <div class="gutter">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
         </svg>
       </div>
       <div class="cell-out">(3.0, 3.0, 1.5811388300841898)</div>
-      <div class="code-cell">
+      <div class="code-cell done">
         <div class="cell-ctrls"><span class="rt-badge">0.8 ms</span></div>
         <code>mean(x), median(x), std(x)</code>
       </div>
@@ -429,7 +451,16 @@
   </div>
 </div>
 
-<p style="margin-top:24px;font-size:11px;color:var(--text-tertiary);">
+<!-- Status legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--status-done)"></div> Done</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--status-running)"></div> Running</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--status-stale)"></div> Stale</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--status-error)"></div> Error</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--rose-500)"></div> Rose (accent)</div>
+</div>
+
+<p style="margin-top:12px;font-size:11px;color:var(--text-3);">
   Sessions.jl — Therapy.jl + JavaScriptTarget.jl
 </p>
 
