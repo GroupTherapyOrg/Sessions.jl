@@ -96,7 +96,7 @@ tailwind.config = {
   --status-done: #56d4a0;
   --status-running: #d4a056;
   --status-error: #dc3545;
-  --panel-shadow: 0 2px 12px rgba(0,0,0,.06);
+  --panel-shadow: none;
   --scrollbar-thumb: #d4d0c8;
 }
 .dark {
@@ -115,7 +115,7 @@ tailwind.config = {
   --term-bg: #050709;          /* matches chrome-bg — near black */
   --term-border: #2a3a4f;
   --selection-bg: rgba(86,212,160,.15);
-  --panel-shadow: 0 4px 24px rgba(0,0,0,.3);
+  --panel-shadow: none;
   --scrollbar-thumb: #2a3a4f;
 }
 
@@ -124,6 +124,8 @@ tailwind.config = {
 html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;background:var(--workspace-bg);color:var(--text-1);transition:background .2s,color .2s;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
+/* Clip panel shadows at workspace boundary to prevent corner bleed */
+#workspace>*{overflow:hidden;}
 #workspace>div{min-height:0;}
 
 /* ═══ Activity Bar ═══ */

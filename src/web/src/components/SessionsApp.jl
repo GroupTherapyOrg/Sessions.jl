@@ -114,7 +114,7 @@ function _status_bar(cell_count::Int)
         Span(:id => "status-connection", :style => "color:var(--status-done);", "\u25CF connected"),
         # Theme toggle (light/dark)
         Button(:id => "theme-toggle-btn",
-            :style => "padding:2px 10px;border-radius:9999px;border:1px solid var(--cell-border);background:transparent;color:var(--text-3);font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;",
+            :style => "padding:2px 10px;border-radius:9999px;border:1px solid var(--accent);background:rgba(212,117,154,.08);color:var(--accent);font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all .15s;",
             :title => "Toggle light/dark mode",
             "\u25D0 Toggle"))
 end
