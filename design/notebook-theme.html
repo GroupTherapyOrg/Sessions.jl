@@ -180,10 +180,17 @@
   .tab-area::-webkit-scrollbar { height: 0; }
   .toolbar {
     display: flex; align-items: center; gap: 6px;
-    padding: 0 10px; margin-left: auto; flex-shrink: 0;
+    padding: 0 12px; margin-left: auto; flex-shrink: 0;
+    background: var(--panel-bg);
+    box-shadow: -4px 0 8px rgba(0,0,0,.04);
+    border-left: 1px solid var(--cell-border);
+  }
+  .dark .toolbar {
+    background: var(--chrome-active);
+    box-shadow: -4px 0 8px rgba(0,0,0,.15);
   }
   .toolbar .sep {
-    width: 1px; height: 16px; background: var(--cell-border); margin: 0 2px;
+    width: 1px; height: 14px; background: var(--cell-border); margin: 0 2px;
   }
 
   /* Toolbar buttons — slightly different bg from tab bar to distinguish */
@@ -374,6 +381,11 @@
         <div class="tab-area">
           <div class="tab"><span class="dot-mod"></span> analysis.jl</div>
           <div class="tab-inactive"><span class="dot-ok"></span> helpers.jl</div>
+          <div class="tab-inactive"><span class="dot-ok"></span> plotting.jl</div>
+          <div class="tab-inactive"><span class="dot-mod"></span> model.jl</div>
+          <div class="tab-inactive"><span class="dot-ok"></span> data_processing.jl</div>
+          <div class="tab-inactive"><span class="dot-ok"></span> utils.jl</div>
+          <div class="tab-inactive"><span class="dot-ok"></span> config.jl</div>
         </div>
         <!-- Toolbar: right half, always visible -->
         <div class="toolbar">
