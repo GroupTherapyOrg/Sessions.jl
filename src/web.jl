@@ -1173,8 +1173,8 @@ Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
 Pluto-style tables (sst-*), CodeMirror overrides, slider widgets.
 """
 const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
-.code-cell{background:#ffffff;border:1px solid #d4d8e0;border-radius:8px;transition:border-color .2s;}
-.code-cell:hover{border-color:#bec4cf;}
+.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
+.code-cell:hover{border-color:var(--cell-border-hov);}
 .code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#219669;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
 .code-cell:hover::before{opacity:.7;}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
@@ -1184,9 +1184,7 @@ const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
 .cell-wrap:hover .cell-eye{opacity:1;}
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
 .cell-eye:hover svg{color:#219669;}
-/* Cell chrome — dark overrides */
-.dark .code-cell{background:#1a2332;border-color:#1c2736;}
-.dark .code-cell:hover{border-color:#2a3a4f;}
+/* Cell chrome — dark overrides (accent bar only, bg/border use CSS vars) */
 .dark .code-cell::before{background:#56d4a0;}
 .dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
 .dark .cell-eye svg{color:#3d5068;}

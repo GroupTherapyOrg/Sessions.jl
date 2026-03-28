@@ -230,6 +230,8 @@ sl-tree-item::part(item):hover{background:rgba(128,128,128,.06);}
 .tb-btn.stop:hover{background:rgba(220,53,69,.08);}
 .tb-btn svg{width:9px;height:9px;}
 .toolbar-sep{width:1px;height:14px;background:var(--divider);margin:0 4px;}
+/* Theme toggle button */
+#theme-toggle-btn:hover{background:rgba(212,117,154,.18) !important;border-color:var(--accent) !important;}
 </style>"""),
 
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
