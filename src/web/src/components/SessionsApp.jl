@@ -96,6 +96,9 @@ function _file_explorer_panel()
             :style => "height:38px;border-bottom:1px solid var(--divider);",
             Span(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);", "Explorer"),
             Span(:style => "font-size:9px;color:var(--text-3);font-family:'JetBrains Mono',monospace;", "\u2318B")),
+        # Loading placeholder (visible while Shoelace components initialize)
+        Div(:class => "explorer-loading", :id => "explorer-loading",
+            Span(:class => "dot-pulse"), Span(:class => "dot-pulse"), Span(:class => "dot-pulse")),
         FileExplorer())
 end
 
@@ -153,6 +156,12 @@ function _panel_restore_script()
         repl.style.display = showRepl ? '' : 'none';
         if (btns[2]) btns[2].setAttribute('data-state', showRepl ? 'on' : 'off');
     }
+
+    // Hide explorer loading dots once Shoelace tree is defined
+    customElements.whenDefined('sl-tree').then(function() {
+        var loader = document.getElementById('explorer-loading');
+        if (loader) loader.style.display = 'none';
+    });
 })();
 </script>""")
 end

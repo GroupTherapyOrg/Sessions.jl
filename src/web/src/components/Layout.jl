@@ -105,14 +105,14 @@ tailwind.config = {
   --cell-bg: #1a2332;
   --cell-border: #1c2736;
   --cell-border-hov: #2a3a4f;
-  --chrome-bg: #080b10;
-  --chrome-active: #0f1419;
+  --chrome-bg: #050709;       /* near-black — tab bar + terminal header */
+  --chrome-active: #0f1419;   /* matches notebook bg for active tab */
   --divider: #1c2736;
   --text-1: #d4dce8;
   --text-2: #9baabd;
   --text-3: #6b7d93;
   --output-text: #7ca0bf;
-  --term-bg: #080b10;
+  --term-bg: #050709;          /* matches chrome-bg — near black */
   --term-border: #2a3a4f;
   --selection-bg: rgba(86,212,160,.15);
   --panel-shadow: 0 4px 24px rgba(0,0,0,.3);
@@ -155,6 +155,15 @@ $(Main.Sessions.NOTEBOOK_CSS)
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px;}
 ::selection{background:var(--selection-bg);}
+
+/* ═══ Shoelace loading: hide tree until web components defined ═══ */
+sl-tree:not(:defined),sl-tree-item:not(:defined){opacity:0;height:0;overflow:hidden;}
+sl-tree:defined,sl-tree-item:defined{opacity:1;height:auto;transition:opacity .2s;}
+/* File explorer loading placeholder */
+.explorer-loading{display:flex;align-items:center;justify-content:center;flex:1;color:var(--text-3);font-size:11px;font-family:'JetBrains Mono',monospace;gap:6px;}
+.explorer-loading .dot-pulse{width:4px;height:4px;border-radius:50%;background:var(--text-3);animation:pulse 1.2s ease-in-out infinite;}
+.explorer-loading .dot-pulse:nth-child(2){animation-delay:.2s;}
+.explorer-loading .dot-pulse:nth-child(3){animation-delay:.4s;}
 
 /* ═══ Animations ═══ */
 @keyframes blink{50%{opacity:0}}

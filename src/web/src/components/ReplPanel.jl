@@ -60,10 +60,10 @@ function _terminal_js()
   // Theme — adapts to light/dark mode
   var isDark = document.documentElement.classList.contains('dark');
   var termTheme = isDark ? {
-    background: '#080b10',
+    background: '#050709',
     foreground: '#d4dce8',
     cursor: '#d4759a',
-    cursorAccent: '#080b10',
+    cursorAccent: '#050709',
     selectionBackground: 'rgba(212,117,154,.2)',
     selectionForeground: '#d4dce8',
     black: '#080b10', red: '#dc3545', green: '#56d4a0', yellow: '#d4a056',
