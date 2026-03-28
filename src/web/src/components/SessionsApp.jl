@@ -10,7 +10,7 @@
 
 const _JULIA_LOGO_SVG = """<svg width="16" height="14" viewBox="0 0 40 34" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="6" r="5.5" fill="#56d4a0"/><circle cx="10" cy="28" r="5.5" fill="#e06b65"/><circle cx="30" cy="28" r="5.5" fill="#b08fd8"/></svg>"""
 
-const _AB_BTN_STYLE = "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:#3d5068;transition:all .15s;"
+const _AB_BTN_STYLE = "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:var(--text-3);transition:all .15s;"
 
 function SessionsApp(children...)
     cell_count = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
@@ -59,7 +59,8 @@ end
 # ═══════════════════════════════════════════════════════════════
 
 function _activity_bar()
-    Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl bg-surf border border-b1 shadow-lg shadow-black/25",
+    Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl",
+        :style => "background:var(--panel-bg);border:1px solid var(--cell-border);box-shadow:var(--panel-shadow);",
         Div(:class => "flex items-center justify-center w-8 h-8 mb-2",
             RawHtml(_JULIA_LOGO_SVG)),
 
@@ -89,29 +90,30 @@ end
 
 function _file_explorer_panel()
     Div(:id => "fpanel",
-        :class => "rounded-xl bg-surf border border-b1 flex flex-col overflow-hidden shrink-0 shadow-lg shadow-black/25",
-        :style => "width:234px;max-height:100%;display:none;",
-        Div(:class => "flex items-center justify-between px-3 py-2.5 border-b border-b1 shrink-0",
-            Span(:class => "text-[10px] font-semibold uppercase tracking-wider text-t3", "Explorer"),
-            Span(:class => "text-[9px] text-t4 font-mono", "\u2318B")),
+        :class => "rounded-xl flex flex-col overflow-hidden shrink-0",
+        :style => "width:234px;max-height:100%;display:none;background:var(--panel-bg);border:1px solid var(--cell-border);box-shadow:var(--panel-shadow);",
+        Div(:class => "flex items-center justify-between px-3 shrink-0",
+            :style => "height:38px;border-bottom:1px solid var(--divider);",
+            Span(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);", "Explorer"),
+            Span(:style => "font-size:9px;color:var(--text-3);font-family:'JetBrains Mono',monospace;", "\u2318B")),
         FileExplorer())
 end
 
 function _status_bar(cell_count::Int)
     Div(:id => "status-bar",
-        :style => "height:26px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:#3d5068;background:transparent;box-shadow:0 -4px 8px rgba(0,0,0,.15);",
+        :style => "height:28px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-3);background:var(--workspace-bg);box-shadow:0 -2px 8px rgba(0,0,0,.06);",
+        Span(:style => "color:var(--accent);", "\u25CF"),
         Span(:style => "display:flex;align-items:center;gap:6px;",
-            RawHtml(_JULIA_LOGO_SVG),
             "Sessions.jl"),
+        Span("\u00B7"),
         Span(:id => "status-cells", "$(cell_count) cells"),
         Span(:style => "flex:1;"),
-        Span(:id => "status-connection", :style => "color:#56d4a0;", "\u25CF connected"),
-        # Theme picker
-        Span(:id => "theme-picker",
-            :style => "position:relative;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background .12s;display:flex;align-items:center;gap:4px;",
-            :title => "Switch IDE theme",
-            RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.2a5.8 5.8 0 010 11.6V2.2z"/></svg>"""),
-            Span(:id => "theme-picker-label", "Dark+")))
+        Span(:id => "status-connection", :style => "color:var(--status-done);", "\u25CF connected"),
+        # Theme toggle (light/dark)
+        Button(:id => "theme-toggle-btn",
+            :style => "padding:2px 10px;border-radius:9999px;border:1px solid var(--cell-border);background:transparent;color:var(--text-3);font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;",
+            :title => "Toggle light/dark mode",
+            "\u25D0 Toggle"))
 end
 
 # ═══════════════════════════════════════════════════════════════
@@ -197,50 +199,22 @@ function _status_bar_script()
   window.addEventListener('therapy:ws:open', function(){ setConnected(true); });
   window.addEventListener('therapy:ws:close', function(){ setConnected(false); });
 
-  // ── Theme picker ──
-  var _themes = [
-    {id:'dark+', label:'Dark+'},
-    {id:'dark', label:'Dark'}
-  ];
-  var _picker = document.getElementById('theme-picker');
-  var _pickerLabel = document.getElementById('theme-picker-label');
-  var _popup = null;
-
-  // Restore saved theme
-  var saved = localStorage.getItem('sessions-ide-theme') || 'dark';
-  _applyTheme(saved);
-
-  function _applyTheme(id) {
-    var root = document.getElementById('sessions-root');
-    if (root) {
-      if (id === 'dark+') root.removeAttribute('data-ide-theme');
-      else root.setAttribute('data-ide-theme', id);
-    }
-    if (_pickerLabel) _pickerLabel.textContent = _themes.find(function(t){return t.id===id;}).label;
-    localStorage.setItem('sessions-ide-theme', id);
-  }
-
-  if (_picker) {
-    _picker.addEventListener('mouseenter', function(){ _picker.style.background='rgba(255,255,255,.06)'; });
-    _picker.addEventListener('mouseleave', function(){ _picker.style.background=''; });
-    _picker.addEventListener('click', function(e) {
-      e.stopPropagation();
-      if (_popup) { _popup.remove(); _popup = null; return; }
-      var r = _picker.getBoundingClientRect();
-      _popup = document.createElement('div');
-      _popup.style.cssText = 'position:fixed;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:6px;min-width:100px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;padding:3px 0;bottom:'+(window.innerHeight-r.top+4)+'px;right:'+(window.innerWidth-r.right)+'px;';
-      _themes.forEach(function(t) {
-        var item = document.createElement('div');
-        item.textContent = t.label;
-        item.style.cssText = 'padding:5px 12px;font-size:11px;cursor:pointer;color:#9baabd;transition:background .1s,color .1s;';
-        item.addEventListener('mouseenter', function(){ item.style.background='rgba(86,212,160,.08)'; item.style.color='#d4dce8'; });
-        item.addEventListener('mouseleave', function(){ item.style.background=''; item.style.color='#9baabd'; });
-        item.addEventListener('click', function(){ _applyTheme(t.id); _popup.remove(); _popup = null; });
-        _popup.appendChild(item);
-      });
-      document.body.appendChild(_popup);
+  // ── Theme toggle (light/dark) ──
+  var _toggleBtn = document.getElementById('theme-toggle-btn');
+  if (_toggleBtn) {
+    _toggleBtn.addEventListener('click', function() {
+      var html = document.documentElement;
+      var isDark = html.classList.contains('dark');
+      if (isDark) {
+        html.classList.remove('dark', 'sl-theme-dark');
+        html.classList.add('sl-theme-light');
+        localStorage.setItem('sessions-theme', 'light');
+      } else {
+        html.classList.add('dark', 'sl-theme-dark');
+        html.classList.remove('sl-theme-light');
+        localStorage.setItem('sessions-theme', 'dark');
+      }
     });
-    document.addEventListener('click', function(){ if(_popup){ _popup.remove(); _popup=null; } });
   }
 })();
 </script>""")

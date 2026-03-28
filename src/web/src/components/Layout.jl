@@ -18,10 +18,20 @@ function Layout(children...; title="Sessions.jl")
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">"""),
 
-        # --- Shoelace Web Components (dark theme) ---
-        RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
+        # --- Shoelace Web Components (load both themes, apply based on mode) ---
+        RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
 <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
-<script>document.documentElement.classList.add('sl-theme-dark');</script>"""),
+<script>
+(function(){
+  var isDark = localStorage.getItem('sessions-theme') !== 'light';
+  if (isDark) {
+    document.documentElement.classList.add('dark', 'sl-theme-dark');
+  } else {
+    document.documentElement.classList.add('sl-theme-light');
+  }
+})();
+</script>"""),
 
         # --- xterm.js (terminal emulator) ---
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
@@ -29,17 +39,25 @@ function Layout(children...; title="Sessions.jl")
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>"""),
 
-        # --- Tailwind CDN + custom config ---
+        # --- Tailwind CDN + custom config (dual light/dark mode) ---
         RawHtml("""<script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        /* Dark mode palette (original Sessions colors, used via dark: prefix) */
         deep:'#0a0e14', base:'#0f1419', surf:'#151c25', island:'#1a2332', hov:'#1f2b3d',
         b1:'#1c2736', b2:'#2a3a4f',
         t1:'#d4dce8', t2:'#9baabd', t3:'#4a5568', t4:'#3d5068', tout:'#7ca0bf',
+        /* Shared warm neutrals (Therapy.jl ecosystem) */
+        'warm-50':'#f8f7f4', 'warm-100':'#f0ece4', 'warm-200':'#e8e3d9',
+        'warm-300':'#d4d0c8', 'warm-400':'#9a9590', 'warm-500':'#8a8680',
+        'warm-600':'#6b6560', 'warm-700':'#5a5855', 'warm-800':'#2a2520',
+        /* Status + accent */
         accent:'#56d4a0', jr:'#e06b65', jg:'#56d4a0', jp:'#b08fd8',
+        rose:'#d4759a',
       },
       fontFamily: {
         sans:['DM Sans','system-ui','sans-serif'],
@@ -51,102 +69,166 @@ tailwind.config = {
 }
 </script>"""),
 
-        # --- Full CSS ---
+        # --- Full CSS (dual light/dark via CSS custom properties) ---
         RawHtml("""<style>
+/* ═══ CSS Custom Properties: Light/Dark ═══ */
+:root {
+  --workspace-bg: #f8f7f4;    /* warm-50 */
+  --panel-bg: #ffffff;
+  --cell-bg: #f8f7f4;         /* warm-50 = workspace */
+  --cell-border: #e8e3d9;     /* warm-200 */
+  --cell-border-hov: #d4d0c8; /* warm-300 */
+  --chrome-bg: #f0ece4;       /* warm-100 */
+  --chrome-active: #ffffff;
+  --divider: #e8e3d9;
+  --text-1: #2a2520;
+  --text-2: #6b6560;
+  --text-3: #9a9590;
+  --output-text: #6b6560;
+  --term-bg: #f0ece4;         /* warm-100, distinct from notebook */
+  --term-border: #ffffff;
+  --selection-bg: rgba(86,212,160,.15);
+  --accent: #d4759a;          /* rose */
+  --status-done: #56d4a0;
+  --status-running: #d4a056;
+  --status-error: #dc3545;
+  --panel-shadow: 0 2px 12px rgba(0,0,0,.06);
+  --scrollbar-thumb: #d4d0c8;
+}
+.dark {
+  --workspace-bg: #1a2332;
+  --panel-bg: #0f1419;
+  --cell-bg: #1a2332;
+  --cell-border: #1c2736;
+  --cell-border-hov: #2a3a4f;
+  --chrome-bg: #080b10;
+  --chrome-active: #0f1419;
+  --divider: #1c2736;
+  --text-1: #d4dce8;
+  --text-2: #9baabd;
+  --text-3: #6b7d93;
+  --output-text: #7ca0bf;
+  --term-bg: #080b10;
+  --term-border: #2a3a4f;
+  --selection-bg: rgba(86,212,160,.15);
+  --panel-shadow: 0 4px 24px rgba(0,0,0,.3);
+  --scrollbar-thumb: #2a3a4f;
+}
+
+/* ═══ Reset + Layout ═══ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;margin:0;padding:0;}
-/* #sessions-root is the layout owner — uses 100vh to bypass all Therapy wrappers */
-#sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;}
-/* IDE theme: Dark (neutral gray workspace — t3 #4a5568 as bg) */
-#sessions-root[data-ide-theme="dark"]{background:#4a5568;}
-#sessions-root[data-ide-theme="dark"] #status-bar{box-shadow:0 -4px 8px rgba(0,0,0,.25) !important;color:#0a0e14 !important;font-weight:600 !important;}
-[data-ide-theme="dark"] #app-root{background:#4a5568 !important;}
+#sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;background:var(--workspace-bg);color:var(--text-1);transition:background .2s,color .2s;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>div{min-height:0;}
-/* Activity bar button: active highlight when panel is open.
-   !important needed to override inline style from _AB_BTN_STYLE */
-/* Activity bar */
-.ab-btn[data-state="on"]{background:rgba(86,212,160,.08) !important;color:#56d4a0 !important;}
-.ab-btn:hover{background:rgba(86,212,160,.06) !important;color:#9baabd !important;}
-/* Shared notebook CSS (cell chrome, md-prose, sst-*, cm overrides) */
+
+/* ═══ Activity Bar ═══ */
+.ab-btn[data-state="on"]{background:rgba(212,117,154,.1) !important;color:var(--accent) !important;}
+.ab-btn:hover{background:rgba(128,128,128,.08) !important;color:var(--text-2) !important;}
+
+/* ═══ Shared Notebook CSS ═══ */
 $(Main.Sessions.NOTEBOOK_CSS)
-/* Layout-only cell state overrides */
-.code-cell.idle::before{background:#3d5068;opacity:.2;}
+
+/* ═══ Cell States ═══ */
+.code-cell.idle::before{background:var(--text-3);opacity:.2;}
+.code-cell.stale::before{background:var(--status-running);opacity:.5;}
 .code-cell.executing::before{opacity:0 !important;}
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
 .cell-collapsed .cm-cell{display:none;}
 .cell-collapsed .cell-ctrls{display:none;}
 .cell-collapsed::before{opacity:.15!important;}
 .cell-collapsed{border-style:dashed!important;opacity:.4;max-height:8px;overflow:hidden;}
+
+/* ═══ Tab Bar + Cell Gaps ═══ */
 .cdiv:hover .cdiv-inner{opacity:1;}
 .chv{transition:transform .12s ease;}
 .chv.open{transform:rotate(90deg);}
-.tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:#56d4a0;border-radius:2px 2px 0 0;}
+.tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
 #fpanel.hide{width:0!important;opacity:0;padding:0;border:none;overflow:hidden;pointer-events:none;}
+
+/* ═══ Scrollbar ═══ */
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:#2a3a4f;border-radius:3px;}
-::selection{background:rgba(86,212,160,.2);}
+::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px;}
+::selection{background:var(--selection-bg);}
+
+/* ═══ Animations ═══ */
 @keyframes blink{50%{opacity:0}}
 .cblink{animation:blink 1s step-end infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
-.code-cell.stale::before{background:#d4a056;opacity:.5;}
-.md-prose h5,.md-prose h6{font-family:'Fraunces',Georgia,serif;font-size:1rem;font-weight:600;color:#d4dce8;margin:0.6em 0 0.2em;}
-/* Shoelace dark theme overrides — match Sessions.jl palette */
-:root{--sl-color-neutral-0:#0a0e14;--sl-color-neutral-50:#0f1419;--sl-color-neutral-100:#151c25;--sl-color-neutral-200:#1a2332;--sl-color-neutral-300:#1c2736;--sl-color-neutral-400:#2a3a4f;--sl-color-neutral-500:#3d5068;--sl-color-neutral-600:#4a5568;--sl-color-neutral-700:#9baabd;--sl-color-neutral-800:#d4dce8;--sl-color-neutral-900:#d4dce8;--sl-color-neutral-1000:#ffffff;--sl-color-primary-600:#56d4a0;--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
-sl-tree{--indent-size:14px;--indent-guide-width:1px;--indent-guide-color:#1c2736;}
-sl-tree-item::part(label){font-size:12px;font-family:'JetBrains Mono',monospace;color:#4a5568;display:flex;align-items:center;gap:6px;}
+
+/* ═══ Markdown Prose ═══ */
+.md-prose h5,.md-prose h6{font-family:'Fraunces',Georgia,serif;font-size:1rem;font-weight:600;color:var(--text-1);margin:0.6em 0 0.2em;}
+
+/* ═══ Shoelace Overrides (adapt to current mode) ═══ */
+:root{--sl-color-primary-600:var(--accent);--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
+sl-tree{--indent-size:14px;--indent-guide-width:1px;--indent-guide-color:var(--divider);}
+sl-tree-item::part(label){font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text-3);display:flex;align-items:center;gap:6px;}
 sl-tree-item::part(item){border-radius:4px;padding:1px 4px;transition:background .12s,color .12s;}
-sl-tree-item::part(item--selected){background:rgba(86,212,160,.08);outline:none;}
-sl-tree-item::part(expand-button){color:#3d5068;padding-right:0;}
-sl-tree-item[selected]::part(label){color:#d4dce8;}
-sl-tree-item[selected]{border-left:2px solid #56d4a0;}
-sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
+sl-tree-item::part(item--selected){background:rgba(212,117,154,.08);outline:none;}
+sl-tree-item::part(expand-button){color:var(--text-3);padding-right:0;}
+sl-tree-item[selected]::part(label){color:var(--text-1);}
+sl-tree-item[selected]{border-left:2px solid var(--accent);}
+sl-tree-item::part(item):hover{background:rgba(128,128,128,.06);}
 .tree-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tree-rename-input{background:#1a2332;border:1px solid #56d4a0;border-radius:3px;color:#d4dce8;font-family:'JetBrains Mono',monospace;font-size:12px;padding:1px 4px;outline:none;width:100%;}
-.file-ctx-menu{display:none;position:fixed;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:8px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;padding:4px 0;}
-.file-ctx-item{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:#9baabd;font-family:'JetBrains Mono',monospace;transition:background .1s,color .1s;}
-.file-ctx-item:hover{background:rgba(86,212,160,.08);color:#d4dce8;}
-.file-ctx-item.danger:hover{background:rgba(224,107,101,.12);color:#e06b65;}
-.file-ctx-sep{height:1px;background:#2a3a4f;margin:4px 8px;}
-.tree-breadcrumb{display:flex;align-items:center;gap:4px;padding:4px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#3d5068;overflow:hidden;}
-.tree-breadcrumb button{background:none;border:none;color:#4a5568;cursor:pointer;padding:2px 4px;border-radius:3px;display:flex;align-items:center;transition:color .12s,background .12s;}
-.tree-breadcrumb button:hover{color:#d4dce8;background:rgba(255,255,255,.05);}
-.tree-breadcrumb .crumb{color:#4a5568;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
-/* xterm.js overrides */
+.tree-rename-input{background:var(--cell-bg);border:1px solid var(--accent);border-radius:3px;color:var(--text-1);font-family:'JetBrains Mono',monospace;font-size:12px;padding:1px 4px;outline:none;width:100%;}
+.file-ctx-menu{display:none;position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov);border-radius:8px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;}
+.file-ctx-item{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-2);font-family:'JetBrains Mono',monospace;transition:background .1s,color .1s;}
+.file-ctx-item:hover{background:rgba(212,117,154,.08);color:var(--text-1);}
+.file-ctx-item.danger:hover{background:rgba(220,53,69,.1);color:var(--status-error);}
+.file-ctx-sep{height:1px;background:var(--divider);margin:4px 8px;}
+.tree-breadcrumb{display:flex;align-items:center;gap:4px;padding:4px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-3);overflow:hidden;}
+.tree-breadcrumb button{background:none;border:none;color:var(--text-3);cursor:pointer;padding:2px 4px;border-radius:3px;display:flex;align-items:center;transition:color .12s,background .12s;}
+.tree-breadcrumb button:hover{color:var(--text-1);background:rgba(128,128,128,.06);}
+.tree-breadcrumb .crumb{color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+
+/* ═══ xterm.js ═══ */
 .xterm{height:100%;}
 .xterm .xterm-viewport{overflow-y:auto!important;}
 .xterm .xterm-viewport::-webkit-scrollbar{width:5px;}
 .xterm .xterm-viewport::-webkit-scrollbar-track{background:transparent;}
-.xterm .xterm-viewport::-webkit-scrollbar-thumb{background:#2a3a4f;border-radius:3px;}
-.term-tab{display:flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#4a5568;cursor:pointer;border-radius:4px 4px 0 0;transition:color .12s,background .12s;white-space:nowrap;user-select:none;}
-.term-tab:hover{color:#9baabd;background:rgba(255,255,255,.03);}
-.term-tab.active{color:#d4dce8;background:#0a0e14;border-bottom:2px solid #56d4a0;}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px;}
+.term-tab{display:flex;align-items:center;gap:4px;padding:3px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-3);cursor:pointer;border-radius:4px 4px 0 0;transition:color .12s,background .12s;white-space:nowrap;user-select:none;}
+.term-tab:hover{color:var(--text-2);background:rgba(128,128,128,.06);}
+.term-tab.active{color:var(--text-1);background:var(--term-bg);border-bottom:2px solid var(--accent);}
 .term-tab .close-x{opacity:0;font-size:9px;padding:1px 3px;border-radius:3px;transition:opacity .1s,background .1s;}
 .term-tab:hover .close-x,.term-tab.active .close-x{opacity:.6;}
-.term-tab .close-x:hover{opacity:1;background:rgba(224,107,101,.2);color:#e06b65;}
-/* Undo toast — bottom-left notification for deleted cells */
-#undo-toast{position:fixed;bottom:20px;left:20px;z-index:9999;background:#1a2332;border:1px solid #2a3a4f;border-radius:8px;padding:10px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:#9baabd;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;}
+.term-tab .close-x:hover{opacity:1;background:rgba(220,53,69,.15);color:var(--status-error);}
+
+/* ═══ Undo Toast ═══ */
+#undo-toast{position:fixed;bottom:20px;left:20px;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov);border-radius:8px;padding:10px 16px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text-2);box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;}
 #undo-toast.show{opacity:1;transform:translateY(0);pointer-events:auto;}
-#undo-toast kbd{background:#0f1419;border:1px solid #2a3a4f;border-radius:3px;padding:1px 5px;font-size:11px;color:#56d4a0;}
-/* File editor — full-height CodeMirror for plain files */
+#undo-toast kbd{background:var(--chrome-bg);border:1px solid var(--cell-border);border-radius:3px;padding:1px 5px;font-size:11px;color:var(--accent);}
+
+/* ═══ File Editor ═══ */
 .file-editor-wrap{height:100%;display:flex;flex-direction:column;}
 .cm-file-editor{flex:1;min-height:0;}
 .cm-file-editor .cm-editor{height:100%;}
+
+/* ═══ Ghost Toolbar Buttons ═══ */
+.tb-btn{display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:5px;font-size:11px;font-family:-apple-system,sans-serif;border:none;background:transparent;color:var(--text-3);cursor:pointer;transition:all .12s;white-space:nowrap;}
+.tb-btn:hover{color:var(--text-1);background:rgba(128,128,128,.1);}
+.tb-btn:active{background:rgba(128,128,128,.15);}
+.tb-btn.stale{color:var(--status-running);}
+.tb-btn.stale:hover{background:rgba(212,160,86,.08);}
+.tb-btn.stop{color:var(--status-error);}
+.tb-btn.stop:hover{background:rgba(220,53,69,.08);}
+.tb-btn svg{width:9px;height:9px;}
+.toolbar-sep{width:1px;height:14px;background:var(--divider);margin:0 4px;}
 </style>"""),
 
         # --- Editor bundle (inlined — Therapy dev server has no static file handler) ---
         RawHtml(string("<script>", _EDITOR_BUNDLE_JS, "</script>")),
 
         # --- Body: children render directly (no wrapper div — SessionsApp owns the layout) ---
-        RawHtml("""<div id="app-root" class="bg-base text-t1 font-sans">"""),
+        RawHtml("""<div id="app-root" class="font-sans" style="background:var(--workspace-bg);color:var(--text-1);">"""),
         children...,
         RawHtml("""</div>"""),
 
         # --- Undo toast (for deleted cells) ---
         RawHtml("""<div id="undo-toast">Cell deleted &mdash; <kbd>Ctrl+Z</kbd> to undo</div>"""),
 
-        # --- Panel state: persist to localStorage, restore after WASM hydration ---
+        # --- Panel state: persist to localStorage ---
         RawHtml("""<script>
 (function(){
   // Panel persistence is handled by SessionsApp.jl (toggle + restore scripts)
@@ -185,20 +267,23 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
     {tag:C.t.macroName,color:"#d4a056"},
   ]);
 
+  // CM theme uses CSS vars so it adapts to light/dark automatically
+  var isDark = document.documentElement.classList.contains('dark');
+  var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#d4759a';
   var edTheme = C.EditorView.theme({
-    "&":{backgroundColor:"transparent",color:"#d4dce8"},
-    ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
+    "&":{backgroundColor:"transparent",color:"var(--text-1)"},
+    ".cm-gutters":{backgroundColor:"transparent",color:"var(--text-3)",border:"none",minWidth:"38px"},
     ".cm-activeLine":{backgroundColor:"transparent"},
-    "&.cm-focused .cm-activeLine":{backgroundColor:"rgba(86,212,160,.03)"},
-    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#3d5068"},
-    "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"#4a5568"},
-    "&.cm-focused .cm-cursor":{borderLeftColor:"#56d4a0"},
-    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"rgba(86,212,160,.15) !important"},
-    ".cm-content":{caretColor:"#56d4a0",fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+    "&.cm-focused .cm-activeLine":{backgroundColor:"rgba(128,128,128,.04)"},
+    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-3)"},
+    "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-2)"},
+    "&.cm-focused .cm-cursor":{borderLeftColor:accentColor},
+    "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"var(--selection-bg) !important"},
+    ".cm-content":{caretColor:accentColor,fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
     ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-    ".cm-matchingBracket":{color:"#56d4a0 !important",backgroundColor:"rgba(86,212,160,.1)",outline:"1px solid rgba(86,212,160,.2)"},
+    ".cm-matchingBracket":{color:accentColor+" !important",backgroundColor:"rgba(212,117,154,.1)",outline:"1px solid rgba(212,117,154,.2)"},
     ".cm-line":{paddingLeft:"4px"},
-  },{dark:true});
+  },{dark:isDark});
 
   // ── Run cell: read code from CM editor, send to server ──
   window._sessionsRunCell = function(cellId) {
@@ -351,8 +436,8 @@ sl-tree-item::part(item):hover{background:rgba(255,255,255,.03);}
   initCMEditors();
   window._sessionsInitNewCells = initCMEditors;
 
-  // ── Fold persistence: watch CellToggle WASM toggle and sync to server ──
-  // CellToggle @island handles the visual toggle via WASM signal + Show().
+  // ── Fold persistence: watch CellToggle @island toggle and sync to server ──
+  // CellToggle @island handles the visual toggle via Therapy.jl signal + Show().
   // This observer detects when the Show wrapper hides/shows the code-cell
   // and sends the fold state to the server for .jl file persistence.
   document.querySelectorAll('.cell-island').forEach(function(island) {
