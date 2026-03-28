@@ -171,14 +171,29 @@
   .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
   .tab-spacer { flex: 1; }
 
-  /* Toolbar buttons (Run Stale, Run All, Save, Format) */
-  .toolbar { display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+  /* Toolbar: inset/recessed strip between tabs and notebook content */
+  .toolbar-strip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    background: var(--warm-100); /* slightly recessed vs white notebook */
+    border-bottom: 1px solid var(--cell-border);
+    border-top: 1px solid rgba(0,0,0,.03);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.04);
+  }
+  .dark .toolbar-strip {
+    background: #0a0f15; /* slightly recessed vs #0f1419 notebook */
+    border-top-color: rgba(0,0,0,.15);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+  }
+  .toolbar-strip .spacer { flex: 1; }
+
+  /* Toolbar buttons */
   .tb-btn {
     display: flex; align-items: center; gap: 5px;
     padding: 3px 10px; border-radius: 5px;
     font-size: 11px; font-family: -apple-system, sans-serif;
     border: 1px solid var(--cell-border);
-    background: var(--cell-bg); color: var(--text-2);
+    background: var(--panel-bg); color: var(--text-2);
     cursor: pointer; transition: all .15s;
   }
   .tb-btn:hover { color: var(--text-1); border-color: var(--cell-border-hov); }
@@ -357,23 +372,24 @@
       <div class="tab-bar">
         <div class="tab"><span class="dot-mod"></span> analysis.jl</div>
         <div class="tab-inactive"><span class="dot-ok"></span> helpers.jl</div>
-        <div class="tab-spacer"></div>
-        <div class="toolbar">
-          <button class="tb-btn stale">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
-            Run Stale (2)
-          </button>
-          <button class="tb-btn">
-            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
-            Run All
-          </button>
-          <button class="tb-btn stop">
-            <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
-            Stop
-          </button>
-          <button class="tb-btn">Save</button>
-          <button class="tb-btn">Format</button>
-        </div>
+      </div>
+      <!-- Toolbar: recessed strip below tabs, above notebook content -->
+      <div class="toolbar-strip">
+        <button class="tb-btn stale">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
+          Run Stale (2)
+        </button>
+        <button class="tb-btn">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
+          Run All
+        </button>
+        <button class="tb-btn stop">
+          <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
+          Stop
+        </button>
+        <div class="spacer"></div>
+        <button class="tb-btn">Save</button>
+        <button class="tb-btn">Format</button>
       </div>
       <div class="nb-scroll"><div class="nb-content">
 
