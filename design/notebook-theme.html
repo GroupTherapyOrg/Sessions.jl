@@ -271,11 +271,12 @@
   .dark .terminal.panel { background: #080b10; border-color: #2a3a4f; }
   .term-header {
     height: 32px; display: flex; align-items: center; flex-shrink: 0;
-    padding: 0 12px; border-bottom: 1px solid var(--divider);
+    padding: 0 12px; border-bottom: 1px solid #ffffff;
     font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
     background: var(--chrome-bg); border-radius: 12px 12px 0 0;
     gap: 6px;
   }
+  .dark .term-header { border-bottom-color: #2a3a4f; }
   .term-body {
     flex: 1; padding: 8px 12px; overflow-y: auto;
     font-family: 'JetBrains Mono', monospace;
