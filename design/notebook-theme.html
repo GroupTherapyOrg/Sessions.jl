@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sessions.jl — Notebook Theme Prototype</title>
+<style>
+  /* ═══════════════════════════════════════════════════════════
+     SESSIONS.JL THEME — Shared palette with Therapy.jl
+     Same warm neutrals, unique accent color (rose/pink)
+     ═══════════════════════════════════════════════════════════ */
+
+  :root {
+    /* Warm neutrals (shared with Therapy.jl ecosystem) */
+    --warm-50:  #f8f7f4;
+    --warm-100: #f0ece4;
+    --warm-200: #e8e3d9;
+    --warm-300: #d4d0c8;
+    --warm-400: #9a9590;
+    --warm-500: #8a8680;
+    --warm-600: #6b6560;
+    --warm-700: #5a5855;
+    --warm-800: #2a2520;
+    --warm-900: #1a1918;
+    --warm-950: #111110;
+
+    /* Sessions accent — Rose/Pink */
+    --accent-400: #fb7185;
+    --accent-500: #f43f5e;
+    --accent-600: #e11d48;
+
+    /* Code cell colors */
+    --cell-bg:      #1a2332;  /* dark blue-tint */
+    --cell-border:  #1c2736;
+    --cell-hover:   #2a3a4f;
+    --accent-bar:   #f43f5e;  /* rose accent for left bar */
+
+    /* Output text */
+    --output-text: #7ca0bf;
+
+    /* ── Light mode ── */
+    --workspace-bg:  var(--warm-100);  /* beige workspace */
+    --notebook-bg:   #ffffff;          /* white notebook panel */
+    --cell-bg-light: var(--warm-50);   /* beige code cells */
+    --cell-border-light: var(--warm-200);
+    --cell-hover-light: var(--warm-300);
+    --text-primary:   var(--warm-800);
+    --text-secondary: var(--warm-600);
+    --text-tertiary:  var(--warm-400);
+    --output-text-light: var(--warm-600);
+    --tab-bg: var(--warm-100);
+    --tab-active-bg: #ffffff;
+  }
+
+  .dark {
+    --workspace-bg:  #0d1117;          /* near-black workspace */
+    --notebook-bg:   #0f1419;          /* deep dark notebook */
+    --cell-bg-light: #1a2332;          /* blue-tint code cells */
+    --cell-border-light: #1c2736;
+    --cell-hover-light: #2a3a4f;
+    --text-primary:   #d4dce8;
+    --text-secondary: #9baabd;
+    --text-tertiary:  #6b7d93;
+    --output-text-light: #7ca0bf;
+    --tab-bg: #0a0e14;
+    --tab-active-bg: #151c25;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--workspace-bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    transition: background .2s, color .2s;
+  }
+
+  /* ── Theme toggle ── */
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px;
+    padding: 6px 14px; border-radius: 9999px;
+    border: 1px solid var(--cell-border-light);
+    background: var(--notebook-bg);
+    color: var(--text-secondary);
+    font-size: 12px; cursor: pointer;
+    transition: all .2s;
+    z-index: 100;
+  }
+  .theme-toggle:hover { color: var(--accent-500); border-color: var(--accent-500); }
+
+  /* ── Title ── */
+  .page-title {
+    font-size: 13px; font-weight: 500; color: var(--text-tertiary);
+    margin-bottom: 24px; letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .page-title span { color: var(--accent-500); }
+
+  /* ═══════════════════════════════════════════════════════════
+     NOTEBOOK PANEL
+     ═══════════════════════════════════════════════════════════ */
+  .notebook {
+    width: 100%; max-width: 900px;
+    background: var(--notebook-bg);
+    border: 1px solid var(--cell-border-light);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    transition: background .2s, border-color .2s, box-shadow .2s;
+  }
+  .dark .notebook { box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+
+  /* ── Tab bar ── */
+  .tab-bar {
+    height: 38px; display: flex; align-items: stretch;
+    background: var(--tab-bg);
+    border-bottom: 1px solid var(--cell-border-light);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12px;
+  }
+  .tab {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 14px;
+    border-right: 1px solid var(--cell-border-light);
+    color: var(--text-primary);
+    background: var(--tab-active-bg);
+  }
+  .tab .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent-500);
+  }
+
+  /* ── Notebook content ── */
+  .nb-content {
+    padding: 20px 24px 32px;
+    max-width: 780px; margin: 0 auto;
+    padding-left: 52px; /* gutter space */
+  }
+
+  /* ── Cell wrapper ── */
+  .cell {
+    position: relative;
+    padding: 3px 0;
+  }
+  .cell:hover .gutter { opacity: 1; }
+  .cell:hover .cell-ctrls { opacity: 1; transform: translateY(0); }
+
+  /* ── Gutter (cell number / eye icon) ── */
+  .gutter {
+    position: absolute; left: -28px; top: 0; bottom: 0;
+    width: 24px; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s; cursor: pointer; z-index: 5;
+  }
+  .gutter svg { color: var(--text-tertiary); transition: color .15s; }
+  .gutter:hover svg { color: var(--accent-500); }
+  .gutter .num { font-size: 10px; font-family: monospace; color: var(--text-tertiary); }
+
+  /* ── Code cell ── */
+  .code-cell {
+    position: relative; overflow: hidden;
+    background: var(--cell-bg-light);
+    border: 1px solid var(--cell-border-light);
+    border-radius: 8px;
+    transition: border-color .2s;
+  }
+  .code-cell:hover { border-color: var(--cell-hover-light); }
+
+  /* Accent bar (left edge) */
+  .code-cell::before {
+    content: ''; position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent-500);
+    opacity: .3; transition: opacity .2s;
+    border-radius: 2px 0 0 2px;
+  }
+  .cell:hover .code-cell::before { opacity: .7; }
+
+  .code-cell code {
+    display: block;
+    padding: 10px 12px 10px 14px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px; line-height: 1.6;
+    white-space: pre; overflow-x: auto;
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  /* ── Cell controls (runtime badge) ── */
+  .cell-ctrls {
+    position: absolute; top: 4px; right: 6px;
+    display: flex; align-items: center; gap: 6px; z-index: 10;
+    opacity: 0; transform: translateY(-3px);
+    pointer-events: none;
+    transition: opacity .15s, transform .15s;
+  }
+  .cell:hover .cell-ctrls { pointer-events: auto; }
+
+  .rt-badge {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    padding: 1px 7px; border-radius: 9999px;
+    color: var(--accent-500); opacity: .8;
+    background: rgba(244, 63, 94, .08);
+    border: 1px solid rgba(244, 63, 94, .15);
+  }
+
+  /* ── Output ── */
+  .cell-out {
+    padding: 4px 2px 8px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px; line-height: 1.5;
+    color: var(--output-text-light);
+    overflow-x: auto;
+  }
+
+  /* ── Markdown cell ── */
+  .md-cell {
+    padding: 8px 4px;
+    font-size: 14px; line-height: 1.7;
+    color: var(--text-secondary);
+  }
+  .md-cell h2 {
+    font-size: 16px; font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  /* ── Cell gap ── */
+  .cell-gap {
+    height: 26px; display: flex; align-items: center; justify-content: center;
+    margin: 2px 0;
+  }
+  .cell-gap:hover .gap-inner { opacity: 1; }
+  .gap-inner {
+    display: flex; align-items: center; gap: 4px;
+    opacity: 0; transition: opacity .15s;
+  }
+  .gap-line { height: 1px; width: 56px; background: var(--cell-border-light); }
+  .gap-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 1px 10px; border-radius: 9999px;
+    font-size: 10px; border: 1px solid var(--cell-border-light);
+    background: transparent; color: var(--text-tertiary);
+    cursor: pointer; transition: all .15s;
+  }
+  .gap-btn:hover { color: var(--text-primary); border-color: var(--cell-hover-light); }
+  .gap-btn svg { width: 8px; height: 8px; }
+
+  /* ── Static badge ── */
+  .badge-static {
+    font-size: 10px; font-family: monospace;
+    padding: 1px 7px; border-radius: 9999px;
+    color: var(--text-tertiary);
+    border: 1px solid var(--cell-border-light);
+    background: var(--cell-bg-light);
+  }
+
+  /* ── Slider ── */
+  .slider-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 6px 2px;
+  }
+  .slider-row input[type="range"] { flex: 1; accent-color: var(--accent-500); }
+  .slider-row .val {
+    font-family: monospace; font-size: 13px;
+    color: var(--output-text-light);
+    min-width: 2ch; text-align: right;
+  }
+
+  /* ── Plot placeholder ── */
+  .plot-placeholder {
+    width: 100%; height: 220px;
+    border: 1px solid var(--cell-border-light);
+    border-radius: 8px; margin: 4px 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text-tertiary);
+    background: var(--notebook-bg);
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')">
+  Toggle Dark Mode
+</button>
+
+<div class="page-title"><span>Sessions</span>.jl — Notebook Theme Prototype</div>
+
+<!-- ═══ NOTEBOOK ═══ -->
+<div class="notebook">
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <div class="tab">
+      <span class="dot"></span>
+      analysis.jl
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="nb-content">
+
+    <!-- Cell 1: Markdown -->
+    <div class="cell">
+      <div class="gutter"><span class="num">1</span></div>
+      <div class="md-cell">
+        <h2>2D Wave Analysis</h2>
+        Interactive heatmap of sin(x*f) * cos(y*f). Adjust the frequency parameter below.
+      </div>
+    </div>
+
+    <!-- Gap -->
+    <div class="cell-gap">
+      <div class="gap-inner">
+        <div class="gap-line"></div>
+        <button class="gap-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
+          Code
+        </button>
+        <div class="gap-line"></div>
+      </div>
+    </div>
+
+    <!-- Cell 2: @bind slider -->
+    <div class="cell">
+      <div class="gutter">
+        <!-- Eye icon -->
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <!-- Output above code -->
+      <div class="slider-row">
+        <input type="range" min="1" max="15" value="8">
+        <span class="val">8</span>
+      </div>
+      <!-- Code cell -->
+      <div class="code-cell">
+        <div class="cell-ctrls"><span class="rt-badge">0.2 ms</span></div>
+        <code>@bind freq Slider(1:15)</code>
+      </div>
+    </div>
+
+    <!-- Gap -->
+    <div class="cell-gap">
+      <div class="gap-inner">
+        <div class="gap-line"></div>
+        <button class="gap-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
+          Code
+        </button>
+        <div class="gap-line"></div>
+      </div>
+    </div>
+
+    <!-- Cell 3: Plot output -->
+    <div class="cell">
+      <div class="gutter">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <!-- Plot output above code -->
+      <div class="plot-placeholder">[ Plotly heatmap renders here ]</div>
+      <!-- Code cell -->
+      <div class="code-cell">
+        <div class="cell-ctrls"><span class="rt-badge">8.4 ms</span></div>
+        <code>heatmap(z, colorscale="Viridis")</code>
+      </div>
+    </div>
+
+    <!-- Gap -->
+    <div class="cell-gap">
+      <div class="gap-inner">
+        <div class="gap-line"></div>
+        <button class="gap-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
+          Code
+        </button>
+        <div class="gap-line"></div>
+      </div>
+    </div>
+
+    <!-- Cell 4: Static cell -->
+    <div class="cell">
+      <div class="gutter"><span class="num">4</span></div>
+      <div class="cell-out">
+        CSV written: 1,200 rows <span class="badge-static">static</span>
+      </div>
+      <div class="code-cell">
+        <div class="cell-ctrls"><span class="rt-badge">45.2 ms</span></div>
+        <code>CSV.write("output.csv", df)</code>
+      </div>
+    </div>
+
+    <!-- Gap -->
+    <div class="cell-gap">
+      <div class="gap-inner">
+        <div class="gap-line"></div>
+        <button class="gap-btn">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>
+          Code
+        </button>
+        <div class="gap-line"></div>
+      </div>
+    </div>
+
+    <!-- Cell 5: Another code cell -->
+    <div class="cell">
+      <div class="gutter">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div class="cell-out">(3.0, 3.0, 1.5811388300841898)</div>
+      <div class="code-cell">
+        <div class="cell-ctrls"><span class="rt-badge">0.8 ms</span></div>
+        <code>mean(x), median(x), std(x)</code>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p style="margin-top:24px;font-size:11px;color:var(--text-tertiary);">
+  Sessions.jl — Therapy.jl + JavaScriptTarget.jl
+</p>
+
+</body>
+</html>
