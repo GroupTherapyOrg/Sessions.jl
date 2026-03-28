@@ -1,12 +1,61 @@
 # web_server.jl — Server state + channel handlers for Sessions.jl Web UI
 #
-# Bridges the notebook engine to Therapy.jl WebSocket channels.
+# Bridges the notebook engine to Therapy.jl WebSocket message handling.
 # Handles: cell execution, add/delete/move cells, save, run all.
 # All heavy lifting (execution, reactivity, analysis) stays server-side.
 
 using Therapy
 using UUIDs
 # Note: Markdown is already imported by web.jl (included earlier in the module)
+
+# ═══════════════════════════════════════════════════════════
+# Channel system — message routing for WebSocket communication
+# Replaces old MESSAGE_CHANNELS with local implementation.
+# Client JS sends: {type:"action", channel:"notebook", action:"execute", ...}
+# Server routes by channel name to registered handlers.
+# ═══════════════════════════════════════════════════════════
+
+const MESSAGE_CHANNELS = Dict{String, Vector{Function}}()
+
+function create_channel(name::String)
+    MESSAGE_CHANNELS[name] = Function[]
+end
+
+function on_channel_message(fn::Function, name::String)
+    if !haskey(MESSAGE_CHANNELS, name)
+        create_channel(name)
+    end
+    push!(MESSAGE_CHANNELS[name], fn)
+end
+
+function dispatch_channel_message(channel::String, conn, data::Dict{String, Any})
+    handlers = get(MESSAGE_CHANNELS, channel, Function[])
+    for handler in handlers
+        try
+            handler(conn, data)
+        catch e
+            @warn "Channel handler error" channel=channel exception=e
+        end
+    end
+end
+
+# Hook into Therapy's WebSocket message handler
+function _setup_ws_dispatch!()
+    # Override Therapy's handle_client_action to route by channel
+    if !isdefined(Therapy, :handle_client_action)
+        return
+    end
+    # Monkey-patch the action handler to dispatch to channels
+    @eval Therapy function handle_client_action(conn::WSConnection, msg::Dict{String, Any})
+        channel = get(msg, "channel", nothing)
+        if channel !== nothing && haskey(Sessions.MESSAGE_CHANNELS, channel)
+            Sessions.dispatch_channel_message(channel, conn, msg)
+        else
+            action = get(msg, "action", nothing)
+            @debug "Unhandled client action" connection=conn.id action=action
+        end
+    end
+end
 
 """A single tab in the web UI — either a notebook or a plain file."""
 mutable struct WebTab
@@ -53,21 +102,21 @@ Signal names: `cell_{uuid}_state` with values like "idle", "running", "done".
 Therapy's WS client auto-updates DOM elements with `data-server-signal` attrs.
 """
 function create_cell_signals!(state::WebNotebookState)
-    active_tab(state).tab_type == :notebook || return
-    for cell in ordered_cells(active_nb(state))
-        sig_name = "cell_$(cell.id)_state"
-        if !haskey(Therapy.SERVER_SIGNALS, sig_name)
-            create_server_signal(sig_name, string(cell.state); use_patches=false)
-        end
-    end
+    # TODO: re-implement with new Therapy signal API or WS broadcast
+    # For now, cell state updates are pushed via broadcast_all in handlers
 end
 
-"""Update a cell's server signal to broadcast its state to all clients."""
+"""Update a cell's state and broadcast to all clients."""
 function _update_cell_signal!(cell::Cell)
-    sig_name = "cell_$(cell.id)_state"
-    sig = get(Therapy.SERVER_SIGNALS, sig_name, nothing)
-    if sig !== nothing
-        set_server_signal!(sig, string(cell.state))
+    # Broadcast cell state change to all connected clients
+    try
+        Therapy.broadcast_all(Dict{String,Any}(
+            "type" => "cell_state",
+            "cell_id" => string(cell.id),
+            "state" => string(cell.state)
+        ))
+    catch
+        # WS not connected yet — ignore
     end
 end
 
@@ -79,7 +128,7 @@ Creates the "notebook" channel and registers message handlers.
 """
 function setup_web_notebook!(state::WebNotebookState)
     # Create channel (safe for HMR reloads)
-    if !haskey(Therapy.MESSAGE_CHANNELS, "notebook")
+    if !haskey(MESSAGE_CHANNELS, "notebook")
         create_channel("notebook")
     end
 
@@ -379,11 +428,8 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
         end
     end
 
-    # Create server signal for the new cell
-    sig_name = "cell_$(new_cell.id)_state"
-    if !haskey(Therapy.SERVER_SIGNALS, sig_name)
-        create_server_signal(sig_name, string(new_cell.state); use_patches=false)
-    end
+    # Broadcast initial cell state
+    _update_cell_signal!(new_cell)
 
     println("[WebNotebook] Added cell $(new_cell.id) after $(after_cell_id_str)")
 
@@ -1149,7 +1195,7 @@ Creates the "file_explorer" channel and registers message handlers for:
 list_dir, rename, delete, create_file, create_dir, navigate_up.
 """
 function setup_file_explorer!(state::WebNotebookState)
-    if !haskey(Therapy.MESSAGE_CHANNELS, "file_explorer")
+    if !haskey(MESSAGE_CHANNELS, "file_explorer")
         create_channel("file_explorer")
     end
 

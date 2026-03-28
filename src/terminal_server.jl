@@ -48,7 +48,7 @@ Set up the 'terminal' WebSocket channel for xterm.js communication.
 Handles: spawn, input, resize, close, switch_tab actions.
 """
 function setup_terminal!(term_state::TerminalState, web_state::WebNotebookState)
-    if !haskey(Therapy.MESSAGE_CHANNELS, "terminal")
+    if !haskey(MESSAGE_CHANNELS, "terminal")
         create_channel("terminal")
     end
 

@@ -90,6 +90,7 @@ app = App(
 # WebSocket: Notebook Channel
 # =============================================================================
 
+Sessions._setup_ws_dispatch!()
 Sessions.setup_web_notebook!(WEB_STATE[])
 Sessions.setup_file_explorer!(WEB_STATE[])
 Sessions.create_cell_signals!(WEB_STATE[])
