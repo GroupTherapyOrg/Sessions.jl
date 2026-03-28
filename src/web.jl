@@ -58,7 +58,7 @@ end
 # CellToggle @island — wasm-compiled code visibility toggle
 # =============================================================================
 
-@island function CellToggle(children...; initial_open=1)
+@island function CellToggle(children...; initial_open::Int=1)
     is_open, set_is_open = create_signal(Int32(initial_open))
 
     Div(:class => "cell-island",
@@ -90,7 +90,7 @@ end
 # WebSlider @island — wasm-compiled interactive slider for @bind
 # =============================================================================
 
-@island function WebSlider(; min_val=0, max_val=100, value=50, step_val=1, var_name="x")
+@island function WebSlider(; min_val::Int=0, max_val::Int=100, value::Int=50, step_val::Int=1, var_name::String="x")
     current, set_current = create_signal(Int32(value))
 
     Div(:style => "display:flex;align-items:center;gap:12px;padding:8px 0;",
@@ -119,7 +119,7 @@ end
 # sharing or compile the entire cell logic to WASM.
 # =============================================================================
 
-@island function BoundValue(; value=0)
+@island function BoundValue(; value::Int=0)
     current, set_current = create_signal(value)
 
     Div(:class => "inline-flex items-baseline",
