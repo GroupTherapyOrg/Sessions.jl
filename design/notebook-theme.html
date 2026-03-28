@@ -171,44 +171,42 @@
   .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
   .tab-spacer { flex: 1; }
 
-  /* Toolbar: lives INSIDE the tab bar, right-aligned */
-  /* Tabs take left half (max), toolbar takes right half (always visible) */
+  /* Tab area: left half, scrollable when many tabs */
   .tab-area {
     display: flex; overflow-x: auto; overflow-y: hidden;
-    max-width: 50%; flex-shrink: 1; min-width: 0;
+    max-width: 55%; flex-shrink: 1; min-width: 0;
   }
   .tab-area::-webkit-scrollbar { height: 0; }
+
+  /* Toolbar: ghost buttons in the tab bar, right-aligned */
   .toolbar {
-    display: flex; align-items: center; gap: 6px;
-    padding: 0 12px; margin-left: auto; flex-shrink: 0;
-    background: var(--panel-bg);
-    box-shadow: -4px 0 8px rgba(0,0,0,.04);
-    border-left: 1px solid var(--cell-border);
-  }
-  .dark .toolbar {
-    background: var(--chrome-active);
-    box-shadow: -4px 0 8px rgba(0,0,0,.15);
+    display: flex; align-items: center; gap: 2px;
+    padding: 0 8px; margin-left: auto; flex-shrink: 0;
   }
   .toolbar .sep {
-    width: 1px; height: 14px; background: var(--cell-border); margin: 0 2px;
+    width: 1px; height: 14px; background: var(--cell-border);
+    margin: 0 4px;
   }
 
-  /* Toolbar buttons — slightly different bg from tab bar to distinguish */
+  /* Ghost buttons — no border, no bg. Hover reveals pill. */
   .tb-btn {
-    display: flex; align-items: center; gap: 5px;
-    padding: 3px 10px; border-radius: 5px;
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px; border-radius: 5px;
     font-size: 11px; font-family: -apple-system, sans-serif;
-    border: 1px solid var(--cell-border);
-    background: var(--panel-bg); color: var(--text-2);
-    cursor: pointer; transition: all .15s; white-space: nowrap;
+    border: none; background: transparent;
+    color: var(--text-3); cursor: pointer;
+    transition: all .12s; white-space: nowrap;
   }
-  .dark .tb-btn { background: #151c25; }
-  .tb-btn:hover { color: var(--text-1); border-color: var(--cell-border-hov); }
+  .tb-btn:hover {
+    color: var(--text-1);
+    background: rgba(128,128,128,.1);
+  }
+  .tb-btn:active { background: rgba(128,128,128,.15); }
   .tb-btn svg { width: 9px; height: 9px; }
   .tb-btn.stale { color: var(--status-running); }
-  .tb-btn.stale:hover { color: var(--status-running); }
+  .tb-btn.stale:hover { color: var(--status-running); background: rgba(212,160,86,.08); }
   .tb-btn.stop { color: var(--status-error); display: none; }
-  .tb-progress { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--status-done); display: none; }
+  .tb-btn.stop:hover { background: rgba(220,53,69,.08); }
 
   .nb-scroll { flex: 1; overflow-y: auto; padding: 20px 24px 40px; }
   .nb-content { max-width: 750px; margin: 0 auto; padding-left: 28px; }
