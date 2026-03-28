@@ -2,7 +2,7 @@ module Sessions
 
 # Sessions.jl — Web-Native Reactive Julia Notebook
 # Web UI via Therapy.jl + xterm.js + Shoelace + CodeMirror
-# Execution via Malt.jl workers, PTY terminals, WASM @islands
+# Execution via Malt.jl workers, PTY terminals, Therapy.jl @islands
 
 using UUIDs
 
