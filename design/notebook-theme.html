@@ -169,6 +169,24 @@
   .tab-inactive:hover { color: var(--text-2); }
   .dot-mod { width: 5px; height: 5px; border-radius: 50%; background: var(--rose-500); }
   .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
+  .tab-spacer { flex: 1; }
+
+  /* Toolbar buttons (Run Stale, Run All, Save, Format) */
+  .toolbar { display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+  .tb-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 5px;
+    font-size: 11px; font-family: -apple-system, sans-serif;
+    border: 1px solid var(--cell-border);
+    background: var(--cell-bg); color: var(--text-2);
+    cursor: pointer; transition: all .15s;
+  }
+  .tb-btn:hover { color: var(--text-1); border-color: var(--cell-border-hov); }
+  .tb-btn svg { width: 9px; height: 9px; }
+  .tb-btn.stale { color: var(--status-running); }
+  .tb-btn.stale:hover { color: var(--status-running); }
+  .tb-btn.stop { color: var(--status-error); display: none; }
+  .tb-progress { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--status-done); display: none; }
 
   .nb-scroll { flex: 1; overflow-y: auto; padding: 20px 24px 40px; }
   .nb-content { max-width: 750px; margin: 0 auto; padding-left: 28px; }
@@ -339,6 +357,23 @@
       <div class="tab-bar">
         <div class="tab"><span class="dot-mod"></span> analysis.jl</div>
         <div class="tab-inactive"><span class="dot-ok"></span> helpers.jl</div>
+        <div class="tab-spacer"></div>
+        <div class="toolbar">
+          <button class="tb-btn stale">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
+            Run Stale (2)
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>
+            Run All
+          </button>
+          <button class="tb-btn stop">
+            <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
+            Stop
+          </button>
+          <button class="tb-btn">Save</button>
+          <button class="tb-btn">Format</button>
+        </div>
       </div>
       <div class="nb-scroll"><div class="nb-content">
 
