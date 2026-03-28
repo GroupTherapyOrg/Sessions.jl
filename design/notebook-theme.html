@@ -171,19 +171,15 @@
   .dot-ok  { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
   .tab-spacer { flex: 1; }
 
-  /* Toolbar: inset/recessed strip between tabs and notebook content */
+  /* Toolbar: subtle tint strip — between tab chrome and notebook white */
   .toolbar-strip {
     display: flex; align-items: center; gap: 6px;
     padding: 5px 12px;
-    background: var(--warm-100); /* slightly recessed vs white notebook */
+    background: var(--warm-50); /* halfway between warm-100 tabs and white notebook */
     border-bottom: 1px solid var(--cell-border);
-    border-top: 1px solid rgba(0,0,0,.03);
-    box-shadow: inset 0 1px 3px rgba(0,0,0,.04);
   }
   .dark .toolbar-strip {
-    background: #0a0f15; /* slightly recessed vs #0f1419 notebook */
-    border-top-color: rgba(0,0,0,.15);
-    box-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+    background: #111820; /* halfway between #080b10 tabs and #0f1419 notebook */
   }
   .toolbar-strip .spacer { flex: 1; }
 
