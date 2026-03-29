@@ -25,16 +25,18 @@ const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
         }
     """))
 
-    # Effect: sync sidebar visibility to DOM
+    # Effect: sync sidebar visibility + button highlight
     create_effect(() -> begin
         v = sidebar_open()
         js("var fp=document.getElementById('fpanel');if(fp)fp.style.display=\$1?'':'none'", v)
+        js("var b=document.querySelectorAll('.ab-btn')[0];if(b)b.setAttribute('data-state',\$1?'on':'off')", v)
     end)
 
-    # Effect: sync terminal visibility to DOM
+    # Effect: sync terminal visibility + button highlight
     create_effect(() -> begin
         v = terminal_open()
         js("var rp=document.getElementById('repl-panel');if(rp)rp.style.display=\$1?'':'none'", v)
+        js("var b=document.querySelectorAll('.ab-btn')[2];if(b)b.setAttribute('data-state',\$1?'on':'off')", v)
     end)
 
     return Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl",
