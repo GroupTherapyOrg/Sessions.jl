@@ -85,9 +85,38 @@ function _terminal_js()
     brightCyan: '#0d9488', brightWhite: '#ffffff'
   };
 
+  var darkTheme = {
+    background: '#050709', foreground: '#d4dce8', cursor: '#d4759a', cursorAccent: '#050709',
+    selectionBackground: 'rgba(212,117,154,.2)', selectionForeground: '#d4dce8',
+    black: '#080b10', red: '#dc3545', green: '#56d4a0', yellow: '#d4a056',
+    blue: '#7bb8e8', magenta: '#b08fd8', cyan: '#56d4a0', white: '#d4dce8',
+    brightBlack: '#6b7d93', brightRed: '#dc3545', brightGreen: '#56d4a0',
+    brightYellow: '#d4a056', brightBlue: '#7bb8e8', brightMagenta: '#b08fd8',
+    brightCyan: '#7bb8e8', brightWhite: '#ffffff'
+  };
+  var lightTheme = {
+    background: '#f0ece4', foreground: '#2a2520', cursor: '#d4759a', cursorAccent: '#f0ece4',
+    selectionBackground: 'rgba(212,117,154,.15)', selectionForeground: '#2a2520',
+    black: '#2a2520', red: '#dc3545', green: '#219669', yellow: '#b8860b',
+    blue: '#2563eb', magenta: '#9558b2', cyan: '#0d9488', white: '#f8f7f4',
+    brightBlack: '#9a9590', brightRed: '#dc3545', brightGreen: '#219669',
+    brightYellow: '#b8860b', brightBlue: '#2563eb', brightMagenta: '#9558b2',
+    brightCyan: '#0d9488', brightWhite: '#ffffff'
+  };
+
   // Terminal instances per tab: { tabId: { term, fitAddon } }
   var terminals = {};
   var activeTabId = null;
+
+  // Expose theme update for live toggle
+  window._sessionsUpdateTermTheme = function() {
+    var d = document.documentElement.classList.contains('dark');
+    var t = d ? darkTheme : lightTheme;
+    termTheme = t;
+    for (var id in terminals) {
+      terminals[id].term.options.theme = t;
+    }
+  };
 
   // ── Create a new xterm.js instance for a tab ──
   function createTerminal(tabId) {

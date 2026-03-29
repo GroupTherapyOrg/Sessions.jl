@@ -56,6 +56,7 @@
                 js("var d=document.documentElement.classList.contains('dark')")
                 js("if(d){document.documentElement.classList.add('sl-theme-dark');document.documentElement.classList.remove('sl-theme-light')}else{document.documentElement.classList.remove('sl-theme-dark');document.documentElement.classList.add('sl-theme-light')}")
                 js("localStorage.setItem('sessions-theme',document.documentElement.classList.contains('dark')?'dark':'light')")
+                js("if(window._sessionsUpdateTermTheme)window._sessionsUpdateTermTheme()")
             end,
             :title => "Toggle light/dark mode",
             "\u25D0 Toggle")
