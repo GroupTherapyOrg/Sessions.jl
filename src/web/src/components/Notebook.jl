@@ -1,26 +1,35 @@
-# Notebook.jl — Notebook cell rendering
+# Notebook.jl — Notebook cell rendering component
 #
-# In LIVE IDE mode: cells are rendered server-side via Sessions.render_cell()
-# and managed by imperative JS (CM init, WS output injection, state updates).
-# This JS lives in Layout.jl as a global script since it manipulates
-# existing DOM elements by data-cell-id attributes.
+# Phase A: Renders cells server-side via Sessions.render_cell() + Sessions.CellGap().
+# The CM init and WS channel handler scripts remain in Layout.jl for now
+# (they work globally and moving them is a separate cleanup step).
 #
-# In PUBLISHED mode (future): this becomes a standalone @island with
-# all cell signals/memos/effects compiled to JS via JST. The @bind
-# widgets drive signal setters, dependent cells recompute via create_memo,
-# and outputs render via create_effect. This is the "publishable unit"
-# that Sessions.export() will extract.
-#
-# Architecture decision: the live IDE does NOT use signals for per-cell
-# state. The WS handler directly patches DOM (proven fast, simpler than
-# maintaining 50+ signals for 50 cells). Signals are used for structural
-# UI (panel toggles, toolbar state, theme) via the @island components.
-#
-# When the export pipeline is built, Notebook.jl will gain:
-#   @island function Notebook(; cells_json::String="[]", mode::String="published")
-#     ... For(cells) do cell ... end
-#     ... on_mount for @bind signal wiring
-#   end
-#
-# For now, cell rendering is handled by NotebookPanel.jl calling
-# Sessions.render_cell() and Sessions.CellGap() in a server-side loop.
+# Phase B (future): Becomes a true @island with cell signals, For(),
+# and optimistic updates for one-click publishing.
+
+"""
+    NotebookContent(state) -> VNode
+
+Render the notebook content area: cell list with gaps.
+Called by NotebookPanel for notebook tabs (not file tabs).
+"""
+function NotebookContent(state)
+    _Sess = Main.Sessions
+    nb = _Sess.active_nb(state)
+    cells = _Sess.ordered_cells(nb)
+
+    rendered = Any[]
+    cell_index = 0
+    push!(rendered, _Sess.CellGap(after_cell_id=""))
+    for cell in cells
+        cell_index += 1
+        view = _Sess.render_cell(cell; mode=:live, index=cell_index)
+        view === nothing && continue
+        push!(rendered, view)
+        push!(rendered, _Sess.CellGap(after_cell_id=string(cell.id)))
+    end
+
+    Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
+        Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
+            rendered...))
+end

@@ -116,19 +116,8 @@ function NotebookPanel(state)
                     :data_src => tab.file_content,
                     :style => "height:100%;overflow:auto;")))
     else
-        rendered_cells = Any[]
-        cell_index = 0
-        push!(rendered_cells, _Sess.CellGap(after_cell_id=""))
-        for cell in cells
-            cell_index += 1
-            view = _Sess.render_cell(cell; mode=:live, index=cell_index)
-            view === nothing && continue
-            push!(rendered_cells, view)
-            push!(rendered_cells, _Sess.CellGap(after_cell_id=string(cell.id)))
-        end
-        Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
-            Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
-                rendered_cells...))
+        # Notebook cells rendered by NotebookContent (Notebook.jl)
+        NotebookContent(state)
     end
 
     # ═══════════════════════════════════════════════════════════
