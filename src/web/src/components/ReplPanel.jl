@@ -57,8 +57,8 @@ function _terminal_js()
   var addBtn = document.getElementById('term-add-btn');
   if (!container || !tabBar) return;
 
-  // Theme — adapts to light/dark mode
-  var isDark = document.documentElement.classList.contains('dark');
+  // Theme — adapts to light/dark mode (check classList + localStorage fallback)
+  var isDark = document.documentElement.classList.contains('dark') || localStorage.getItem('sessions-theme') !== 'light';
   var termTheme = isDark ? {
     background: '#050709',
     foreground: '#d4dce8',
