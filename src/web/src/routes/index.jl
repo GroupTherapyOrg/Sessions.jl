@@ -1,7 +1,8 @@
 # Main route — renders the full Sessions.jl web IDE
 
 function Index()
-    SessionsApp(NotebookPanel())
+    state = isdefined(Main, :WEB_STATE) ? Main.WEB_STATE[] : nothing
+    SessionsApp(NotebookPanel(state))
 end
 
 Index
