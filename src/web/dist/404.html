@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html data-base-path="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found - Sessions.jl</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+        (function() {
+            try {
+                var bp = '';
+                var sk = bp ? 'therapy-theme:' + bp : 'therapy-theme';
+                var tk = bp ? 'suite-active-theme:' + bp : 'suite-active-theme';
+                var s = localStorage.getItem(sk);
+                if (s === 'dark' || (!s && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                }
+                var t = localStorage.getItem(tk);
+                if (t && t !== 'default') {
+                    document.documentElement.setAttribute('data-theme', t);
+                }
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body class="antialiased bg-warm-50 dark:bg-warm-950">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="text-center">
+            <h1 class="text-6xl font-serif font-semibold text-warm-300 dark:text-warm-700">404</h1>
+            <p class="text-xl text-warm-600 dark:text-warm-400 mt-4">Page not found</p>
+            <a href="/" class="inline-block mt-6 px-6 py-3 bg-accent-700 dark:bg-accent-600 text-white rounded hover:bg-accent-800 dark:hover:bg-accent-500 transition">
+                Go Home
+            </a>
+        </div>
+    </div>
+</body>
+</html>
