@@ -44,8 +44,8 @@ function SessionsApp(children...)
                         :style => "display:none;flex-shrink:0;margin-top:10px;",
                         ReplPanel()))),
 
-            # Row 3: Status bar (always visible, fixed height)
-            _status_bar(cell_count)),
+            # Row 3: Status bar (@island — theme toggle, connection, cell count)
+            StatusBar(initial_cells=cell_count)),
 
         # ── Restore panels from localStorage ──
         _panel_restore_script(),
