@@ -66,10 +66,11 @@ function _setup_ws_dispatch!()
         return
     end
     # Monkey-patch the action handler to dispatch to channels
+    # Must use Main.Sessions since this runs in Therapy's module scope
     @eval Therapy function handle_client_action(conn::WSConnection, msg::Dict{String, Any})
         channel = get(msg, "channel", nothing)
-        if channel !== nothing && haskey(Sessions.MESSAGE_CHANNELS, channel)
-            Sessions.dispatch_channel_message(channel, conn, msg)
+        if channel !== nothing && haskey(Main.Sessions.MESSAGE_CHANNELS, channel)
+            Main.Sessions.dispatch_channel_message(channel, conn, msg)
         else
             action = get(msg, "action", nothing)
             @debug "Unhandled client action" connection=conn.id action=action
