@@ -39,6 +39,26 @@ function dispatch_channel_message(channel::String, conn, data::Dict{String, Any}
     end
 end
 
+"""Broadcast a message to ALL clients on a specific channel."""
+function broadcast_channel!(channel::String, msg::Dict)
+    msg["channel"] = channel
+    try
+        Therapy.broadcast_all(msg)
+    catch
+        # WS not ready yet
+    end
+end
+
+"""Send a message to ONE client on a specific channel."""
+function send_channel!(channel::String, conn, msg::Dict)
+    msg["channel"] = channel
+    try
+        Therapy.send_ws_message(conn, msg)
+    catch
+        # WS not ready yet
+    end
+end
+
 # Hook into Therapy's WebSocket message handler
 function _setup_ws_dispatch!()
     # Override Therapy's handle_client_action to route by channel

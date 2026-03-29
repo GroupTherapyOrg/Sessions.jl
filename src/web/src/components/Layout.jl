@@ -218,6 +218,38 @@ sl-tree-item::part(item):hover{background:rgba(128,128,128,.06);}
         children...,
         RawHtml("""</div>"""),
 
+        # --- Sessions WS: channel-based messaging + dispatch ---
+        RawHtml("""<script>
+(function(){
+  // 1. Extend TherapyWS with sendMessage(channel, data)
+  //    TherapyWS.sendMessage('notebook', {action:'execute', cell_id:'...'})
+  //    → sends {type:'action', channel:'notebook', action:'execute', cell_id:'...'}
+  function _waitForWS() {
+    if (window.TherapyWS && TherapyWS.send) {
+      TherapyWS.sendMessage = function(channel, data) {
+        var msg = Object.assign({type:'action', channel:channel}, data);
+        TherapyWS.send(msg);
+      };
+    } else {
+      setTimeout(_waitForWS, 100);
+    }
+  }
+  _waitForWS();
+
+  // 2. Dispatch incoming WS messages to channel-specific custom events
+  //    Server sends: {channel:'notebook', event:'cell_output', ...}
+  //    Client dispatches: therapy:channel:notebook CustomEvent with detail=msg
+  window.addEventListener('therapy:ws:message', function(e) {
+    var msg = e.detail;
+    if (!msg) return;
+    var channel = msg.channel;
+    if (channel) {
+      window.dispatchEvent(new CustomEvent('therapy:channel:' + channel, {detail: msg}));
+    }
+  });
+})();
+</script>"""),
+
         # --- Undo toast (for deleted cells) ---
         RawHtml("""<div id="undo-toast">Cell deleted &mdash; <kbd>Ctrl+Z</kbd> to undo</div>"""),
 
