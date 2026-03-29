@@ -52,12 +52,8 @@
             :style => "padding:2px 10px;border-radius:9999px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all .15s;",
             :on_click => () -> begin
                 set_dark(1 - is_dark())
-                js("document.documentElement.classList.toggle('dark')")
-                js("var d=document.documentElement.classList.contains('dark')")
-                js("if(d){document.documentElement.classList.add('sl-theme-dark');document.documentElement.classList.remove('sl-theme-light')}else{document.documentElement.classList.remove('sl-theme-dark');document.documentElement.classList.add('sl-theme-light')}")
-                js("localStorage.setItem('sessions-theme',document.documentElement.classList.contains('dark')?'dark':'light')")
-                js("if(window._sessionsUpdateTermTheme)window._sessionsUpdateTermTheme()")
-                js("setTimeout(function(){window.location.reload()},100)")
+                js("localStorage.setItem('sessions-theme',document.documentElement.classList.contains('dark')?'light':'dark')")
+                js("window.location.reload()")
             end,
             :title => "Toggle light/dark mode",
             "\u25D0 Toggle")
