@@ -154,6 +154,7 @@ function _file_explorer_js(root_dir::String)
     if (absPath && window.TherapyWS && _openableTypes[fileType]) {
       clearTimeout(_clickTimer);
       _clickTimer = setTimeout(function() {
+        if (window._sessionsShowLoading) _sessionsShowLoading();
         TherapyWS.sendMessage('notebook', {action: 'open_notebook', path: absPath});
       }, 250);
     }

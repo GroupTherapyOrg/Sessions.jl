@@ -588,6 +588,21 @@ function _notebook_island_js()
   // ── Auto-init CM editors (file editors outside NotebookIsland) ──
   setTimeout(function() { if (window._initAllCM) _initAllCM(); }, 100);
 
+  // ── Show loading overlay on notebook panel (called before server responds) ──
+  window._sessionsShowLoading = function() {
+    var panel = document.getElementById('nb-island');
+    if (!panel) return;
+    // Remove old loading overlay if exists
+    var old = document.getElementById('nb-loading');
+    if (old) old.remove();
+    // Create and insert loading overlay
+    var lo = document.createElement('div');
+    lo.id = 'nb-loading';
+    lo.className = 'nb-loading';
+    lo.innerHTML = '<span class="dot-pulse"></span><span class="dot-pulse"></span><span class="dot-pulse"></span>';
+    panel.appendChild(lo);
+  };
+
   // ── Global event handler (works for file tabs without WS bridge) ──
   window._sessionsMarkUnsaved = window._sessionsMarkUnsaved || function() { var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='\\u25CF Save';btn.style.color='var(--status-running)';} };
   window.addEventListener('therapy:channel:notebook', function(e) {

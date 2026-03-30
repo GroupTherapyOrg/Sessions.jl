@@ -56,7 +56,7 @@ function NotebookPanel(state)
             push!(tab_views, Div(
                 :class => "tab relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer",
                 :style => "color:var(--text-3);border-right:1px solid var(--divider);",
-                :on_click => "TherapyWS.sendMessage('notebook',{action:'switch_tab',tab_idx:$(i)})",
+                :on_click => "window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'switch_tab',tab_idx:$(i)})",
                 RawHtml(icon_svg), tab_name,
                 Span(:style => "font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;",
                     :on_click => "event.stopPropagation();if(confirm('Close?'))TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})",
