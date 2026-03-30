@@ -477,50 +477,63 @@ function handle_add_cell!(state::WebNotebookState, conn, data)
     nb = active_nb(state)
     after_cell_id_str = get(data, "after_cell_id", "")
     restore_code = get(data, "code", "")
+    mutation_id = get(data, "mutation_id", nothing)
+    temp_id = get(data, "temp_id", nothing)
     new_cell = Cell(; code=restore_code)
 
-    if isempty(after_cell_id_str)
-        # Insert at beginning
-        insert_cell!(nb, 1, new_cell)
-    else
-        after_id = UUID(after_cell_id_str)
-        idx = findfirst(==(after_id), nb.cell_order)
-        if idx !== nothing
-            insert_cell!(nb, idx + 1, new_cell)
+    try
+        if isempty(after_cell_id_str)
+            insert_cell!(nb, 1, new_cell)
         else
-            add_cell!(nb, new_cell)
+            after_id = UUID(after_cell_id_str)
+            idx = findfirst(==(after_id), nb.cell_order)
+            if idx !== nothing
+                insert_cell!(nb, idx + 1, new_cell)
+            else
+                add_cell!(nb, new_cell)
+            end
+        end
+
+        _update_cell_signal!(new_cell)
+
+        # Render the new cell to HTML server-side
+        cell_html = try
+            cell_vnode = render_cell(new_cell; mode=:live, index=0)
+            gap_vnode = CellGap(; after_cell_id=string(new_cell.id))
+            cell_str = cell_vnode !== nothing ? Therapy.render_to_string(cell_vnode) : ""
+            gap_str = Therapy.render_to_string(gap_vnode)
+            cell_str * gap_str
+        catch e
+            @warn "[WebNotebook] Failed to render new cell" exception=(e, catch_backtrace())
+            ""
+        end
+
+        msg = Dict(
+            "event" => "cell_added",
+            "cell_id" => string(new_cell.id),
+            "after_cell_id" => after_cell_id_str,
+            "cell_html" => cell_html
+        )
+        mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+        temp_id !== nothing && (msg["temp_id"] = temp_id)
+        broadcast_channel!("notebook", msg)
+    catch e
+        @warn "[WebNotebook] Add cell failed" exception=(e, catch_backtrace())
+        if mutation_id !== nothing
+            send_channel!("notebook", conn, Dict(
+                "event" => "mutation_error",
+                "ack_mutation" => mutation_id,
+                "reason" => string(e)
+            ))
         end
     end
-
-    # Broadcast initial cell state
-    _update_cell_signal!(new_cell)
-
-    println("[WebNotebook] Added cell $(new_cell.id) after $(after_cell_id_str)")
-
-    # Render the new cell to HTML server-side (using Sessions.render_cell)
-    cell_html = try
-        cell_vnode = render_cell(new_cell; mode=:live, index=0)
-        gap_vnode = CellGap(; after_cell_id=string(new_cell.id))
-        cell_str = cell_vnode !== nothing ? Therapy.render_to_string(cell_vnode) : ""
-        gap_str = Therapy.render_to_string(gap_vnode)
-        cell_str * gap_str
-    catch e
-        @warn "[WebNotebook] Failed to render new cell" exception=(e, catch_backtrace())
-        ""
-    end
-
-    broadcast_channel!("notebook", Dict(
-        "event" => "cell_added",
-        "cell_id" => string(new_cell.id),
-        "after_cell_id" => after_cell_id_str,
-        "cell_html" => cell_html
-    ))
 end
 
 """Handle delete-cell request."""
 function handle_delete_cell!(state::WebNotebookState, conn, data)
     cell_id_str = get(data, "cell_id", "")
     isempty(cell_id_str) && return
+    mutation_id = get(data, "mutation_id", nothing)
 
     nb = active_nb(state)
     cell_id = UUID(cell_id_str)
@@ -536,17 +549,26 @@ function handle_delete_cell!(state::WebNotebookState, conn, data)
     end
 
     removed = remove_cell!(nb, cell_id)
-    removed === nothing && return
+    if removed === nothing
+        if mutation_id !== nothing
+            send_channel!("notebook", conn, Dict(
+                "event" => "mutation_error",
+                "ack_mutation" => mutation_id,
+                "reason" => "Cell not found"
+            ))
+        end
+        return
+    end
 
-    println("[WebNotebook] Deleted cell $(cell_id_str)")
-
-    broadcast_channel!("notebook", Dict(
+    msg = Dict(
         "event" => "cell_deleted",
         "cell_id" => cell_id_str,
         "code" => deleted_code,
         "index" => deleted_index !== nothing ? deleted_index : 0,
         "prev_cell_id" => prev_cell_id
-    ))
+    )
+    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+    broadcast_channel!("notebook", msg)
 end
 
 """Handle move-cell request."""
@@ -554,6 +576,7 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
     nb = active_nb(state)
     cell_id_str = get(data, "cell_id", "")
     direction = get(data, "direction", "")
+    mutation_id = get(data, "mutation_id", nothing)
     isempty(cell_id_str) && return
 
     cell_id = UUID(cell_id_str)
@@ -568,13 +591,24 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
         false
     end
 
-    swapped || return
+    if !swapped
+        if mutation_id !== nothing
+            send_channel!("notebook", conn, Dict(
+                "event" => "mutation_error",
+                "ack_mutation" => mutation_id,
+                "reason" => "Cannot move cell $(direction)"
+            ))
+        end
+        return
+    end
 
-    broadcast_channel!("notebook", Dict(
+    msg = Dict(
         "event" => "cell_moved",
         "cell_id" => cell_id_str,
         "direction" => direction
-    ))
+    )
+    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+    broadcast_channel!("notebook", msg)
 end
 
 """Handle fold/unfold toggle — persisted in .jl file as ╟─ (folded) vs ╠═ (visible)."""
@@ -602,18 +636,17 @@ end
 
 """Handle save request. Routes to notebook save or file save based on tab type."""
 function handle_save!(state::WebNotebookState, conn, data)
+    mutation_id = get(data, "mutation_id", nothing)
     tab = active_tab(state)
+
     if tab.tab_type == :file
-        # File tab: save raw content
         content = get(data, "content", nothing)
         if content !== nothing
             tab.file_content = String(content)
             write(tab.path, tab.file_content)
-            broadcast_channel!("notebook", Dict(
-                "event" => "saved",
-                "notebook_path" => tab.path
-            ))
-            println("[WebNotebook] Saved file: $(tab.path)")
+            msg = Dict("event" => "saved", "notebook_path" => tab.path)
+            mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+            broadcast_channel!("notebook", msg)
         end
         return
     end
@@ -630,11 +663,9 @@ function handle_save!(state::WebNotebookState, conn, data)
 
     save_notebook(nb)
     save_session!(nb)
-    broadcast_channel!("notebook", Dict(
-        "event" => "saved",
-        "notebook_path" => nb.path
-    ))
-    println("[WebNotebook] Saved: $(nb.path)")
+    msg = Dict("event" => "saved", "notebook_path" => nb.path)
+    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+    broadcast_channel!("notebook", msg)
 end
 
 """Handle save_file action — explicit file content save."""

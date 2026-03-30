@@ -6,12 +6,16 @@
 
 using UUIDs
 
+"""Max scrollback buffer size (bytes) — kept per terminal for reconnection."""
+const TERM_SCROLLBACK_BYTES = 64 * 1024  # 64KB
+
 """A single terminal tab backed by a PTY."""
 mutable struct TerminalTab
     id::String
     label::String
     pty::PTY
     relay_task::Union{Task, Nothing}
+    scrollback::IOBuffer  # circular-ish buffer of recent PTY output
 end
 
 """Server-side state for all terminal tabs."""
@@ -95,7 +99,7 @@ function _handle_terminal_spawn!(term_state::TerminalState, web_state, conn, dat
     term_state.next_num += 1
     label = "Terminal $num"
 
-    tab = TerminalTab(tab_id, label, pty, nothing)
+    tab = TerminalTab(tab_id, label, pty, nothing, IOBuffer())
     push!(term_state.tabs, tab)
     term_state.active_tab_id = tab_id
 
@@ -123,6 +127,14 @@ function _relay_pty_output(tab::TerminalTab)
                 rethrow()
             end
             isempty(chunk) && continue
+
+            # Append to scrollback buffer (trim if too large)
+            write(tab.scrollback, chunk)
+            if tab.scrollback.size > TERM_SCROLLBACK_BYTES
+                # Keep only the last TERM_SCROLLBACK_BYTES bytes
+                all_data = take!(tab.scrollback)
+                write(tab.scrollback, all_data[max(1, end - TERM_SCROLLBACK_BYTES + 1):end])
+            end
 
             # Send raw bytes as base64 (WS text frames can't carry raw bytes cleanly)
             b64 = Base64.base64encode(chunk)
@@ -189,9 +201,16 @@ function _handle_terminal_list!(term_state::TerminalState, conn, data)
         term_state.active_tab_id = term_state.tabs[end].id
     end
 
+    tabs_data = [Dict(
+        "id" => t.id,
+        "label" => t.label,
+        "active" => t.id == term_state.active_tab_id,
+        "scrollback" => Base64.base64encode(copy(t.scrollback.data[1:t.scrollback.size]))
+    ) for t in term_state.tabs]
+
     send_channel!("terminal", conn, Dict(
         "event" => "terminal_list",
-        "tabs" => [Dict("id" => t.id, "label" => t.label, "active" => t.id == term_state.active_tab_id) for t in term_state.tabs],
+        "tabs" => tabs_data,
         "active_tab_id" => term_state.active_tab_id
     ))
 end

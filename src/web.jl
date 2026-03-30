@@ -921,7 +921,7 @@ function CellGap(; after_cell_id::String="")
         Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
             Div(:class => "h-px w-14 bg-b2"),
             Therapy.Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov",
-                :on_click => "TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: '$(after_cell_id)'})",
+                :on_click => "window._sessionsAddCell&&_sessionsAddCell('$(after_cell_id)')",
                 RawHtml(_SVG_PLUS),
                 "Code"),
             Div(:class => "h-px w-14 bg-b2")))

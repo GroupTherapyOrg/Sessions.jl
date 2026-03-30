@@ -1,4 +1,4 @@
-# SharedSignals.jl — Cross-island shared signals
+# SharedSignals.jl — Cross-island shared signals + shared constants
 #
 # Module-level signal TUPLES captured by multiple @island components.
 # Each @island destructures: `getter, setter = signal_tuple`
@@ -12,6 +12,18 @@
 #   end
 
 using Therapy: create_signal
+
+# ═══════════════════════════════════════════════════════════
+# localStorage keys — single source of truth
+# Used by: Layout.jl, StatusBar.jl, ActivityBar.jl, SessionsApp.jl, ReplPanel.jl
+# ═══════════════════════════════════════════════════════════
+const LS_THEME    = "sessions-theme"
+const LS_SIDEBAR  = "sessions-sidebar"
+const LS_TERMINAL = "sessions-repl"
+
+# ═══════════════════════════════════════════════════════════
+# Shared signals
+# ═══════════════════════════════════════════════════════════
 
 # Panel visibility (ActivityBar ↔ FileExplorer, ActivityBar ↔ Terminal)
 const sidebar_signal = create_signal(0)

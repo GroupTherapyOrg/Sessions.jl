@@ -136,6 +136,101 @@
   --panel-shadow: none;
   --scrollbar-thumb: #2a3a4f;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Notebook Components — Cell chrome, markdown prose, tables
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Code Cells ── */
+.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
+.code-cell:hover{border-color:var(--cell-border-hov);}
+.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#219669;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
+.code-cell:hover::before{opacity:.7;}
+.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
+.code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
+.rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#219669;opacity:.8;background:rgba(33,150,105,.08);border:1px solid rgba(33,150,105,.12);}
+.cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
+.cell-wrap:hover .cell-eye{opacity:1;}
+.cell-eye svg{color:#a0aec0;transition:color .15s;}
+.cell-eye:hover svg{color:#219669;}
+.cell-out{overflow-x:auto;}
+
+/* ── Code Cells — Dark Overrides ── */
+.dark .code-cell::before{background:#56d4a0;}
+.dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
+.dark .cell-eye svg{color:#3d5068;}
+.dark .cell-eye:hover svg{color:#56d4a0;}
+
+/* ── Markdown Prose ── */
+.md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#4a5568;line-height:1.7;font-size:14.5px;}
+.md-prose h1{font-family:'Fraunces',Georgia,serif;font-size:2.2rem;font-weight:700;color:#1a202c;margin:0.3em 0 0.6em;letter-spacing:-0.01em;padding-bottom:0.3em;border-bottom:3px solid #e2e8f0;}
+.md-prose h2{font-family:'Fraunces',Georgia,serif;font-size:1.8rem;font-weight:700;color:#1a202c;margin:1.2em 0 0.4em;padding-bottom:0.3em;border-bottom:2px dotted #e2e8f0;}
+.md-prose h3{font-family:'Fraunces',Georgia,serif;font-size:1.4rem;font-weight:600;color:#1a202c;margin:1em 0 0.3em;}
+.md-prose h4{font-family:'Fraunces',Georgia,serif;font-size:1.15rem;font-weight:600;color:#1a202c;margin:0.8em 0 0.2em;}
+.md-prose p{margin:0 0 1em;color:#4a5568;}
+.md-prose ul,.md-prose ol{margin:0 0 1em;padding-left:1.5em;color:#4a5568;line-height:1.6em;}
+.md-prose li{margin:0.25em 0;}
+.md-prose li p{margin:0 0 0.4em;}
+.md-prose blockquote{border-left:3px solid #b08fd8;padding:0.4em 0 0.4em 1em;margin:1em 0;color:#718096;background:rgba(176,143,216,.04);border-radius:0 4px 4px 0;}
+.md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;background:#eaecf0;padding:0.15em 0.4em;border-radius:4px;color:#2b6cb0;}
+.md-prose pre{background:#eaecf0;border-radius:6px;padding:0.8em 1em;margin:1em 0;overflow-x:auto;tab-size:4;white-space:pre-wrap;}
+.md-prose pre code{background:none;padding:0;font-size:0.8rem;color:#1a2332;white-space:pre;}
+.md-prose strong{color:#1a202c;font-weight:600;}
+.md-prose em{font-style:italic;}
+.md-prose a{color:#1e7855;text-decoration:none;}
+.md-prose a:hover{text-decoration:underline;}
+.md-prose hr{border:none;border-top:3px solid #e2e8f0;margin:1.5em 0;}
+.md-prose img{max-width:100%;border-radius:6px;}
+.md-prose table{border-collapse:collapse;margin:1em 0;width:auto;}
+.md-prose th{padding:6px 12px;border-bottom:2px solid #e2e8f0;color:#1a202c;font-weight:600;text-align:left;}
+.md-prose td{padding:6px 12px;border-bottom:1px solid rgba(226,232,240,.6);color:#4a5568;}
+
+/* ── Markdown Prose — Dark Overrides ── */
+.dark .md-prose{color:#9baabd;}
+.dark .md-prose h1{color:#d4dce8;border-bottom-color:#2a3a4f;}
+.dark .md-prose h2{color:#d4dce8;border-bottom-color:#2a3a4f;}
+.dark .md-prose h3,.dark .md-prose h4{color:#d4dce8;}
+.dark .md-prose p{color:#9baabd;}
+.dark .md-prose ul,.dark .md-prose ol{color:#9baabd;}
+.dark .md-prose blockquote{color:#6b7d93;}
+.dark .md-prose code{background:#0a0e14;color:#7bb8e8;}
+.dark .md-prose pre{background:#0a0e14;}
+.dark .md-prose pre code{color:#d4dce8;}
+.dark .md-prose strong{color:#d4dce8;}
+.dark .md-prose a{color:#56d4a0;}
+.dark .md-prose hr{border-top-color:#2a3a4f;}
+.dark .md-prose th{border-bottom-color:#2a3a4f;color:#d4dce8;}
+.dark .md-prose td{border-bottom-color:rgba(42,58,79,.4);color:#9baabd;}
+
+/* ── Notebook Widgets ── */
+.notebook-slider{display:flex;align-items:center;gap:12px;padding:8px 0;}
+.notebook-plotly{border-radius:8px;overflow:hidden;}
+
+/* ── Sessions Table (sst-*) ── */
+.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:14px;overflow-x:auto;max-width:100%;}
+.sst-table{border-collapse:collapse;width:auto;border-top:2px solid #219669;border-bottom:1px solid #e2e8f0;}
+.sst-th{padding:12px 20px;color:#219669;font-weight:700;font-size:14px;text-align:left;border-bottom:1px solid #e2e8f0;white-space:nowrap;}
+.sst-type-row .sst-type-th{padding:0 20px 8px;color:#a0aec0;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:1px solid #e2e8f0;opacity:0;transition:opacity .15s;}
+.sst-table thead:hover .sst-type-row .sst-type-th{opacity:1;}
+.sst-row-label{color:#1a202c;font-weight:700;font-size:13px;text-align:right;padding:10px 16px 10px 12px;width:1%;white-space:nowrap;border-bottom:1px solid rgba(226,232,240,.6);}
+.sst-td{padding:10px 20px;color:#1a202c;border-bottom:1px solid rgba(226,232,240,.6);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
+.sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
+.sst-more{padding:10px 20px;color:#718096;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(226,232,240,.6);transition:color .15s;}
+.sst-more:hover{color:#219669;}
+
+/* ── Sessions Table — Dark Overrides ── */
+.dark .sst-table{border-top-color:#56d4a0;border-bottom-color:#2a3a4f;}
+.dark .sst-th{color:#56d4a0;border-bottom-color:#2a3a4f;}
+.dark .sst-type-row .sst-type-th{color:#3d5068;border-bottom-color:#2a3a4f;}
+.dark .sst-row-label{color:#d4dce8;border-bottom-color:rgba(42,58,79,.3);}
+.dark .sst-td{color:#d4dce8;border-bottom-color:rgba(42,58,79,.3);}
+.dark .sst-more{color:#6b7d93;border-bottom-color:rgba(42,58,79,.3);}
+.dark .sst-more:hover{color:#56d4a0;}
+
+/* ── CodeMirror Overrides ── */
+.cm-cell .cm-editor{background:transparent!important;}
+.cm-cell .cm-scroller{overflow-x:auto;}
+.cm-cell .cm-focused{outline:none!important;}
 </style><script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
@@ -183,12 +278,14 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 /* Clip panel shadows at workspace boundary to prevent corner bleed */
 #workspace>*{min-height:0;}
 #workspace>div{min-height:0;}
+/* NotebookIsland therapy-island must participate in #nb-island flex layout for scroll */
+#nb-island>therapy-island{flex:1;display:flex;flex-direction:column;min-height:0;}
 
 /* ═══ Activity Bar ═══ */
 .ab-btn[data-state="on"]{background:rgba(212,117,154,.1) !important;color:var(--accent) !important;}
 .ab-btn:hover{background:rgba(128,128,128,.08) !important;color:var(--text-2) !important;}
 
-/* ═══ Shared Notebook CSS ═══ */
+/* ═══ Notebook CSS (cell chrome, markdown prose, tables) ═══ */
 /* Cell chrome — light defaults, dark overrides */
 .code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
@@ -636,8 +733,8 @@ Delete</div>
     }
   });
 })();
-</script><div data-hk="15" class="flex items-center gap-1.5 px-3 py-2 shrink-0" style="border-top:1px solid #1c2736; font-size:11px; color:#3d5068;"><span data-hk="16" class="flex-1"></span><span data-hk="17" class="font-mono" style="font-size:10px;">0/1 cells</span></div></div><div data-hk="18" id="editor-area" style="flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;"><div data-hk="19" id="nb-island" class="flex-1 flex flex-col rounded-xl overflow-hidden min-h-0" style="background:var(--panel-bg);border:1px solid var(--cell-border);"><div data-hk="20" class="h-[38px] flex items-stretch shrink-0" style="background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;"><div data-hk="21" style="display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;"><div data-hk="22" class="tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;switch_tab&#39;,tab_idx:1})" style="color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);"><svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>Untitled.jl<span data-hk="23" style="width:5px;height:5px;border-radius:50%;background:var(--accent);"></span><span data-hk="24" onclick="event.stopPropagation();if(confirm(&#39;Close?&#39;))TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;close_tab&#39;,tab_idx:1})" style="font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;">×</span></div></div><div data-hk="25" style="display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;"><button data-hk="26" id="run-stale-btn" class="tb-btn stale" title="Run stale cells" onclick="window._sessionsRunStale()" style=""><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg><span data-hk="27" id="run-stale-label"> Run Stale (1)</span></button><button data-hk="28" id="run-all-btn" class="tb-btn" title="Run all cells" onclick="window._sessionsRunAll()"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg> Run All</button><button data-hk="29" id="stop-btn" class="tb-btn stop" title="Stop execution" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;interrupt&#39;})" style="display:none;"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg> Stop</button><span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><span class="toolbar-sep"></span><button data-hk="30" id="save-indicator" class="tb-btn" title="Save (Ctrl+S)" onclick="window._sessionsSave()">Save</button><button data-hk="31" class="tb-btn" title="Format all cells" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;format_all&#39;})" data-format-btn="1">Format</button></div></div><therapy-island data-component="notebookisland"><div data-hk="1" id="nb" class="flex-1 overflow-y-auto px-5 pt-3 pb-8"><div data-hk="2" style="max-width:900px;margin:0 auto;padding-left:28px;"><div data-hk="3" class="cdiv h-[26px] flex items-center justify-center my-[2px]"><div data-hk="4" class="cdiv-inner flex items-center gap-1 opacity-0 transition-opacity"><div data-hk="5" class="h-px w-14 bg-b2"></div><button data-hk="6" class="flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov" onclick="TherapyWS.sendMessage(&#39;notebook&#39;, {action: &#39;add_cell&#39;, after_cell_id: &#39;&#39;})"><svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code</button><div data-hk="7" class="h-px w-14 bg-b2"></div></div></div><div data-hk="8" class="cell-wrap relative" data-cell-id="358e072d-211f-407f-bea3-e976a39fead2"><div data-hk="9" class="cell-out" data-cell-id="358e072d-211f-407f-bea3-e976a39fead2" style="display:none;"></div><therapy-island data-component="celltoggle" data-props="{&quot;initial_open&quot;:1}"><div data-hk="1" class="cell-island"><div data-hk="2" class="cell-eye"><div data-hk="3" style="position:relative;width:14px;height:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg><span data-hk="4" data-show="true"><div data-hk="5" style="position:absolute;inset:0;background:var(--bg-primary, #151c25);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div></span></div></div><span data-hk="6" data-show="true"><div data-hk="7"><div data-hk="8" class="code-cell relative overflow-hidden idle"><div data-hk="9" class="cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10"><button data-hk="10" class="run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125" title="Run cell (Shift+Enter)" onclick="window._sessionsRunCell(&#39;358e072d-211f-407f-bea3-e976a39fead2&#39;)" style="background:rgba(86,212,160,.1)"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg></button><button data-hk="11" class="menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3" title="Cell actions" onclick="window._sessionsShowCellMenu(this,&#39;358e072d-211f-407f-bea3-e976a39fead2&#39;)" style="background:rgba(255,255,255,.04)"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg></button></div><div data-hk="12" data-src="# Welcome to Sessions.jl
-# Add cells and start coding!" class="cm-cell" data-cell-id="358e072d-211f-407f-bea3-e976a39fead2"></div></div></div></span></div></therapy-island></div><div data-hk="10" class="cdiv h-[26px] flex items-center justify-center my-[2px]"><div data-hk="11" class="cdiv-inner flex items-center gap-1 opacity-0 transition-opacity"><div data-hk="12" class="h-px w-14 bg-b2"></div><button data-hk="13" class="flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov" onclick="TherapyWS.sendMessage(&#39;notebook&#39;, {action: &#39;add_cell&#39;, after_cell_id: &#39;358e072d-211f-407f-bea3-e976a39fead2&#39;})"><svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code</button><div data-hk="14" class="h-px w-14 bg-b2"></div></div></div></div></div></therapy-island></div><div data-hk="32" id="repl-panel" style="display:none;flex-shrink:0;"><div data-hk="33" id="repl" class="flex flex-col overflow-hidden shrink-0 rounded-xl" style="height:220px;background:var(--term-bg);border:1px solid var(--term-border);box-shadow:var(--panel-shadow);"><div data-hk="34" id="term-tab-bar" class="flex items-center shrink-0" style="padding:0 4px;border-bottom:1px solid var(--divider);height:30px;gap:0;background:var(--chrome-bg);border-radius:12px 12px 0 0;"><div data-hk="35" id="term-tabs" class="flex items-center gap-0 flex-1 overflow-x-auto" style="scrollbar-width:none;"></div><button data-hk="36" id="term-add-btn" class="shrink-0" title="New Terminal" style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:4px 8px;font-size:14px;font-family:ui-monospace,monospace;transition:color .12s;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button></div><div data-hk="37" id="term-container" class="flex-1 min-h-0" style="padding:4px 4px 0;"></div><script>(function() {
+</script><div data-hk="15" class="flex items-center gap-1.5 px-3 py-2 shrink-0" style="border-top:1px solid #1c2736; font-size:11px; color:#3d5068;"><span data-hk="16" class="flex-1"></span><span data-hk="17" class="font-mono" style="font-size:10px;">0/1 cells</span></div></div><div data-hk="18" id="editor-area" style="flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;"><div data-hk="19" id="nb-island" class="flex-1 flex flex-col rounded-xl overflow-hidden min-h-0" style="background:var(--panel-bg);border:1px solid var(--cell-border);"><div data-hk="20" class="h-[38px] flex items-stretch shrink-0" style="background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;"><div data-hk="21" style="display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;"><div data-hk="22" class="tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;switch_tab&#39;,tab_idx:1})" style="color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);"><svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>Untitled.jl<span data-hk="23" style="width:5px;height:5px;border-radius:50%;background:var(--accent);"></span><span data-hk="24" onclick="event.stopPropagation();if(confirm(&#39;Close?&#39;))TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;close_tab&#39;,tab_idx:1})" style="font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;">×</span></div></div><div data-hk="25" style="display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;"><button data-hk="26" id="run-stale-btn" class="tb-btn stale" title="Run stale cells" onclick="window._sessionsRunStale()" style=""><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg><span data-hk="27" id="run-stale-label"> Run Stale (1)</span></button><button data-hk="28" id="run-all-btn" class="tb-btn" title="Run all cells" onclick="window._sessionsRunAll()"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg> Run All</button><button data-hk="29" id="stop-btn" class="tb-btn stop" title="Stop execution" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;interrupt&#39;})" style="display:none;"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg> Stop</button><span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><span class="toolbar-sep"></span><button data-hk="30" id="save-indicator" class="tb-btn" title="Save (Ctrl+S)" onclick="window._sessionsSave()">Save</button><button data-hk="31" class="tb-btn" title="Format all cells" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;format_all&#39;})" data-format-btn="1">Format</button></div></div><therapy-island data-component="notebookisland"><div data-hk="1" id="nb" class="flex-1 overflow-y-auto px-5 pt-3 pb-8"><div data-hk="2" style="max-width:900px;margin:0 auto;padding-left:28px;"><div data-hk="3" class="cdiv h-[26px] flex items-center justify-center my-[2px]"><div data-hk="4" class="cdiv-inner flex items-center gap-1 opacity-0 transition-opacity"><div data-hk="5" class="h-px w-14 bg-b2"></div><button data-hk="6" class="flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov" onclick="window._sessionsAddCell&amp;&amp;_sessionsAddCell(&#39;&#39;)"><svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code</button><div data-hk="7" class="h-px w-14 bg-b2"></div></div></div><div data-hk="8" class="cell-wrap relative" data-cell-id="d70b947b-e9e7-4af2-8932-b84cf25c9f5c"><div data-hk="9" class="cell-out" data-cell-id="d70b947b-e9e7-4af2-8932-b84cf25c9f5c" style="display:none;"></div><therapy-island data-component="celltoggle" data-props="{&quot;initial_open&quot;:1}"><div data-hk="1" class="cell-island"><div data-hk="2" class="cell-eye"><div data-hk="3" style="position:relative;width:14px;height:14px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg><span data-hk="4" data-show="true"><div data-hk="5" style="position:absolute;inset:0;background:var(--bg-primary, #151c25);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div></span></div></div><span data-hk="6" data-show="true"><div data-hk="7"><div data-hk="8" class="code-cell relative overflow-hidden idle"><div data-hk="9" class="cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10"><button data-hk="10" class="run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125" title="Run cell (Shift+Enter)" onclick="window._sessionsRunCell(&#39;d70b947b-e9e7-4af2-8932-b84cf25c9f5c&#39;)" style="background:rgba(86,212,160,.1)"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg></button><button data-hk="11" class="menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3" title="Cell actions" onclick="window._sessionsShowCellMenu(this,&#39;d70b947b-e9e7-4af2-8932-b84cf25c9f5c&#39;)" style="background:rgba(255,255,255,.04)"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg></button></div><div data-hk="12" data-src="# Welcome to Sessions.jl
+# Add cells and start coding!" class="cm-cell" data-cell-id="d70b947b-e9e7-4af2-8932-b84cf25c9f5c"></div></div></div></span></div></therapy-island></div><div data-hk="10" class="cdiv h-[26px] flex items-center justify-center my-[2px]"><div data-hk="11" class="cdiv-inner flex items-center gap-1 opacity-0 transition-opacity"><div data-hk="12" class="h-px w-14 bg-b2"></div><button data-hk="13" class="flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px bg-island border border-b2 text-t3 cursor-pointer hover:text-t1 hover:bg-hov" onclick="window._sessionsAddCell&amp;&amp;_sessionsAddCell(&#39;d70b947b-e9e7-4af2-8932-b84cf25c9f5c&#39;)"><svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>Code</button><div data-hk="14" class="h-px w-14 bg-b2"></div></div></div></div></div></therapy-island></div><div data-hk="32" id="repl-panel" style="display:none;flex-shrink:0;"><div data-hk="33" id="repl" class="flex flex-col overflow-hidden shrink-0 rounded-xl" style="height:220px;background:var(--term-bg);border:1px solid var(--term-border);box-shadow:var(--panel-shadow);"><div data-hk="34" id="term-tab-bar" class="flex items-center shrink-0" style="padding:0 4px;border-bottom:1px solid var(--divider);height:30px;gap:0;background:var(--chrome-bg);border-radius:12px 12px 0 0;"><div data-hk="35" id="term-tabs" class="flex items-center gap-0 flex-1 overflow-x-auto" style="scrollbar-width:none;"></div><button data-hk="36" id="term-add-btn" class="shrink-0" title="New Terminal" style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:4px 8px;font-size:14px;font-family:ui-monospace,monospace;transition:color .12s;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></button></div><div data-hk="37" id="term-container" class="flex-1 min-h-0" style="padding:4px 4px 0;"></div><script>(function() {
   if (window._terminalInit) return;
   window._terminalInit = true;
 
@@ -913,7 +1010,15 @@ Delete</div>
             div.style.cssText = 'height:100%;';
             container.appendChild(div);
             info.term.open(div);
-            info.term.writeln('[90m[reconnected][0m');
+            // Restore scrollback from server (instead of just "[reconnected]")
+            if (t.scrollback) {
+              try {
+                var raw = atob(t.scrollback);
+                var bytes = new Uint8Array(raw.length);
+                for (var j = 0; j < raw.length; j++) bytes[j] = raw.charCodeAt(j);
+                info.term.write(bytes);
+              } catch(e) { info.term.writeln('[90m[reconnected][0m'); }
+            }
             setTimeout(function() { info.fitAddon.fit(); }, 50);
           }
         });
@@ -1021,11 +1126,11 @@ Delete</div>
     _cellMenu = document.createElement('div');
     _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
     var actions = [
-      {label:'Move Up', icon:'\u2191', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'up'})}},
-      {label:'Move Down', icon:'\u2193', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'down'})}},
+      {label:'Move Up', icon:'\u2191', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'up'); }},
+      {label:'Move Down', icon:'\u2193', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
       {label:'Format', icon:'\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
       {sep:true},
-      {label:'Delete', icon:'\u2715', danger:true, action:function(){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:cellId})}}
+      {label:'Delete', icon:'\u2715', danger:true, action:function(){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); }}
     ];
     actions.forEach(function(a) {
       if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
@@ -1105,7 +1210,7 @@ Delete</div>
     function _collectCodes() { var codes = {}; for (var cid in editors) { codes[cid] = editors[cid].state.doc.toString(); } return codes; }
     window._sessionsRunAll = function() { var codes = _collectCodes(); for (var cid in codes) { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'update_code',cell_id:cid,code:codes[cid]}); } if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_all'}); };
     window._sessionsRunStale = function() { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_stale',codes:_collectCodes()}); };
-    window._sessionsSave = function() { if (!TherapyWS||!TherapyWS.sendMessage) return; var fe=window._fileEditorView; if(fe){TherapyWS.sendMessage('notebook',{action:'save',content:fe.state.doc.toString()});return;} TherapyWS.sendMessage('notebook',{action:'save',codes:_collectCodes()}); };
+    // _sessionsSave defined in WS bridge (uses MutationManager for optimistic save)
 
     var _syncTimers = {};
     if (!window._sessSuppressSync) window._sessSuppressSync = {};
@@ -1130,38 +1235,258 @@ Delete</div>
     window._sessionsInitNewCells = window._initAllCM;
   }
 
-  // ── WS Bridge ──
+  // ══════════════════════════════════════════════════════════════
+  // MutationManager — optimistic UI with server reconciliation
+  // Pattern: client applies immediately → server confirms/rejects
+  // ══════════════════════════════════════════════════════════════
+  var _mutations = new Map();  // mutation_id → { rollback, timeout_id }
+  var _mutSeq = 0;
+
+  function mutate(channel, payload, rollbackFn) {
+    var mid = 'm_' + (++_mutSeq);
+    payload.mutation_id = mid;
+    _mutations.set(mid, {
+      rollback: rollbackFn,
+      timeout_id: setTimeout(function() {
+        if (_mutations.has(mid)) {
+          console.warn('[Sessions] Mutation timed out:', mid, payload.action);
+          _mutations.get(mid).rollback();
+          _mutations.delete(mid);
+        }
+      }, 10000)
+    });
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage(channel, payload);
+    }
+    return mid;
+  }
+
+  function reconcile(data) {
+    var mid = data.ack_mutation;
+    if (!mid || !_mutations.has(mid)) return false;
+    var m = _mutations.get(mid);
+    clearTimeout(m.timeout_id);
+    if (data.event === 'mutation_error') {
+      console.warn('[Sessions] Mutation rejected:', mid, data.reason);
+      m.rollback();
+    }
+    _mutations.delete(mid);
+    return true;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // WS Bridge — sets up event listener + exposes optimistic APIs
+  // ══════════════════════════════════════════════════════════════
   window._setupWSBridge = function(setCellOrder, setExecuting, setStaleCount) {
+    console.log('[Sessions WS] Bridge initialized');
+
+    // ── Save state ──
     window._sessionsUnsaved = false;
     function markUnsaved() { if(window._sessionsUnsaved)return; window._sessionsUnsaved=true; var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='\u25CF Save';btn.style.color='var(--status-running)';} }
     function markSaved() { window._sessionsUnsaved=false; var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='Saved';btn.style.color='';setTimeout(function(){if(!window._sessionsUnsaved)btn.textContent='Save';},2000);} }
     window._sessionsMarkUnsaved = markUnsaved;
 
+    // ── DOM helpers ──
     function cellEls(cellId) { var wrap=document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]'); if(!wrap)return null; return {wrap:wrap,code:wrap.querySelector('.code-cell'),out:wrap.querySelector('.cell-out'),ctrls:wrap.querySelector('.cell-ctrls')}; }
+    function nbContainer() { return document.querySelector('#nb > div'); }
     function fmtRuntime(ns) { var ms=ns/1e6; return ms<1?(ns/1e3).toFixed(1)+'\u00b5s':ms<1000?ms.toFixed(1)+'ms':(ms/1000).toFixed(2)+'s'; }
     function fmtSeconds(s) { return s<1?s.toFixed(2)+'s':s<60?s.toFixed(1)+'s':(s/60).toFixed(1)+'min'; }
 
+    // ── Cell execution timer ──
     var _cellTimers = {};
-    function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var startTime=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);'; badge.textContent='0.0s'; var interval=setInterval(function(){var elapsed=(performance.now()-startTime)/1000;badge.textContent=fmtSeconds(elapsed);},100); _cellTimers[cellId]={interval:interval,startTime:startTime}; }
-    function stopCellTimer(cellId) { var timer=_cellTimers[cellId]; if(timer){clearInterval(timer.interval);delete _cellTimers[cellId];} }
-    function setCellState(el,state,cellId) { if(!el)return; var cc=el.code; if(!cc)return; cc.classList.remove('idle','stale','executing'); if(state==='cell_queued'||state==='cell_running'){cc.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';cc.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);if(state==='cell_errored'){cc.style.borderColor='var(--status-error)';}else{cc.style.borderColor='';}} }
+    function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var t0=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);'; badge.textContent='0.0s'; var iv=setInterval(function(){badge.textContent=fmtSeconds((performance.now()-t0)/1000);},100); _cellTimers[cellId]={interval:iv}; }
+    function stopCellTimer(cellId) { var t=_cellTimers[cellId]; if(t){clearInterval(t.interval);delete _cellTimers[cellId];} }
+    function setCellState(el,state,cellId) { if(!el||!el.code)return; el.code.classList.remove('idle','stale','executing'); if(state==='cell_queued'||state==='cell_running'){el.code.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);el.code.style.borderColor=state==='cell_errored'?'var(--status-error)':'';} }
 
+    // ── Find gap after a cell (or first gap if null) ──
+    function gapAfter(cellId) {
+      if (cellId) {
+        var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+        if (!wrap) return null;
+        var sib = wrap.nextElementSibling;
+        while (sib && !sib.classList.contains('cdiv')) sib = sib.nextElementSibling;
+        return sib;
+      }
+      var c = nbContainer();
+      return c ? c.querySelector('.cdiv') : null;
+    }
+
+    // ── Insert HTML after a gap element ──
+    function insertHtmlAfterGap(gap, html) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var nodes = Array.from(tmp.children);
+      var ref = gap.nextSibling;
+      var parent = gap.parentNode;
+      nodes.forEach(function(n) { parent.insertBefore(n, ref); });
+      setTimeout(function() {
+        if (window._initAllCM) _initAllCM();
+        if (window.__hydrateTherapyIslands) { var nb=document.getElementById('nb'); if(nb) __hydrateTherapyIslands(nb); }
+      }, 30);
+    }
+
+    // ── Remove cell + its following gap from DOM, return rollback data ──
+    function removeCellDOM(cellId) {
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      if (!wrap) return null;
+      var nextGap = wrap.nextElementSibling;
+      while (nextGap && !nextGap.classList.contains('cdiv')) nextGap = nextGap.nextElementSibling;
+      var parent = wrap.parentNode;
+      var refNode = wrap.previousElementSibling; // gap before this cell
+      var wrapHTML = wrap.outerHTML;
+      var gapHTML = nextGap ? nextGap.outerHTML : '';
+      if (nextGap) nextGap.remove();
+      wrap.remove();
+      return { html: wrapHTML + gapHTML, parent: parent, refNode: refNode };
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Optimistic APIs — called by UI handlers, send + apply at once
+    // ══════════════════════════════════════════════════════════════
+
+    // Optimistic add: insert placeholder → server confirms with real HTML
+    window._sessionsAddCell = function(afterCellId) {
+      markUnsaved();
+      var tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+      var gap = gapAfter(afterCellId);
+      mutate('notebook',
+        { action:'add_cell', after_cell_id:afterCellId||'', temp_id:tempId },
+        function() {
+          // Rollback: remove the temp cell if it exists
+          var el = document.querySelector('.cell-wrap[data-cell-id="'+tempId+'"]');
+          if (el) { var ng=el.nextElementSibling; if(ng&&ng.classList.contains('cdiv'))ng.remove(); el.remove(); }
+        }
+      );
+      // No immediate DOM insertion — server sends cell_html quickly
+      // This is "pessimistic-for-add" since we need server-rendered HTML
+    };
+
+    // Optimistic delete: remove DOM immediately → server confirms
+    window._sessionsDeleteCell = function(cellId) {
+      markUnsaved();
+      var eds = window._sessionsEditors||{};
+      if (eds[cellId]) delete eds[cellId];
+      // Capture for undo toast
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      var prevWrap = null;
+      if (wrap) {
+        var prev = wrap.previousElementSibling;
+        while (prev && !prev.classList.contains('cell-wrap')) prev = prev.previousElementSibling;
+        prevWrap = prev;
+      }
+      var prevId = prevWrap ? prevWrap.dataset.cellId : '';
+      // Capture DOM for rollback BEFORE removing
+      var removed = removeCellDOM(cellId);
+      if (!removed) return;
+      mutate('notebook',
+        { action:'delete_cell', cell_id:cellId },
+        function() {
+          // Rollback: re-insert the cell
+          if (removed.refNode && removed.parent) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = removed.html;
+            var nodes = Array.from(tmp.children);
+            var ref = removed.refNode.nextSibling;
+            nodes.forEach(function(n) { removed.parent.insertBefore(n, ref); });
+            if (window._initAllCM) _initAllCM();
+            if (window.__hydrateTherapyIslands) { var nb=document.getElementById('nb'); if(nb) __hydrateTherapyIslands(nb); }
+          }
+        }
+      );
+      // Show undo toast
+      window._recentlyDeleted = {cell_id:cellId,prev_cell_id:prevId};
+      var toast=document.getElementById('undo-toast');
+      if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
+    };
+
+    // Optimistic move: swap DOM elements immediately → server confirms
+    window._sessionsMoveCell = function(cellId, direction) {
+      markUnsaved();
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      if (!wrap) return;
+      var parent = wrap.parentNode;
+      var nextGap = wrap.nextElementSibling;
+      while (nextGap && !nextGap.classList.contains('cdiv')) nextGap = nextGap.nextElementSibling;
+
+      // Capture original position for rollback
+      var origNextSibling = wrap.nextSibling;
+
+      if (direction === 'up') {
+        // Find the cell-wrap above (skip past the gap before us)
+        var prevGap = wrap.previousElementSibling;
+        while (prevGap && !prevGap.classList.contains('cdiv')) prevGap = prevGap.previousElementSibling;
+        if (!prevGap) return; // already at top
+        var target = prevGap.previousElementSibling;
+        while (target && !target.classList.contains('cell-wrap')) target = target.previousElementSibling;
+        if (!target) return;
+        // Move: insert wrap before target (with gap following)
+        parent.insertBefore(wrap, target);
+        if (nextGap) parent.insertBefore(nextGap, target);
+      } else if (direction === 'down') {
+        if (!nextGap) return;
+        var nextCell = nextGap.nextElementSibling;
+        while (nextCell && !nextCell.classList.contains('cell-wrap')) nextCell = nextCell.nextElementSibling;
+        if (!nextCell) return; // already at bottom
+        var nextCellGap = nextCell.nextElementSibling;
+        while (nextCellGap && !nextCellGap.classList.contains('cdiv')) nextCellGap = nextCellGap.nextElementSibling;
+        // Move: insert wrap after nextCell's gap
+        var insertRef = nextCellGap ? nextCellGap.nextSibling : null;
+        parent.insertBefore(wrap, insertRef);
+        if (nextGap) parent.insertBefore(nextGap, insertRef);
+      }
+      wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+
+      mutate('notebook',
+        { action:'move_cell', cell_id:cellId, direction:direction },
+        function() {
+          // Rollback: move back to original position
+          parent.insertBefore(wrap, origNextSibling);
+          if (nextGap) parent.insertBefore(nextGap, wrap.nextSibling);
+        }
+      );
+    };
+
+    // Optimistic save: show "Saved" immediately → rollback on error
+    window._sessionsSave = function() {
+      if (!TherapyWS||!TherapyWS.sendMessage) return;
+      var fe=window._fileEditorView;
+      markSaved(); // optimistic
+      if(fe) {
+        mutate('notebook', {action:'save',content:fe.state.doc.toString()}, function(){ markUnsaved(); });
+      } else {
+        var codes={}; var eds=window._sessionsEditors||{}; for(var cid in eds)codes[cid]=eds[cid].state.doc.toString();
+        mutate('notebook', {action:'save',codes:codes}, function(){ markUnsaved(); });
+      }
+    };
+
+    // ══════════════════════════════════════════════════════════════
+    // WS Event Handler — processes server events, reconciles mutations
+    // ══════════════════════════════════════════════════════════════
     window.addEventListener('therapy:channel:notebook', function(e) {
       var data = e.detail;
       if (!data || !data.event) return;
 
-      if (data.event === 'cell_state') {
-        var el = cellEls(data.cell_id);
-        setCellState(el, data.state, data.cell_id);
-        if (window._cellStore) { var s = _cellStore.get(data.cell_id); if (s) s.state = data.state; }
+      // Reconcile: if this event acknowledges a pending mutation, handle it
+      if (data.ack_mutation) {
+        var wasPending = reconcile(data);
+        if (data.event === 'mutation_error') return; // rollback already done
+        // For confirmed mutations, we still process the event to handle
+        // server-provided data (e.g. real cell_id replacing temp_id)
       }
 
+      // ── Cell state (queued/running/idle/errored) ──
+      if (data.event === 'cell_state') {
+        setCellState(cellEls(data.cell_id), data.state, data.cell_id);
+      }
+
+      // ── Cell output (pessimistic — server computes, client displays) ──
       else if (data.event === 'cell_output') {
         var el = cellEls(data.cell_id);
         if (!el) return;
         if (el.out) {
           var html = data.output_html || '';
-          if (html) { el.out.innerHTML=html; el.out.style.display=''; el.out.style.padding='6px 0 10px';
+          if (html) {
+            el.out.innerHTML=html; el.out.style.display=''; el.out.style.padding='6px 0 10px';
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
           } else { el.out.innerHTML=''; el.out.style.display='none'; }
@@ -1174,50 +1499,54 @@ Delete</div>
           badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;opacity:.8;color:'+c+';';
           badge.textContent=fmtRuntime(data.runtime_ns); el.ctrls.insertBefore(badge,el.ctrls.firstChild);
         }
-        if (window._cellStore) { var s=_cellStore.get(data.cell_id); if(s){s.state=data.state;s.output_html=data.output_html||'';s.runtime_ns=data.runtime_ns||0;} }
       }
 
+      // ── Cell added (server confirms with rendered HTML) ──
       else if (data.event === 'cell_added') {
         markUnsaved();
-        if (window._cellStore) {
-          _cellStore.set(data.cell_id, {state:'cell_idle',output_html:'',runtime_ns:0,code:data.code||'',folded:false,stale:false,stdout:''});
+        // If we had a temp placeholder, replace it. Otherwise insert fresh.
+        if (data.temp_id) {
+          var tempEl = document.querySelector('.cell-wrap[data-cell-id="'+data.temp_id+'"]');
+          if (tempEl) { tempEl.remove(); } // remove placeholder
         }
-        // Update cell_order signal — insert after the target cell
-        var currentOrder = setCellOrder._getter ? setCellOrder._getter() : [];
-        if (typeof currentOrder === 'function') currentOrder = currentOrder();
-        var newOrder = currentOrder.slice ? currentOrder.slice() : Array.from(currentOrder);
-        var afterIdx = data.after_cell_id ? newOrder.indexOf(data.after_cell_id) : -1;
-        newOrder.splice(afterIdx + 1, 0, data.cell_id);
-        setCellOrder(newOrder);
-        // Populate + init CM after For re-renders
-        setTimeout(function(){ _populateCells(); _initAllCM(); }, 100);
+        if (data.cell_html) {
+          var gap = gapAfter(data.after_cell_id);
+          if (gap) insertHtmlAfterGap(gap, data.cell_html);
+        }
       }
 
+      // ── Cell deleted (already removed optimistically, just confirm) ──
       else if (data.event === 'cell_deleted') {
-        markUnsaved();
-        window._recentlyDeleted = {cell_id:data.cell_id,code:data.code||'',prev_cell_id:data.prev_cell_id||''};
-        var toast=document.getElementById('undo-toast'); if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
+        // If NOT our mutation (e.g. from another client), remove from DOM
+        if (!data.ack_mutation) {
+          removeCellDOM(data.cell_id);
+        }
         if(window._sessionsEditors)delete window._sessionsEditors[data.cell_id];
-        if(window._cellStore)_cellStore.delete(data.cell_id);
-        // Update cell_order signal — remove the deleted cell
-        var currentOrder = setCellOrder._getter ? setCellOrder._getter() : [];
-        if (typeof currentOrder === 'function') currentOrder = currentOrder();
-        var newOrder = (currentOrder.slice ? currentOrder.slice() : Array.from(currentOrder)).filter(function(id){return id!==data.cell_id;});
-        setCellOrder(newOrder);
+        // Undo info (for non-optimistic path)
+        if (!data.ack_mutation) {
+          window._recentlyDeleted = {cell_id:data.cell_id,code:data.code||'',prev_cell_id:data.prev_cell_id||''};
+          var toast=document.getElementById('undo-toast');
+          if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
+        }
       }
 
+      // ── Cell moved (already moved optimistically, just confirm) ──
       else if (data.event === 'cell_moved') {
-        markUnsaved();
-        // Update cell_order signal with new order
-        if (data.cell_order) { setCellOrder(data.cell_order); }
+        // If NOT our mutation, apply the move to DOM
+        if (!data.ack_mutation) {
+          // Other client moved a cell — reload for simplicity
+          setTimeout(function(){window.location.reload();},200);
+        }
       }
 
+      // ── Code updated (format, external edit) ──
       else if (data.event === 'cell_formatted' || data.event === 'cell_code_updated') {
         if (data.event === 'cell_formatted') markUnsaved();
         var eds=window._sessionsEditors||{}; var ev=eds[data.cell_id];
         if(ev&&data.code!==undefined){var cur=ev.state.doc.toString();if(data.code!==cur){window._sessSuppressSync[data.cell_id]=true;ev.dispatch({changes:{from:0,to:cur.length,insert:data.code}});}}
       }
 
+      // ── Stale cells update ──
       else if (data.event === 'stale_update') {
         setStaleCount(data.count || 0);
         var btn=document.getElementById('run-stale-btn');var label=document.getElementById('run-stale-label');
@@ -1226,6 +1555,7 @@ Delete</div>
         document.querySelectorAll('.code-cell').forEach(function(el){var wrap=el.closest('.cell-wrap');var cid=wrap?wrap.dataset.cellId:null;if(cid&&staleSet.has(cid)){el.classList.add('stale');}else{el.classList.remove('stale');}});
       }
 
+      // ── Run progress ──
       else if (data.event === 'run_progress') {
         var isRunning=data.running_index>0&&data.total>0;
         window._sessionsExecuting=isRunning;
@@ -1235,29 +1565,31 @@ Delete</div>
         if(runAllBtn&&stopBtn){if(isRunning){runAllBtn.style.display='none';stopBtn.style.display='';if(runStaleBtn)runStaleBtn.style.display='none';}else{runAllBtn.style.display='';stopBtn.style.display='none';}}
       }
 
+      // ── Format progress ──
       else if (data.event === 'format_started') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.dataset.origText=btn.textContent;btn.textContent='Formatting...';btn.style.opacity='0.6';btn.style.pointerEvents='none';}); }
       else if (data.event === 'format_done') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent=btn.dataset.origText||'Format';btn.style.opacity='';btn.style.pointerEvents='';}); }
-      else if (data.event === 'saved') { markSaved(); }
+
+      // ── Save confirmed ──
+      else if (data.event === 'saved') { if(!data.ack_mutation) markSaved(); }
+
+      // ── Interrupted ──
       else if (data.event === 'interrupted') {
         window._sessionsExecuting=false; setExecuting(0);
         var el=document.getElementById('run-progress');if(el){el.textContent='Interrupted';el.style.display='';el.style.color='var(--status-error)';setTimeout(function(){el.textContent='';el.style.display='';el.style.color='';},2000);}
         var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');if(runAllBtn&&stopBtn){runAllBtn.style.display='';stopBtn.style.display='none';}
       }
+
+      // ── Full state (SSR already rendered, skip) ──
       else if (data.event === 'full_state') {
-        console.log('[Sessions] Full state:', data.cells ? data.cells.length : 0, 'cells');
-        if (data.cells && window._cellStore) {
-          data.cells.forEach(function(cell) {
-            _cellStore.set(cell.cell_id, {state:cell.state,output_html:cell.output_html||'',runtime_ns:cell.runtime_ns||0,code:cell.code||'',folded:cell.folded||false,stale:cell.stale||false,stdout:cell.stdout||''});
-          });
-          _populateCells();
-          if(window.__hydrateTherapyIslands){var nb=document.getElementById('nb');if(nb)window.__hydrateTherapyIslands(nb);}
-        }
+        console.log('[Sessions WS] Full state received — SSR has content');
       }
+
+      // ── Notebook replaced (tab switch, etc.) ──
       else if (data.event === 'nb_replaced') {
         window._fileEditorView = null;
         if (data.nb_html) {
           var nbIsland=document.getElementById('nb-island');
-          if(nbIsland){nbIsland.outerHTML=data.nb_html;window._sessionsInitNewCells&&window._sessionsInitNewCells();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
+          if(nbIsland){nbIsland.outerHTML=data.nb_html;if(window._initAllCM)_initAllCM();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
         } else { setTimeout(function(){window.location.reload();},200); }
       }
     });
@@ -1279,6 +1611,7 @@ Delete</div>
         var toast = document.getElementById('undo-toast');
         if (toast) toast.classList.remove('show');
         if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
+        // Undo uses direct WS call (not optimistic — we need server to render the cell)
         if (window.TherapyWS && TherapyWS.sendMessage) {
           TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: del.prev_cell_id, code: del.code});
         }

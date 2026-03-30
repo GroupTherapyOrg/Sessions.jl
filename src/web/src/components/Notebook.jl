@@ -114,7 +114,7 @@ function _notebook_cm_script_body()
     function _collectCodes() { var codes = {}; for (var cid in editors) { codes[cid] = editors[cid].state.doc.toString(); } return codes; }
     window._sessionsRunAll = function() { var codes = _collectCodes(); for (var cid in codes) { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'update_code',cell_id:cid,code:codes[cid]}); } if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_all'}); };
     window._sessionsRunStale = function() { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_stale',codes:_collectCodes()}); };
-    window._sessionsSave = function() { if (!TherapyWS||!TherapyWS.sendMessage) return; var fe=window._fileEditorView; if(fe){TherapyWS.sendMessage('notebook',{action:'save',content:fe.state.doc.toString()});return;} TherapyWS.sendMessage('notebook',{action:'save',codes:_collectCodes()}); };
+    // _sessionsSave defined in WS bridge (uses MutationManager for optimistic save)
 
     var _syncTimers = {};
     if (!window._sessSuppressSync) window._sessSuppressSync = {};
@@ -147,38 +147,258 @@ end
 
 function _notebook_ws_bridge_body()
 """
-  // ── WS Bridge ──
+  // ══════════════════════════════════════════════════════════════
+  // MutationManager — optimistic UI with server reconciliation
+  // Pattern: client applies immediately → server confirms/rejects
+  // ══════════════════════════════════════════════════════════════
+  var _mutations = new Map();  // mutation_id → { rollback, timeout_id }
+  var _mutSeq = 0;
+
+  function mutate(channel, payload, rollbackFn) {
+    var mid = 'm_' + (++_mutSeq);
+    payload.mutation_id = mid;
+    _mutations.set(mid, {
+      rollback: rollbackFn,
+      timeout_id: setTimeout(function() {
+        if (_mutations.has(mid)) {
+          console.warn('[Sessions] Mutation timed out:', mid, payload.action);
+          _mutations.get(mid).rollback();
+          _mutations.delete(mid);
+        }
+      }, 10000)
+    });
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage(channel, payload);
+    }
+    return mid;
+  }
+
+  function reconcile(data) {
+    var mid = data.ack_mutation;
+    if (!mid || !_mutations.has(mid)) return false;
+    var m = _mutations.get(mid);
+    clearTimeout(m.timeout_id);
+    if (data.event === 'mutation_error') {
+      console.warn('[Sessions] Mutation rejected:', mid, data.reason);
+      m.rollback();
+    }
+    _mutations.delete(mid);
+    return true;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // WS Bridge — sets up event listener + exposes optimistic APIs
+  // ══════════════════════════════════════════════════════════════
   window._setupWSBridge = function(setCellOrder, setExecuting, setStaleCount) {
+    console.log('[Sessions WS] Bridge initialized');
+
+    // ── Save state ──
     window._sessionsUnsaved = false;
     function markUnsaved() { if(window._sessionsUnsaved)return; window._sessionsUnsaved=true; var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='\\u25CF Save';btn.style.color='var(--status-running)';} }
     function markSaved() { window._sessionsUnsaved=false; var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='Saved';btn.style.color='';setTimeout(function(){if(!window._sessionsUnsaved)btn.textContent='Save';},2000);} }
     window._sessionsMarkUnsaved = markUnsaved;
 
+    // ── DOM helpers ──
     function cellEls(cellId) { var wrap=document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]'); if(!wrap)return null; return {wrap:wrap,code:wrap.querySelector('.code-cell'),out:wrap.querySelector('.cell-out'),ctrls:wrap.querySelector('.cell-ctrls')}; }
+    function nbContainer() { return document.querySelector('#nb > div'); }
     function fmtRuntime(ns) { var ms=ns/1e6; return ms<1?(ns/1e3).toFixed(1)+'\\u00b5s':ms<1000?ms.toFixed(1)+'ms':(ms/1000).toFixed(2)+'s'; }
     function fmtSeconds(s) { return s<1?s.toFixed(2)+'s':s<60?s.toFixed(1)+'s':(s/60).toFixed(1)+'min'; }
 
+    // ── Cell execution timer ──
     var _cellTimers = {};
-    function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var startTime=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);'; badge.textContent='0.0s'; var interval=setInterval(function(){var elapsed=(performance.now()-startTime)/1000;badge.textContent=fmtSeconds(elapsed);},100); _cellTimers[cellId]={interval:interval,startTime:startTime}; }
-    function stopCellTimer(cellId) { var timer=_cellTimers[cellId]; if(timer){clearInterval(timer.interval);delete _cellTimers[cellId];} }
-    function setCellState(el,state,cellId) { if(!el)return; var cc=el.code; if(!cc)return; cc.classList.remove('idle','stale','executing'); if(state==='cell_queued'||state==='cell_running'){cc.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';cc.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);if(state==='cell_errored'){cc.style.borderColor='var(--status-error)';}else{cc.style.borderColor='';}} }
+    function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var t0=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);'; badge.textContent='0.0s'; var iv=setInterval(function(){badge.textContent=fmtSeconds((performance.now()-t0)/1000);},100); _cellTimers[cellId]={interval:iv}; }
+    function stopCellTimer(cellId) { var t=_cellTimers[cellId]; if(t){clearInterval(t.interval);delete _cellTimers[cellId];} }
+    function setCellState(el,state,cellId) { if(!el||!el.code)return; el.code.classList.remove('idle','stale','executing'); if(state==='cell_queued'||state==='cell_running'){el.code.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);el.code.style.borderColor=state==='cell_errored'?'var(--status-error)':'';} }
 
+    // ── Find gap after a cell (or first gap if null) ──
+    function gapAfter(cellId) {
+      if (cellId) {
+        var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+        if (!wrap) return null;
+        var sib = wrap.nextElementSibling;
+        while (sib && !sib.classList.contains('cdiv')) sib = sib.nextElementSibling;
+        return sib;
+      }
+      var c = nbContainer();
+      return c ? c.querySelector('.cdiv') : null;
+    }
+
+    // ── Insert HTML after a gap element ──
+    function insertHtmlAfterGap(gap, html) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var nodes = Array.from(tmp.children);
+      var ref = gap.nextSibling;
+      var parent = gap.parentNode;
+      nodes.forEach(function(n) { parent.insertBefore(n, ref); });
+      setTimeout(function() {
+        if (window._initAllCM) _initAllCM();
+        if (window.__hydrateTherapyIslands) { var nb=document.getElementById('nb'); if(nb) __hydrateTherapyIslands(nb); }
+      }, 30);
+    }
+
+    // ── Remove cell + its following gap from DOM, return rollback data ──
+    function removeCellDOM(cellId) {
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      if (!wrap) return null;
+      var nextGap = wrap.nextElementSibling;
+      while (nextGap && !nextGap.classList.contains('cdiv')) nextGap = nextGap.nextElementSibling;
+      var parent = wrap.parentNode;
+      var refNode = wrap.previousElementSibling; // gap before this cell
+      var wrapHTML = wrap.outerHTML;
+      var gapHTML = nextGap ? nextGap.outerHTML : '';
+      if (nextGap) nextGap.remove();
+      wrap.remove();
+      return { html: wrapHTML + gapHTML, parent: parent, refNode: refNode };
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // Optimistic APIs — called by UI handlers, send + apply at once
+    // ══════════════════════════════════════════════════════════════
+
+    // Optimistic add: insert placeholder → server confirms with real HTML
+    window._sessionsAddCell = function(afterCellId) {
+      markUnsaved();
+      var tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+      var gap = gapAfter(afterCellId);
+      mutate('notebook',
+        { action:'add_cell', after_cell_id:afterCellId||'', temp_id:tempId },
+        function() {
+          // Rollback: remove the temp cell if it exists
+          var el = document.querySelector('.cell-wrap[data-cell-id="'+tempId+'"]');
+          if (el) { var ng=el.nextElementSibling; if(ng&&ng.classList.contains('cdiv'))ng.remove(); el.remove(); }
+        }
+      );
+      // No immediate DOM insertion — server sends cell_html quickly
+      // This is "pessimistic-for-add" since we need server-rendered HTML
+    };
+
+    // Optimistic delete: remove DOM immediately → server confirms
+    window._sessionsDeleteCell = function(cellId) {
+      markUnsaved();
+      var eds = window._sessionsEditors||{};
+      if (eds[cellId]) delete eds[cellId];
+      // Capture for undo toast
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      var prevWrap = null;
+      if (wrap) {
+        var prev = wrap.previousElementSibling;
+        while (prev && !prev.classList.contains('cell-wrap')) prev = prev.previousElementSibling;
+        prevWrap = prev;
+      }
+      var prevId = prevWrap ? prevWrap.dataset.cellId : '';
+      // Capture DOM for rollback BEFORE removing
+      var removed = removeCellDOM(cellId);
+      if (!removed) return;
+      mutate('notebook',
+        { action:'delete_cell', cell_id:cellId },
+        function() {
+          // Rollback: re-insert the cell
+          if (removed.refNode && removed.parent) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = removed.html;
+            var nodes = Array.from(tmp.children);
+            var ref = removed.refNode.nextSibling;
+            nodes.forEach(function(n) { removed.parent.insertBefore(n, ref); });
+            if (window._initAllCM) _initAllCM();
+            if (window.__hydrateTherapyIslands) { var nb=document.getElementById('nb'); if(nb) __hydrateTherapyIslands(nb); }
+          }
+        }
+      );
+      // Show undo toast
+      window._recentlyDeleted = {cell_id:cellId,prev_cell_id:prevId};
+      var toast=document.getElementById('undo-toast');
+      if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
+    };
+
+    // Optimistic move: swap DOM elements immediately → server confirms
+    window._sessionsMoveCell = function(cellId, direction) {
+      markUnsaved();
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      if (!wrap) return;
+      var parent = wrap.parentNode;
+      var nextGap = wrap.nextElementSibling;
+      while (nextGap && !nextGap.classList.contains('cdiv')) nextGap = nextGap.nextElementSibling;
+
+      // Capture original position for rollback
+      var origNextSibling = wrap.nextSibling;
+
+      if (direction === 'up') {
+        // Find the cell-wrap above (skip past the gap before us)
+        var prevGap = wrap.previousElementSibling;
+        while (prevGap && !prevGap.classList.contains('cdiv')) prevGap = prevGap.previousElementSibling;
+        if (!prevGap) return; // already at top
+        var target = prevGap.previousElementSibling;
+        while (target && !target.classList.contains('cell-wrap')) target = target.previousElementSibling;
+        if (!target) return;
+        // Move: insert wrap before target (with gap following)
+        parent.insertBefore(wrap, target);
+        if (nextGap) parent.insertBefore(nextGap, target);
+      } else if (direction === 'down') {
+        if (!nextGap) return;
+        var nextCell = nextGap.nextElementSibling;
+        while (nextCell && !nextCell.classList.contains('cell-wrap')) nextCell = nextCell.nextElementSibling;
+        if (!nextCell) return; // already at bottom
+        var nextCellGap = nextCell.nextElementSibling;
+        while (nextCellGap && !nextCellGap.classList.contains('cdiv')) nextCellGap = nextCellGap.nextElementSibling;
+        // Move: insert wrap after nextCell's gap
+        var insertRef = nextCellGap ? nextCellGap.nextSibling : null;
+        parent.insertBefore(wrap, insertRef);
+        if (nextGap) parent.insertBefore(nextGap, insertRef);
+      }
+      wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+
+      mutate('notebook',
+        { action:'move_cell', cell_id:cellId, direction:direction },
+        function() {
+          // Rollback: move back to original position
+          parent.insertBefore(wrap, origNextSibling);
+          if (nextGap) parent.insertBefore(nextGap, wrap.nextSibling);
+        }
+      );
+    };
+
+    // Optimistic save: show "Saved" immediately → rollback on error
+    window._sessionsSave = function() {
+      if (!TherapyWS||!TherapyWS.sendMessage) return;
+      var fe=window._fileEditorView;
+      markSaved(); // optimistic
+      if(fe) {
+        mutate('notebook', {action:'save',content:fe.state.doc.toString()}, function(){ markUnsaved(); });
+      } else {
+        var codes={}; var eds=window._sessionsEditors||{}; for(var cid in eds)codes[cid]=eds[cid].state.doc.toString();
+        mutate('notebook', {action:'save',codes:codes}, function(){ markUnsaved(); });
+      }
+    };
+
+    // ══════════════════════════════════════════════════════════════
+    // WS Event Handler — processes server events, reconciles mutations
+    // ══════════════════════════════════════════════════════════════
     window.addEventListener('therapy:channel:notebook', function(e) {
       var data = e.detail;
       if (!data || !data.event) return;
 
-      if (data.event === 'cell_state') {
-        var el = cellEls(data.cell_id);
-        setCellState(el, data.state, data.cell_id);
-        if (window._cellStore) { var s = _cellStore.get(data.cell_id); if (s) s.state = data.state; }
+      // Reconcile: if this event acknowledges a pending mutation, handle it
+      if (data.ack_mutation) {
+        var wasPending = reconcile(data);
+        if (data.event === 'mutation_error') return; // rollback already done
+        // For confirmed mutations, we still process the event to handle
+        // server-provided data (e.g. real cell_id replacing temp_id)
       }
 
+      // ── Cell state (queued/running/idle/errored) ──
+      if (data.event === 'cell_state') {
+        setCellState(cellEls(data.cell_id), data.state, data.cell_id);
+      }
+
+      // ── Cell output (pessimistic — server computes, client displays) ──
       else if (data.event === 'cell_output') {
         var el = cellEls(data.cell_id);
         if (!el) return;
         if (el.out) {
           var html = data.output_html || '';
-          if (html) { el.out.innerHTML=html; el.out.style.display=''; el.out.style.padding='6px 0 10px';
+          if (html) {
+            el.out.innerHTML=html; el.out.style.display=''; el.out.style.padding='6px 0 10px';
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
           } else { el.out.innerHTML=''; el.out.style.display='none'; }
@@ -191,50 +411,54 @@ function _notebook_ws_bridge_body()
           badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;opacity:.8;color:'+c+';';
           badge.textContent=fmtRuntime(data.runtime_ns); el.ctrls.insertBefore(badge,el.ctrls.firstChild);
         }
-        if (window._cellStore) { var s=_cellStore.get(data.cell_id); if(s){s.state=data.state;s.output_html=data.output_html||'';s.runtime_ns=data.runtime_ns||0;} }
       }
 
+      // ── Cell added (server confirms with rendered HTML) ──
       else if (data.event === 'cell_added') {
         markUnsaved();
-        if (window._cellStore) {
-          _cellStore.set(data.cell_id, {state:'cell_idle',output_html:'',runtime_ns:0,code:data.code||'',folded:false,stale:false,stdout:''});
+        // If we had a temp placeholder, replace it. Otherwise insert fresh.
+        if (data.temp_id) {
+          var tempEl = document.querySelector('.cell-wrap[data-cell-id="'+data.temp_id+'"]');
+          if (tempEl) { tempEl.remove(); } // remove placeholder
         }
-        // Update cell_order signal — insert after the target cell
-        var currentOrder = setCellOrder._getter ? setCellOrder._getter() : [];
-        if (typeof currentOrder === 'function') currentOrder = currentOrder();
-        var newOrder = currentOrder.slice ? currentOrder.slice() : Array.from(currentOrder);
-        var afterIdx = data.after_cell_id ? newOrder.indexOf(data.after_cell_id) : -1;
-        newOrder.splice(afterIdx + 1, 0, data.cell_id);
-        setCellOrder(newOrder);
-        // Populate + init CM after For re-renders
-        setTimeout(function(){ _populateCells(); _initAllCM(); }, 100);
+        if (data.cell_html) {
+          var gap = gapAfter(data.after_cell_id);
+          if (gap) insertHtmlAfterGap(gap, data.cell_html);
+        }
       }
 
+      // ── Cell deleted (already removed optimistically, just confirm) ──
       else if (data.event === 'cell_deleted') {
-        markUnsaved();
-        window._recentlyDeleted = {cell_id:data.cell_id,code:data.code||'',prev_cell_id:data.prev_cell_id||''};
-        var toast=document.getElementById('undo-toast'); if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
+        // If NOT our mutation (e.g. from another client), remove from DOM
+        if (!data.ack_mutation) {
+          removeCellDOM(data.cell_id);
+        }
         if(window._sessionsEditors)delete window._sessionsEditors[data.cell_id];
-        if(window._cellStore)_cellStore.delete(data.cell_id);
-        // Update cell_order signal — remove the deleted cell
-        var currentOrder = setCellOrder._getter ? setCellOrder._getter() : [];
-        if (typeof currentOrder === 'function') currentOrder = currentOrder();
-        var newOrder = (currentOrder.slice ? currentOrder.slice() : Array.from(currentOrder)).filter(function(id){return id!==data.cell_id;});
-        setCellOrder(newOrder);
+        // Undo info (for non-optimistic path)
+        if (!data.ack_mutation) {
+          window._recentlyDeleted = {cell_id:data.cell_id,code:data.code||'',prev_cell_id:data.prev_cell_id||''};
+          var toast=document.getElementById('undo-toast');
+          if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
+        }
       }
 
+      // ── Cell moved (already moved optimistically, just confirm) ──
       else if (data.event === 'cell_moved') {
-        markUnsaved();
-        // Update cell_order signal with new order
-        if (data.cell_order) { setCellOrder(data.cell_order); }
+        // If NOT our mutation, apply the move to DOM
+        if (!data.ack_mutation) {
+          // Other client moved a cell — reload for simplicity
+          setTimeout(function(){window.location.reload();},200);
+        }
       }
 
+      // ── Code updated (format, external edit) ──
       else if (data.event === 'cell_formatted' || data.event === 'cell_code_updated') {
         if (data.event === 'cell_formatted') markUnsaved();
         var eds=window._sessionsEditors||{}; var ev=eds[data.cell_id];
         if(ev&&data.code!==undefined){var cur=ev.state.doc.toString();if(data.code!==cur){window._sessSuppressSync[data.cell_id]=true;ev.dispatch({changes:{from:0,to:cur.length,insert:data.code}});}}
       }
 
+      // ── Stale cells update ──
       else if (data.event === 'stale_update') {
         setStaleCount(data.count || 0);
         var btn=document.getElementById('run-stale-btn');var label=document.getElementById('run-stale-label');
@@ -243,6 +467,7 @@ function _notebook_ws_bridge_body()
         document.querySelectorAll('.code-cell').forEach(function(el){var wrap=el.closest('.cell-wrap');var cid=wrap?wrap.dataset.cellId:null;if(cid&&staleSet.has(cid)){el.classList.add('stale');}else{el.classList.remove('stale');}});
       }
 
+      // ── Run progress ──
       else if (data.event === 'run_progress') {
         var isRunning=data.running_index>0&&data.total>0;
         window._sessionsExecuting=isRunning;
@@ -252,43 +477,36 @@ function _notebook_ws_bridge_body()
         if(runAllBtn&&stopBtn){if(isRunning){runAllBtn.style.display='none';stopBtn.style.display='';if(runStaleBtn)runStaleBtn.style.display='none';}else{runAllBtn.style.display='';stopBtn.style.display='none';}}
       }
 
+      // ── Format progress ──
       else if (data.event === 'format_started') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.dataset.origText=btn.textContent;btn.textContent='Formatting...';btn.style.opacity='0.6';btn.style.pointerEvents='none';}); }
       else if (data.event === 'format_done') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent=btn.dataset.origText||'Format';btn.style.opacity='';btn.style.pointerEvents='';}); }
-      else if (data.event === 'saved') { markSaved(); }
+
+      // ── Save confirmed ──
+      else if (data.event === 'saved') { if(!data.ack_mutation) markSaved(); }
+
+      // ── Interrupted ──
       else if (data.event === 'interrupted') {
         window._sessionsExecuting=false; setExecuting(0);
         var el=document.getElementById('run-progress');if(el){el.textContent='Interrupted';el.style.display='';el.style.color='var(--status-error)';setTimeout(function(){el.textContent='';el.style.display='';el.style.color='';},2000);}
         var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');if(runAllBtn&&stopBtn){runAllBtn.style.display='';stopBtn.style.display='none';}
       }
+
+      // ── Full state (SSR already rendered, skip) ──
       else if (data.event === 'full_state') {
-        console.log('[Sessions] Full state:', data.cells ? data.cells.length : 0, 'cells');
-        if (data.cells && window._cellStore) {
-          data.cells.forEach(function(cell) {
-            _cellStore.set(cell.cell_id, {state:cell.state,output_html:cell.output_html||'',runtime_ns:cell.runtime_ns||0,code:cell.code||'',folded:cell.folded||false,stale:cell.stale||false,stdout:cell.stdout||''});
-          });
-          _populateCells();
-          if(window.__hydrateTherapyIslands){var nb=document.getElementById('nb');if(nb)window.__hydrateTherapyIslands(nb);}
-        }
+        console.log('[Sessions WS] Full state received — SSR has content');
       }
+
+      // ── Notebook replaced (tab switch, etc.) ──
       else if (data.event === 'nb_replaced') {
         window._fileEditorView = null;
         if (data.nb_html) {
           var nbIsland=document.getElementById('nb-island');
-          if(nbIsland){nbIsland.outerHTML=data.nb_html;window._sessionsInitNewCells&&window._sessionsInitNewCells();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
+          if(nbIsland){nbIsland.outerHTML=data.nb_html;if(window._initAllCM)_initAllCM();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
         } else { setTimeout(function(){window.location.reload();},200); }
       }
     });
   };
 """
-end
-
-# Keep the old functions for backward compatibility during transition
-function _notebook_cm_script()
-    _notebook_cm_script_body()
-end
-
-function _notebook_channel_script()
-    RawHtml(string("<script>(function(){", _notebook_ws_bridge_body(), "if(window.TherapyWS)_setupWSBridge(function(){},function(){},function(){});})();</script>"))
 end
 
 # Combined notebook JS for global injection by Layout.jl
@@ -314,11 +532,11 @@ function _notebook_island_js()
     _cellMenu = document.createElement('div');
     _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
     var actions = [
-      {label:'Move Up', icon:'\\u2191', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'up'})}},
-      {label:'Move Down', icon:'\\u2193', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'down'})}},
+      {label:'Move Up', icon:'\\u2191', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'up'); }},
+      {label:'Move Down', icon:'\\u2193', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
       {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
       {sep:true},
-      {label:'Delete', icon:'\\u2715', danger:true, action:function(){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:cellId})}}
+      {label:'Delete', icon:'\\u2715', danger:true, action:function(){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); }}
     ];
     actions.forEach(function(a) {
       if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
@@ -366,6 +584,7 @@ function _notebook_island_js()
         var toast = document.getElementById('undo-toast');
         if (toast) toast.classList.remove('show');
         if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
+        // Undo uses direct WS call (not optimistic — we need server to render the cell)
         if (window.TherapyWS && TherapyWS.sendMessage) {
           TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: del.prev_cell_id, code: del.code});
         }

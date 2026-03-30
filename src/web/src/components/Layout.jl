@@ -11,8 +11,9 @@ const _EDITOR_BUNDLE_JS = let
     isfile(p) ? read(p, String) : "/* editor.js not found */"
 end
 
-# Load theme CSS — single source of truth for all colors
-const _THEME_CSS = let
+# Load theme CSS — read fresh each time (not const, so changes to theme.css
+# are picked up without recompilation)
+function _load_theme_css()
     p = joinpath(@__DIR__, "..", "..", "theme.css")
     isfile(p) ? read(p, String) : "/* theme.css not found */"
 end
@@ -50,7 +51,7 @@ function Layout(children...; title="Sessions.jl")
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>"""),
 
         # --- Theme CSS (single source of truth for all colors) ---
-        RawHtml(string("<style>", _THEME_CSS, "</style>")),
+        RawHtml(string("<style>", _load_theme_css(), "</style>")),
 
         # --- Tailwind CDN + config (references CSS vars from theme.css) ---
         RawHtml("""<script src="https://cdn.tailwindcss.com"></script>
@@ -103,12 +104,14 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 /* Clip panel shadows at workspace boundary to prevent corner bleed */
 #workspace>*{min-height:0;}
 #workspace>div{min-height:0;}
+/* NotebookIsland therapy-island must participate in #nb-island flex layout for scroll */
+#nb-island>therapy-island{flex:1;display:flex;flex-direction:column;min-height:0;}
 
 /* ═══ Activity Bar ═══ */
 .ab-btn[data-state="on"]{background:rgba(212,117,154,.1) !important;color:var(--accent) !important;}
 .ab-btn:hover{background:rgba(128,128,128,.08) !important;color:var(--text-2) !important;}
 
-/* ═══ Shared Notebook CSS ═══ */
+/* ═══ Notebook CSS (cell chrome, markdown prose, tables) ═══ */
 $(Main.Sessions.NOTEBOOK_CSS)
 
 /* ═══ Cell States ═══ */

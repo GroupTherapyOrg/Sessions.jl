@@ -318,7 +318,15 @@ function _terminal_js()
             div.style.cssText = 'height:100%;';
             container.appendChild(div);
             info.term.open(div);
-            info.term.writeln('\x1b[90m[reconnected]\x1b[0m');
+            // Restore scrollback from server (instead of just "[reconnected]")
+            if (t.scrollback) {
+              try {
+                var raw = atob(t.scrollback);
+                var bytes = new Uint8Array(raw.length);
+                for (var j = 0; j < raw.length; j++) bytes[j] = raw.charCodeAt(j);
+                info.term.write(bytes);
+              } catch(e) { info.term.writeln('\x1b[90m[reconnected]\x1b[0m'); }
+            }
             setTimeout(function() { info.fitAddon.fit(); }, 50);
           }
         });
