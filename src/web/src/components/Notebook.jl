@@ -588,6 +588,14 @@ function _notebook_island_js()
   // ── Auto-init CM editors (file editors outside NotebookIsland) ──
   setTimeout(function() { if (window._initAllCM) _initAllCM(); }, 100);
 
+  // ── Hydrate nested Therapy islands (CellToggle etc.) after DOM replacement ──
+  window.__hydrateTherapyIslands = function(root) {
+    if (!window.TherapyHydrate) return;
+    for (var name in TherapyHydrate) {
+      TherapyHydrate[name]();
+    }
+  };
+
   // ── Show loading overlay on notebook panel (called before server responds) ──
   window._sessionsShowLoading = function() {
     var panel = document.getElementById('nb-island');

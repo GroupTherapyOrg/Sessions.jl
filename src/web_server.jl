@@ -103,17 +103,30 @@ mutable struct WebNotebookState
     executing::Bool
 end
 
-"""Return the currently active tab."""
-active_tab(state::WebNotebookState) = state.tabs[state.active_tab_idx]
+"""Return the currently active tab (nothing if no tabs open)."""
+function active_tab(state::WebNotebookState)
+    idx = state.active_tab_idx
+    (idx < 1 || idx > length(state.tabs)) && return nothing
+    state.tabs[idx]
+end
 
-"""Return the notebook of the currently active tab (nothing for file tabs)."""
-active_nb(state::WebNotebookState) = active_tab(state).nb
+"""Return the notebook of the currently active tab (nothing for file tabs or no tabs)."""
+function active_nb(state::WebNotebookState)
+    tab = active_tab(state)
+    tab === nothing ? nothing : tab.nb
+end
 
-"""Return the worker of the currently active tab (nothing for file tabs)."""
-active_worker(state::WebNotebookState) = active_tab(state).worker
+"""Return the worker of the currently active tab (nothing for file tabs or no tabs)."""
+function active_worker(state::WebNotebookState)
+    tab = active_tab(state)
+    tab === nothing ? nothing : tab.worker
+end
 
 """Check if the active tab is a notebook."""
-is_notebook_tab(state::WebNotebookState) = active_tab(state).tab_type == :notebook
+function is_notebook_tab(state::WebNotebookState)
+    tab = active_tab(state)
+    tab !== nothing && tab.tab_type == :notebook
+end
 
 """
     create_cell_signals!(state::WebNotebookState)
@@ -1036,9 +1049,6 @@ function handle_close_tab!(state::WebNotebookState, conn, data)
     tab_idx = Int(tab_idx)
     (tab_idx < 1 || tab_idx > length(state.tabs)) && return
 
-    # Enforce minimum 1 tab
-    length(state.tabs) <= 1 && return
-
     closed_tab = state.tabs[tab_idx]
     closed_label = closed_tab.label
     # Stop the worker process
@@ -1051,18 +1061,29 @@ function handle_close_tab!(state::WebNotebookState, conn, data)
     end
     deleteat!(state.tabs, tab_idx)
 
-    # Adjust active index
-    if state.active_tab_idx > length(state.tabs)
-        state.active_tab_idx = length(state.tabs)
-    elseif state.active_tab_idx > tab_idx
-        state.active_tab_idx -= 1
-    elseif state.active_tab_idx == tab_idx && state.active_tab_idx > length(state.tabs)
-        state.active_tab_idx = length(state.tabs)
+    # Adjust active index — prefer previous tab, fallback to last
+    if isempty(state.tabs)
+        state.active_tab_idx = 0
+    elseif tab_idx <= state.active_tab_idx
+        state.active_tab_idx = max(1, state.active_tab_idx - 1)
+    end
+    # Clamp to valid range
+    if !isempty(state.tabs)
+        state.active_tab_idx = clamp(state.active_tab_idx, 1, length(state.tabs))
     end
 
     create_cell_signals!(state)
     println("[WebNotebook] Closed tab: $(closed_label) ($(length(state.tabs)) tabs)")
     _broadcast_nb_html!(state)
+
+    # Notify file explorer of the new active file
+    tab = active_tab(state)
+    if tab !== nothing
+        broadcast_channel!("file_explorer", Dict(
+            "event" => "active_file_changed",
+            "path" => tab.path
+        ))
+    end
 end
 
 # =============================================================================
