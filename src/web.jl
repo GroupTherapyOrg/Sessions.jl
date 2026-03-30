@@ -62,10 +62,21 @@ end
     is_open, set_is_open = create_signal(Int32(initial_open))
 
     # Toggle code cell visibility via CSS display (not Show/innerHTML) —
-    # preserves live CodeMirror editors instead of destroying/recreating them
+    # preserves live CodeMirror editors instead of destroying/recreating them.
+    # Also persists fold state to server so it survives reload.
+    # Skip the first effect run (initial hydration) to avoid spurious WS messages.
     create_effect(() -> begin
         v = is_open()
-        js("var c=island.querySelector('.cell-code-wrap');if(c)c.style.display=\$1?'':'none'", v)
+        js("""
+            var c=island.querySelector('.cell-code-wrap');
+            if(c)c.style.display=\$1?'':'none';
+            if(!island._foldInit){island._foldInit=true;return;}
+            var wrap=island.closest('.cell-wrap');
+            var cid=wrap?wrap.dataset.cellId:'';
+            if(cid&&window.TherapyWS&&TherapyWS.sendMessage){
+                TherapyWS.sendMessage('notebook',{action:'toggle_fold',cell_id:cid,folded:!\$1});
+            }
+        """, v)
     end)
 
     Div(:class => "cell-island",
