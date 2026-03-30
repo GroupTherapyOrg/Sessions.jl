@@ -14,7 +14,7 @@
 # NotebookIsland @island — the publishable unit
 # ═══════════════════════════════════════════════════════════════
 
-@island function NotebookIsland(; mode::String = "live")
+@island function NotebookIsland()
     # Structural signal: drives For() — add/delete/move trigger re-render
     cell_order, set_cell_order = create_signal(Vector{String}())
 
@@ -49,15 +49,17 @@
                 });
             });
             // Populate cell skeletons after For() renders them
-            setTimeout(function() { _populateCells(); _initAllCM(); }, 50);
+            // Use requestAnimationFrame + setTimeout to ensure For() has rendered
+            requestAnimationFrame(function() {
+                setTimeout(function() {
+                    _populateCells();
+                    if (window._initAllCM) _initAllCM();
+                }, 100);
+            });
         """)
 
-        # 3. Setup WS bridge (live mode)
-        js("""
-            if ('""" * mode * """' === 'live') {
-                _setupWSBridge(\$1, \$2, \$3);
-            }
-        """, set_cell_order, set_executing, set_stale_count)
+        # 3. Setup WS bridge (always in live IDE mode for now)
+        js("_setupWSBridge(\$1, \$2, \$3)", set_cell_order, set_executing, set_stale_count)
     end)
 
     # Render: For() over cell_order signal

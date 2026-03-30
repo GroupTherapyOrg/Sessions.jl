@@ -120,7 +120,7 @@ function NotebookPanel(state)
         cells_json = _Sess.serialize_cells_json(state)
         Fragment(
             RawHtml("""<script type="application/json" id="nb-cells-data">$(cells_json)</script>"""),
-            NotebookIsland(mode="live")
+            NotebookIsland()
         )
     end
 
