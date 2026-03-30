@@ -186,12 +186,28 @@ function _notebook_island_js()
         }
       }
 
-      // Eye toggle + run/menu buttons
+      // Stdout (separate from output_html)
+      if (cell.stdout && cell.stdout.length > 0) {
+        var out = wrap.querySelector('.cell-out');
+        if (out) {
+          var stdoutDiv = document.createElement('div');
+          stdoutDiv.className = 'font-mono text-xs whitespace-pre overflow-x-auto';
+          stdoutDiv.style.cssText = 'padding:4px 0 6px;line-height:1.5;color:var(--output-text);';
+          stdoutDiv.textContent = cell.stdout;
+          out.parentNode.insertBefore(stdoutDiv, out);
+          stdoutDiv.style.display = '';
+        }
+      }
+
+      // Eye toggle
       var eye = wrap.querySelector('.cell-eye');
       if (eye) {
         eye.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        eye.style.color = 'var(--text-3)';
         eye.onclick = function() { _toggleFold(cellId); };
       }
+
+      // Run button
       var ctrls2 = wrap.querySelector('.cell-ctrls');
       if (ctrls2 && !ctrls2.querySelector('.run-btn')) {
         var runBtn = document.createElement('button');
@@ -201,6 +217,15 @@ function _notebook_island_js()
         runBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>';
         runBtn.onclick = function() { window._sessionsRunCell(cellId); };
         ctrls2.appendChild(runBtn);
+
+        // Menu button (move up/down, format, delete)
+        var menuBtn = document.createElement('button');
+        menuBtn.className = 'menu-btn';
+        menuBtn.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);';
+        menuBtn.title = 'Cell actions';
+        menuBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>';
+        menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
+        ctrls2.appendChild(menuBtn);
       }
 
       // CellGap onclick
@@ -232,6 +257,38 @@ function _notebook_island_js()
       TherapyWS.sendMessage('notebook', {action:'toggle_fold', cell_id:cellId, folded:s.folded});
     }
   };
+
+  // ── Cell action menu (move up/down, format, delete) ──
+  var _cellMenu = null;
+  window._showCellMenu = function(btn, cellId) {
+    if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; return; }
+    var rect = btn.getBoundingClientRect();
+    _cellMenu = document.createElement('div');
+    _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
+    var actions = [
+      {label:'Move Up', icon:'\\u2191', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'up'})}},
+      {label:'Move Down', icon:'\\u2193', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'down'})}},
+      {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
+      {sep:true},
+      {label:'Delete', icon:'\\u2715', danger:true, action:function(){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:cellId})}}
+    ];
+    actions.forEach(function(a) {
+      if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
+      var item = document.createElement('div');
+      item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-2);font-family:ui-monospace,monospace;transition:background .1s,color .1s;';
+      item.innerHTML = '<span style="width:14px;text-align:center;">'+a.icon+'</span>'+a.label;
+      item.addEventListener('mouseenter', function(){item.style.background=a.danger?'rgba(220,53,69,.1)':'rgba(128,128,128,.08)';item.style.color=a.danger?'var(--status-error)':'var(--text-1)';});
+      item.addEventListener('mouseleave', function(){item.style.background='';item.style.color='var(--text-2)';});
+      item.onclick = function(){a.action();_cellMenu.remove();_cellMenu=null;};
+      _cellMenu.appendChild(item);
+    });
+    document.body.appendChild(_cellMenu);
+  };
+  document.addEventListener('click', function(e) {
+    if (_cellMenu && !_cellMenu.contains(e.target) && !e.target.closest('.menu-btn')) {
+      _cellMenu.remove(); _cellMenu = null;
+    }
+  });
 
   // ── Hover visibility for cell controls ──
   document.addEventListener('mouseover', function(e) {

@@ -636,7 +636,7 @@ Delete</div>
     }
   });
 })();
-</script><div data-hk="15" class="flex items-center gap-1.5 px-3 py-2 shrink-0" style="border-top:1px solid #1c2736; font-size:11px; color:#3d5068;"><span data-hk="16" class="flex-1"></span><span data-hk="17" class="font-mono" style="font-size:10px;">0/1 cells</span></div></div><div data-hk="18" id="editor-area" style="flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;"><div data-hk="19" id="nb-island" class="flex-1 flex flex-col rounded-xl overflow-hidden min-h-0" style="background:var(--panel-bg);border:1px solid var(--cell-border);"><div data-hk="20" class="h-[38px] flex items-stretch shrink-0" style="background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;"><div data-hk="21" style="display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;"><div data-hk="22" class="tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;switch_tab&#39;,tab_idx:1})" style="color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);"><svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>Untitled.jl<span data-hk="23" style="width:5px;height:5px;border-radius:50%;background:var(--accent);"></span><span data-hk="24" onclick="event.stopPropagation();if(confirm(&#39;Close?&#39;))TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;close_tab&#39;,tab_idx:1})" style="font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;">×</span></div></div><div data-hk="25" style="display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;"><button data-hk="26" id="run-stale-btn" class="tb-btn stale" title="Run stale cells" onclick="window._sessionsRunStale()" style=""><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg><span data-hk="27" id="run-stale-label"> Run Stale (1)</span></button><button data-hk="28" id="run-all-btn" class="tb-btn" title="Run all cells" onclick="window._sessionsRunAll()"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg> Run All</button><button data-hk="29" id="stop-btn" class="tb-btn stop" title="Stop execution" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;interrupt&#39;})" style="display:none;"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg> Stop</button><span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><span class="toolbar-sep"></span><button data-hk="30" id="save-indicator" class="tb-btn" title="Save (Ctrl+S)" onclick="window._sessionsSave()">Save</button><button data-hk="31" class="tb-btn" title="Format all cells" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;format_all&#39;})" data-format-btn="1">Format</button></div></div><script type="application/json" id="nb-cells-data">[{"stdout":"","folded":false,"cell_id":"ad27723b-5f4a-4f56-a9c6-7489197406cf","output_html":"","disabled":false,"runtime_ns":0,"code":"# Welcome to Sessions.jl\n# Add cells and start coding!","stale":false,"state":"cell_idle"}]</script><therapy-island data-component="notebookisland" data-props="{&quot;mode&quot;:&quot;live&quot;}"><div data-hk="1" id="nb" class="flex-1 overflow-y-auto px-5 pt-3 pb-8"><div data-hk="2" style="max-width:900px;margin:0 auto;padding-left:28px;"></div><script>(function() {
+</script><div data-hk="15" class="flex items-center gap-1.5 px-3 py-2 shrink-0" style="border-top:1px solid #1c2736; font-size:11px; color:#3d5068;"><span data-hk="16" class="flex-1"></span><span data-hk="17" class="font-mono" style="font-size:10px;">0/1 cells</span></div></div><div data-hk="18" id="editor-area" style="flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;"><div data-hk="19" id="nb-island" class="flex-1 flex flex-col rounded-xl overflow-hidden min-h-0" style="background:var(--panel-bg);border:1px solid var(--cell-border);"><div data-hk="20" class="h-[38px] flex items-stretch shrink-0" style="background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;"><div data-hk="21" style="display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;"><div data-hk="22" class="tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;switch_tab&#39;,tab_idx:1})" style="color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);"><svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>Untitled.jl<span data-hk="23" style="width:5px;height:5px;border-radius:50%;background:var(--accent);"></span><span data-hk="24" onclick="event.stopPropagation();if(confirm(&#39;Close?&#39;))TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;close_tab&#39;,tab_idx:1})" style="font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;">×</span></div></div><div data-hk="25" style="display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;"><button data-hk="26" id="run-stale-btn" class="tb-btn stale" title="Run stale cells" onclick="window._sessionsRunStale()" style=""><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg><span data-hk="27" id="run-stale-label"> Run Stale (1)</span></button><button data-hk="28" id="run-all-btn" class="tb-btn" title="Run all cells" onclick="window._sessionsRunAll()"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg> Run All</button><button data-hk="29" id="stop-btn" class="tb-btn stop" title="Stop execution" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;interrupt&#39;})" style="display:none;"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg> Stop</button><span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><span class="toolbar-sep"></span><button data-hk="30" id="save-indicator" class="tb-btn" title="Save (Ctrl+S)" onclick="window._sessionsSave()">Save</button><button data-hk="31" class="tb-btn" title="Format all cells" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;format_all&#39;})" data-format-btn="1">Format</button></div></div><script type="application/json" id="nb-cells-data">[{"stdout":"","folded":false,"cell_id":"a4882ce5-52aa-4c36-8d78-150d7bb603db","output_html":"","disabled":false,"runtime_ns":0,"code":"# Welcome to Sessions.jl\n# Add cells and start coding!","stale":false,"state":"cell_idle"}]</script><therapy-island data-component="notebookisland" data-props="{&quot;mode&quot;:&quot;live&quot;}"><div data-hk="1" id="nb" class="flex-1 overflow-y-auto px-5 pt-3 pb-8"><div data-hk="2" style="max-width:900px;margin:0 auto;padding-left:28px;"></div><script>(function() {
   // ── Populate cell skeletons from _cellStore ──
   window._populateCells = function() {
     if (!window._cellStore) return;
@@ -692,12 +692,28 @@ Delete</div>
         }
       }
 
-      // Eye toggle + run/menu buttons
+      // Stdout (separate from output_html)
+      if (cell.stdout && cell.stdout.length > 0) {
+        var out = wrap.querySelector('.cell-out');
+        if (out) {
+          var stdoutDiv = document.createElement('div');
+          stdoutDiv.className = 'font-mono text-xs whitespace-pre overflow-x-auto';
+          stdoutDiv.style.cssText = 'padding:4px 0 6px;line-height:1.5;color:var(--output-text);';
+          stdoutDiv.textContent = cell.stdout;
+          out.parentNode.insertBefore(stdoutDiv, out);
+          stdoutDiv.style.display = '';
+        }
+      }
+
+      // Eye toggle
       var eye = wrap.querySelector('.cell-eye');
       if (eye) {
         eye.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        eye.style.color = 'var(--text-3)';
         eye.onclick = function() { _toggleFold(cellId); };
       }
+
+      // Run button
       var ctrls2 = wrap.querySelector('.cell-ctrls');
       if (ctrls2 && !ctrls2.querySelector('.run-btn')) {
         var runBtn = document.createElement('button');
@@ -707,6 +723,15 @@ Delete</div>
         runBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>';
         runBtn.onclick = function() { window._sessionsRunCell(cellId); };
         ctrls2.appendChild(runBtn);
+
+        // Menu button (move up/down, format, delete)
+        var menuBtn = document.createElement('button');
+        menuBtn.className = 'menu-btn';
+        menuBtn.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);';
+        menuBtn.title = 'Cell actions';
+        menuBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>';
+        menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
+        ctrls2.appendChild(menuBtn);
       }
 
       // CellGap onclick
@@ -738,6 +763,38 @@ Delete</div>
       TherapyWS.sendMessage('notebook', {action:'toggle_fold', cell_id:cellId, folded:s.folded});
     }
   };
+
+  // ── Cell action menu (move up/down, format, delete) ──
+  var _cellMenu = null;
+  window._showCellMenu = function(btn, cellId) {
+    if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; return; }
+    var rect = btn.getBoundingClientRect();
+    _cellMenu = document.createElement('div');
+    _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
+    var actions = [
+      {label:'Move Up', icon:'\u2191', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'up'})}},
+      {label:'Move Down', icon:'\u2193', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'down'})}},
+      {label:'Format', icon:'\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
+      {sep:true},
+      {label:'Delete', icon:'\u2715', danger:true, action:function(){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:cellId})}}
+    ];
+    actions.forEach(function(a) {
+      if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
+      var item = document.createElement('div');
+      item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-2);font-family:ui-monospace,monospace;transition:background .1s,color .1s;';
+      item.innerHTML = '<span style="width:14px;text-align:center;">'+a.icon+'</span>'+a.label;
+      item.addEventListener('mouseenter', function(){item.style.background=a.danger?'rgba(220,53,69,.1)':'rgba(128,128,128,.08)';item.style.color=a.danger?'var(--status-error)':'var(--text-1)';});
+      item.addEventListener('mouseleave', function(){item.style.background='';item.style.color='var(--text-2)';});
+      item.onclick = function(){a.action();_cellMenu.remove();_cellMenu=null;};
+      _cellMenu.appendChild(item);
+    });
+    document.body.appendChild(_cellMenu);
+  };
+  document.addEventListener('click', function(e) {
+    if (_cellMenu && !_cellMenu.contains(e.target) && !e.target.closest('.menu-btn')) {
+      _cellMenu.remove(); _cellMenu = null;
+    }
+  });
 
   // ── Hover visibility for cell controls ──
   document.addEventListener('mouseover', function(e) {
