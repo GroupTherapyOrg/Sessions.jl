@@ -25,9 +25,13 @@ function (@main)(args)
         return
     end
 
+    # Resolve paths relative to the user's actual working directory
+    # (Pkg.Apps shims may change cwd before invoking Julia)
+    user_cwd = pwd()
+
     # Headless run mode
     if !isempty(args) && args[1] == "run"
-        nb_path = length(args) >= 2 ? args[2] : nothing
+        nb_path = length(args) >= 2 ? abspath(user_cwd, args[2]) : nothing
         if nb_path === nothing
             println("Error: sessions run requires a notebook path")
             println("Usage: sessions run <notebook.jl>")
@@ -43,7 +47,7 @@ function (@main)(args)
 
     # Web IDE mode — launch the web server
     nb_path = if !isempty(args) && endswith(args[1], ".jl")
-        args[1]
+        abspath(user_cwd, args[1])
     else
         nothing
     end
