@@ -1,338 +1,65 @@
-# Notebook.jl — Notebook @island component
+# Notebook.jl — NotebookIsland @island
 #
-# True @island with For(cell_order) signal driving cell list.
-# SSR renders cells initially, @island hydrates with:
-# - cell_order signal for structural changes (add/delete/move)
-# - on_mount for CM init + WS bridge
-# - Per-cell state managed in JS cell store (DOM patches, not signals)
+# SSR Children + Signal Hydration approach:
+# 1. render_cell() produces rich VNodes (markdown, outputs, CM hosts, etc.)
+# 2. NotebookPanel passes them as children to NotebookIsland
+# 3. SSR preserves full HTML inside <therapy-island>
+# 4. on_mount hydrates: CM editors, WS bridge, fold observers
 #
-# Works in both modes:
-# - Live IDE: WS bridge receives cell_state, cell_output, etc.
-# - Published (future): @bind signals → JST-compiled dependent cells
+# Signals track state (cell_order, is_executing, stale_count)
+# but DOM is the source of truth for cell positions.
 
-# ═══════════════════════════════════════════════════════════════
-# NotebookIsland @island — the publishable unit
-# ═══════════════════════════════════════════════════════════════
-
-@island function NotebookIsland()
-    # Structural signal: drives For() — add/delete/move trigger re-render
+@island function NotebookIsland(children...)
+    # State tracking signals
     cell_order, set_cell_order = create_signal(Vector{String}())
-
-    # Toolbar state signals
     is_executing, set_executing = create_signal(0)
     stale_count, set_stale_count = create_signal(0)
 
-    # on_mount: read initial data, build cell store, init CM, setup WS
+    # Hydrate: wire CM editors + WS bridge to existing SSR'd DOM
     on_mount(() -> begin
-        # 1. Read serialized cell data from <script> tag
-        js("""
-            var dataEl = document.getElementById('nb-cells-data');
-            var cells = dataEl ? JSON.parse(dataEl.textContent) : [];
-            var ids = cells.map(function(c){ return c.cell_id; });
-            \$1(ids);
-        """, set_cell_order)
+        # Init CM editors on existing .cm-cell elements
+        js("if(window._initAllCM) _initAllCM()")
 
-        # 2. Build JS cell store + populate skeletons
+        # Setup WS bridge with signal setters for structural changes
+        js("if(window._setupWSBridge) _setupWSBridge(\$1, \$2, \$3)",
+            set_cell_order, set_executing, set_stale_count)
+
+        # Init fold observers on existing .cell-island elements
         js("""
-            window._cellStore = new Map();
-            var cells = document.getElementById('nb-cells-data') ?
-                JSON.parse(document.getElementById('nb-cells-data').textContent) : [];
-            cells.forEach(function(c) {
-                _cellStore.set(c.cell_id, {
-                    state: c.state || 'cell_idle',
-                    output_html: c.output_html || '',
-                    runtime_ns: c.runtime_ns || 0,
-                    code: c.code || '',
-                    folded: c.folded || false,
-                    stale: c.stale || false,
-                    stdout: c.stdout || ''
+            document.querySelectorAll('.cell-island').forEach(function(island) {
+                var cellWrap = island.closest('.cell-wrap');
+                var cellId = cellWrap ? cellWrap.dataset.cellId : '';
+                if (!cellId) return;
+                var lastFolded = null;
+                var observer = new MutationObserver(function() {
+                    var codeCell = island.querySelector('.code-cell');
+                    var folded = !codeCell || codeCell.offsetParent === null;
+                    if (folded !== lastFolded) {
+                        lastFolded = folded;
+                        if (window.TherapyWS && TherapyWS.sendMessage) {
+                            TherapyWS.sendMessage('notebook', {action: 'toggle_fold', cell_id: cellId, folded: folded});
+                        }
+                    }
                 });
-            });
-            // Populate cell skeletons after For() renders them
-            // Use requestAnimationFrame + setTimeout to ensure For() has rendered
-            requestAnimationFrame(function() {
-                setTimeout(function() {
-                    _populateCells();
-                    if (window._initAllCM) _initAllCM();
-                }, 100);
+                observer.observe(island, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
             });
         """)
 
-        # 3. Setup WS bridge (always in live IDE mode for now)
-        js("_setupWSBridge(\$1, \$2, \$3)", set_cell_order, set_executing, set_stale_count)
+        # Build initial cell_order from DOM
+        js("""
+            var ids = [];
+            document.querySelectorAll('.cell-wrap[data-cell-id]').forEach(function(el) {
+                ids.push(el.dataset.cellId);
+            });
+            \$1(ids);
+        """, set_cell_order)
     end)
 
-    # Render: For() over cell_order signal
-    return Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
+    # SSR'd children (render_cell output) rendered directly — no For(), no skeletons
+    return Div(:id => "nb", :class => "flex-1 overflow-y-auto px-5 pt-3 pb-8",
         Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
-            For(cell_order) do cell_id
-                # Cell skeleton with full static structure.
-                # onclick handlers wired by _populateCells (For items can't compile closures).
-                # Dynamic data (output HTML, code, state) injected by _populateCells from _cellStore.
-                Fragment(
-                    Div(:class => "cell-wrap relative", :data_cell_id => cell_id,
-                        # Output above code (Pluto style) — innerHTML set by _populateCells
-                        Div(:class => "cell-out", :data_cell_id => cell_id,
-                            :style => "display:none;overflow-x:auto;"),
-                        # Code cell
-                        Div(:class => "code-cell relative overflow-hidden",
-                            :style => "background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;",
-                            # Controls (hover visible via CSS: .code-cell:hover .cell-ctrls)
-                            Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
-                                # Runtime badge slot (inserted dynamically)
-                                # Run button
-                                Button(:class => "run-btn",
-                                    :style => "width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--status-done);background:rgba(86,212,160,.1);",
-                                    :title => "Run cell (Shift+Enter)",
-                                    RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>""")),
-                                # Menu button
-                                Button(:class => "menu-btn",
-                                    :style => "width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);",
-                                    :title => "Cell actions",
-                                    RawHtml("""<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""))),
-                            # Eye toggle (left gutter — CSS handles hover via .cell-wrap:hover .cell-eye)
-                            Div(:class => "cell-eye",
-                                RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>""")),
-                            # CM editor host — code injected by _populateCells
-                            Div(:class => "cm-cell", :data_cell_id => cell_id, :data_src => ""))),
-                    # Cell gap
-                    Div(:class => "cdiv h-[26px] flex items-center justify-center my-[2px]",
-                        Div(:class => "cdiv-inner flex items-center gap-1 opacity-0 transition-opacity",
-                            Div(:class => "h-px w-14", :style => "background:var(--divider);"),
-                            Button(:class => "flex items-center gap-1 rounded-full text-[10px] font-sans px-2.5 py-px cursor-pointer",
-                                :style => "border:1px solid var(--divider);background:transparent;color:var(--text-3);",
-                                RawHtml("""<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>"""),
-                                "Code"),
-                            Div(:class => "h-px w-14", :style => "background:var(--divider);"))))
-            end),
-        # Notebook JS functions are defined globally in Layout.jl
-        # (must load before island hydration)
-    )
+            children...))
 end
-
-# ═══════════════════════════════════════════════════════════════
-# SSR Fallback (used when NotebookIsland hasn't been switched on yet)
-# ═══════════════════════════════════════════════════════════════
-
-"""SSR cell rendering fallback — used during transition."""
-function NotebookContent(state)
-    _Sess = Main.Sessions
-    nb = _Sess.active_nb(state)
-    cells = _Sess.ordered_cells(nb)
-
-    rendered = Any[]
-    cell_index = 0
-    push!(rendered, _Sess.CellGap(after_cell_id=""))
-    for cell in cells
-        cell_index += 1
-        view = _Sess.render_cell(cell; mode=:live, index=cell_index)
-        view === nothing && continue
-        push!(rendered, view)
-        push!(rendered, _Sess.CellGap(after_cell_id=string(cell.id)))
-    end
-
-    Fragment(
-        Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
-            Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
-                rendered...)),
-        RawHtml(string("<script>", _notebook_cm_script(), "</script>")),
-        _notebook_channel_script()
-    )
-end
-
-# ═══════════════════════════════════════════════════════════════
-# Notebook Island JS — populates skeletons, inits CM, WS bridge
-# Combines CM init + WS handler + cell population into one script
-# ═══════════════════════════════════════════════════════════════
-
-function _notebook_island_js()
-"""
-(function() {
-  // ── Populate cell skeletons from _cellStore ──
-  window._populateCells = function() {
-    if (!window._cellStore) return;
-    _cellStore.forEach(function(cell, cellId) {
-      var wrap = document.querySelector('.cell-wrap[data-cell-id="' + cellId + '"]');
-      if (!wrap) return;
-
-      // Output HTML
-      var out = wrap.querySelector('.cell-out');
-      if (out && cell.output_html) {
-        out.innerHTML = cell.output_html;
-        out.style.display = '';
-        out.style.padding = '6px 0 10px';
-        // Re-execute inline scripts
-        out.querySelectorAll('script').forEach(function(old) {
-          var s = document.createElement('script');
-          s.textContent = old.textContent;
-          old.parentNode.replaceChild(s, old);
-        });
-      }
-
-      // Code source for CM
-      var cm = wrap.querySelector('.cm-cell');
-      if (cm) cm.dataset.src = cell.code || '';
-
-      // Cell state CSS
-      var code = wrap.querySelector('.code-cell');
-      if (code) {
-        code.classList.remove('idle', 'stale', 'executing');
-        if (cell.stale) code.classList.add('stale');
-        else if (cell.state === 'cell_idle') code.classList.add('idle');
-      }
-
-      // Folded state
-      if (cell.folded && code) {
-        code.style.display = 'none';
-      }
-
-      // Runtime badge
-      if (cell.runtime_ns > 0) {
-        var ctrls = wrap.querySelector('.cell-ctrls');
-        if (ctrls) {
-          var ms = cell.runtime_ns / 1e6;
-          var rt = ms < 1 ? (cell.runtime_ns / 1e3).toFixed(1) + '\\u00b5s' :
-                   ms < 1000 ? ms.toFixed(1) + 'ms' : (ms / 1000).toFixed(2) + 's';
-          var badge = document.createElement('span');
-          badge.className = 'rt-badge';
-          var isErr = cell.state === 'cell_errored';
-          var c = isErr ? 'var(--status-error)' : 'var(--status-done)';
-          badge.style.cssText = 'font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;opacity:.8;color:'+c+';';
-          badge.textContent = rt;
-          ctrls.insertBefore(badge, ctrls.firstChild);
-        }
-      }
-
-      // Stdout (separate from output_html)
-      if (cell.stdout && cell.stdout.length > 0) {
-        var out = wrap.querySelector('.cell-out');
-        if (out) {
-          var stdoutDiv = document.createElement('div');
-          stdoutDiv.className = 'font-mono text-xs whitespace-pre overflow-x-auto';
-          stdoutDiv.style.cssText = 'padding:4px 0 6px;line-height:1.5;color:var(--output-text);';
-          stdoutDiv.textContent = cell.stdout;
-          out.parentNode.insertBefore(stdoutDiv, out);
-          stdoutDiv.style.display = '';
-        }
-      }
-
-      // Wire onclick handlers (buttons are in VNode skeleton, but For items
-      // can't compile closures that capture cell_id — so we wire here)
-      var eye = wrap.querySelector('.cell-eye');
-      if (eye) eye.onclick = function() { _toggleFold(cellId); };
-
-      var runBtn = wrap.querySelector('.run-btn');
-      if (runBtn) runBtn.onclick = function() { window._sessionsRunCell(cellId); };
-
-      var menuBtn = wrap.querySelector('.menu-btn');
-      if (menuBtn) menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
-
-      // Wire CellGap "+ Code" button (VNode button, onclick needs cell_id)
-      var gap = wrap.nextElementSibling;
-      if (gap && gap.classList.contains('cdiv')) {
-        var gapBtn = gap.querySelector('button');
-        if (gapBtn) gapBtn.onclick = function() {
-          if (TherapyWS && TherapyWS.sendMessage) TherapyWS.sendMessage('notebook', {action:'add_cell', after_cell_id: cellId});
-        };
-      }
-    });
-  };
-
-  // ── Toggle fold ──
-  window._toggleFold = function(cellId) {
-    if (!window._cellStore) return;
-    var s = _cellStore.get(cellId);
-    if (!s) return;
-    s.folded = !s.folded;
-    var wrap = document.querySelector('.cell-wrap[data-cell-id="' + cellId + '"]');
-    if (!wrap) return;
-    var code = wrap.querySelector('.code-cell');
-    if (code) code.style.display = s.folded ? 'none' : '';
-    if (window.TherapyWS && TherapyWS.sendMessage) {
-      TherapyWS.sendMessage('notebook', {action:'toggle_fold', cell_id:cellId, folded:s.folded});
-    }
-  };
-
-  // ── Cell action menu (move up/down, format, delete) ──
-  var _cellMenu = null;
-  window._showCellMenu = function(btn, cellId) {
-    if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; return; }
-    var rect = btn.getBoundingClientRect();
-    _cellMenu = document.createElement('div');
-    _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
-    var actions = [
-      {label:'Move Up', icon:'\\u2191', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'up'})}},
-      {label:'Move Down', icon:'\\u2193', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'down'})}},
-      {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
-      {sep:true},
-      {label:'Delete', icon:'\\u2715', danger:true, action:function(){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:cellId})}}
-    ];
-    actions.forEach(function(a) {
-      if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
-      var item = document.createElement('div');
-      item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-2);font-family:ui-monospace,monospace;transition:background .1s,color .1s;';
-      item.innerHTML = '<span style="width:14px;text-align:center;">'+a.icon+'</span>'+a.label;
-      item.addEventListener('mouseenter', function(){item.style.background=a.danger?'rgba(220,53,69,.1)':'rgba(128,128,128,.08)';item.style.color=a.danger?'var(--status-error)':'var(--text-1)';});
-      item.addEventListener('mouseleave', function(){item.style.background='';item.style.color='var(--text-2)';});
-      item.onclick = function(){a.action();_cellMenu.remove();_cellMenu=null;};
-      _cellMenu.appendChild(item);
-    });
-    document.body.appendChild(_cellMenu);
-  };
-  document.addEventListener('click', function(e) {
-    if (_cellMenu && !_cellMenu.contains(e.target) && !e.target.closest('.menu-btn')) {
-      _cellMenu.remove(); _cellMenu = null;
-    }
-  });
-
-  // Hover visibility handled by CSS:
-  // .cell-wrap:hover .cell-eye { opacity:1; }
-  // .code-cell:hover .cell-ctrls { opacity:1; transform:translateY(0); pointer-events:auto; }
-
-  // ── CellGap hover ──
-  document.addEventListener('mouseover', function(e) {
-    var gap = e.target.closest('.cdiv');
-    if (gap) { var inner = gap.querySelector('.cdiv-inner'); if (inner) inner.style.opacity = '1'; }
-  });
-  document.addEventListener('mouseout', function(e) {
-    var gap = e.target.closest('.cdiv');
-    if (gap && !gap.contains(e.relatedTarget)) { var inner = gap.querySelector('.cdiv-inner'); if (inner) inner.style.opacity = '0'; }
-  });
-
-""" * _notebook_cm_script_body() * """
-
-""" * _notebook_ws_bridge_body() * """
-
-  // ── Keyboard shortcuts ──
-  document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      window._sessionsSave && window._sessionsSave();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && window._recentlyDeleted) {
-      var active = document.activeElement;
-      var inEditor = active && (active.closest('.cm-editor') || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
-      if (!inEditor) {
-        e.preventDefault();
-        var del = window._recentlyDeleted;
-        window._recentlyDeleted = null;
-        var toast = document.getElementById('undo-toast');
-        if (toast) toast.classList.remove('show');
-        if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
-        if (window.TherapyWS && TherapyWS.sendMessage) {
-          TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: del.prev_cell_id, code: del.code});
-        }
-      }
-    }
-  });
-})();
-"""
-end
-
-# ═══════════════════════════════════════════════════════════════
-# CM Init Script Body (no wrapper — inlined into _notebook_island_js)
-# ═══════════════════════════════════════════════════════════════
-
 function _notebook_cm_script_body()
 """
   // ── CM Init ──
@@ -562,4 +289,89 @@ end
 
 function _notebook_channel_script()
     RawHtml(string("<script>(function(){", _notebook_ws_bridge_body(), "if(window.TherapyWS)_setupWSBridge(function(){},function(){},function(){});})();</script>"))
+end
+
+# Combined notebook JS for global injection by Layout.jl
+# No _populateCells — SSR provides all cell HTML
+function _notebook_island_js()
+"""
+(function() {
+  // ── Cell menu + toggle fold + hover + keyboard shortcuts ──
+  window._toggleFold = function(cellId) {
+    var wrap = document.querySelector('.cell-wrap[data-cell-id="' + cellId + '"]');
+    if (!wrap) return;
+    var code = wrap.querySelector('.code-cell');
+    if (code) code.style.display = code.style.display === 'none' ? '' : 'none';
+    if (window.TherapyWS && TherapyWS.sendMessage) {
+      TherapyWS.sendMessage('notebook', {action:'toggle_fold', cell_id:cellId, folded:code && code.style.display==='none'});
+    }
+  };
+
+  var _cellMenu = null;
+  window._showCellMenu = function(btn, cellId) {
+    if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; return; }
+    var rect = btn.getBoundingClientRect();
+    _cellMenu = document.createElement('div');
+    _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
+    var actions = [
+      {label:'Move Up', icon:'\\u2191', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'up'})}},
+      {label:'Move Down', icon:'\\u2193', action:function(){TherapyWS.sendMessage('notebook',{action:'move_cell',cell_id:cellId,direction:'down'})}},
+      {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
+      {sep:true},
+      {label:'Delete', icon:'\\u2715', danger:true, action:function(){TherapyWS.sendMessage('notebook',{action:'delete_cell',cell_id:cellId})}}
+    ];
+    actions.forEach(function(a) {
+      if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
+      var item = document.createElement('div');
+      item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-2);font-family:ui-monospace,monospace;transition:background .1s,color .1s;';
+      item.innerHTML = '<span style="width:14px;text-align:center;">'+a.icon+'</span>'+a.label;
+      item.addEventListener('mouseenter', function(){item.style.background=a.danger?'rgba(220,53,69,.1)':'rgba(128,128,128,.08)';item.style.color=a.danger?'var(--status-error)':'var(--text-1)';});
+      item.addEventListener('mouseleave', function(){item.style.background='';item.style.color='var(--text-2)';});
+      item.onclick = function(){a.action();_cellMenu.remove();_cellMenu=null;};
+      _cellMenu.appendChild(item);
+    });
+    document.body.appendChild(_cellMenu);
+  };
+  document.addEventListener('click', function(e) {
+    if (_cellMenu && !_cellMenu.contains(e.target) && !e.target.closest('.menu-btn')) { _cellMenu.remove(); _cellMenu = null; }
+  });
+
+  // ── CellGap hover ──
+  document.addEventListener('mouseover', function(e) {
+    var gap = e.target.closest('.cdiv');
+    if (gap) { var inner = gap.querySelector('.cdiv-inner'); if (inner) inner.style.opacity = '1'; }
+  });
+  document.addEventListener('mouseout', function(e) {
+    var gap = e.target.closest('.cdiv');
+    if (gap && !gap.contains(e.relatedTarget)) { var inner = gap.querySelector('.cdiv-inner'); if (inner) inner.style.opacity = '0'; }
+  });
+
+""" * _notebook_cm_script_body() * """
+
+""" * _notebook_ws_bridge_body() * """
+
+  // ── Keyboard shortcuts ──
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      window._sessionsSave && window._sessionsSave();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && window._recentlyDeleted) {
+      var active = document.activeElement;
+      var inEditor = active && (active.closest('.cm-editor') || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
+      if (!inEditor) {
+        e.preventDefault();
+        var del = window._recentlyDeleted;
+        window._recentlyDeleted = null;
+        var toast = document.getElementById('undo-toast');
+        if (toast) toast.classList.remove('show');
+        if (window._undoToastTimer) clearTimeout(window._undoToastTimer);
+        if (window.TherapyWS && TherapyWS.sendMessage) {
+          TherapyWS.sendMessage('notebook', {action: 'add_cell', after_cell_id: del.prev_cell_id, code: del.code});
+        }
+      }
+    }
+  });
+})();
+"""
 end

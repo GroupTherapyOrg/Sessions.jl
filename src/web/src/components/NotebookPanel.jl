@@ -116,12 +116,18 @@ function NotebookPanel(state)
                     :data_src => tab.file_content,
                     :style => "height:100%;overflow:auto;")))
     else
-        # NotebookIsland @island — cells rendered via For(cell_order) signal
-        cells_json = _Sess.serialize_cells_json(state)
-        Fragment(
-            RawHtml("""<script type="application/json" id="nb-cells-data">$(cells_json)</script>"""),
-            NotebookIsland()
-        )
+        # NotebookIsland @island: SSR'd cells as children, hydrated with signals
+        rendered_cells = Any[]
+        cell_index = 0
+        push!(rendered_cells, _Sess.CellGap(after_cell_id=""))
+        for cell in cells
+            cell_index += 1
+            view = _Sess.render_cell(cell; mode=:live, index=cell_index)
+            view === nothing && continue
+            push!(rendered_cells, view)
+            push!(rendered_cells, _Sess.CellGap(after_cell_id=string(cell.id)))
+        end
+        NotebookIsland(rendered_cells...)
     end
 
     # ═══════════════════════════════════════════════════════════
