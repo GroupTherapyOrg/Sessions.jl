@@ -77,9 +77,8 @@
                         # Code cell
                         Div(:class => "code-cell relative overflow-hidden",
                             :style => "background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;",
-                            # Controls (hover visible) — onclick wired by _populateCells
+                            # Controls (hover visible via CSS: .code-cell:hover .cell-ctrls)
                             Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
-                                :style => "opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;",
                                 # Runtime badge slot (inserted dynamically)
                                 # Run button
                                 Button(:class => "run-btn",
@@ -91,9 +90,8 @@
                                     :style => "width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);",
                                     :title => "Cell actions",
                                     RawHtml("""<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""))),
-                            # Eye toggle (left gutter) — onclick wired by _populateCells
+                            # Eye toggle (left gutter — CSS handles hover via .cell-wrap:hover .cell-eye)
                             Div(:class => "cell-eye",
-                                :style => "position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;color:var(--text-3);",
                                 RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>""")),
                             # CM editor host — code injected by _populateCells
                             Div(:class => "cm-cell", :data_cell_id => cell_id, :data_src => ""))),
@@ -287,25 +285,9 @@ function _notebook_island_js()
     }
   });
 
-  // ── Hover visibility for cell controls ──
-  document.addEventListener('mouseover', function(e) {
-    var wrap = e.target.closest('.cell-wrap');
-    if (wrap) {
-      var eye = wrap.querySelector('.cell-eye');
-      var ctrls = wrap.querySelector('.cell-ctrls');
-      if (eye) eye.style.opacity = '1';
-      if (ctrls) { ctrls.style.opacity = '1'; ctrls.style.transform = 'translateY(0)'; ctrls.style.pointerEvents = 'auto'; }
-    }
-  });
-  document.addEventListener('mouseout', function(e) {
-    var wrap = e.target.closest('.cell-wrap');
-    if (wrap && !wrap.contains(e.relatedTarget)) {
-      var eye = wrap.querySelector('.cell-eye');
-      var ctrls = wrap.querySelector('.cell-ctrls');
-      if (eye) eye.style.opacity = '0';
-      if (ctrls) { ctrls.style.opacity = '0'; ctrls.style.transform = 'translateY(-3px)'; ctrls.style.pointerEvents = 'none'; }
-    }
-  });
+  // Hover visibility handled by CSS:
+  // .cell-wrap:hover .cell-eye { opacity:1; }
+  // .code-cell:hover .cell-ctrls { opacity:1; transform:translateY(0); pointer-events:auto; }
 
   // ── CellGap hover ──
   document.addEventListener('mouseover', function(e) {
