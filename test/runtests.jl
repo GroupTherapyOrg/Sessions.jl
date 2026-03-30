@@ -1,6 +1,9 @@
 using Test
 using Sessions
 
+# Ensure fixture paths resolve correctly (Pkg.test runs from a temp dir)
+cd(joinpath(@__DIR__, ".."))
+
 @testset "Sessions.jl v2" begin
     @testset "Module loads" begin
         @test true  # Sessions loaded successfully
