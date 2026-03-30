@@ -86,23 +86,24 @@ function _notebook_cm_script_body()
       {tag:C.t.macroName,color:"#d4a056"},
     ]);
 
-    var isDark = document.documentElement.classList.contains('dark');
-    var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#d4759a';
-    var edTheme = C.EditorView.theme({
-      "&":{backgroundColor:"transparent",color:"var(--text-1)"},
-      ".cm-gutters":{backgroundColor:"transparent",color:"var(--text-3)",border:"none",minWidth:"38px"},
-      ".cm-activeLine":{backgroundColor:"transparent"},
-      "&.cm-focused .cm-activeLine":{backgroundColor:"rgba(128,128,128,.04)"},
-      ".cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-3)"},
-      "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-2)"},
-      "&.cm-focused .cm-cursor":{borderLeftColor:accentColor},
-      "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"var(--selection-bg) !important"},
-      ".cm-content":{caretColor:accentColor,fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
-      ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-      ".cm-matchingBracket":{color:accentColor+" !important",backgroundColor:"rgba(212,117,154,.1)",outline:"1px solid rgba(212,117,154,.2)"},
-      ".cm-line":{paddingLeft:"4px"},
-    },{dark:isDark});
-
+    var accentColor = '#d4759a';
+    function _makeEdTheme() {
+      var isDark = document.documentElement.classList.contains('dark');
+      return C.EditorView.theme({
+        "&":{backgroundColor:"transparent",color:"var(--text-1)"},
+        ".cm-gutters":{backgroundColor:"transparent",color:"var(--text-3)",border:"none",minWidth:"38px"},
+        ".cm-activeLine":{backgroundColor:"transparent"},
+        "&.cm-focused .cm-activeLine":{backgroundColor:"rgba(128,128,128,.04)"},
+        ".cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-3)"},
+        "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-2)"},
+        "&.cm-focused .cm-cursor":{borderLeftColor:accentColor},
+        "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"var(--selection-bg) !important"},
+        ".cm-content":{caretColor:accentColor,fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
+        ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
+        ".cm-matchingBracket":{color:accentColor+" !important",backgroundColor:"rgba(212,117,154,.1)",outline:"1px solid rgba(212,117,154,.2)"},
+        ".cm-line":{paddingLeft:"4px"},
+      },{dark:isDark});
+    }
     window._sessionsRunCell = function(cellId) {
       var code = '';
       var ev = editors[cellId];
@@ -124,13 +125,15 @@ function _notebook_cm_script_body()
     function shiftEnterKeymap(cellId) { return C.EditorView.domEventHandlers({keydown:function(event){if(event.key==='Enter'&&event.shiftKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();window._sessionsRunCell(cellId);return true;}}}); }
 
     window._initAllCM = function() {
+      // Rebuild theme fresh each time (picks up current dark/light mode)
+      var currentEdTheme = _makeEdTheme();
       document.querySelectorAll('.cm-cell').forEach(function(host) {
         if (host.querySelector('.cm-editor')) return;
         var src = host.dataset.src || '';
         var cellId = host.dataset.cellId || '';
         var isFileEditor = host.classList.contains('cm-file-editor');
         var cellKeymaps = (!isFileEditor && cellId) ? [shiftEnterKeymap(cellId)] : [];
-        var exts = [...cellKeymaps, C.lineNumbers(),C.highlightActiveLineGutter(),C.highlightSpecialChars(),C.history(),C.drawSelection(),C.EditorState.allowMultipleSelections.of(true),C.indentOnInput(),C.bracketMatching(),C.closeBrackets(),C.rectangularSelection(),C.highlightActiveLine(),C.highlightSelectionMatches(),C.keymap.of([...C.closeBracketsKeymap,...C.defaultKeymap,...C.searchKeymap,...C.historyKeymap,...C.completionKeymap,C.indentWithTab]),C.julia(),C.syntaxHighlighting(hlTheme),edTheme];
+        var exts = [...cellKeymaps, C.lineNumbers(),C.highlightActiveLineGutter(),C.highlightSpecialChars(),C.history(),C.drawSelection(),C.EditorState.allowMultipleSelections.of(true),C.indentOnInput(),C.bracketMatching(),C.closeBrackets(),C.rectangularSelection(),C.highlightActiveLine(),C.highlightSelectionMatches(),C.keymap.of([...C.closeBracketsKeymap,...C.defaultKeymap,...C.searchKeymap,...C.historyKeymap,...C.completionKeymap,C.indentWithTab]),C.julia(),C.syntaxHighlighting(hlTheme),currentEdTheme];
         if (isFileEditor) { exts.push(C.EditorView.theme({'&':{height:'100%'},'.cm-scroller':{overflow:'auto'}})); }
         else if (cellId) { exts.push(editSyncExtension(cellId)); }
         var view = new C.EditorView({doc:src,extensions:exts,parent:host});
@@ -527,6 +530,11 @@ function _notebook_ws_bridge_body()
           if(runAllBtn)runAllBtn.classList.add('tb-disabled');
           if(stopBtn)stopBtn.classList.remove('tb-disabled');
           if(runStaleBtn)runStaleBtn.classList.add('tb-disabled');
+          // Count running/queued cells for progress text
+          var running=0,queued=0,total=0;
+          if(data.cells){data.cells.forEach(function(c){if(c.state==='cell_running'){running++;total++;}else if(c.state==='cell_queued'){queued++;total++;}});}
+          var el=document.getElementById('run-progress');
+          if(el&&total>0){el.textContent='Running '+(running>0?1:0)+'/'+(total)+'...';}
         }
       }
 
@@ -602,6 +610,56 @@ function _notebook_island_js()
 """ * _notebook_cm_script_body() * """
 
 """ * _notebook_ws_bridge_body() * """
+
+  // ── Theme switch: rebuild CM editors in-place, preserve scroll + content ──
+  window._sessionsThemeSwitch = function() {
+    // 1. Save notebook scroll position
+    var nb = document.getElementById('nb');
+    var scrollTop = nb ? nb.scrollTop : 0;
+
+    // 2. Save each editor's current doc content (may differ from data-src)
+    var editorDocs = {};
+    if (window._sessionsEditors) {
+      for (var cid in _sessionsEditors) {
+        editorDocs[cid] = _sessionsEditors[cid].state.doc.toString();
+      }
+    }
+    var fileDoc = window._fileEditorView ? _fileEditorView.state.doc.toString() : null;
+
+    // 3. Destroy all CM editors
+    document.querySelectorAll('.cm-cell .cm-editor').forEach(function(ed) { ed.remove(); });
+    if (window._sessionsEditors) {
+      for (var cid in _sessionsEditors) delete _sessionsEditors[cid];
+    }
+    window._fileEditorView = null;
+
+    // 4. Update CM theme (new dark flag) — uses the factory function
+    if (typeof _makeEdTheme === 'function') {
+      // _makeEdTheme reads isDark from DOM, returns fresh theme
+      // But it's scoped inside the CM IIFE, so we use _initAllCM which
+      // rebuilds editors with the current theme. We just need to update
+      // data-src on each host so the new editor gets the current content.
+    }
+
+    // 5. Update data-src attributes with current content
+    for (var cid in editorDocs) {
+      var host = document.querySelector('.cm-cell[data-cell-id="'+cid+'"]');
+      if (host) host.dataset.src = editorDocs[cid];
+    }
+    if (fileDoc !== null) {
+      var fh = document.querySelector('.cm-file-editor');
+      if (fh) fh.dataset.src = fileDoc;
+    }
+
+    // 6. Reinit all CM editors (picks up new dark/light theme)
+    if (window._initAllCM) _initAllCM();
+
+    // 7. Restore scroll position
+    if (nb) nb.scrollTop = scrollTop;
+
+    // 8. Update terminal theme
+    if (window._sessionsUpdateTermTheme) _sessionsUpdateTermTheme();
+  };
 
   // ── Auto-init CM editors (file editors outside NotebookIsland) ──
   setTimeout(function() { if (window._initAllCM) _initAllCM(); }, 100);
