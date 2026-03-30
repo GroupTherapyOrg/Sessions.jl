@@ -19,9 +19,9 @@ function Index()
                     "with ",
                     Span(:class => "text-accent-600 dark:text-accent-400", "Sessions"),
                     Span(:class => "text-4xl sm:text-5xl lg:text-6xl font-light",
-                        Span(:style => "color:#b08fd8;", "."),
-                        Span(:class => "text-accent-600 dark:text-accent-400", "j"),
-                        Span(:class => "text-accent-secondary-600 dark:text-accent-secondary-400", "l")
+                        Span(:style => "color:var(--jl-dot);", "."),
+                        Span(:style => "color:var(--jl-j);", "j"),
+                        Span(:style => "color:var(--jl-l);", "l")
                     )
                 ),
                 P(:class => "mt-8 text-lg sm:text-xl text-warm-600 dark:text-warm-400 max-w-2xl mx-auto leading-relaxed",

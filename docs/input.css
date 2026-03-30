@@ -89,8 +89,8 @@
 
     /* .jl wordmark tri-colors (exclude Rose — the active accent) */
     --jl-dot: #56d4a0;  /* Green */
-    --jl-j: #b08fd8;    /* Purple */
-    --jl-l: #e06b65;    /* Red */
+    --jl-j: #7bb8e8;    /* Blue */
+    --jl-l: #b08fd8;    /* Purple */
   }
 
   html {
