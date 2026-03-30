@@ -20,6 +20,7 @@ cd(joinpath(@__DIR__, ".."))
     include("test_e2e.jl")
     include("test_pluto_compat.jl")
     include("test_structured_error.jl")
+    include("test_stale_tracking.jl")
 
     # TUI-dependent tests — removed (TUI + Tachikoma deleted)
     # These tested TUI rendering, cell widgets, file editor, REPL panel,
