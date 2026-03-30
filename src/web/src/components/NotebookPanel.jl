@@ -71,8 +71,7 @@ function NotebookPanel(state)
     if !is_file_tab
         sc = nb !== nothing ? _Sess.stale_cells(nb) : _Sess.Cell[]
         n = length(sc)
-        push!(toolbar, Button(:id => "run-stale-btn", :class => "tb-btn stale",
-            :style => n == 0 ? "display:none;" : "",
+        push!(toolbar, Button(:id => "run-stale-btn", :class => n == 0 ? "tb-btn stale tb-disabled" : "tb-btn stale",
             :on_click => "window._sessionsRunStale()",
             :title => "Run stale cells",
             RawHtml(_SVG_RUN_SMALL),
@@ -81,13 +80,12 @@ function NotebookPanel(state)
             :on_click => "window._sessionsRunAll()",
             :title => "Run all cells",
             RawHtml(_SVG_RUN_SMALL), " Run All"))
-        push!(toolbar, Button(:id => "stop-btn", :class => "tb-btn stop",
-            :style => "display:none;",
+        push!(toolbar, Button(:id => "stop-btn", :class => "tb-btn stop tb-disabled",
             :on_click => "TherapyWS.sendMessage('notebook',{action:'interrupt'})",
             :title => "Stop execution",
             RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""),
             " Stop"))
-        push!(toolbar, RawHtml("""<span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span>"""))
+        push!(toolbar, RawHtml("""<span id="run-progress" style="font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span>"""))
         push!(toolbar, RawHtml("""<span class="toolbar-sep"></span>"""))
     end
     push!(toolbar, Button(:id => "save-indicator", :class => "tb-btn",
@@ -131,11 +129,20 @@ function NotebookPanel(state)
     end
 
     # ═══════════════════════════════════════════════════════════
+    # Loading overlay — fades out once CM editors initialize
+    # ═══════════════════════════════════════════════════════════
+    loading_overlay = Div(:id => "nb-loading", :class => "nb-loading",
+        Span(:class => "dot-pulse"),
+        Span(:class => "dot-pulse"),
+        Span(:class => "dot-pulse"))
+
+    # ═══════════════════════════════════════════════════════════
     # Assemble
     # ═══════════════════════════════════════════════════════════
     Div(:id => "nb-island",
         :class => "flex-1 flex flex-col rounded-xl overflow-hidden min-h-0",
-        :style => "background:var(--panel-bg);border:1px solid var(--cell-border);",
+        :style => "background:var(--panel-bg);border:1px solid var(--cell-border);position:relative;",
         tab_bar,
+        loading_overlay,
         content_area)
 end

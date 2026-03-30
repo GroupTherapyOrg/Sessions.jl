@@ -135,6 +135,9 @@ function _notebook_cm_script_body()
         var view = new C.EditorView({doc:src,extensions:exts,parent:host});
         if (isFileEditor) { window._fileEditorView = view; } else if (cellId) { editors[cellId] = view; }
       });
+      // Fade out loading overlay once editors are ready
+      var lo = document.getElementById('nb-loading');
+      if (lo) { lo.classList.add('loaded'); setTimeout(function(){ lo.remove(); }, 400); }
     };
     window._sessionsInitNewCells = window._initAllCM;
   }
@@ -468,7 +471,7 @@ function _notebook_ws_bridge_body()
       else if (data.event === 'stale_update') {
         setStaleCount(data.count || 0);
         var btn=document.getElementById('run-stale-btn');var label=document.getElementById('run-stale-label');
-        if(btn){if(data.count>0&&!window._sessionsExecuting){btn.style.display='';if(label)label.textContent=' Run Stale ('+data.count+')';}else{btn.style.display='none';}}
+        if(btn){if(data.count>0&&!window._sessionsExecuting){btn.classList.remove('tb-disabled');if(label)label.textContent=' Run Stale ('+data.count+')';}else{btn.classList.add('tb-disabled');if(label)label.textContent=' Run Stale';}}
         var staleSet=new Set(data.stale_ids||[]);
         document.querySelectorAll('.code-cell').forEach(function(el){var wrap=el.closest('.cell-wrap');var cid=wrap?wrap.dataset.cellId:null;if(cid&&staleSet.has(cid)){el.classList.add('stale');}else{el.classList.remove('stale');}});
       }
@@ -478,9 +481,9 @@ function _notebook_ws_bridge_body()
         var isRunning=data.running_index>0&&data.total>0;
         window._sessionsExecuting=isRunning;
         setExecuting(isRunning ? 1 : 0);
-        var el=document.getElementById('run-progress');if(el){if(isRunning){el.textContent='Running '+data.running_index+'/'+data.total+'...';el.style.display='';}else{el.textContent='';el.style.display='none';}}
+        var el=document.getElementById('run-progress');if(el){if(isRunning){el.textContent='Running '+data.running_index+'/'+data.total+'...';}else{el.textContent='';}}
         var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');var runStaleBtn=document.getElementById('run-stale-btn');
-        if(runAllBtn&&stopBtn){if(isRunning){runAllBtn.style.display='none';stopBtn.style.display='';if(runStaleBtn)runStaleBtn.style.display='none';}else{runAllBtn.style.display='';stopBtn.style.display='none';}}
+        if(runAllBtn&&stopBtn){if(isRunning){runAllBtn.classList.add('tb-disabled');stopBtn.classList.remove('tb-disabled');if(runStaleBtn)runStaleBtn.classList.add('tb-disabled');}else{runAllBtn.classList.remove('tb-disabled');stopBtn.classList.add('tb-disabled');}}
       }
 
       // ── Format progress ──
@@ -493,8 +496,8 @@ function _notebook_ws_bridge_body()
       // ── Interrupted ──
       else if (data.event === 'interrupted') {
         window._sessionsExecuting=false; setExecuting(0);
-        var el=document.getElementById('run-progress');if(el){el.textContent='Interrupted';el.style.display='';el.style.color='var(--status-error)';setTimeout(function(){el.textContent='';el.style.display='';el.style.color='';},2000);}
-        var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');if(runAllBtn&&stopBtn){runAllBtn.style.display='';stopBtn.style.display='none';}
+        var el=document.getElementById('run-progress');if(el){el.textContent='Interrupted';el.style.color='var(--status-error)';setTimeout(function(){el.textContent='';el.style.color='';},2000);}
+        var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');if(runAllBtn&&stopBtn){runAllBtn.classList.remove('tb-disabled');stopBtn.classList.add('tb-disabled');}
       }
 
       // ── Full state (SSR already rendered, skip) ──
@@ -573,6 +576,9 @@ function _notebook_island_js()
 """ * _notebook_cm_script_body() * """
 
 """ * _notebook_ws_bridge_body() * """
+
+  // ── Auto-init CM editors (file editors outside NotebookIsland) ──
+  setTimeout(function() { if (window._initAllCM) _initAllCM(); }, 100);
 
   // ── Keyboard shortcuts ──
   document.addEventListener('keydown', function(e) {

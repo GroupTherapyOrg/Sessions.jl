@@ -151,6 +151,13 @@ sl-tree:defined,sl-tree-item:defined{opacity:1;height:auto;transition:opacity .2
 .explorer-loading .dot-pulse:nth-child(2){animation-delay:.2s;}
 .explorer-loading .dot-pulse:nth-child(3){animation-delay:.4s;}
 
+/* ═══ Notebook loading overlay ═══ */
+.nb-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;z-index:10;background:var(--panel-bg);transition:opacity .3s;pointer-events:none;}
+.nb-loading.loaded{opacity:0;}
+.nb-loading .dot-pulse{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;}
+.nb-loading .dot-pulse:nth-child(2){animation-delay:.2s;}
+.nb-loading .dot-pulse:nth-child(3){animation-delay:.4s;}
+
 /* ═══ Animations ═══ */
 @keyframes blink{50%{opacity:0}}
 .cblink{animation:blink 1s step-end infinite;}
@@ -212,6 +219,7 @@ sl-tree-item::part(item):hover{background:rgba(128,128,128,.06);}
 .tb-btn.stale:hover{background:rgba(212,160,86,.08);}
 .tb-btn.stop{color:var(--status-error);}
 .tb-btn.stop:hover{background:rgba(220,53,69,.08);}
+.tb-btn.tb-disabled{opacity:.3;pointer-events:none;}
 .tb-btn svg{width:9px;height:9px;}
 .toolbar-sep{width:1px;height:14px;background:var(--divider);margin:0 4px;}
 /* Theme toggle button */

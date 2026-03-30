@@ -967,31 +967,21 @@ function handle_switch_tab!(state::WebNotebookState, conn, data)
     state.active_tab_idx = tab_idx
     create_cell_signals!(state)
 
-    # Render the full notebook panel (tab bar + cells) server-side
-    nb_html = try
-        _NotebookPanel = getfield(Therapy, :NotebookPanel)
-        vnode = Base.invokelatest(_NotebookPanel)
-        vnode !== nothing ? Therapy.render_to_string(vnode) : ""
-    catch e
-        @warn "[WebNotebook] Failed to render notebook panel" exception=e
-        ""
-    end
-
     _broadcast_nb_html!(state)
 end
 
 """Render the full NotebookPanel to HTML and broadcast to all clients."""
 function _broadcast_nb_html!(state::WebNotebookState)
     nb_html = try
-        _NotebookPanel = getfield(Therapy, :NotebookPanel)
-        vnode = Base.invokelatest(_NotebookPanel)
+        vnode = Base.invokelatest(NotebookPanel, state)
         vnode !== nothing ? Therapy.render_to_string(vnode) : ""
     catch e
         @warn "[WebNotebook] Failed to render notebook panel" exception=e
         ""
     end
 
-    total = if active_tab(state).tab_type == :notebook && active_nb(state) !== nothing
+    tab = active_tab(state)
+    total = if tab !== nothing && tab.tab_type == :notebook && active_nb(state) !== nothing
         length(ordered_cells(active_nb(state)))
     else
         0
@@ -1205,7 +1195,13 @@ end
 """Determine the file explorer root directory from the active notebook."""
 function _explorer_root_dir(state::WebNotebookState)::String
     nb = active_nb(state)
-    nb_path = nb.path
+    # Use notebook path, or fall back to active tab path, or USER_CWD
+    nb_path = if nb !== nothing
+        nb.path
+    else
+        tab = active_tab(state)
+        tab !== nothing && tab.tab_type == :file ? tab.path : ""
+    end
     if isfile(nb_path)
         dir = dirname(abspath(nb_path))
         found = dir
