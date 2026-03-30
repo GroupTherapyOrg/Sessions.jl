@@ -436,7 +436,7 @@ function FileExplorer()
     Fragment(
         # Breadcrumb: parent nav + current dir name
         Div(:class => "tree-breadcrumb",
-            :style => "border-bottom:1px solid #1c2736;",
+            :style => "border-bottom:1px solid var(--divider);",
             Button(:id => "tree-nav-up", :title => "Go to parent directory",
                 RawHtml("""<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 12V4M4 8l4-4 4 4"/></svg>""")),
             Span(:class => "crumb", :title => root_dir, root_name)),
@@ -457,7 +457,7 @@ function FileExplorer()
 
         # Status bar (JETLS diagnostics disabled — just show cell count)
         Div(:class => "flex items-center gap-1.5 px-3 py-2 shrink-0",
-            :style => "border-top:1px solid #1c2736; font-size:11px; color:#3d5068;",
+            :style => "border-top:1px solid var(--divider); font-size:11px; color:var(--text-3);",
             Span(:class => "flex-1"),
             Span(:class => "font-mono",
                 :style => "font-size:10px;",
