@@ -10,6 +10,8 @@
 #   sessions --help                       # Show usage
 
 function (@main)(args)
+    # Filter out "--" separator (passed by shell/Pkg.Apps shim)
+    args = filter(a -> a != "--", args)
     if "--help" in args || "-h" in args
         println("""
         Sessions.jl — Web-native reactive Julia notebook
