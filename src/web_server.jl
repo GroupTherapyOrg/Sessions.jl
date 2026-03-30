@@ -230,6 +230,49 @@ function send_full_state!(state::WebNotebookState, conn)
     ))
 end
 
+"""Serialize all cells to JSON for injection into the page as initial data."""
+function serialize_cells_json(state::WebNotebookState)::String
+    tab = active_tab(state)
+    tab === nothing && return "[]"
+    tab.tab_type != :notebook && return "[]"
+    nb = active_nb(state)
+    cells_data = [_cell_to_dict(cell) for cell in ordered_cells(nb)]
+    # Use Therapy's JSON (re-exported from HTTP/JSON3)
+    try
+        io = IOBuffer()
+        print(io, "[")
+        for (i, cell) in enumerate(cells_data)
+            i > 1 && print(io, ",")
+            print(io, "{")
+            first = true
+            for (k, v) in cell
+                first || print(io, ",")
+                first = false
+                print(io, "\"", k, "\":")
+                if v isa String
+                    # Escape for JSON
+                    print(io, "\"", replace(replace(replace(replace(v,
+                        "\\" => "\\\\"), "\"" => "\\\""), "\n" => "\\n"), "\r" => "\\r"), "\"")
+                elseif v isa Bool
+                    print(io, v ? "true" : "false")
+                elseif v isa Number
+                    print(io, v)
+                elseif v === nothing
+                    print(io, "null")
+                else
+                    print(io, "\"", string(v), "\"")
+                end
+            end
+            print(io, "}")
+        end
+        print(io, "]")
+        return String(take!(io))
+    catch e
+        @warn "serialize_cells_json failed" exception=e
+        return "[]"
+    end
+end
+
 """Convert a Cell to a serializable Dict for the client."""
 function _cell_to_dict(cell::Cell)
     output_html = render_output_html(cell)
