@@ -308,7 +308,7 @@ function _notebook_island_js()
   };
 
   var _cellMenu = null;
-  window._showCellMenu = function(btn, cellId) {
+  window._sessionsShowCellMenu = function(btn, cellId) {
     if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; return; }
     var rect = btn.getBoundingClientRect();
     _cellMenu = document.createElement('div');

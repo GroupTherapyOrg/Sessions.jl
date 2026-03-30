@@ -101,7 +101,7 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;background:var(--workspace-bg);color:var(--text-1);transition:background .2s,color .2s;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 /* Clip panel shadows at workspace boundary to prevent corner bleed */
-#workspace>*{overflow:hidden;}
+#workspace>*{min-height:0;}
 #workspace>div{min-height:0;}
 
 /* ═══ Activity Bar ═══ */
