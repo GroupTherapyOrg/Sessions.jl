@@ -519,7 +519,8 @@ function _notebook_ws_bridge_body()
         if (data.nb_html) {
           var nbIsland=document.getElementById('nb-island');
           if(nbIsland){nbIsland.outerHTML=data.nb_html;if(window._initAllCM)_initAllCM();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
-        } else { setTimeout(function(){window.location.reload();},200); }
+        }
+        var lo=document.getElementById('nb-loading');if(lo){lo.classList.add('loaded');setTimeout(function(){lo.remove();},400);}
       }
     });
   };
@@ -603,7 +604,9 @@ function _notebook_island_js()
     // Remove old loading overlay if exists
     var old = document.getElementById('nb-loading');
     if (old) old.remove();
-    // Create and insert loading overlay
+    // Ensure panel has position:relative for the overlay
+    if (!panel.style.position) panel.style.position = 'relative';
+    // Create and insert loading overlay (within nb-island, not replacing it)
     var lo = document.createElement('div');
     lo.id = 'nb-loading';
     lo.className = 'nb-loading';
@@ -636,7 +639,10 @@ function _notebook_island_js()
             if (window.__hydrateTherapyIslands) { var nb = document.getElementById('nb-island'); if (nb) __hydrateTherapyIslands(nb); }
           }, 50);
         }
-      } else { setTimeout(function(){window.location.reload();},200); }
+      }
+      // Remove loading overlay if present
+      var lo = document.getElementById('nb-loading');
+      if (lo) { lo.classList.add('loaded'); setTimeout(function(){ lo.remove(); }, 400); }
     }
   });
 
