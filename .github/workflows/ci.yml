@@ -35,4 +35,4 @@ jobs:
 
       - name: Run tests
         run: |
-          julia --project=. -e 'using Pkg; Pkg.test()'
+          julia --project=. test/runtests.jl
