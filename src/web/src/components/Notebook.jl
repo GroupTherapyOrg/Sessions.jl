@@ -64,19 +64,36 @@
     return Div(:class => "flex-1 overflow-y-auto px-5 pt-3 pb-8", :id => "nb",
         Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
             For(cell_order) do cell_id
-                # Cell skeleton: empty divs with data-cell-id
-                # Populated by on_mount from _cellStore
+                # Cell skeleton with full static structure.
+                # onclick handlers wired by _populateCells (For items can't compile closures).
+                # Dynamic data (output HTML, code, state) injected by _populateCells from _cellStore.
                 Fragment(
                     Div(:class => "cell-wrap relative", :data_cell_id => cell_id,
-                        # Output (above code, Pluto style)
+                        # Output above code (Pluto style) — innerHTML set by _populateCells
                         Div(:class => "cell-out", :data_cell_id => cell_id,
                             :style => "display:none;overflow-x:auto;"),
-                        # Code cell with controls
+                        # Code cell
                         Div(:class => "code-cell relative overflow-hidden",
-                            :style => "background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;",
-                            Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10"),
+                            :style => "background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;",
+                            # Controls (hover visible) — onclick wired by _populateCells
+                            Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
+                                :style => "opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;",
+                                # Runtime badge slot (inserted dynamically)
+                                # Run button
+                                Button(:class => "run-btn",
+                                    :style => "width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--status-done);background:rgba(86,212,160,.1);",
+                                    :title => "Run cell (Shift+Enter)",
+                                    RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>""")),
+                                # Menu button
+                                Button(:class => "menu-btn",
+                                    :style => "width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);",
+                                    :title => "Cell actions",
+                                    RawHtml("""<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""))),
+                            # Eye toggle (left gutter) — onclick wired by _populateCells
                             Div(:class => "cell-eye",
-                                :style => "position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;"),
+                                :style => "position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;color:var(--text-3);",
+                                RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>""")),
+                            # CM editor host — code injected by _populateCells
                             Div(:class => "cm-cell", :data_cell_id => cell_id, :data_src => ""))),
                     # Cell gap
                     Div(:class => "cdiv h-[26px] flex items-center justify-center my-[2px]",
@@ -199,46 +216,24 @@ function _notebook_island_js()
         }
       }
 
-      // Eye toggle
+      // Wire onclick handlers (buttons are in VNode skeleton, but For items
+      // can't compile closures that capture cell_id — so we wire here)
       var eye = wrap.querySelector('.cell-eye');
-      if (eye) {
-        eye.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-        eye.style.color = 'var(--text-3)';
-        eye.onclick = function() { _toggleFold(cellId); };
-      }
+      if (eye) eye.onclick = function() { _toggleFold(cellId); };
 
-      // Run button
-      var ctrls2 = wrap.querySelector('.cell-ctrls');
-      if (ctrls2 && !ctrls2.querySelector('.run-btn')) {
-        var runBtn = document.createElement('button');
-        runBtn.className = 'run-btn';
-        runBtn.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--status-done);background:rgba(86,212,160,.1);';
-        runBtn.title = 'Run cell (Shift+Enter)';
-        runBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>';
-        runBtn.onclick = function() { window._sessionsRunCell(cellId); };
-        ctrls2.appendChild(runBtn);
+      var runBtn = wrap.querySelector('.run-btn');
+      if (runBtn) runBtn.onclick = function() { window._sessionsRunCell(cellId); };
 
-        // Menu button (move up/down, format, delete)
-        var menuBtn = document.createElement('button');
-        menuBtn.className = 'menu-btn';
-        menuBtn.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);';
-        menuBtn.title = 'Cell actions';
-        menuBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>';
-        menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
-        ctrls2.appendChild(menuBtn);
-      }
+      var menuBtn = wrap.querySelector('.menu-btn');
+      if (menuBtn) menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
 
-      // CellGap onclick
+      // Wire CellGap "+ Code" button (VNode button, onclick needs cell_id)
       var gap = wrap.nextElementSibling;
       if (gap && gap.classList.contains('cdiv')) {
-        var btn = gap.querySelector('button');
-        if (btn) {
-          btn.onclick = function() {
-            if (window.TherapyWS && TherapyWS.sendMessage) {
-              TherapyWS.sendMessage('notebook', {action:'add_cell', after_cell_id: cellId});
-            }
-          };
-        }
+        var gapBtn = gap.querySelector('button');
+        if (gapBtn) gapBtn.onclick = function() {
+          if (TherapyWS && TherapyWS.sendMessage) TherapyWS.sendMessage('notebook', {action:'add_cell', after_cell_id: cellId});
+        };
       }
     });
   };

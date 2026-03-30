@@ -636,7 +636,7 @@ Delete</div>
     }
   });
 })();
-</script><div data-hk="15" class="flex items-center gap-1.5 px-3 py-2 shrink-0" style="border-top:1px solid #1c2736; font-size:11px; color:#3d5068;"><span data-hk="16" class="flex-1"></span><span data-hk="17" class="font-mono" style="font-size:10px;">0/1 cells</span></div></div><div data-hk="18" id="editor-area" style="flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;"><div data-hk="19" id="nb-island" class="flex-1 flex flex-col rounded-xl overflow-hidden min-h-0" style="background:var(--panel-bg);border:1px solid var(--cell-border);"><div data-hk="20" class="h-[38px] flex items-stretch shrink-0" style="background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;"><div data-hk="21" style="display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;"><div data-hk="22" class="tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;switch_tab&#39;,tab_idx:1})" style="color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);"><svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>Untitled.jl<span data-hk="23" style="width:5px;height:5px;border-radius:50%;background:var(--accent);"></span><span data-hk="24" onclick="event.stopPropagation();if(confirm(&#39;Close?&#39;))TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;close_tab&#39;,tab_idx:1})" style="font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;">×</span></div></div><div data-hk="25" style="display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;"><button data-hk="26" id="run-stale-btn" class="tb-btn stale" title="Run stale cells" onclick="window._sessionsRunStale()" style=""><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg><span data-hk="27" id="run-stale-label"> Run Stale (1)</span></button><button data-hk="28" id="run-all-btn" class="tb-btn" title="Run all cells" onclick="window._sessionsRunAll()"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg> Run All</button><button data-hk="29" id="stop-btn" class="tb-btn stop" title="Stop execution" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;interrupt&#39;})" style="display:none;"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg> Stop</button><span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><span class="toolbar-sep"></span><button data-hk="30" id="save-indicator" class="tb-btn" title="Save (Ctrl+S)" onclick="window._sessionsSave()">Save</button><button data-hk="31" class="tb-btn" title="Format all cells" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;format_all&#39;})" data-format-btn="1">Format</button></div></div><script type="application/json" id="nb-cells-data">[{"stdout":"","folded":false,"cell_id":"a4882ce5-52aa-4c36-8d78-150d7bb603db","output_html":"","disabled":false,"runtime_ns":0,"code":"# Welcome to Sessions.jl\n# Add cells and start coding!","stale":false,"state":"cell_idle"}]</script><therapy-island data-component="notebookisland" data-props="{&quot;mode&quot;:&quot;live&quot;}"><div data-hk="1" id="nb" class="flex-1 overflow-y-auto px-5 pt-3 pb-8"><div data-hk="2" style="max-width:900px;margin:0 auto;padding-left:28px;"></div><script>(function() {
+</script><div data-hk="15" class="flex items-center gap-1.5 px-3 py-2 shrink-0" style="border-top:1px solid #1c2736; font-size:11px; color:#3d5068;"><span data-hk="16" class="flex-1"></span><span data-hk="17" class="font-mono" style="font-size:10px;">0/1 cells</span></div></div><div data-hk="18" id="editor-area" style="flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;"><div data-hk="19" id="nb-island" class="flex-1 flex flex-col rounded-xl overflow-hidden min-h-0" style="background:var(--panel-bg);border:1px solid var(--cell-border);"><div data-hk="20" class="h-[38px] flex items-stretch shrink-0" style="background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;"><div data-hk="21" style="display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;"><div data-hk="22" class="tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;switch_tab&#39;,tab_idx:1})" style="color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);"><svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>Untitled.jl<span data-hk="23" style="width:5px;height:5px;border-radius:50%;background:var(--accent);"></span><span data-hk="24" onclick="event.stopPropagation();if(confirm(&#39;Close?&#39;))TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;close_tab&#39;,tab_idx:1})" style="font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;">×</span></div></div><div data-hk="25" style="display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;"><button data-hk="26" id="run-stale-btn" class="tb-btn stale" title="Run stale cells" onclick="window._sessionsRunStale()" style=""><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg><span data-hk="27" id="run-stale-label"> Run Stale (1)</span></button><button data-hk="28" id="run-all-btn" class="tb-btn" title="Run all cells" onclick="window._sessionsRunAll()"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg> Run All</button><button data-hk="29" id="stop-btn" class="tb-btn stop" title="Stop execution" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;interrupt&#39;})" style="display:none;"><svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg> Stop</button><span id="run-progress" style="display:none;font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><span class="toolbar-sep"></span><button data-hk="30" id="save-indicator" class="tb-btn" title="Save (Ctrl+S)" onclick="window._sessionsSave()">Save</button><button data-hk="31" class="tb-btn" title="Format all cells" onclick="TherapyWS.sendMessage(&#39;notebook&#39;,{action:&#39;format_all&#39;})" data-format-btn="1">Format</button></div></div><script type="application/json" id="nb-cells-data">[{"stdout":"","folded":false,"cell_id":"bcdad74d-6fbf-4132-b3ce-e2d9582f45c0","output_html":"","disabled":false,"runtime_ns":0,"code":"# Welcome to Sessions.jl\n# Add cells and start coding!","stale":false,"state":"cell_idle"}]</script><therapy-island data-component="notebookisland" data-props="{&quot;mode&quot;:&quot;live&quot;}"><div data-hk="1" id="nb" class="flex-1 overflow-y-auto px-5 pt-3 pb-8"><div data-hk="2" style="max-width:900px;margin:0 auto;padding-left:28px;"></div><script>(function() {
   // ── Populate cell skeletons from _cellStore ──
   window._populateCells = function() {
     if (!window._cellStore) return;
@@ -705,46 +705,24 @@ Delete</div>
         }
       }
 
-      // Eye toggle
+      // Wire onclick handlers (buttons are in VNode skeleton, but For items
+      // can't compile closures that capture cell_id — so we wire here)
       var eye = wrap.querySelector('.cell-eye');
-      if (eye) {
-        eye.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-        eye.style.color = 'var(--text-3)';
-        eye.onclick = function() { _toggleFold(cellId); };
-      }
+      if (eye) eye.onclick = function() { _toggleFold(cellId); };
 
-      // Run button
-      var ctrls2 = wrap.querySelector('.cell-ctrls');
-      if (ctrls2 && !ctrls2.querySelector('.run-btn')) {
-        var runBtn = document.createElement('button');
-        runBtn.className = 'run-btn';
-        runBtn.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--status-done);background:rgba(86,212,160,.1);';
-        runBtn.title = 'Run cell (Shift+Enter)';
-        runBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>';
-        runBtn.onclick = function() { window._sessionsRunCell(cellId); };
-        ctrls2.appendChild(runBtn);
+      var runBtn = wrap.querySelector('.run-btn');
+      if (runBtn) runBtn.onclick = function() { window._sessionsRunCell(cellId); };
 
-        // Menu button (move up/down, format, delete)
-        var menuBtn = document.createElement('button');
-        menuBtn.className = 'menu-btn';
-        menuBtn.style.cssText = 'width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);';
-        menuBtn.title = 'Cell actions';
-        menuBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>';
-        menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
-        ctrls2.appendChild(menuBtn);
-      }
+      var menuBtn = wrap.querySelector('.menu-btn');
+      if (menuBtn) menuBtn.onclick = function(e) { e.stopPropagation(); _showCellMenu(menuBtn, cellId); };
 
-      // CellGap onclick
+      // Wire CellGap "+ Code" button (VNode button, onclick needs cell_id)
       var gap = wrap.nextElementSibling;
       if (gap && gap.classList.contains('cdiv')) {
-        var btn = gap.querySelector('button');
-        if (btn) {
-          btn.onclick = function() {
-            if (window.TherapyWS && TherapyWS.sendMessage) {
-              TherapyWS.sendMessage('notebook', {action:'add_cell', after_cell_id: cellId});
-            }
-          };
-        }
+        var gapBtn = gap.querySelector('button');
+        if (gapBtn) gapBtn.onclick = function() {
+          if (TherapyWS && TherapyWS.sendMessage) TherapyWS.sendMessage('notebook', {action:'add_cell', after_cell_id: cellId});
+        };
       }
     });
   };
@@ -1691,15 +1669,28 @@ window.__t={signal:signal,effect:effect,memo:memo,batch:batch,onCleanup:onCleanu
         html += '</div>';
         html += '<div';
         html += ' class="code-cell relative overflow-hidden"';
-        html += ' style="background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;"';
+        html += ' style="background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;"';
         html += '>';
         html += '<div';
         html += ' class="cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10"';
+        html += ' style="opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;"';
         html += '>';
+        html += '<button';
+        html += ' class="run-btn"';
+        html += ' title="Run cell (Shift+Enter)"';
+        html += ' style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--status-done);background:rgba(86,212,160,.1);"';
+        html += '>';
+        html += '</button>';
+        html += '<button';
+        html += ' class="menu-btn"';
+        html += ' title="Cell actions"';
+        html += ' style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:0;cursor:pointer;color:var(--text-3);background:rgba(128,128,128,.06);"';
+        html += '>';
+        html += '</button>';
         html += '</div>';
         html += '<div';
         html += ' class="cell-eye"';
-        html += ' style="position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;"';
+        html += ' style="position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;color:var(--text-3);"';
         html += '>';
         html += '</div>';
         html += '<div';
