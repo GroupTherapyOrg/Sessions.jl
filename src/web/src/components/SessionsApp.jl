@@ -38,10 +38,15 @@ function SessionsApp(children...)
                         Span(:class => "dot-pulse"), Span(:class => "dot-pulse"), Span(:class => "dot-pulse")),
                     FileExplorer()),
 
+                # Resize handle: explorer ↔ editor
+                Div(:class => "resize-handle-x", :id => "resize-explorer"),
+
                 # Editor Area (notebook/file + terminal)
                 Div(:id => "editor-area",
                     :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;",
                     children...,
+                    # Resize handle: editor ↔ terminal
+                    Div(:class => "resize-handle-y", :id => "resize-terminal"),
                     # Terminal (@island — xterm.js)
                     Div(:id => "repl-panel",
                         :style => "display:none;flex-shrink:0;",
@@ -54,16 +59,60 @@ function SessionsApp(children...)
         # This will be replaced when FileExplorer and Terminal become proper Show()-based islands
         RawHtml("""<script>
 (function() {
-    var sb = localStorage.getItem('sessions-sidebar');
-    var rp = localStorage.getItem('sessions-repl');
     var fp = document.getElementById('fpanel');
     var repl = document.getElementById('repl-panel');
+    var sb = localStorage.getItem('sessions-sidebar');
+    var rp = localStorage.getItem('sessions-repl');
     if (fp && sb === '1') fp.style.display = '';
     if (repl && rp === '1') repl.style.display = '';
     customElements.whenDefined('sl-tree').then(function() {
         var loader = document.getElementById('explorer-loading');
         if (loader) loader.style.display = 'none';
     });
+
+    // ── Restore saved panel sizes ──
+    var savedW = localStorage.getItem('sessions-explorer-w');
+    if (fp && savedW) fp.style.width = savedW + 'px';
+    var savedH = localStorage.getItem('sessions-terminal-h');
+    if (repl && savedH) { var r = repl.querySelector('#repl'); if (r) r.style.height = savedH + 'px'; }
+
+    // ── Resize logic ──
+    function setupResize(handleId, target, prop, lsKey, min, max, axis) {
+      var handle = document.getElementById(handleId);
+      if (!handle || !target) return;
+      handle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        handle.classList.add('active');
+        var start = axis === 'x' ? e.clientX : e.clientY;
+        var startSize = target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height'];
+        var onMove = function(e2) {
+          var delta = (axis === 'x' ? e2.clientX : e2.clientY) - start;
+          var newSize = Math.round(Math.max(min, Math.min(max, startSize + (axis === 'y' ? -delta : delta))));
+          target.style[prop] = newSize + 'px';
+          // Fit terminal on resize
+          if (axis === 'y' && window._terminalInit) {
+            var tid = window._sessionsActiveTermTabId;
+            // Trigger xterm fit via resize event
+            window.dispatchEvent(new Event('resize'));
+          }
+        };
+        var onUp = function() {
+          handle.classList.remove('active');
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          var size = Math.round(target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height']);
+          localStorage.setItem(lsKey, size);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+
+    // Explorer: drag right edge to resize width (min 160, max 500)
+    setupResize('resize-explorer', fp, 'width', 'sessions-explorer-w', 160, 500, 'x');
+    // Terminal: drag top edge to resize height (min 80, max 600)
+    var termEl = repl ? repl.querySelector('#repl') : null;
+    setupResize('resize-terminal', termEl, 'height', 'sessions-terminal-h', 80, 600, 'y');
 })();
 </script>"""))
 end

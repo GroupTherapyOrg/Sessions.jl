@@ -142,6 +142,12 @@ $(Main.Sessions.NOTEBOOK_CSS)
 ::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px;}
 ::selection{background:var(--selection-bg);}
 
+/* ═══ Resize Handles ═══ */
+.resize-handle-x{width:6px;cursor:col-resize;flex-shrink:0;border-radius:3px;transition:background .15s;margin:0 -3px;z-index:5;position:relative;}
+.resize-handle-x:hover,.resize-handle-x.active{background:var(--accent);}
+.resize-handle-y{height:6px;cursor:row-resize;flex-shrink:0;border-radius:3px;transition:background .15s;margin:-3px 0;z-index:5;position:relative;}
+.resize-handle-y:hover,.resize-handle-y.active{background:var(--accent);}
+
 /* ═══ Shoelace loading: hide tree until web components defined ═══ */
 sl-tree:not(:defined),sl-tree-item:not(:defined){opacity:0;height:0;overflow:hidden;}
 sl-tree:defined,sl-tree-item:defined{opacity:1;height:auto;transition:opacity .2s;}
