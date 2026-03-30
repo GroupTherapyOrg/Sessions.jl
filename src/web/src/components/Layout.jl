@@ -251,9 +251,10 @@ sl-tree-item::part(item):hover{background:rgba(128,128,128,.06);}
 </script>"""),
 
         # --- Undo toast (for deleted cells) ---
-        RawHtml("""<div id="undo-toast">Cell deleted &mdash; <kbd>Ctrl+Z</kbd> to undo</div>"""))
-        # CM init + notebook channel handler now live in Notebook.jl
-        # They are injected by NotebookContent() via Fragment()
+        RawHtml("""<div id="undo-toast">Cell deleted &mdash; <kbd>Ctrl+Z</kbd> to undo</div>"""),
+
+        # --- Notebook JS: global function definitions (must load before island hydration) ---
+        RawHtml(string("<script>", _notebook_island_js(), "</script>")))
 end
 
 # _notebook_channel_script() moved to Notebook.jl

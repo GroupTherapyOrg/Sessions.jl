@@ -105,8 +105,8 @@
                                 "Code"),
                             Div(:class => "h-px w-14", :style => "background:var(--divider);"))))
             end),
-        # Inject the notebook JS (CM init + WS handler)
-        RawHtml(string("<script>", _notebook_island_js(), "</script>"))
+        # Notebook JS functions are defined globally in Layout.jl
+        # (must load before island hydration)
     )
 end
 
