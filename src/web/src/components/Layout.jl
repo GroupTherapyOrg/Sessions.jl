@@ -123,6 +123,11 @@ $(Main.Sessions.NOTEBOOK_CSS)
 .cell-collapsed .cell-ctrls{display:none;}
 .cell-collapsed::before{opacity:.15!important;}
 .cell-collapsed{border-style:dashed!important;opacity:.4;max-height:8px;overflow:hidden;}
+/* Cell-wrap execution state — visible even when code is hidden/folded */
+.cell-wrap.wrap-queued{outline:2px solid var(--status-running);outline-offset:-2px;border-radius:8px;min-height:6px;}
+.cell-wrap.wrap-running{outline:2px solid #7bb8e8;outline-offset:-2px;border-radius:8px;min-height:6px;animation:pulse-outline 1.5s ease-in-out infinite;}
+.cell-wrap.wrap-errored{outline:2px solid var(--status-error);outline-offset:-2px;border-radius:8px;min-height:6px;}
+@keyframes pulse-outline{0%,100%{outline-color:#7bb8e8;}50%{outline-color:rgba(123,184,232,.3);}}
 
 /* ═══ Tab Bar + Cell Gaps ═══ */
 .cdiv:hover .cdiv-inner{opacity:1;}

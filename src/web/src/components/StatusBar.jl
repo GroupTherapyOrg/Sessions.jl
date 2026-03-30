@@ -38,7 +38,7 @@
     """))
 
     return Div(:id => "status-bar",
-        :style => "height:28px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-3);background:var(--workspace-bg);box-shadow:0 -2px 8px rgba(0,0,0,.06);",
+        :style => "height:28px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-3);background:var(--workspace-bg);box-shadow:var(--statusbar-shadow);border-top:1px solid var(--divider);",
 
         Span(:style => "color:var(--accent);", "\u25CF"),
         Span("Sessions.jl"),

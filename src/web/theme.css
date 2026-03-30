@@ -55,6 +55,7 @@
   --selection-bg: rgba(86, 212, 160, 0.15);
   --panel-shadow: none;
   --scrollbar-thumb: var(--warm-300);
+  --statusbar-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Dark Mode Overrides ── */
@@ -78,6 +79,7 @@
   --selection-bg: rgba(86, 212, 160, 0.15);
   --panel-shadow: none;
   --scrollbar-thumb: #2a3a4f;
+  --statusbar-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

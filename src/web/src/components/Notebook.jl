@@ -208,7 +208,13 @@ function _notebook_ws_bridge_body()
     var _cellTimers = {};
     function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var t0=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);'; badge.textContent='0.0s'; var iv=setInterval(function(){badge.textContent=fmtSeconds((performance.now()-t0)/1000);},100); _cellTimers[cellId]={interval:iv}; }
     function stopCellTimer(cellId) { var t=_cellTimers[cellId]; if(t){clearInterval(t.interval);delete _cellTimers[cellId];} }
-    function setCellState(el,state,cellId) { if(!el||!el.code)return; el.code.classList.remove('idle','stale','executing'); if(state==='cell_queued'||state==='cell_running'){el.code.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);el.code.style.borderColor=state==='cell_errored'?'var(--status-error)':'';} }
+    function setCellState(el,state,cellId) {
+      if(!el)return;
+      // Apply state to code-cell (visible when code shown)
+      if(el.code){el.code.classList.remove('idle','stale','executing');if(state==='cell_queued'||state==='cell_running'){el.code.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);el.code.style.borderColor=state==='cell_errored'?'var(--status-error)':'';}}
+      // Also apply state to cell-wrap (visible even when code is hidden/folded)
+      if(el.wrap){el.wrap.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored');if(state==='cell_queued')el.wrap.classList.add('wrap-queued');else if(state==='cell_running')el.wrap.classList.add('wrap-running');else if(state==='cell_errored')el.wrap.classList.add('wrap-errored');}
+    }
 
     // ── Find gap after a cell (or first gap if null) ──
     function gapAfter(cellId) {
