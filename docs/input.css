@@ -7,90 +7,90 @@
 /* Enable class-based dark mode (toggle via .dark class on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Theme customizations — matched to Sessions.jl web IDE palette */
+/* Theme customizations — identical to Therapy.jl with rose accent */
 @theme {
   --font-sans: 'Optima', 'Palatino Linotype', 'Book Antiqua', 'EB Garamond', serif;
   --font-serif: 'EB Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
   --font-mono: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
 
-  /* Blue-tinted neutral palette — dark end matches app (deep/base/island/b1/b2/t4/t3/t2/t1) */
-  --color-warm-50:  #f0f4f8;
-  --color-warm-100: #e1e8ef;
-  --color-warm-200: #d4dce8;
-  --color-warm-300: #b8c5d4;
-  --color-warm-400: #9baabd;
-  --color-warm-500: #6b7d93;
-  --color-warm-600: #3d5068;
-  --color-warm-700: #2a3a4f;
-  --color-warm-800: #1a2332;
-  --color-warm-900: #0f1419;
-  --color-warm-950: #0a0e14;
+  /* Warm neutral palette (shared across GroupTherapyOrg ecosystem) */
+  --color-warm-50: #f8f7f4;
+  --color-warm-100: #f0ece4;
+  --color-warm-200: #e8e3d9;
+  --color-warm-300: #d4d0c8;
+  --color-warm-400: #9a9590;
+  --color-warm-500: #8a8680;
+  --color-warm-600: #6b6560;
+  --color-warm-700: #5a5855;
+  --color-warm-800: #2a2520;
+  --color-warm-900: #1a1918;
+  --color-warm-950: #111110;
 
-  /* Accent palette — teal #56d4a0 (matches app accent) */
-  --color-accent-50:  #eefbf4;
-  --color-accent-100: #d5f5e5;
-  --color-accent-200: #aeeacd;
-  --color-accent-300: #79dbb0;
-  --color-accent-400: #56d4a0;
-  --color-accent-500: #2fb882;
-  --color-accent-600: #219669;
-  --color-accent-700: #1e7855;
-  --color-accent-800: #1a5f43;
-  --color-accent-900: #184e38;
-  --color-accent-950: #0b2c1f;
+  /* Accent palette — Rose #d4759a (Sessions.jl primary accent) */
+  --color-accent-50: #fdf2f6;
+  --color-accent-100: #fce7ef;
+  --color-accent-200: #fad0e0;
+  --color-accent-300: #f5a8c5;
+  --color-accent-400: #e88aad;
+  --color-accent-500: #d4759a;
+  --color-accent-600: #be5a80;
+  --color-accent-700: #a04568;
+  --color-accent-800: #853b57;
+  --color-accent-900: #70344b;
+  --color-accent-950: #431a2b;
 
-  /* Accent-secondary palette — soft red #e06b65 (matches app error/jr) */
-  --color-accent-secondary-50:  #fef2f2;
-  --color-accent-secondary-100: #fee2e1;
-  --color-accent-secondary-200: #fcc9c7;
-  --color-accent-secondary-300: #f8a8a4;
-  --color-accent-secondary-400: #e06b65;
-  --color-accent-secondary-500: #d04a43;
-  --color-accent-secondary-600: #b83832;
-  --color-accent-secondary-700: #9a2d28;
-  --color-accent-secondary-800: #7f2825;
-  --color-accent-secondary-900: #6a2624;
-  --color-accent-secondary-950: #3a100f;
+  /* Accent-secondary palette — Julia Green #56d4a0 */
+  --color-accent-secondary-50: #eefbf4;
+  --color-accent-secondary-100: #d5f5e5;
+  --color-accent-secondary-200: #aeeacd;
+  --color-accent-secondary-300: #79dbb0;
+  --color-accent-secondary-400: #56d4a0;
+  --color-accent-secondary-500: #2fb882;
+  --color-accent-secondary-600: #219669;
+  --color-accent-secondary-700: #1e7855;
+  --color-accent-secondary-800: #1a5f43;
+  --color-accent-secondary-900: #184e38;
+  --color-accent-secondary-950: #0b2c1f;
 
   /* Border radius tokens */
   --radius: 0.5rem;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
-  --radius-2xl: 2rem;
-
-  /* Shadow tokens */
-  --shadow-sm: 0 2px 4px -1px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 8px -2px rgba(0,0,0,0.12), 0 2px 4px -2px rgba(0,0,0,0.08);
 }
 
-/* Design System CSS custom properties — matched to app palette */
+/* Design System CSS custom properties */
 @layer base {
+  button { cursor: pointer; }
+  therapy-island { display: contents; }
+
+  /* Heading spacing and underlines — scoped to page content (Pluto-style separation) */
+  #page-content h1:not(.no-rule) { padding-top: 1.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-warm-200); margin-bottom: 1rem; }
+  #page-content h2 { padding-top: 1.25rem; padding-bottom: 0.375rem; border-bottom: 1px solid var(--color-warm-200); margin-bottom: 0.75rem; }
+  #page-content h3 { padding-top: 1rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--color-warm-100); margin-bottom: 0.5rem; }
+  .dark #page-content h1:not(.no-rule), .dark #page-content h2 { border-bottom-color: var(--color-warm-800); }
+  .dark #page-content h3 { border-bottom-color: var(--color-warm-900); }
+
   :root {
-    color: var(--text-primary);
-    /* Light mode — blue-tinted neutrals */
-    --bg-primary:      #f0f4f8;
-    --bg-secondary:    #e1e8ef;
-    --bg-tertiary:     #d4dce8;
-    --text-primary:    #0f1419;
-    --text-secondary:  #3d5068;
-    --text-tertiary:   #6b7d93;
+    /* Shared neutrals */
+    --bg-primary: #f8f7f4;
+    --bg-secondary: #f0ece4;
+    --bg-tertiary: #e8e3d9;
+    --text-primary: #2a2520;
+    --text-secondary: #6b6560;
+    --text-tertiary: #9a9590;
 
-    /* Julia palette (app-matched brighter variants) */
-    --julia-red:    #e06b65;
-    --julia-purple: #b08fd8;
-    --julia-blue:   #7bb8e8;
-    --julia-green:  #56d4a0;
+    /* Julia palette */
+    --julia-red: #cb3c33;
+    --julia-purple: #9558b2;
+    --julia-blue: #4063d8;
+    --julia-green: #389826;
 
-    /* Accent aliases */
-    --accent:           var(--julia-green);
-    --accent-secondary: var(--julia-red);
+    /* Sessions.jl accent overrides */
+    --accent: #d4759a;
+    --accent-secondary: #56d4a0;
 
-    /* .jl wordmark tri-colors */
-    --jl-dot: #b08fd8;  /* Purple */
-    --jl-j:   #56d4a0;  /* Green (teal) */
-    --jl-l:   #e06b65;  /* Red */
+    /* .jl wordmark tri-colors (exclude Rose — the active accent) */
+    --jl-dot: #56d4a0;  /* Green */
+    --jl-j: #b08fd8;    /* Purple */
+    --jl-l: #e06b65;    /* Red */
   }
 
   html {
@@ -103,59 +103,30 @@
   }
 }
 
-/* Dark mode — matches app's deep/base/island palette */
+/* Dark mode custom properties */
 @layer base {
   .dark {
-    --bg-primary:     #0a0e14;
-    --bg-secondary:   #0f1419;
-    --bg-tertiary:    #1a2332;
-    --text-primary:   #d4dce8;
-    --text-secondary: #9baabd;
-    --text-tertiary:  #6b7d93;
-    --shadow-sm: 0 2px 8px 0 rgba(0,0,0,0.3);
-    --shadow-md: 0 4px 12px 0 rgba(0,0,0,0.4);
+    --bg-primary: #111110;
+    --bg-secondary: #1a1918;
+    --bg-tertiary: #252422;
+    --text-primary: #d4d0c8;
+    --text-secondary: #8a8680;
+    --text-tertiary: #5a5855;
   }
 }
 
-/* Glass panel utilities */
-.dark .glass-panel {
-    border-top: 1px solid rgba(255,255,255,0.14);
-    border-left: 1px solid rgba(255,255,255,0.10);
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    border-right: 1px solid rgba(255,255,255,0.04);
-    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.35);
-}
-.dark .glass-panel-elevated {
-    border-top: 1px solid rgba(255,255,255,0.12);
-    border-left: 1px solid rgba(255,255,255,0.08);
-    border-bottom: 1px solid rgba(255,255,255,0.02);
-    border-right: 1px solid rgba(255,255,255,0.02);
-    box-shadow: 0 4px 12px 0 rgba(0,0,0,0.4);
-}
-:root:not(.dark) .glass-panel {
-    border-top: 1px solid rgba(0,0,0,0.04);
-    border-left: 1px solid rgba(0,0,0,0.03);
-    border-bottom: 1px solid rgba(0,0,0,0.06);
-    border-right: 1px solid rgba(0,0,0,0.06);
-    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.08);
-}
-:root:not(.dark) .glass-panel-elevated {
-    border-top: 1px solid rgba(0,0,0,0.06);
-    border-left: 1px solid rgba(0,0,0,0.04);
-    border-bottom: 1px solid rgba(0,0,0,0.08);
-    border-right: 1px solid rgba(0,0,0,0.08);
-    box-shadow: 0 4px 12px 0 rgba(0,0,0,0.12);
-}
-.glass-hover {
-    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+/* Julia syntax highlighting for CodeBlock */
+@layer components {
+  .suite-hl-keyword { color: #c792ea; }
+  .suite-hl-string  { color: #c3e88d; }
+  .suite-hl-comment { color: #6b6560; font-style: italic; }
+  .suite-hl-number  { color: #f78c6c; }
+  .suite-hl-funcall { color: #82aaff; }
+  .suite-hl-type    { color: #ffcb6b; }
+  .suite-hl-symbol  { color: #ff5370; }
+  .suite-hl-macro   { color: #c792ea; font-weight: 600; }
+  .suite-hl-special { color: #f78c6c; font-style: italic; }
+  .suite-hl-operator { color: #89ddff; }
 }
 
-/* Override Prism.js styles on CodeBlock pre/code elements */
-[data-codeblock] pre,
-[data-codeblock] code {
-  margin: 0 !important;
-  background: transparent !important;
-}
-
-/* Notebook rendering CSS is self-injected by Sessions.NotebookPage().
-   No notebook-specific styles needed here — Sessions.jl owns it all. */
+/* Notebook rendering CSS is self-injected by Sessions.NotebookPage(). */
