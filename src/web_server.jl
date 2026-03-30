@@ -994,6 +994,15 @@ function handle_switch_tab!(state::WebNotebookState, conn, data)
     create_cell_signals!(state)
 
     _broadcast_nb_html!(state)
+
+    # Notify file explorer of the active file path
+    tab = active_tab(state)
+    if tab !== nothing
+        broadcast_channel!("file_explorer", Dict(
+            "event" => "active_file_changed",
+            "path" => tab.path
+        ))
+    end
 end
 
 """Render the full NotebookPanel to HTML and broadcast to all clients."""

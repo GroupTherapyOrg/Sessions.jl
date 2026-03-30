@@ -159,6 +159,17 @@ function _file_explorer_js(root_dir::String)
     }
   });
 
+  // ── Sync explorer selection when active tab changes ──
+  window.addEventListener('therapy:channel:file_explorer', function(e) {
+    var d = e.detail;
+    if (d && d.event === 'active_file_changed' && d.path) {
+      var item = tree.querySelector('sl-tree-item[data-abs-path="' + CSS.escape(d.path) + '"]');
+      // Deselect all, then select the matching item
+      tree.querySelectorAll('sl-tree-item[selected]').forEach(function(el) { el.selected = false; });
+      if (item) { item.selected = true; item.scrollIntoView({block:'nearest'}); }
+    }
+  });
+
   // ── Lazy loading: fetch directory contents on expand ──
   // sl-lazy-load fires on the sl-tree-item itself; use closest() for safety
   tree.addEventListener('sl-lazy-load', function(e) {
