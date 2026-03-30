@@ -463,8 +463,15 @@ function _notebook_ws_bridge_body()
       // ── Code updated (format, external edit) ──
       else if (data.event === 'cell_formatted' || data.event === 'cell_code_updated') {
         if (data.event === 'cell_formatted') markUnsaved();
-        var eds=window._sessionsEditors||{}; var ev=eds[data.cell_id];
-        if(ev&&data.code!==undefined){var cur=ev.state.doc.toString();if(data.code!==cur){window._sessSuppressSync[data.cell_id]=true;ev.dispatch({changes:{from:0,to:cur.length,insert:data.code}});}}
+        // File editor update (format_file result)
+        if (data.cell_id === '__file__' && window._fileEditorView && data.code !== undefined) {
+          var fe = window._fileEditorView;
+          var cur = fe.state.doc.toString();
+          if (data.code !== cur) fe.dispatch({changes:{from:0,to:cur.length,insert:data.code}});
+        } else {
+          var eds=window._sessionsEditors||{}; var ev=eds[data.cell_id];
+          if(ev&&data.code!==undefined){var cur=ev.state.doc.toString();if(data.code!==cur){window._sessSuppressSync[data.cell_id]=true;ev.dispatch({changes:{from:0,to:cur.length,insert:data.code}});}}
+        }
       }
 
       // ── Stale cells update ──

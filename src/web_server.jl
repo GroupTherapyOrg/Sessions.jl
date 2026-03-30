@@ -190,6 +190,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_format_cell!(state, conn, data)
             elseif action == "format_all"
                 handle_format_all!(state, conn, data)
+            elseif action == "format_file"
+                handle_format_file!(state, conn, data)
             else
                 @warn "[WebNotebook] Unknown action" action=action
             end
@@ -834,6 +836,30 @@ function handle_format_all!(state::WebNotebookState, conn, data)
     broadcast_channel!("notebook", Dict("event" => "format_done"))
 end
 
+"""Handle format file — format entire file content via Runic.jl (Julia files only)."""
+function handle_format_file!(state::WebNotebookState, conn, data)
+    tab = active_tab(state)
+    tab === nothing && return
+    tab.tab_type == :file || return
+
+    # Only format Julia files
+    endswith(tab.path, ".jl") || return
+
+    broadcast_channel!("notebook", Dict("event" => "format_started"))
+
+    original = tab.file_content
+    formatted = format_code(original)
+    if formatted != original
+        tab.file_content = formatted
+        broadcast_channel!("notebook", Dict(
+            "event" => "cell_code_updated",
+            "cell_id" => "__file__",
+            "code" => formatted
+        ))
+    end
+    broadcast_channel!("notebook", Dict("event" => "format_done"))
+end
+
 """Handle bond value change — update bond in worker, re-execute downstream cells."""
 function handle_set_bond!(state::WebNotebookState, conn, data)
     bond_name = get(data, "name", "")
@@ -973,7 +999,8 @@ end
 """Render the full NotebookPanel to HTML and broadcast to all clients."""
 function _broadcast_nb_html!(state::WebNotebookState)
     nb_html = try
-        vnode = Base.invokelatest(NotebookPanel, state)
+        _NP = getfield(Main, :NotebookPanel)
+        vnode = Base.invokelatest(_NP, state)
         vnode !== nothing ? Therapy.render_to_string(vnode) : ""
     catch e
         @warn "[WebNotebook] Failed to render notebook panel" exception=e

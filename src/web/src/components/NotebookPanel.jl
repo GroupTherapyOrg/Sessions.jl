@@ -91,11 +91,14 @@ function NotebookPanel(state)
     push!(toolbar, Button(:id => "save-indicator", :class => "tb-btn",
         :on_click => "window._sessionsSave()",
         :title => "Save (Ctrl+S)", "Save"))
-    if !is_file_tab
-        push!(toolbar, Button(Symbol("data-format-btn") => "1", :class => "tb-btn",
-            :on_click => "TherapyWS.sendMessage('notebook',{action:'format_all'})",
-            :title => "Format all cells", "Format"))
-    end
+    is_jl_file = is_file_tab && endswith(tab.path, ".jl")
+    can_format = !is_file_tab || is_jl_file  # notebooks always, files only .jl
+    push!(toolbar, Button(Symbol("data-format-btn") => "1",
+        :class => can_format ? "tb-btn" : "tb-btn tb-disabled",
+        :on_click => is_file_tab ?
+            "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
+            "TherapyWS.sendMessage('notebook',{action:'format_all'})",
+        :title => is_file_tab ? "Format file" : "Format all cells", "Format"))
     push!(tab_items, Div(:style => "display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;",
         toolbar...))
 
