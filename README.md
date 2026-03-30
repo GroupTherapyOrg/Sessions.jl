@@ -1,4 +1,5 @@
 <div align="center">
+
   # Sessions.jl
 
   **A reactive Julia notebook IDE.**
