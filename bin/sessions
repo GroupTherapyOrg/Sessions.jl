@@ -1,2 +1,3 @@
 #!/bin/sh
-exec julia --startup-file=no --project=@Sessions -e 'using Sessions; Sessions.main()' -- "$@"
+# Manual launcher (Pkg.Apps generates its own shim via `pkg> app add Sessions`)
+exec julia --startup-file=no --threads=auto -m Sessions -- "$@"
