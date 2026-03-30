@@ -98,6 +98,10 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
     !nw.booted && error("Worker not booted")
 
     code = cell.code
+    # Capture the hash of the code we're ACTUALLY executing.
+    # If cell.code changes during execution (external edit, agent),
+    # mark_executed! must use this hash, not the new code's hash.
+    executed_code_hash = source_hash(cell)
     cell.state = cell_running
     cell._exec_start_time = time()
 
@@ -130,7 +134,9 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
         cell.state = cell_done
     end
 
-    mark_executed!(cell)
+    # Use the hash of the code that was actually executed, not current cell.code
+    # (cell.code may have changed during execution via external edit)
+    cell.produced_by_hash = executed_code_hash
     cell.output
 end
 

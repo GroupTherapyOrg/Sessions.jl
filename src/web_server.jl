@@ -392,7 +392,20 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                 "total" => 0
             ))
 
+            # Handle errable cells (unmet dependencies)
+            for (c, _err) in order.errable
+                c.state = cell_errored
+                c.produced_by_hash = source_hash(c)
+                _update_cell_signal!(c)
+                broadcast_channel!("notebook", Dict(
+                    "event" => "cell_state",
+                    "cell_id" => string(c.id),
+                    "state" => "cell_errored"
+                ))
+            end
+
             save_session!(nb)
+            _broadcast_stale!(state)
         finally
             state.executing = false
         end
@@ -453,10 +466,10 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         "total" => 0
     ))
 
-    # Broadcast errors (mark executed so they don't appear stale)
+    # Broadcast errors (mark with current hash so they don't appear stale)
     for (c, _err) in order.errable
         c.state = cell_errored
-        mark_executed!(c)
+        c.produced_by_hash = source_hash(c)
         _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
             "event" => "cell_state",
