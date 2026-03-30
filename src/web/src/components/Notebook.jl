@@ -510,7 +510,24 @@ function _notebook_ws_bridge_body()
 
       // ── Full state (SSR already rendered, skip) ──
       else if (data.event === 'full_state') {
-        console.log('[Sessions WS] Full state received — SSR has content');
+        // Restore cell execution states from server (important after reconnect/reload)
+        if (data.cells) {
+          data.cells.forEach(function(cell) {
+            var el = cellEls(cell.cell_id);
+            if (el && cell.state && cell.state !== 'cell_idle') {
+              setCellState(el, cell.state, cell.cell_id);
+            }
+          });
+        }
+        // Restore execution progress indicators
+        if (data.executing) {
+          window._sessionsExecuting = true;
+          setExecuting(1);
+          var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');var runStaleBtn=document.getElementById('run-stale-btn');
+          if(runAllBtn)runAllBtn.classList.add('tb-disabled');
+          if(stopBtn)stopBtn.classList.remove('tb-disabled');
+          if(runStaleBtn)runStaleBtn.classList.add('tb-disabled');
+        }
       }
 
       // ── Notebook replaced (tab switch, etc.) ──

@@ -241,7 +241,8 @@ function send_full_state!(state::WebNotebookState, conn)
         "event" => "full_state",
         "notebook_path" => nb.path,
         "cells" => cells_data,
-        "cell_order" => [string(id) for id in nb.cell_order]
+        "cell_order" => [string(id) for id in nb.cell_order],
+        "executing" => state.executing
     ))
 end
 
