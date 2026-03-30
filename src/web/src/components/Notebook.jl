@@ -491,8 +491,11 @@ function _notebook_ws_bridge_body()
       else if (data.event === 'run_progress') {
         var isRunning=data.running_index>0&&data.total>0;
         window._sessionsExecuting=isRunning;
+        window._sessionsRunningCellId=isRunning&&data.cell_id?data.cell_id:null;
         setExecuting(isRunning ? 1 : 0);
         var el=document.getElementById('run-progress');if(el){if(isRunning){el.textContent='Running '+data.running_index+'/'+data.total+'...';}else{el.textContent='';}}
+        var jumpBtn=document.getElementById('jump-running-btn');
+        if(jumpBtn){if(isRunning){jumpBtn.classList.remove('tb-disabled');}else{jumpBtn.classList.add('tb-disabled');}}
         var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');var runStaleBtn=document.getElementById('run-stale-btn');
         if(runAllBtn&&stopBtn){if(isRunning){runAllBtn.classList.add('tb-disabled');stopBtn.classList.remove('tb-disabled');if(runStaleBtn)runStaleBtn.classList.add('tb-disabled');}else{runAllBtn.classList.remove('tb-disabled');stopBtn.classList.add('tb-disabled');}}
       }
@@ -610,6 +613,21 @@ function _notebook_island_js()
 """ * _notebook_cm_script_body() * """
 
 """ * _notebook_ws_bridge_body() * """
+
+  // ── Jump to currently running cell ──
+  window._sessionsJumpToRunning = function() {
+    var cid = window._sessionsRunningCellId;
+    if (!cid) {
+      // Fallback: find any cell with executing class
+      var ex = document.querySelector('.code-cell.executing');
+      if (ex) { var wrap = ex.closest('.cell-wrap'); if (wrap) cid = wrap.dataset.cellId; }
+    }
+    if (!cid) return;
+    var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cid+'"]');
+    if (wrap) {
+      wrap.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  };
 
   // ── Theme switch: rebuild CM editors in-place, preserve scroll + content ──
   window._sessionsThemeSwitch = function() {

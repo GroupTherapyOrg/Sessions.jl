@@ -85,7 +85,7 @@ function NotebookPanel(state)
             :title => "Stop execution",
             RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""),
             " Stop"))
-        push!(toolbar, RawHtml("""<span id="run-progress" style="font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span>"""))
+        push!(toolbar, RawHtml("""<span id="run-progress" style="font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><button id="jump-running-btn" class="tb-btn tb-disabled" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell" style="padding:2px 6px;font-size:10px;"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg></button>"""))
         push!(toolbar, RawHtml("""<span class="toolbar-sep"></span>"""))
     end
     push!(toolbar, Button(:id => "save-indicator", :class => "tb-btn",
