@@ -1,5 +1,5 @@
 <div align="center">
-  <img alt="Sessions.jl" src="assets/sessions_dark.svg" height="60">
+  # Sessions.jl
 
   **A reactive Julia notebook IDE.**
 
