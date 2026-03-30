@@ -64,14 +64,14 @@ if _notebook_path !== nothing
 
     worker = Sessions.NotebookWorker(; notebook_path=nb.path)
     tab = Sessions.WebTab(uuid4(), nb, worker, basename(nb.path), abspath(nb.path))
-    WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false)
+    WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false, false)
 else
     println("[Sessions Web] No notebook specified — starting with empty notebook")
     nb = Sessions.Notebook(; path="Untitled.jl")
     Sessions.add_cell!(nb, "# Welcome to Sessions.jl\n# Add cells and start coding!")
     worker = Sessions.NotebookWorker()
     tab = Sessions.WebTab(uuid4(), nb, worker, "Untitled.jl", abspath("Untitled.jl"))
-    WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false)
+    WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false, false)
 end
 
 # =============================================================================

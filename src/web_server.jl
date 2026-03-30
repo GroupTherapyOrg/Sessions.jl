@@ -101,6 +101,7 @@ mutable struct WebNotebookState
     tabs::Vector{WebTab}
     active_tab_idx::Int
     executing::Bool
+    interrupted::Bool  # set by handle_interrupt!, checked by execution loops
 end
 
 """Return the currently active tab (nothing if no tabs open)."""
@@ -330,6 +331,7 @@ function handle_execute_cell!(state::WebNotebookState, conn, data)
 
     @async begin
         state.executing = true
+        state.interrupted = false
         try
             _execute_cells!(state, [cell])
         finally
@@ -342,6 +344,7 @@ end
 function handle_run_all!(state::WebNotebookState, conn, data)
     @async begin
         state.executing = true
+        state.interrupted = false
         try
             nb = active_nb(state)
             update_topology!(nb)
@@ -357,9 +360,14 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                 ))
             end
 
-            # Execute in topological order
+            # Execute in topological order — check interrupted between cells
             n_total = length(order.runnable)
             for (i, c) in enumerate(order.runnable)
+                if state.interrupted
+                    println("[WebNotebook] Run All interrupted — skipping remaining cells")
+                    break
+                end
+
                 c.state = cell_running
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_state",
@@ -429,9 +437,15 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         ))
     end
 
-    # Execute in topological order
+    # Execute in topological order — check interrupted flag between cells
     n_total = length(order.runnable)
     for (i, c) in enumerate(order.runnable)
+        # Check if interrupted before starting next cell
+        if state.interrupted
+            println("[WebNotebook] Execution interrupted — skipping remaining cells")
+            break
+        end
+
         c.state = cell_running
         _update_cell_signal!(c)
         broadcast_channel!("notebook", Dict(
@@ -766,6 +780,10 @@ function handle_interrupt!(state::WebNotebookState, conn, data)
         return
     end
 
+    # Set interrupted flag FIRST — execution loops check this between cells
+    state.interrupted = true
+    state.executing = false
+
     worker = active_worker(state)
     if worker !== nothing
         try
@@ -775,8 +793,6 @@ function handle_interrupt!(state::WebNotebookState, conn, data)
             @warn "[WebNotebook] Interrupt failed" exception=e
         end
     end
-
-    state.executing = false
 
     # Mark any queued/running cells as idle
     nb = active_nb(state)
