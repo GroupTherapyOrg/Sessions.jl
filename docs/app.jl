@@ -69,8 +69,8 @@ if isdir(notebooks_dir)
             NOTEBOOK_PRERENDERED[slug] = prerendered
 
             push!(app.routes, "/notebooks/$slug" => let nb=nb, pre=prerendered
-                () -> Therapy.NotebooksLayout(
-                    Therapy.PageHeader(Sessions.notebook_title(nb), ""),
+                () -> Main.NotebooksLayout(
+                    Main.PageHeader(Sessions.notebook_title(nb), ""),
                     Sessions.NotebookPage(nb; prerendered=pre))
             end)
         catch e
