@@ -142,13 +142,13 @@ $(Main.Sessions.NOTEBOOK_CSS)
 ::-webkit-scrollbar-thumb{background:var(--scrollbar-thumb);border-radius:3px;}
 ::selection{background:var(--selection-bg);}
 
-/* ═══ Resize Handles (zero layout footprint, overlaid on gap) ═══ */
-.resize-handle-x{width:0;flex-shrink:0;position:relative;z-index:5;}
-.resize-handle-x::after{content:'';position:absolute;top:0;bottom:0;left:-6px;width:12px;cursor:col-resize;border-radius:3px;transition:background .15s;}
-.resize-handle-x:hover::after,.resize-handle-x.active::after{background:var(--accent);left:-2px;width:4px;}
-.resize-handle-y{height:0;flex-shrink:0;position:relative;z-index:5;}
-.resize-handle-y::after{content:'';position:absolute;left:0;right:0;top:-6px;height:12px;cursor:row-resize;border-radius:3px;transition:background .15s;}
-.resize-handle-y:hover::after,.resize-handle-y.active::after{background:var(--accent);top:-2px;height:4px;}
+/* ═══ Resize Zones (on panel edges, no extra DOM elements) ═══ */
+#fpanel{position:relative;}
+#fpanel::after{content:'';position:absolute;top:0;bottom:0;right:-8px;width:12px;cursor:col-resize;z-index:10;}
+#repl{position:relative;}
+#repl::before{content:'';position:absolute;left:0;right:0;top:-8px;height:12px;cursor:row-resize;z-index:10;}
+body.resizing-x *{cursor:col-resize!important;user-select:none!important;}
+body.resizing-y *{cursor:row-resize!important;user-select:none!important;}
 
 /* ═══ Shoelace loading: hide tree until web components defined ═══ */
 sl-tree:not(:defined),sl-tree-item:not(:defined){opacity:0;height:0;overflow:hidden;}

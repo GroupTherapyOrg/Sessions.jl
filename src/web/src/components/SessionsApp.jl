@@ -38,15 +38,10 @@ function SessionsApp(children...)
                         Span(:class => "dot-pulse"), Span(:class => "dot-pulse"), Span(:class => "dot-pulse")),
                     FileExplorer()),
 
-                # Resize handle: explorer ↔ editor
-                Div(:class => "resize-handle-x", :id => "resize-explorer"),
-
                 # Editor Area (notebook/file + terminal)
                 Div(:id => "editor-area",
                     :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;",
                     children...,
-                    # Resize handle: editor ↔ terminal
-                    Div(:class => "resize-handle-y", :id => "resize-terminal"),
                     # Terminal (@island — xterm.js)
                     Div(:id => "repl-panel",
                         :style => "display:none;flex-shrink:0;",
@@ -76,43 +71,38 @@ function SessionsApp(children...)
     var savedH = localStorage.getItem('sessions-terminal-h');
     if (repl && savedH) { var r = repl.querySelector('#repl'); if (r) r.style.height = savedH + 'px'; }
 
-    // ── Resize logic ──
-    function setupResize(handleId, target, prop, lsKey, min, max, axis) {
-      var handle = document.getElementById(handleId);
-      if (!handle || !target) return;
-      handle.addEventListener('mousedown', function(e) {
+    // ── Resize logic (uses ::after/::before pseudo-elements on panels) ──
+    function setupEdgeResize(panel, target, prop, lsKey, min, max, axis) {
+      if (!panel || !target) return;
+      panel.addEventListener('mousedown', function(e) {
+        var rect = panel.getBoundingClientRect();
+        // Only activate if click is in the resize zone (near the edge)
+        if (axis === 'x' && e.clientX < rect.right - 4) return;
+        if (axis === 'y' && e.clientY > rect.top + 4) return;
         e.preventDefault();
-        handle.classList.add('active');
+        document.body.classList.add(axis === 'x' ? 'resizing-x' : 'resizing-y');
         var start = axis === 'x' ? e.clientX : e.clientY;
         var startSize = target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height'];
         var onMove = function(e2) {
           var delta = (axis === 'x' ? e2.clientX : e2.clientY) - start;
           var newSize = Math.round(Math.max(min, Math.min(max, startSize + (axis === 'y' ? -delta : delta))));
           target.style[prop] = newSize + 'px';
-          // Fit terminal on resize
-          if (axis === 'y' && window._terminalInit) {
-            var tid = window._sessionsActiveTermTabId;
-            // Trigger xterm fit via resize event
-            window.dispatchEvent(new Event('resize'));
-          }
+          if (axis === 'y') window.dispatchEvent(new Event('resize'));
         };
         var onUp = function() {
-          handle.classList.remove('active');
+          document.body.classList.remove('resizing-x', 'resizing-y');
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
-          var size = Math.round(target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height']);
-          localStorage.setItem(lsKey, size);
+          localStorage.setItem(lsKey, Math.round(target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height']));
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
       });
     }
 
-    // Explorer: drag right edge to resize width (min 160, max 500)
-    setupResize('resize-explorer', fp, 'width', 'sessions-explorer-w', 160, 500, 'x');
-    // Terminal: drag top edge to resize height (min 80, max 600)
+    setupEdgeResize(fp, fp, 'width', 'sessions-explorer-w', 160, 500, 'x');
     var termEl = repl ? repl.querySelector('#repl') : null;
-    setupResize('resize-terminal', termEl, 'height', 'sessions-terminal-h', 80, 600, 'y');
+    setupEdgeResize(termEl, termEl, 'height', 'sessions-terminal-h', 80, 600, 'y');
 })();
 </script>"""))
 end
