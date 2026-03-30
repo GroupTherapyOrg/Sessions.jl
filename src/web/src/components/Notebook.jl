@@ -495,8 +495,8 @@ function _notebook_ws_bridge_body()
       }
 
       // ── Format progress ──
-      else if (data.event === 'format_started') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.dataset.origText=btn.textContent;btn.textContent='Formatting...';btn.style.opacity='0.6';btn.style.pointerEvents='none';}); }
-      else if (data.event === 'format_done') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent=btn.dataset.origText||'Format';btn.style.opacity='';btn.style.pointerEvents='';}); }
+      else if (data.event === 'format_started') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent='Formatting...';btn.classList.add('tb-disabled');}); }
+      else if (data.event === 'format_done') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent='Format';btn.classList.remove('tb-disabled');}); }
 
       // ── Save confirmed ──
       else if (data.event === 'saved') { if(!data.ack_mutation) markSaved(); }
