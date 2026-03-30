@@ -114,7 +114,8 @@ function _notebook_cm_script_body()
     function _collectCodes() { var codes = {}; for (var cid in editors) { codes[cid] = editors[cid].state.doc.toString(); } return codes; }
     window._sessionsRunAll = function() { var codes = _collectCodes(); for (var cid in codes) { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'update_code',cell_id:cid,code:codes[cid]}); } if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_all'}); };
     window._sessionsRunStale = function() { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_stale',codes:_collectCodes()}); };
-    // _sessionsSave defined in WS bridge (uses MutationManager for optimistic save)
+    // Basic save — works for file tabs without WS bridge. WS bridge overrides with optimistic version.
+    window._sessionsSave = function() { if (!TherapyWS||!TherapyWS.sendMessage) return; var fe=window._fileEditorView; if(fe){TherapyWS.sendMessage('notebook',{action:'save',content:fe.state.doc.toString()});return;} TherapyWS.sendMessage('notebook',{action:'save',codes:_collectCodes()}); };
 
     var _syncTimers = {};
     if (!window._sessSuppressSync) window._sessSuppressSync = {};
@@ -586,6 +587,35 @@ function _notebook_island_js()
 
   // ── Auto-init CM editors (file editors outside NotebookIsland) ──
   setTimeout(function() { if (window._initAllCM) _initAllCM(); }, 100);
+
+  // ── Global event handler (works for file tabs without WS bridge) ──
+  window._sessionsMarkUnsaved = window._sessionsMarkUnsaved || function() { var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='\\u25CF Save';btn.style.color='var(--status-running)';} };
+  window.addEventListener('therapy:channel:notebook', function(e) {
+    var d = e.detail;
+    if (!d) return;
+    if (d.event === 'saved') { var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='Saved';btn.style.color='';setTimeout(function(){btn.textContent='Save';},2000);} }
+    if (d.event === 'format_started') { document.querySelectorAll('[data-format-btn]').forEach(function(b){b.dataset.origText=b.textContent;b.textContent='Formatting...';b.style.opacity='0.6';b.style.pointerEvents='none';}); }
+    if (d.event === 'format_done') { document.querySelectorAll('[data-format-btn]').forEach(function(b){b.textContent=b.dataset.origText||'Format';b.style.opacity='';b.style.pointerEvents='';}); }
+    // File editor format result
+    if (d.event === 'cell_code_updated' && d.cell_id === '__file__' && window._fileEditorView && d.code !== undefined) {
+      var fe = window._fileEditorView; var cur = fe.state.doc.toString();
+      if (d.code !== cur) fe.dispatch({changes:{from:0,to:cur.length,insert:d.code}});
+    }
+    // nb_replaced fallback (for when WS bridge wasn't initialized)
+    if (d.event === 'nb_replaced') {
+      window._fileEditorView = null;
+      if (d.nb_html) {
+        var nbIsland = document.getElementById('nb-island');
+        if (nbIsland) {
+          nbIsland.outerHTML = d.nb_html;
+          setTimeout(function() {
+            if (window._initAllCM) _initAllCM();
+            if (window.__hydrateTherapyIslands) { var nb = document.getElementById('nb-island'); if (nb) __hydrateTherapyIslands(nb); }
+          }, 50);
+        }
+      } else { setTimeout(function(){window.location.reload();},200); }
+    }
+  });
 
   // ── Keyboard shortcuts ──
   document.addEventListener('keydown', function(e) {
