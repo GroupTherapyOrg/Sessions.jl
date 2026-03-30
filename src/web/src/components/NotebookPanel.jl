@@ -116,12 +116,11 @@ function NotebookPanel(state)
                     :data_src => tab.file_content,
                     :style => "height:100%;overflow:auto;")))
     else
-        # Notebook cells rendered by NotebookContent (Notebook.jl)
-        # Inject initial cell data as JSON for the future NotebookIsland
+        # NotebookIsland @island — cells rendered via For(cell_order) signal
         cells_json = _Sess.serialize_cells_json(state)
         Fragment(
             RawHtml("""<script type="application/json" id="nb-cells-data">$(cells_json)</script>"""),
-            NotebookContent(state)
+            NotebookIsland(mode="live")
         )
     end
 
