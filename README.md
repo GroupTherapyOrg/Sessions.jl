@@ -4,6 +4,7 @@
 
   **A reactive Julia notebook IDE.**
 
+  [![CI](https://github.com/GroupTherapyOrg/Sessions.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/GroupTherapyOrg/Sessions.jl/actions/workflows/ci.yml)
   [![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://grouptherapyorg.github.io/Sessions.jl/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 </div>
