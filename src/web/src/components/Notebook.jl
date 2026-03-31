@@ -208,7 +208,7 @@ function _notebook_ws_bridge_body()
     // ── DOM helpers ──
     function cellEls(cellId) { var wrap=document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]'); if(!wrap)return null; return {wrap:wrap,code:wrap.querySelector('.code-cell'),out:wrap.querySelector('.cell-out'),ctrls:wrap.querySelector('.cell-ctrls')}; }
     function nbContainer() { return document.querySelector('#nb > div'); }
-    function fmtRuntime(ns) { var ms=ns/1e6; return ms<1?(ns/1e3).toFixed(1)+'\\u00b5s':ms<1000?ms.toFixed(1)+'ms':(ms/1000).toFixed(2)+'s'; }
+    function fmtRuntime(ns) { var ms=ns/1e6; if(ms<1)return(ns/1e3).toFixed(1)+'\\u00b5s'; if(ms<1000)return ms.toFixed(1)+'ms'; var s=ms/1000; if(s<60)return s.toFixed(1)+'s'; var m=s/60; if(m<60)return m.toFixed(1)+'min'; return(m/60).toFixed(1)+'hr'; }
     function fmtSeconds(s) { return s<1?s.toFixed(2)+'s':s<60?s.toFixed(1)+'s':(s/60).toFixed(1)+'min'; }
 
     // ── Cell execution timer ──
