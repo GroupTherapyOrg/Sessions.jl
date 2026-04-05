@@ -285,40 +285,42 @@
 .dark .jl-error{background:rgba(220,53,69,.06);}
 .dark .jl-frame.user-frame{background:rgba(86,212,160,.08);}
 
-/* ── Stdout Display (below code cell — retro terminal feel) ── */
-.cell-stdout{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#b0c8a0;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;padding:10px 14px;margin-top:6px;background:#1a1e14;border-radius:6px;border-left:3px solid #5a8a3a;line-height:1.55;letter-spacing:0.02em;box-shadow:inset 0 1px 4px rgba(0,0,0,.3);}
-.cell-stdout::before{content:'stdout';display:block;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#5a8a3a;margin-bottom:4px;opacity:.7;}
-.dark .cell-stdout{background:#0c1008;color:#90b880;border-left-color:#4a7a2a;box-shadow:inset 0 1px 6px rgba(0,0,0,.5);}
-.dark .cell-stdout::before{color:#4a7a2a;}
+/* ── Stdout Display (Pluto CRT-style, flush below code) ── */
+.cell-stdout{position:relative;font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c0ffab;white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;padding:0.6em 0.9em;margin:0;background:radial-gradient(hsl(36deg 20% 37%),hsl(36deg 20% 37%) 20%,hsl(31deg 12% 28%));border:4px solid #b7b7b7;border-radius:0 0 8px 8px;line-height:1.5;text-shadow:1px 1px 2px rgba(0,0,0,.35);min-width:18em;}
+.cell-stdout::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:0.2;background:linear-gradient(180deg,hsl(37deg 20% 27%),transparent,#1a1a1a);background-size:100% 7px;background-repeat:repeat;}
+.cell-stdout::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0.3;background:linear-gradient(349deg,#000,transparent);}
+.dark .cell-stdout{background:radial-gradient(hsl(36deg 16% 22%),hsl(36deg 16% 22%) 20%,hsl(31deg 10% 16%));border-color:#555;}
 
 /* ── Variable Assignee Badge ── */
 .cell-assignee{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-3);padding:0 0 4px;user-select:none;}
 
-/* ── Log Entries (@info/@warn/@error/@debug — Pluto-style) ── */
-.cell-logs{font-family:'JetBrains Mono',monospace;font-size:0.7rem;margin-top:4px;border-radius:8px;overflow:hidden;}
-.log-entry{display:flex;flex-direction:row;align-items:flex-start;gap:0;margin:2px;border-radius:6px;background:linear-gradient(148deg,var(--log-bg),transparent);background-size:200% 100%;}
-.log-icon{display:flex;align-items:center;justify-content:center;padding:0.5em 0.3em;font-size:0.75rem;opacity:0.7;min-width:1.6em;}
-.log-body{display:flex;flex-direction:column;flex:1;padding:0.5em 0.8em 0.5em 0.2em;min-width:0;}
+/* ── Log Container (Pluto: below code, flush, max-height 50vh) ── */
+.cell-logs{display:block;overflow-x:hidden;overflow-y:auto;max-height:50vh;margin:0;border-radius:0 0 8px 8px;}
+.cell-logs:not(:empty){background:var(--logs-bg);padding:6px;}
+/* ── Log Entries (Pluto-exact colors + gradient) ── */
+.log-entry{display:flex;flex-direction:row;align-items:flex-start;gap:0;margin:2px;border-radius:6px;background:linear-gradient(148deg,var(--log-bg),transparent);background-size:200% 100%;font-family:'JetBrains Mono',monospace;font-size:0.65rem;}
+.log-icon{display:flex;align-items:center;justify-content:center;padding:0.4em 0.3em;font-size:0.7rem;min-width:1.4em;}
+.log-body{display:flex;flex-direction:column;flex:1;padding:0.4em 0.7em 0.4em 0.1em;min-width:0;}
 .log-msg{color:var(--log-accent);white-space:pre-wrap;word-break:break-word;}
-.log-kwargs{display:flex;flex-wrap:wrap;gap:0 1em;margin-top:2px;}
-.log-kw{font-size:0.65rem;}
-.log-kw-key{color:var(--text-3);opacity:0.7;}
+.log-kwargs{display:flex;flex-wrap:wrap;gap:0 0.8em;margin-top:1px;}
+.log-kw{font-size:0.6rem;}
+.log-kw-key{color:var(--logs-key);opacity:0.8;}
 .log-kw-key::after{content:": ";}
 .log-kw-val{color:var(--log-accent);}
-/* Info — white/subtle (Pluto: default, barely visible) */
-.log-entry.log-info{--log-bg:transparent;--log-accent:inherit;}
-.log-entry.log-info .log-icon{opacity:0.35;}
-/* Warn — warm yellow bg */
-.log-entry.log-warn{--log-bg:rgb(236,234,213);--log-accent:#665f26;}
-/* Error — soft red bg */
-.log-entry.log-error{--log-bg:rgb(245,218,215);--log-accent:rgb(172,66,52);}
-/* Debug — soft purple bg */
-.log-entry.log-debug{--log-bg:rgb(236,223,247);--log-accent:rgb(100,50,179);}
-/* Dark mode overrides */
-.dark .log-entry.log-info{--log-bg:#484848;--log-accent:inherit;}
-.dark .log-entry.log-warn{--log-bg:rgb(80,76,38);--log-accent:rgb(239,231,135);}
-.dark .log-entry.log-error{--log-bg:rgb(100,47,39);--log-accent:rgb(255,147,132);}
-.dark .log-entry.log-debug{--log-bg:hsl(288deg 19% 25%);--log-accent:hsl(283deg 56% 79%);}
+/* Info (Pluto: white/subtle, icon dim) */
+.log-entry.log-info{--log-bg:var(--logs-info);--log-accent:inherit;}
+.log-entry.log-info .log-icon{opacity:0.4;}
+/* Warn (Pluto: warm yellow) */
+.log-entry.log-warn{--log-bg:var(--logs-warn);--log-accent:var(--logs-warn-accent);}
+/* Error (Pluto: soft red) */
+.log-entry.log-error{--log-bg:var(--logs-error);--log-accent:var(--logs-error-accent);}
+/* Debug (Pluto: soft purple) */
+.log-entry.log-debug{--log-bg:var(--logs-debug);--log-accent:var(--logs-debug-accent);}
+
+/* ── Log Variables — Light (Pluto exact) ── */
+:root{--logs-bg:hsl(0deg 0% 98%);--logs-key:rgb(0 0 0 / 51%);--logs-info:white;--logs-warn:rgb(236 234 213);--logs-warn-accent:#665f26;--logs-error:rgb(245 218 215);--logs-error-accent:rgb(172 66 52);--logs-debug:rgb(236 223 247);--logs-debug-accent:rgb(100 50 179);}
+/* ── Log Variables — Dark (Pluto exact) ── */
+.dark{--logs-bg:hsl(0deg 0% 17%);--logs-key:rgba(255,255,255,0.6);--logs-info:#484848;--logs-warn:rgb(80 76 38);--logs-warn-accent:rgb(239 231 135);--logs-error:rgb(100 47 39);--logs-error-accent:rgb(255 147 132);--logs-debug:hsl(288deg 19% 25%);--logs-debug-accent:hsl(283deg 56% 79%);}
 
 /* ── Collapsible Tree View ── */
 .jl-tree{font-family:'JetBrains Mono',monospace;font-size:13px;}
