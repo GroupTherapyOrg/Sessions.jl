@@ -127,6 +127,11 @@
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
 .cell-eye:hover svg{color:#219669;}
 .cell-out{overflow-x:auto;}
+/* ── Disabled Cell (skipped during execution) ── */
+.cell-wrap.cell-disabled{opacity:0.4;}
+.cell-wrap.cell-disabled .code-cell{border-style:dashed !important;}
+.cell-wrap.cell-disabled .code-cell::before{background:var(--text-3) !important;opacity:0.3 !important;width:2px;}
+
 /* ── Cell Shoulder (drag handle) ── */
 .cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
 .cell-shoulder:active{cursor:grabbing;}

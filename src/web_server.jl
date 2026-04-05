@@ -191,6 +191,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_update_code!(state, conn, data)
             elseif action == "toggle_fold"
                 handle_toggle_fold!(state, conn, data)
+            elseif action == "toggle_disable"
+                handle_toggle_disable!(state, conn, data)
             elseif action == "save"
                 handle_save!(state, conn, data)
             elseif action == "run_stale"
@@ -775,6 +777,20 @@ function handle_toggle_fold!(state::WebNotebookState, conn, data)
     cell = get_cell(active_nb(state), UUID(cell_id_str))
     cell === nothing && return
     cell.folded = get(data, "folded", false)
+end
+
+"""Handle disable/enable cell toggle — disabled cells are skipped during execution."""
+function handle_toggle_disable!(state::WebNotebookState, conn, data)
+    cell_id_str = get(data, "cell_id", "")
+    isempty(cell_id_str) && return
+    cell = get_cell(active_nb(state), UUID(cell_id_str))
+    cell === nothing && return
+    cell.disabled = get(data, "disabled", false)
+    broadcast_channel!("notebook", Dict(
+        "event" => "cell_disabled",
+        "cell_id" => cell_id_str,
+        "disabled" => cell.disabled
+    ))
 end
 
 """Handle code update (without execution). Broadcasts stale count so UI updates."""

@@ -1027,10 +1027,9 @@ Both modes share: CellToggle @island, CM editor host, runtime badge, cell-wrap/c
 """
 function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
                      prerendered=Dict{UUID, PrerenderedGallery}())
-    cell.disabled && return nothing
+    # Static export: skip disabled/empty cells. Live app: render all (disabled shown dimmed)
+    mode == :static && cell.disabled && return nothing
     code = strip(cell.code)
-    # Static export: skip empty cells (nothing to show in docs)
-    # Live app: always render (user needs the empty cell to type in)
     mode == :static && isempty(code) && return nothing
 
     output = cell.output
@@ -1158,7 +1157,8 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
         push!(parts, RawHtml("""<div class="cell-shoulder" draggable="true" title="Drag to move cell"></div>"""))
     end
 
-    Div(:data_cell_id => cell_id, :class => "cell-wrap relative", parts...)
+    wrap_cls = cell.disabled ? "cell-wrap relative cell-disabled" : "cell-wrap relative"
+    Div(:data_cell_id => cell_id, :class => wrap_cls, parts...)
 end
 
 # =============================================================================

@@ -529,6 +529,15 @@ function _notebook_ws_bridge_body()
         }
       }
 
+      // ── Cell disabled/enabled ──
+      else if (data.event === 'cell_disabled') {
+        var wrap = document.querySelector('.cell-wrap[data-cell-id="'+data.cell_id+'"]');
+        if (wrap) {
+          if (data.disabled) { wrap.classList.add('cell-disabled'); }
+          else { wrap.classList.remove('cell-disabled'); }
+        }
+      }
+
       // ── Real-time log entry (arrives during execution via file polling) ──
       else if (data.event === 'cell_log') {
         var wrap = document.querySelector('.cell-wrap[data-cell-id="'+data.cell_id+'"]');
@@ -665,9 +674,24 @@ function _notebook_island_js()
     var rect = btn.getBoundingClientRect();
     _cellMenu = document.createElement('div');
     _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
+    // Detect current cell state for toggle labels
+    var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+    var logsEl = wrap ? wrap.querySelector('.cell-logs') : null;
+    var logsVisible = logsEl && logsEl.style.display !== 'none' && logsEl.innerHTML !== '';
+    var isDisabled = wrap ? wrap.classList.contains('cell-disabled') : false;
+
     var actions = [
       {label:'Move Up', icon:'\\u2191', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'up'); }},
       {label:'Move Down', icon:'\\u2193', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
+      {sep:true},
+      {label:logsVisible?'Hide Logs':'Show Logs', icon:'\\u{1F4CB}', action:function(){
+        if(logsEl){logsEl.style.display=logsEl.style.display==='none'?'':'none';}
+      }},
+      {label:isDisabled?'Enable Cell':'Disable Cell', icon:isDisabled?'\\u25B6':'\\u23F8', action:function(){
+        TherapyWS.sendMessage('notebook',{action:'toggle_disable',cell_id:cellId,disabled:!isDisabled});
+        if(wrap){wrap.classList.toggle('cell-disabled');}
+      }},
+      {sep:true},
       {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
       {sep:true},
       {label:'Delete', icon:'\\u2715', danger:true, action:function(){ if(confirm('Delete this cell?')){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); } }}
