@@ -57,8 +57,9 @@
 
     # SSR'd children (render_cell output) rendered directly — no For(), no skeletons
     return Div(:id => "nb", :class => "flex-1 overflow-y-auto px-5 pt-3 pb-8",
-        Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;",
-            children...))
+        Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;position:relative;",
+            children...,
+            RawHtml("""<div id="drop-ruler"></div><div id="select-area"></div>""")))
 end
 function _notebook_cm_script_body()
 """
@@ -464,6 +465,14 @@ function _notebook_ws_bridge_body()
         }
       }
 
+      // ── Cell reordered (drag-and-drop, already moved optimistically) ──
+      else if (data.event === 'cell_reordered') {
+        if (!data.ack_mutation) {
+          // Another client reordered — reload to sync
+          setTimeout(function(){window.location.reload();},200);
+        }
+      }
+
       // ── Code updated (format, external edit) ──
       else if (data.event === 'cell_formatted' || data.event === 'cell_code_updated') {
         if (data.event === 'cell_formatted') markUnsaved();
@@ -585,7 +594,7 @@ function _notebook_island_js()
       {label:'Move Down', icon:'\\u2193', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
       {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
       {sep:true},
-      {label:'Delete', icon:'\\u2715', danger:true, action:function(){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); }}
+      {label:'Delete', icon:'\\u2715', danger:true, action:function(){ if(confirm('Delete this cell?')){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); } }}
     ];
     actions.forEach(function(a) {
       if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
@@ -612,6 +621,369 @@ function _notebook_island_js()
     var gap = e.target.closest('.cdiv');
     if (gap && !gap.contains(e.relatedTarget)) { var inner = gap.querySelector('.cdiv-inner'); if (inner) inner.style.opacity = '0'; }
   });
+
+  // ── Cell Shoulder Drag-and-Drop ──
+  (function() {
+    var dropee = null;
+    var cellEdges = [];
+    var ruler = null;
+    var isDragging = false;
+
+    function nbInner() { return document.querySelector('#nb > div'); }
+
+    function precomputeCellEdges() {
+      var container = nbInner();
+      if (!container) return;
+      var wraps = container.querySelectorAll('.cell-wrap[data-cell-id]');
+      cellEdges = [];
+      wraps.forEach(function(el) { cellEdges.push(el.offsetTop); });
+      if (wraps.length > 0) {
+        var last = wraps[wraps.length - 1];
+        cellEdges.push(last.offsetTop + last.offsetHeight);
+      }
+    }
+
+    function getDropIndex(clientY) {
+      var container = nbInner();
+      if (!container) return 0;
+      var nb = document.getElementById('nb');
+      var containerRect = container.getBoundingClientRect();
+      var scrollTop = nb ? nb.scrollTop : 0;
+      var relY = clientY - containerRect.top + scrollTop;
+      var bestIdx = 0, bestDist = Infinity;
+      for (var i = 0; i < cellEdges.length; i++) {
+        var dist = Math.abs(cellEdges[i] - relY);
+        if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+      }
+      return bestIdx;
+    }
+
+    function showRuler(dropIdx) {
+      if (!ruler) ruler = document.getElementById('drop-ruler');
+      if (!ruler || dropIdx < 0 || dropIdx >= cellEdges.length) return;
+      ruler.style.display = 'block';
+      ruler.style.top = cellEdges[dropIdx] + 'px';
+    }
+
+    function hideRuler() {
+      if (!ruler) ruler = document.getElementById('drop-ruler');
+      if (ruler) ruler.style.display = 'none';
+    }
+
+    document.addEventListener('dragstart', function(e) {
+      var shoulder = e.target.closest('.cell-shoulder');
+      if (!shoulder) return;
+      var wrap = shoulder.closest('.cell-wrap');
+      if (!wrap) return;
+      dropee = wrap;
+      isDragging = true;
+      // Mark all selected cells (or just this one) as dragging
+      var sel = window._sessionsSelectedCells || [];
+      var cellId = wrap.dataset.cellId;
+      if (sel.includes(cellId)) {
+        document.querySelectorAll('.cell-wrap.selected').forEach(function(w) { w.classList.add('dragging'); });
+      } else {
+        wrap.classList.add('dragging');
+      }
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('text/sessions-cell', cellId);
+        e.dataTransfer.effectAllowed = 'move';
+      }
+      precomputeCellEdges();
+    });
+
+    document.addEventListener('dragover', function(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      var dropIdx = getDropIndex(e.clientY);
+      showRuler(dropIdx);
+      // Auto-scroll near edges
+      var nb = document.getElementById('nb');
+      if (nb) {
+        var nbRect = nb.getBoundingClientRect();
+        var edge = 60;
+        if (e.clientY < nbRect.top + edge) nb.scrollTop -= 8;
+        else if (e.clientY > nbRect.bottom - edge) nb.scrollTop += 8;
+      }
+    });
+
+    document.addEventListener('dragenter', function(e) { if (isDragging) e.preventDefault(); });
+
+    document.addEventListener('drop', function(e) {
+      if (!isDragging || !dropee) return;
+      e.preventDefault();
+      var dropIdx = getDropIndex(e.clientY);
+      var cellId = dropee.dataset.cellId;
+      hideRuler();
+      dropee.classList.remove('dragging');
+
+      // Multi-cell drag: if dragged cell is in selection, move all selected
+      var sel = window._sessionsSelectedCells || [];
+      var movingIds = sel.includes(cellId) ? sel.slice() : [cellId];
+
+      var container = nbInner();
+      if (!container) { isDragging = false; dropee = null; return; }
+      var wraps = Array.from(container.querySelectorAll('.cell-wrap[data-cell-id]'));
+      var currentIdx = wraps.indexOf(dropee);
+
+      // No-op if dropped at same position (single cell)
+      if (movingIds.length === 1 && (currentIdx === dropIdx || currentIdx === dropIdx - 1)) {
+        isDragging = false; dropee = null; return;
+      }
+
+      // For single cell: optimistic DOM reorder
+      if (movingIds.length === 1) {
+        var nextGap = dropee.nextElementSibling;
+        while (nextGap && !nextGap.classList.contains('cdiv')) nextGap = nextGap.nextElementSibling;
+        var parent = dropee.parentNode;
+
+        if (nextGap) nextGap.remove();
+        dropee.remove();
+
+        var remaining = Array.from(container.querySelectorAll('.cell-wrap[data-cell-id]'));
+        var targetIdx = dropIdx > currentIdx ? dropIdx - 1 : dropIdx;
+
+        if (targetIdx >= remaining.length) {
+          var lastWrap = remaining[remaining.length - 1];
+          var lastGap = lastWrap ? lastWrap.nextElementSibling : null;
+          while (lastGap && !lastGap.classList.contains('cdiv')) lastGap = lastGap.nextElementSibling;
+          var ref = lastGap ? lastGap.nextSibling : null;
+          parent.insertBefore(dropee, ref);
+          if (nextGap) parent.insertBefore(nextGap, dropee.nextSibling);
+        } else {
+          var targetWrap = remaining[targetIdx];
+          var gapBefore = targetWrap.previousElementSibling;
+          while (gapBefore && !gapBefore.classList.contains('cdiv')) gapBefore = gapBefore.previousElementSibling;
+          if (gapBefore) {
+            parent.insertBefore(dropee, gapBefore.nextSibling);
+            if (nextGap) parent.insertBefore(nextGap, dropee.nextSibling);
+          } else {
+            parent.insertBefore(dropee, targetWrap);
+            if (nextGap) parent.insertBefore(nextGap, dropee.nextSibling);
+          }
+        }
+        dropee.scrollIntoView({behavior:'smooth',block:'nearest'});
+
+        mutate('notebook',
+          {action:'reorder_cell', cell_id:cellId, index:dropIdx + 1},
+          function() { setTimeout(function(){window.location.reload();},200); }
+        );
+      } else {
+        // Multi-cell optimistic DOM reorder
+        // 1. Collect all moving wraps + their following gaps
+        var movingEls = [];
+        movingIds.forEach(function(id) {
+          var w = container.querySelector('.cell-wrap[data-cell-id="'+id+'"]');
+          if (!w) return;
+          var g = w.nextElementSibling;
+          while (g && !g.classList.contains('cdiv')) g = g.nextElementSibling;
+          movingEls.push({wrap: w, gap: g});
+        });
+
+        // 2. Remove all from DOM
+        movingEls.forEach(function(el) {
+          if (el.gap) el.gap.remove();
+          el.wrap.remove();
+        });
+
+        // 3. Find insertion point
+        var remaining = Array.from(container.querySelectorAll('.cell-wrap[data-cell-id]'));
+        var adjustedIdx = dropIdx;
+        // Count how many removed cells were before the drop index
+        var wrapsAll = Array.from(container.querySelectorAll('.cell-wrap[data-cell-id]'));
+        // dropIdx was computed from original layout; adjust for removals above it
+        var removedBefore = 0;
+        for (var ri = 0; ri < movingEls.length; ri++) {
+          var origIdx = wraps.indexOf(movingEls[ri].wrap);
+          if (origIdx >= 0 && origIdx < dropIdx) removedBefore++;
+        }
+        adjustedIdx = dropIdx - removedBefore;
+
+        // 4. Insert all at target position
+        var insertRef = null;
+        remaining = Array.from(container.querySelectorAll('.cell-wrap[data-cell-id]'));
+        if (adjustedIdx >= remaining.length) {
+          // Append at end
+          var lastEl = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+          if (lastEl) {
+            var lastGap = lastEl.nextElementSibling;
+            while (lastGap && !lastGap.classList.contains('cdiv')) lastGap = lastGap.nextElementSibling;
+            insertRef = lastGap ? lastGap.nextSibling : null;
+          }
+        } else {
+          insertRef = remaining[adjustedIdx];
+          // Find gap before target
+          var gb = insertRef.previousElementSibling;
+          while (gb && !gb.classList.contains('cdiv')) gb = gb.previousElementSibling;
+          if (gb) insertRef = gb.nextSibling;
+        }
+
+        movingEls.forEach(function(el) {
+          container.insertBefore(el.wrap, insertRef);
+          if (el.gap) container.insertBefore(el.gap, insertRef);
+        });
+
+        dropee.scrollIntoView({behavior:'smooth',block:'nearest'});
+
+        mutate('notebook',
+          {action:'reorder_cells', cell_ids:movingIds, index:dropIdx + 1},
+          function() { setTimeout(function(){window.location.reload();},200); }
+        );
+      }
+
+      if (window._sessionsMarkUnsaved) window._sessionsMarkUnsaved();
+      isDragging = false; dropee = null;
+    });
+
+    document.addEventListener('dragend', function(e) {
+      hideRuler();
+      document.querySelectorAll('.cell-wrap.dragging').forEach(function(w) { w.classList.remove('dragging'); });
+      isDragging = false; dropee = null;
+    });
+  })();
+
+  // ── Cell Selection Area (drag-to-select multiple cells) ──
+  (function() {
+    window._sessionsSelectedCells = [];
+    var selecting = false;
+    var startX = 0, startY = 0;
+    var selectArea = null;
+
+    function nbInner() { return document.querySelector('#nb > div'); }
+
+    function clearSelection() {
+      document.querySelectorAll('.cell-wrap.selected').forEach(function(el) { el.classList.remove('selected'); });
+      window._sessionsSelectedCells = [];
+    }
+
+    function updateSelection(endX, endY) {
+      if (!selectArea) selectArea = document.getElementById('select-area');
+      if (!selectArea) return;
+      var container = nbInner();
+      if (!container) return;
+      var cRect = container.getBoundingClientRect();
+
+      // Selection rect in container-relative coords
+      // cRect already accounts for parent (#nb) scroll — no scrollTop needed
+      var sx = startX, sy = startY;
+      var ex = endX - cRect.left;
+      var ey = endY - cRect.top;
+      var left = Math.min(sx, ex), top = Math.min(sy, ey);
+      var width = Math.abs(ex - sx), height = Math.abs(ey - sy);
+
+      selectArea.style.display = 'block';
+      selectArea.style.left = left + 'px';
+      selectArea.style.top = top + 'px';
+      selectArea.style.width = width + 'px';
+      selectArea.style.height = height + 'px';
+
+      // AABB collision: check each cell-wrap
+      var selRight = left + width, selBottom = top + height;
+      var selected = [];
+      container.querySelectorAll('.cell-wrap[data-cell-id]').forEach(function(wrap) {
+        var wTop = wrap.offsetTop;
+        var wLeft = wrap.offsetLeft;
+        var wBottom = wTop + wrap.offsetHeight;
+        var wRight = wLeft + wrap.offsetWidth;
+        if (left < wRight && selRight > wLeft && top < wBottom && selBottom > wTop) {
+          wrap.classList.add('selected');
+          selected.push(wrap.dataset.cellId);
+        } else {
+          wrap.classList.remove('selected');
+        }
+      });
+      window._sessionsSelectedCells = selected;
+    }
+
+    // mousedown on notebook background (not on cells/editors)
+    document.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      // Only start selection on notebook background elements
+      var t = e.target;
+      var isBackground = t.id === 'nb' || t.closest('#nb > div') === t ||
+                         t.classList.contains('cdiv') || t.classList.contains('cdiv-inner');
+      // Don't start on cells, editors, buttons, islands, shoulders
+      if (t.closest('.cell-wrap') || t.closest('.cm-editor') || t.closest('button') ||
+          t.closest('.cell-shoulder') || t.closest('#status-bar') || t.closest('#fpanel') ||
+          t.closest('#repl-panel') || t.closest('.tab')) {
+        // Click on shoulder preserves selection (it's a drag handle)
+        if (t.closest('.cell-shoulder')) return;
+        // Click on a cell clears selection (unless shift held)
+        if (t.closest('.cell-wrap') && !e.shiftKey && window._sessionsSelectedCells.length > 0) {
+          clearSelection();
+        }
+        return;
+      }
+      if (!isBackground) return;
+
+      var container = nbInner();
+      if (!container) return;
+      var cRect = container.getBoundingClientRect();
+
+      selecting = true;
+      startX = e.clientX - cRect.left;
+      startY = e.clientY - cRect.top;
+      clearSelection();
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!selecting) return;
+      e.preventDefault();
+      updateSelection(e.clientX, e.clientY);
+      // Auto-scroll near edges
+      var nb = document.getElementById('nb');
+      if (nb) {
+        var nbRect = nb.getBoundingClientRect();
+        if (e.clientY < nbRect.top + 40) nb.scrollTop -= 6;
+        else if (e.clientY > nbRect.bottom - 40) nb.scrollTop += 6;
+      }
+    });
+
+    document.addEventListener('mouseup', function(e) {
+      if (!selecting) return;
+      selecting = false;
+      if (!selectArea) selectArea = document.getElementById('select-area');
+      if (selectArea) selectArea.style.display = 'none';
+    });
+
+    // Keyboard: Delete selected, Escape to clear, Ctrl+A to select all
+    document.addEventListener('keydown', function(e) {
+      var inEditor = document.activeElement && (document.activeElement.closest('.cm-editor') ||
+                     document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+
+      // Delete/Backspace: bulk delete selected cells
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inEditor && window._sessionsSelectedCells.length > 0) {
+        e.preventDefault();
+        var ids = window._sessionsSelectedCells.slice();
+        var n = ids.length;
+        if (confirm('Delete ' + n + ' cell' + (n > 1 ? 's' : '') + '?')) {
+          clearSelection();
+          ids.forEach(function(cid) { if (window._sessionsDeleteCell) window._sessionsDeleteCell(cid); });
+        }
+      }
+
+      // Escape: clear selection
+      if (e.key === 'Escape' && window._sessionsSelectedCells.length > 0) {
+        e.preventDefault();
+        clearSelection();
+      }
+
+      // Ctrl+A: select all cells
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !inEditor) {
+        e.preventDefault();
+        var container = nbInner();
+        if (!container) return;
+        var ids = [];
+        container.querySelectorAll('.cell-wrap[data-cell-id]').forEach(function(wrap) {
+          wrap.classList.add('selected');
+          ids.push(wrap.dataset.cellId);
+        });
+        window._sessionsSelectedCells = ids;
+      }
+    });
+  })();
 
 """ * _notebook_cm_script_body() * """
 

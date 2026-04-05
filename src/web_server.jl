@@ -180,6 +180,12 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_delete_cell!(state, conn, data)
             elseif action == "move_cell"
                 handle_move_cell!(state, conn, data)
+            elseif action == "reorder_cell"
+                handle_reorder_cell!(state, conn, data)
+            elseif action == "reorder_cells"
+                handle_reorder_cells!(state, conn, data)
+            elseif action == "delete_cells"
+                handle_delete_cells!(state, conn, data)
             elseif action == "update_code"
                 handle_update_code!(state, conn, data)
             elseif action == "toggle_fold"
@@ -649,6 +655,81 @@ function handle_move_cell!(state::WebNotebookState, conn, data)
         "event" => "cell_moved",
         "cell_id" => cell_id_str,
         "direction" => direction
+    )
+    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+    broadcast_channel!("notebook", msg)
+end
+
+"""Handle drag-and-drop reorder — move a cell to an arbitrary position."""
+function handle_reorder_cell!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
+    cell_id_str = get(data, "cell_id", "")
+    target_idx = get(data, "index", -1)
+    mutation_id = get(data, "mutation_id", nothing)
+    isempty(cell_id_str) && return
+
+    moved = reorder_cell!(nb, UUID(cell_id_str), Int(target_idx))
+
+    if !moved
+        if mutation_id !== nothing
+            send_channel!("notebook", conn, Dict(
+                "event" => "mutation_error",
+                "ack_mutation" => mutation_id,
+                "reason" => "Cannot reorder cell"
+            ))
+        end
+        return
+    end
+
+    msg = Dict(
+        "event" => "cell_reordered",
+        "cell_id" => cell_id_str,
+        "cell_order" => [string(id) for id in nb.cell_order]
+    )
+    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+    broadcast_channel!("notebook", msg)
+end
+
+"""Handle multi-cell drag-and-drop reorder — move multiple cells to a target position."""
+function handle_reorder_cells!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
+    cell_id_strs = get(data, "cell_ids", String[])
+    target_idx = get(data, "index", -1)
+    mutation_id = get(data, "mutation_id", nothing)
+    isempty(cell_id_strs) && return
+
+    cell_ids = [UUID(String(s)) for s in cell_id_strs]
+
+    # Remove all cells from their current positions
+    filter!(id -> id ∉ cell_ids, nb.cell_order)
+    # Insert them as a group at the target index
+    insert_at = clamp(Int(target_idx), 1, length(nb.cell_order) + 1)
+    for (i, id) in enumerate(cell_ids)
+        insert!(nb.cell_order, insert_at + i - 1, id)
+    end
+
+    msg = Dict(
+        "event" => "cell_reordered",
+        "cell_order" => [string(id) for id in nb.cell_order]
+    )
+    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
+    broadcast_channel!("notebook", msg)
+end
+
+"""Handle bulk cell deletion."""
+function handle_delete_cells!(state::WebNotebookState, conn, data)
+    nb = active_nb(state)
+    cell_id_strs = get(data, "cell_ids", String[])
+    mutation_id = get(data, "mutation_id", nothing)
+    isempty(cell_id_strs) && return
+
+    for cid in cell_id_strs
+        remove_cell!(nb, UUID(String(cid)))
+    end
+
+    msg = Dict(
+        "event" => "cells_deleted",
+        "cell_ids" => cell_id_strs
     )
     mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
     broadcast_channel!("notebook", msg)

@@ -106,6 +106,8 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #workspace>div{min-height:0;}
 /* NotebookIsland therapy-island must participate in #nb-island flex layout for scroll */
 #nb-island>therapy-island{flex:1;display:flex;flex-direction:column;min-height:0;}
+/* Clip cell-shoulder overflow so it doesn't bleed into sidebar/activity bar */
+#nb{overflow-x:hidden;}
 
 /* ═══ Activity Bar ═══ */
 .ab-btn[data-state="on"]{background:rgba(212,117,154,.1) !important;color:var(--accent) !important;}
@@ -115,19 +117,21 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 $(Main.Sessions.NOTEBOOK_CSS)
 
 /* ═══ Cell States ═══ */
-.code-cell.idle::before{background:var(--text-3);opacity:.2;}
-.code-cell.stale::before{background:var(--status-running);opacity:.5;}
-.code-cell.executing::before{opacity:0 !important;}
+.code-cell.idle::before{opacity:0;}
+.code-cell.stale::before{background:var(--status-running);opacity:.6;}
+.code-cell.executing::before{background:#7bb8e8;opacity:.7;}
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
 .cell-collapsed .cm-cell{display:none;}
 .cell-collapsed .cell-ctrls{display:none;}
 .cell-collapsed::before{opacity:.15!important;}
 .cell-collapsed{border-style:dashed!important;opacity:.4;max-height:8px;overflow:hidden;}
 /* Cell-wrap execution state — visible even when code is hidden/folded */
-.cell-wrap.wrap-queued{outline:2px solid var(--status-running);outline-offset:-2px;border-radius:8px;min-height:6px;}
-.cell-wrap.wrap-running{outline:2px solid #7bb8e8;outline-offset:-2px;border-radius:8px;min-height:6px;animation:pulse-outline 1.5s ease-in-out infinite;}
-.cell-wrap.wrap-errored{outline:2px solid var(--status-error);outline-offset:-2px;border-radius:8px;min-height:6px;}
-@keyframes pulse-outline{0%,100%{outline-color:#7bb8e8;}50%{outline-color:rgba(123,184,232,.3);}}
+@property --border-angle{syntax:"<angle>";initial-value:0deg;inherits:false;}
+.cell-wrap.wrap-queued{outline:2.5px solid var(--status-running);outline-offset:-2px;border-radius:8px;min-height:6px;box-shadow:0 0 12px rgba(212,160,86,.2),0 0 4px rgba(212,160,86,.15);}
+.cell-wrap.wrap-running{outline:none;border-radius:8px;min-height:6px;position:relative;box-shadow:0 0 16px rgba(123,184,232,.15);}
+.cell-wrap.wrap-running::after{content:'';position:absolute;inset:-2px;border-radius:10px;padding:2px;background:conic-gradient(from var(--border-angle),#7bb8e8 0%,transparent 30%,transparent 70%,#7bb8e8 100%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;animation:spin-border 2.5s linear infinite;pointer-events:none;z-index:60;}
+.cell-wrap.wrap-errored{outline:2.5px solid var(--status-error);outline-offset:-2px;border-radius:8px;min-height:6px;box-shadow:0 0 10px rgba(220,53,69,.15);}
+@keyframes spin-border{to{--border-angle:360deg;}}
 
 /* ═══ Tab Bar + Cell Gaps ═══ */
 .cdiv:hover .cdiv-inner{opacity:1;}

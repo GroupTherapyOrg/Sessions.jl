@@ -18,7 +18,7 @@ include("format.jl")
 
 export CellState, cell_idle, cell_queued, cell_running, cell_done, cell_errored
 export CellOutput, Cell, Notebook
-export add_cell!, insert_cell!, remove_cell!, get_cell, ordered_cells, swap_cell_up!, swap_cell_down!
+export add_cell!, insert_cell!, remove_cell!, get_cell, ordered_cells, swap_cell_up!, swap_cell_down!, reorder_cell!
 export source_hash, is_stale, is_never_run, stale_cells, never_run_cells, mark_executed!
 export load_notebook, save_notebook, parse_notebook, serialize_notebook, is_notebook_file
 

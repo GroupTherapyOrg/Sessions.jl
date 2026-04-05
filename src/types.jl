@@ -136,6 +136,16 @@ function swap_cell_down!(nb::Notebook, idx::Int)
     true
 end
 
+"""Move cell `id` to position `target_idx` (1-based) in cell_order. Returns true if moved."""
+function reorder_cell!(nb::Notebook, id::UUID, target_idx::Int)
+    current_idx = findfirst(==(id), nb.cell_order)
+    current_idx === nothing && return false
+    deleteat!(nb.cell_order, current_idx)
+    insert_idx = clamp(target_idx, 1, length(nb.cell_order) + 1)
+    insert!(nb.cell_order, insert_idx, id)
+    true
+end
+
 # --- Stale detection ---
 
 """Deterministic hash of a cell's source code."""

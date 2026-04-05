@@ -89,8 +89,8 @@
 /* ── Code Cells ── */
 .code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
-.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#219669;opacity:.4;transition:opacity .2s;border-radius:2px 0 0 2px;}
-.code-cell:hover::before{opacity:.7;}
+.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;opacity:0;transition:opacity .2s,background .2s;border-radius:2px 0 0 2px;}
+.code-cell:hover::before{opacity:0;}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
 .rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#219669;opacity:.8;background:rgba(33,150,105,.08);border:1px solid rgba(33,150,105,.12);}
@@ -99,12 +99,27 @@
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
 .cell-eye:hover svg{color:#219669;}
 .cell-out{overflow-x:auto;}
+/* ── Cell Shoulder (drag handle) ── */
+.cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
+.cell-shoulder:active{cursor:grabbing;}
+.cell-wrap:hover > .cell-shoulder{background:var(--accent-dim);}
+/* ── Drop Ruler ── */
+#drop-ruler{position:absolute;display:none;left:0;right:0;height:4px;background:var(--accent);border-radius:2px;z-index:50;pointer-events:none;transition:top .05s ease-out;box-shadow:0 0 8px rgba(212,117,154,.3);}
+/* ── Drag state ── */
+.cell-wrap.dragging{opacity:.4;}
+/* ── Cell Selection ── */
+.cell-wrap.selected{background:rgba(212,117,154,.1);border-radius:0 8px 8px 0;}
+.cell-wrap.selected .code-cell{border-color:var(--accent);}
+#select-area{position:absolute;background:rgba(212,117,154,.15);border:1px solid rgba(212,117,154,.3);border-radius:3px;z-index:100;pointer-events:none;display:none;}
 
 /* ── Code Cells — Dark Overrides ── */
-.dark .code-cell::before{background:#56d4a0;}
+.dark .code-cell::before{background:transparent;}
 .dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
+.dark .cell-wrap:hover > .cell-shoulder{background:rgba(255,255,255,.04);}
+.dark .cell-wrap.selected{background:rgba(212,117,154,.08);}
+.dark .cell-wrap.selected .code-cell{border-color:var(--accent);}
 
 /* ── Markdown Prose ── */
 .md-prose{font-family:'DM Sans',system-ui,sans-serif;color:#4a5568;line-height:1.7;font-size:14.5px;}
