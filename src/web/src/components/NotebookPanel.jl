@@ -50,7 +50,7 @@ function NotebookPanel(state)
                 RawHtml(icon_svg), tab_name,
                 Span(:style => "width:5px;height:5px;border-radius:50%;background:var(--accent);"),
                 Span(:style => "font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;",
-                    :on_click => "event.stopPropagation();if(confirm('Close?'))TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})",
+                    :on_click => "event.stopPropagation();if(confirm('Close?')){window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})}",
                     "\u00d7")))
         else
             push!(tab_views, Div(
@@ -59,7 +59,7 @@ function NotebookPanel(state)
                 :on_click => "window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'switch_tab',tab_idx:$(i)})",
                 RawHtml(icon_svg), tab_name,
                 Span(:style => "font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;",
-                    :on_click => "event.stopPropagation();if(confirm('Close?'))TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})",
+                    :on_click => "event.stopPropagation();if(confirm('Close?')){window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})}",
                     "\u00d7")))
         end
     end
