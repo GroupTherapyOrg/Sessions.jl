@@ -384,11 +384,13 @@ function handle_run_all!(state::WebNotebookState, conn, data)
             for (cell, err) in order.errable
                 cell.state = cell_errored
                 cell.output = CellOutput()
-                cell.output.text_representation = "Cell skipped — depends on a disabled cell"
+                is_self_disabled = cell.disabled
+                msg = is_self_disabled ? "Cell is disabled" : "Skipped — depends on a disabled cell"
+                cell.output.text_representation = msg
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_output",
                     "cell_id" => string(cell.id),
-                    "output_html" => """<div class="cell-skipped-msg">Skipped — depends on a disabled cell</div>""",
+                    "output_html" => is_self_disabled ? "" : """<div class="cell-skipped-msg">$(msg)</div>""",
                     "runtime_ns" => UInt64(0),
                     "stdout" => "",
                     "rootassignee" => "",

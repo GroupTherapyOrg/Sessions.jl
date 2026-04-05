@@ -133,11 +133,12 @@
 .cell-wrap.cell-disabled .code-cell::before{display:none !important;}
 .cell-wrap.cell-disabled .cell-out{opacity:0.5;}
 .cell-wrap.cell-disabled .cell-ctrls{opacity:1 !important;transform:none !important;pointer-events:auto !important;}
-/* Skipped cells (depends on a disabled cell) — muted, not red */
-.cell-wrap.wrap-skipped{opacity:0.4;border:1.5px dashed var(--warm-300);border-radius:8px;}
+/* Skipped cells (disabled or depends on disabled) — override errored red */
+.cell-wrap.wrap-skipped{opacity:0.4;border:1.5px dashed var(--warm-300) !important;border-radius:8px;}
 .cell-wrap.wrap-skipped .code-cell{border-color:transparent !important;}
+.cell-wrap.wrap-skipped.wrap-errored{border-color:var(--warm-300) !important;outline:none !important;box-shadow:none !important;}
 .cell-skipped-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);font-style:italic;padding:4px 0;}
-.dark .cell-wrap.wrap-skipped{border-color:var(--warm-700);}
+.dark .cell-wrap.wrap-skipped,.dark .cell-wrap.wrap-skipped.wrap-errored{border-color:var(--warm-700) !important;}
 :root{--disabled-cell-bg:var(--warm-100);}
 .dark{--disabled-cell-bg:#151a22;}
 
