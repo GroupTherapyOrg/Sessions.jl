@@ -142,8 +142,8 @@
 
 /* ── Cell connector bar (links output to code, Pluto-style) ── */
 .cell-wrap{position:relative;}
-/* Output indented; code cell stays flush left. Bar connects them. */
-.cell-wrap.has-output:not(.code-hidden) .cell-out{margin-left:6px;border-left:2px solid var(--cell-trafficlight);padding-left:4px;}
+/* Output gets left border matching code cell border — visually extends the code cell upward */
+.cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:8px;margin-bottom:0;}
 /* Traffic light color variables */
 :root{--cell-trafficlight:rgba(0,0,0,.08);}
 .dark{--cell-trafficlight:rgba(255,255,255,.06);}
