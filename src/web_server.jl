@@ -1061,6 +1061,24 @@ function handle_open_notebook!(state::WebNotebookState, conn, data)
 
     !isfile(full_path) && (@warn "[WebNotebook] File not found" path=full_path; return)
 
+    # Reject binary files — they can't be displayed as text and crash the WS
+    binary_exts = Set([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svg",
+                       ".pdf", ".zip", ".gz", ".tar", ".7z", ".rar",
+                       ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv", ".webm",
+                       ".exe", ".dll", ".so", ".dylib", ".o", ".a",
+                       ".wasm", ".class", ".pyc", ".pyo",
+                       ".db", ".sqlite", ".sqlite3",
+                       ".ttf", ".otf", ".woff", ".woff2", ".eot",
+                       ".DS_Store"])
+    ext = lowercase(splitext(full_path)[2])
+    if ext in binary_exts
+        broadcast_channel!("notebook", Dict(
+            "event" => "info",
+            "message" => "Cannot open binary file: $(basename(full_path))"
+        ))
+        return
+    end
+
     # Check if already open (dedup by absolute path)
     for (i, tab) in enumerate(state.tabs)
         if tab.path == full_path
@@ -1092,7 +1110,12 @@ function handle_open_notebook!(state::WebNotebookState, conn, data)
         println("[WebNotebook] Opened notebook tab: $(tab.label)")
     else
         # Open as plain file (read-only editor, no execution)
-        content = read(full_path, String)
+        content = try
+            read(full_path, String)
+        catch
+            broadcast_channel!("notebook", Dict("event" => "info", "message" => "Cannot open file: $(basename(full_path)) (not valid text)"))
+            return
+        end
         tab = WebTab(uuid4(), basename(full_path), full_path, content)
         push!(state.tabs, tab)
         state.active_tab_idx = length(state.tabs)
