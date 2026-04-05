@@ -396,8 +396,11 @@
 .sessions-toc.indent section a.H3{padding-left:20px;}
 .sessions-toc.indent section a.H4{padding-left:30px;}
 .toc-empty{color:var(--toc-color);opacity:.5;font-size:12px;font-style:italic;padding:8px;}
-/* When ToC is open: shrink notebook content to make room, centered in remaining space */
-#nb.toc-open div[style*="max-width"]{max-width:min(900px, calc(100% - 300px)) !important;margin-left:auto !important;margin-right:calc(300px + 0.5rem) !important;}
+/* When ToC is open + enough space: shift content left. Below 900px panel: ToC floats on top. */
+@container (min-width: 900px) {
+  #nb.toc-open div[style*="max-width"]{max-width:min(900px, calc(100% - 300px)) !important;margin-left:auto !important;margin-right:calc(300px + 0.5rem) !important;}
+}
+#nb-island:has(#nb.toc-open){container-type:inline-size;}
 
 /* ── CodeMirror Overrides ── */
 .cm-cell .cm-editor{background:transparent!important;}
