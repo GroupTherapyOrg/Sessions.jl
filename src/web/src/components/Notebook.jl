@@ -426,6 +426,16 @@ function _notebook_ws_bridge_body()
       // ── Cell state (queued/running/idle/errored) ──
       if (data.event === 'cell_state') {
         setCellState(cellEls(data.cell_id), data.state, data.cell_id);
+        // Clear logs when cell starts running (fresh execution)
+        if (data.state === 'cell_running') {
+          var wrap = document.querySelector('.cell-wrap[data-cell-id="'+data.cell_id+'"]');
+          if (wrap) {
+            var logsEl = wrap.querySelector('.cell-logs');
+            if (logsEl) { logsEl.innerHTML = ''; logsEl.style.display = 'none'; }
+            var stdoutEl = wrap.querySelector('.cell-stdout');
+            if (stdoutEl) { stdoutEl.textContent = ''; stdoutEl.style.display = 'none'; }
+          }
+        }
       }
 
       // ── Cell output (pessimistic — server computes, client displays) ──
@@ -461,26 +471,13 @@ function _notebook_ws_bridge_body()
             stdoutEl.style.display = 'none';
           }
         }
-        // Logs display (below stdout, below code)
+        // Logs display — final state (overwrites real-time entries with complete set)
         var logsEl = el.wrap ? el.wrap.querySelector('.cell-logs[data-cell-id="'+data.cell_id+'"]') : null;
         if (logsEl) {
           if (data.logs && data.logs.length > 0) {
-            var lhtml = '';
-            data.logs.forEach(function(log) {
-              var cls = log.level >= 2000 ? 'log-error' : log.level >= 1000 ? 'log-warn' : log.level >= 0 ? 'log-info' : 'log-debug';
-              var icon = log.level >= 2000 ? '\\u2715' : log.level >= 1000 ? '\\u26A0' : log.level >= 0 ? '\\u2139' : '\\u2299';
-              var msg = (log.message||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
-              var kw = '';
-              if (log.kwargs && log.kwargs.length) {
-                kw = log.kwargs.map(function(p){return '<span class="log-kw-key">'+p.k+'</span> = <span class="log-kw-val">'+(p.v||'').replace(/</g,'&lt;')+'</span>';}).join(', ');
-                kw = '<span class="log-kwargs"> \\u2502 '+kw+'</span>';
-              }
-              lhtml += '<div class="log-entry '+cls+'"><span class="log-icon">'+icon+'</span><span class="log-msg">'+msg+'</span>'+kw+'</div>';
-            });
-            logsEl.innerHTML = lhtml;
+            logsEl.innerHTML = data.logs.map(function(log){return _renderLogEntry(log);}).join('');
             logsEl.style.display = '';
-          } else {
-            logsEl.innerHTML = '';
+          } else if (!logsEl.innerHTML) {
             logsEl.style.display = 'none';
           }
         }
@@ -529,6 +526,18 @@ function _notebook_ws_bridge_body()
         if (!data.ack_mutation) {
           // Other client moved a cell — reload for simplicity
           setTimeout(function(){window.location.reload();},200);
+        }
+      }
+
+      // ── Real-time log entry (arrives during execution via file polling) ──
+      else if (data.event === 'cell_log') {
+        var wrap = document.querySelector('.cell-wrap[data-cell-id="'+data.cell_id+'"]');
+        if (wrap) {
+          var logsEl = wrap.querySelector('.cell-logs[data-cell-id="'+data.cell_id+'"]');
+          if (logsEl && window._renderLogEntry) {
+            logsEl.insertAdjacentHTML('beforeend', _renderLogEntry(data.log));
+            logsEl.style.display = '';
+          }
         }
       }
 
@@ -688,6 +697,20 @@ function _notebook_island_js()
     var gap = e.target.closest('.cdiv');
     if (gap && !gap.contains(e.relatedTarget)) { var inner = gap.querySelector('.cdiv-inner'); if (inner) inner.style.opacity = '0'; }
   });
+
+  // ── Log entry renderer (shared by real-time + final render) ──
+  window._renderLogEntry = function(log) {
+    var cls = log.level >= 2000 ? 'log-error' : log.level >= 1000 ? 'log-warn' : log.level >= 0 ? 'log-info' : 'log-debug';
+    var icon = log.level >= 2000 ? '\\u2715' : log.level >= 1000 ? '\\u26A0' : log.level >= 0 ? '\\u2139' : '\\u2299';
+    var msg = (log.message||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    var kw = '';
+    if (log.kwargs && log.kwargs.length) {
+      kw = '<div class="log-kwargs">' + log.kwargs.map(function(p){
+        return '<span class="log-kw"><span class="log-kw-key">'+p.k+'</span><span class="log-kw-val">'+(p.v||'').replace(/</g,'&lt;')+'</span></span>';
+      }).join('') + '</div>';
+    }
+    return '<div class="log-entry '+cls+'"><span class="log-icon">'+icon+'</span><div class="log-body"><span class="log-msg">'+msg+'</span>'+kw+'</div></div>';
+  };
 
   // ── Cell Shoulder Drag-and-Drop ──
   (function() {

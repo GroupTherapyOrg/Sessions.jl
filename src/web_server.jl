@@ -409,7 +409,14 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                     "cell_id" => string(c.id)
                 ))
 
-                remote_execute_cell!(active_worker(state), c)
+                remote_execute_cell!(active_worker(state), c; log_callback=rec -> begin
+                    try broadcast_channel!("notebook", Dict(
+                        "event" => "cell_log",
+                        "cell_id" => string(c.id),
+                        "log" => Dict("level" => Int(rec.level), "message" => rec.message,
+                                     "kwargs" => [Dict("k" => k, "v" => v) for (k, v) in rec.kwargs])
+                    )) catch; end
+                end)
 
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_output",

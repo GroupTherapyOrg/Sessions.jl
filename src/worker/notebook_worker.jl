@@ -94,20 +94,58 @@ function _inject_notebook_api!(nw::NotebookWorker)
 end
 
 """Execute a cell's code in the worker and return a CellOutput."""
-function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
+function remote_execute_cell!(nw::NotebookWorker, cell::Cell; log_callback=nothing)
     !nw.booted && error("Worker not booted")
 
     code = cell.code
-    # Capture the hash of the code we're ACTUALLY executing.
-    # If cell.code changes during execution (external edit, agent),
-    # mark_executed! must use this hash, not the new code's hash.
     executed_code_hash = source_hash(cell)
     cell.state = cell_running
     cell._exec_start_time = time()
 
-    # Execute in worker — send code as expression, get back NamedTuple
+    # Create temp log file for real-time streaming
+    log_file = tempname() * "_logs.txt"
+    touch(log_file)
+
+    # Start log poller — reads new lines from the file every 150ms and calls log_callback
+    poll_running = Ref(true)
+    lines_read = Ref(0)
+    poller_task = if log_callback !== nothing
+        @async begin
+            while poll_running[]
+                try
+                    all_lines = readlines(log_file)
+                    n = length(all_lines)
+                    if n > lines_read[]
+                        for i in (lines_read[]+1):n
+                            parts = split(all_lines[i], "|"; limit=3)
+                            if length(parts) >= 2
+                                level = tryparse(Int32, parts[1])
+                                level === nothing && continue
+                                msg = parts[2]
+                                kw_str = length(parts) >= 3 ? parts[3] : ""
+                                kwargs = Pair{String,String}[]
+                                if !isempty(kw_str)
+                                    for p in split(kw_str, ",")
+                                        eq = findfirst('=', p)
+                                        eq !== nothing && push!(kwargs, p[1:eq-1] => p[eq+1:end])
+                                    end
+                                end
+                                log_callback(LogRecord(level, msg, "", 0, "", kwargs))
+                            end
+                        end
+                        lines_read[] = n
+                    end
+                catch; end
+                sleep(0.15)
+            end
+        end
+    else
+        nothing
+    end
+
+    # Execute in worker
     worker_output = try
-        Malt.remote_eval_fetch(nw.worker, :(_worker_execute(_workspace, $(code))))
+        Malt.remote_eval_fetch(nw.worker, :(_worker_execute(_workspace, $(code); log_file=$(log_file))))
     catch e
         @warn "[Worker] Execution failed" exception=e
         (output_type=:error,
@@ -115,8 +153,14 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
          stdout_text="",
          runtime_ns=UInt64(0),
          error_text=sprint(showerror, e),
-         image_bytes=nothing)
+         image_bytes=nothing,
+         logs=NamedTuple{(:level,:message,:file,:line,:module_name,:kwargs), Tuple{Int32,String,String,Int,String,Vector{Pair{String,String}}}}[])
     end
+
+    # Stop poller
+    poll_running[] = false
+    poller_task !== nothing && try wait(poller_task) catch; end
+    rm(log_file; force=true)
 
     # Map worker output back to CellOutput
     cell.output = CellOutput()
@@ -125,7 +169,6 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
     cell.output.stdout = worker_output.stdout_text
     cell.output.runtime_ns = worker_output.runtime_ns
     cell.output.image_data = worker_output.image_bytes
-    # Map log records from worker (NamedTuple) to LogRecord structs
     cell.output.logs = try
         [LogRecord(r.level, r.message, r.file, r.line, r.module_name, r.kwargs) for r in worker_output.logs]
     catch
@@ -136,14 +179,11 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
         cell.state = cell_errored
         cell.output.error = CapturedException(
             ErrorException(worker_output.error_text), backtrace())
-        # Build structured error from the error text for rich display
         cell.output.structured_error = _parse_error_text(worker_output.error_text)
     else
         cell.state = cell_done
     end
 
-    # Use the hash of the code that was actually executed, not current cell.code
-    # (cell.code may have changed during execution via external edit)
     cell.produced_by_hash = executed_code_hash
     cell.output
 end

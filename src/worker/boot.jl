@@ -13,6 +13,7 @@ const _LogRecordNT = @NamedTuple{level::Int32, message::String, file::String, li
 
 mutable struct _SessionsLogger <: AbstractLogger
     logs::Vector{_LogRecordNT}
+    log_file::Union{String,Nothing}  # path to temp file for real-time streaming
     min_level::LogLevel
 end
 
@@ -22,7 +23,19 @@ Logging.catch_exceptions(::_SessionsLogger) = true
 
 function Logging.handle_message(l::_SessionsLogger, level, message, _module, group, id, file, line; kwargs...)
     kw = Pair{String,String}[string(k) => try sprint(show, v) catch; "?" end for (k, v) in kwargs]
-    push!(l.logs, (level=Int32(level.level), message=string(message), file=string(file), line=Int(line), module_name=string(_module), kwargs=kw))
+    rec = (level=Int32(level.level), message=string(message), file=string(file), line=Int(line), module_name=string(_module), kwargs=kw)
+    push!(l.logs, rec)
+    # Write to shared log file for real-time streaming to coordinator
+    if l.log_file !== nothing
+        try
+            open(l.log_file, "a") do io
+                # Simple line format: level|message|kwarg1=val1,kwarg2=val2
+                kw_str = join(["$(k)=$(v)" for (k, v) in kw], ",")
+                println(io, "$(rec.level)|$(rec.message)|$(kw_str)")
+                flush(io)
+            end
+        catch; end
+    end
 end
 
 # ── Workspace ──
@@ -59,7 +72,7 @@ const _empty_output = (output_type=:nothing, text_representation="", stdout_text
 
 # ── Cell execution ──
 
-function _worker_execute(ws::SessionsWorkspace, code::String)
+function _worker_execute(ws::SessionsWorkspace, code::String; log_file::String="")
     isempty(strip(code)) && return _empty_output
 
     t0 = time_ns()
@@ -68,7 +81,8 @@ function _worker_execute(ws::SessionsWorkspace, code::String)
     had_error = false
     error_text = ""
     logs_buffer = _LogRecordNT[]
-    logger = _SessionsLogger(logs_buffer, Logging.Debug)
+    lf = isempty(log_file) ? nothing : log_file
+    logger = _SessionsLogger(logs_buffer, lf, Logging.Debug)
 
     Logging.with_logger(logger) do
         try
