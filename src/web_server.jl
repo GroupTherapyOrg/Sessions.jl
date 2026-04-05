@@ -458,16 +458,10 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                 "total" => 0
             ))
 
-            # Handle errable cells (unmet dependencies)
+            # Errable cells already handled above (before execution loop)
+            # Just save their session state
             for (c, _err) in order.errable
-                c.state = cell_errored
                 c.produced_by_hash = source_hash(c)
-                _update_cell_signal!(c)
-                broadcast_channel!("notebook", Dict(
-                    "event" => "cell_state",
-                    "cell_id" => string(c.id),
-                    "state" => "cell_errored"
-                ))
             end
 
             save_session!(nb)
@@ -491,18 +485,18 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     for (cell, err) in order.errable
         cell.state = cell_errored
         cell.output = CellOutput()
-        cell.output.error = CapturedException(
-            ErrorException("Skipped: $(typeof(err))"), backtrace())
-        cell.output.text_representation = "Cell skipped — depends on a disabled cell"
+        is_self_disabled = cell.disabled
+        msg = is_self_disabled ? "Cell is disabled" : "Skipped — depends on a disabled cell"
+        cell.output.text_representation = msg
         broadcast_channel!("notebook", Dict(
             "event" => "cell_output",
             "cell_id" => string(cell.id),
-            "output_html" => render_output_html(cell),
+            "output_html" => is_self_disabled ? "" : """<div class="cell-skipped-msg">$(msg)</div>""",
             "runtime_ns" => UInt64(0),
             "stdout" => "",
             "rootassignee" => "",
             "logs" => Any[],
-            "state" => "cell_errored"
+            "state" => "cell_skipped"
         ))
     end
 
