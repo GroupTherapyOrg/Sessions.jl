@@ -483,18 +483,6 @@ function _run_order!(state::WebNotebookState, order)
         "total" => 0
     ))
 
-    # Broadcast errors (mark with current hash so they don't appear stale)
-    for (c, _err) in order.errable
-        c.state = cell_errored
-        c.produced_by_hash = source_hash(c)
-        _update_cell_signal!(c)
-        broadcast_channel!("notebook", Dict(
-            "event" => "cell_state",
-            "cell_id" => string(c.id),
-            "state" => "cell_errored"
-        ))
-    end
-
     save_session!(nb)
     _broadcast_stale!(state)
 end
