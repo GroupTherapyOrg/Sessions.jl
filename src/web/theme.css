@@ -128,9 +128,15 @@
 .cell-eye:hover svg{color:#219669;}
 .cell-out{overflow-x:auto;}
 /* ── Disabled Cell (skipped during execution) ── */
-.cell-wrap.cell-disabled{opacity:0.4;}
-.cell-wrap.cell-disabled .code-cell{border-style:dashed !important;}
-.cell-wrap.cell-disabled .code-cell::before{background:var(--text-3) !important;opacity:0.3 !important;width:2px;}
+.cell-wrap.cell-disabled{opacity:0.45;filter:saturate(0.3);}
+.cell-wrap.cell-disabled .code-cell{border:1.5px dashed var(--warm-300) !important;background:var(--disabled-cell-bg) !important;}
+.cell-wrap.cell-disabled .code-cell::before{display:none !important;}
+.cell-wrap.cell-disabled .cell-out{opacity:0.5;}
+.cell-wrap.cell-disabled .cell-ctrls{opacity:1 !important;transform:none !important;pointer-events:auto !important;}
+/* Disabled-dependent cells (depends on a disabled cell) */
+.cell-wrap.wrap-errored .jl-error-message{font-size:12px;color:var(--text-3);font-style:italic;}
+:root{--disabled-cell-bg:var(--warm-100);}
+.dark{--disabled-cell-bg:#151a22;}
 
 /* ── Cell Shoulder (drag handle) ── */
 .cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
