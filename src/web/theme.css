@@ -56,6 +56,20 @@
   --panel-shadow: none;
   --scrollbar-thumb: var(--warm-300);
   --statusbar-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+
+  /* ── CodeMirror Syntax — Light (Pluto parity + Sessions warmth) ── */
+  --cm-editor-text: #2e2e2e;
+  --cm-keyword: #c4181a;       /* Pluto: oklch(45% 80% 30deg) ≈ #d00000, warmed */
+  --cm-string: #1a7a5a;        /* Pluto: oklch(35% 100% 180deg) ≈ #006543, warmed */
+  --cm-command: #3a5a20;       /* Pluto: oklch(35% 100% 120deg) ≈ #2e4500 */
+  --cm-comment: #a04070;       /* Pluto: oklch(45% 60% 0deg) ≈ #ae0050, warmed */
+  --cm-literal: #8a1090;       /* Pluto: oklch(45% 60% 330deg) ≈ #950092 */
+  --cm-variable: #3549ac;      /* Pluto: oklch(45% 40% 270deg) exact */
+  --cm-function: #b06090;      /* Pluto: #cc80ac, warmed for Sessions */
+  --cm-symbol: #8a5500;        /* Pluto: oklch(45% 80% 90deg) ≈ #973000, warmed */
+  --cm-macro: #1a7a1a;         /* Pluto: oklch(45% 80% 150deg) ≈ #007a00 */
+  --cm-bracket: #41323f;       /* Pluto exact */
+  --cm-matching-bracket-bg: rgba(27,75,187,.13);
 }
 
 /* ── Dark Mode Overrides ── */
@@ -80,6 +94,20 @@
   --panel-shadow: none;
   --scrollbar-thumb: #2a3a4f;
   --statusbar-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+
+  /* ── CodeMirror Syntax — Dark (Pluto parity + Sessions warmth) ── */
+  --cm-editor-text: #e0d8da;
+  --cm-keyword: #e8725e;       /* Pluto: oklch(70% 40% 30deg) ≈ #f17260, warmed */
+  --cm-string: #8ec0b5;        /* Pluto: oklch(80% 10% 180deg) ≈ #a3c7bf, warmed */
+  --cm-command: #a5b895;        /* Pluto: oklch(80% 10% 120deg) ≈ #bac2a5 */
+  --cm-comment: #e09aae;       /* Pluto: oklch(80% 30% 0deg) ≈ #fd9cba, warmed */
+  --cm-literal: #d8a0d4;       /* Pluto: oklch(80% 30% 330deg) ≈ #e9a1e3, warmed */
+  --cm-variable: #b0b8d0;      /* Pluto: oklch(80% 10% 270deg) ≈ #b3bdd8 */
+  --cm-function: #e8a050;      /* Pluto: #f99b15, warmed amber */
+  --cm-symbol: #e0a860;        /* Pluto: oklch(80% 30% 60deg) ≈ #f6ab6b */
+  --cm-macro: #78c888;         /* Pluto: oklch(80% 30% 150deg) ≈ #83d494 */
+  --cm-bracket: #b0a080;       /* Pluto: #b8ab87, warmed */
+  --cm-matching-bracket-bg: rgba(197,140,35,.48);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

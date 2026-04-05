@@ -68,23 +68,43 @@ function _notebook_cm_script_body()
     if (!window._sessionsEditors) window._sessionsEditors = {};
     var editors = window._sessionsEditors;
 
+    // Syntax highlighting — Pluto parity via CSS vars (light + dark in theme.css)
     var hlTheme = C.HighlightStyle.define([
-      {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
-      {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
-      {tag:C.t.moduleKeyword,color:"#e06b65"},
-      {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
-      {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
-      {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
-      {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
-      {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
-      {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
-      {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
-      {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
-      {tag:C.t.variableName,color:"var(--text-1)"},
-      {tag:C.t.punctuation,color:"var(--text-3)"},{tag:C.t.paren,color:"var(--text-3)"},
-      {tag:C.t.squareBracket,color:"var(--text-3)"},{tag:C.t.brace,color:"var(--text-3)"},
-      {tag:C.t.operator,color:"var(--text-1)"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
-      {tag:C.t.macroName,color:"#d4a056"},
+      // Keywords (function, if, end, for, using, etc.)
+      {tag:C.t.keyword,color:"var(--cm-keyword)"},{tag:C.t.controlKeyword,color:"var(--cm-keyword)"},
+      {tag:C.t.operatorKeyword,color:"var(--cm-keyword)"},{tag:C.t.definitionKeyword,color:"var(--cm-keyword)"},
+      {tag:C.t.moduleKeyword,color:"var(--cm-keyword)"},
+      {tag:C.t.definitionOperator,color:"var(--cm-keyword)"},{tag:C.t.logicOperator,color:"var(--cm-keyword)"},
+      {tag:C.t.controlOperator,color:"var(--cm-keyword)"},
+      // Strings
+      {tag:C.t.string,color:"var(--cm-string)"},{tag:C.t.special(C.t.string),color:"var(--cm-command)"},
+      // Comments (italic)
+      {tag:C.t.comment,color:"var(--cm-comment)",fontStyle:"italic"},
+      {tag:C.t.lineComment,color:"var(--cm-comment)",fontStyle:"italic"},
+      {tag:C.t.blockComment,color:"var(--cm-comment)",fontStyle:"italic"},
+      // Literals (numbers, bools, chars)
+      {tag:C.t.number,color:"var(--cm-literal)"},{tag:C.t.integer,color:"var(--cm-literal)"},
+      {tag:C.t.float,color:"var(--cm-literal)"},{tag:C.t.bool,color:"var(--cm-literal)"},
+      {tag:C.t.character,color:"var(--cm-literal)"},{tag:C.t.literal,color:"var(--cm-literal)"},
+      {tag:C.t.escape,color:"var(--cm-literal)"},
+      // Variables
+      {tag:C.t.variableName,color:"var(--cm-variable)"},
+      {tag:C.t.function(C.t.variableName),color:"var(--cm-function)"},
+      {tag:C.t.definition(C.t.variableName),color:"var(--cm-function)"},
+      // Types
+      {tag:C.t.typeName,color:"var(--cm-variable)",opacity:"0.8"},
+      {tag:C.t.className,color:"var(--cm-variable)",opacity:"0.8"},
+      // Symbols & properties
+      {tag:C.t.atom,color:"var(--cm-symbol)"},{tag:C.t.propertyName,color:"var(--cm-symbol)"},
+      // Macros
+      {tag:C.t.macroName,color:"var(--cm-macro)",fontWeight:"bold"},
+      // Brackets & punctuation
+      {tag:C.t.paren,color:"var(--cm-bracket)"},{tag:C.t.squareBracket,color:"var(--cm-bracket)"},
+      {tag:C.t.brace,color:"var(--cm-bracket)"},{tag:C.t.punctuation,color:"var(--cm-bracket)"},
+      // Operators
+      {tag:C.t.operator,color:"var(--cm-editor-text)"},
+      {tag:C.t.arithmeticOperator,color:"var(--cm-editor-text)"},
+      {tag:C.t.compareOperator,color:"var(--cm-editor-text)"},
     ]);
 
     var accentColor = '#d4759a';
@@ -101,7 +121,7 @@ function _notebook_cm_script_body()
         "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"var(--selection-bg) !important"},
         ".cm-content":{caretColor:accentColor,fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
         ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-        ".cm-matchingBracket":{color:accentColor+" !important",backgroundColor:"rgba(212,117,154,.1)",outline:"1px solid rgba(212,117,154,.2)"},
+        ".cm-matchingBracket":{fontWeight:"bold",backgroundColor:"var(--cm-matching-bracket-bg)"},
         ".cm-line":{paddingLeft:"4px"},
       },{dark:isDark});
     }
@@ -134,7 +154,7 @@ function _notebook_cm_script_body()
         var cellId = host.dataset.cellId || '';
         var isFileEditor = host.classList.contains('cm-file-editor');
         var cellKeymaps = (!isFileEditor && cellId) ? [shiftEnterKeymap(cellId)] : [];
-        var exts = [...cellKeymaps, C.lineNumbers(),C.highlightActiveLineGutter(),C.highlightSpecialChars(),C.history(),C.drawSelection(),C.EditorState.allowMultipleSelections.of(true),C.indentOnInput(),C.bracketMatching(),C.closeBrackets(),C.rectangularSelection(),C.highlightActiveLine(),C.highlightSelectionMatches(),C.keymap.of([...C.closeBracketsKeymap,...C.defaultKeymap,...C.searchKeymap,...C.historyKeymap,...C.completionKeymap,C.indentWithTab]),C.julia(),C.syntaxHighlighting(hlTheme),currentEdTheme];
+        var exts = [...cellKeymaps, C.lineNumbers(),C.highlightActiveLineGutter(),C.highlightSpecialChars(),C.history(),C.drawSelection(),C.EditorState.allowMultipleSelections.of(true),C.indentOnInput(),C.bracketMatching(),C.closeBrackets(),C.rectangularSelection(),C.highlightActiveLine(),C.highlightSelectionMatches(),C.keymap.of([...C.closeBracketsKeymap,...C.defaultKeymap,...C.searchKeymap,...C.historyKeymap,...C.completionKeymap,C.indentWithTab]),C.EditorState.tabSize.of(4),C.indentUnit.of("    "),C.julia(),C.syntaxHighlighting(hlTheme),currentEdTheme];
         if (isFileEditor) { exts.push(C.EditorView.theme({'&':{height:'100%'},'.cm-scroller':{overflow:'auto'}})); }
         else if (cellId) { exts.push(editSyncExtension(cellId)); }
         var view = new C.EditorView({doc:src,extensions:exts,parent:host});

@@ -7,7 +7,7 @@ import { EditorView, keymap, lineNumbers, highlightActiveLineGutter,
          highlightActiveLine } from "@codemirror/view";
 import { highlightSelectionMatches } from "@codemirror/search";
 import { EditorState } from "@codemirror/state";
-import { syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput } from "@codemirror/language";
+import { syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput, indentUnit } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { searchKeymap } from "@codemirror/search";
@@ -19,7 +19,7 @@ window.C = {
   keymap, lineNumbers, highlightActiveLineGutter, highlightActiveLine,
   highlightSpecialChars, drawSelection, rectangularSelection,
   highlightSelectionMatches,
-  syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput,
+  syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput, indentUnit,
   defaultKeymap, history, historyKeymap, indentWithTab,
   closeBrackets, closeBracketsKeymap, completionKeymap,
   searchKeymap,
