@@ -115,7 +115,9 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Code Cells ── */
-.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
+.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:0 8px 8px 8px;transition:border-color .2s;}
+/* When no output above, restore full rounding */
+.cell-wrap:not(.has-output) .code-cell,.cell-wrap.code-hidden .code-cell{border-radius:8px;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
 /* code-cell left accent bar removed — traffic light bar on cell-wrap handles this */
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
