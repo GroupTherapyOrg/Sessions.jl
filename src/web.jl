@@ -175,14 +175,10 @@ function _html_esc(s::AbstractString)
     replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
 end
 
-"""Post-process Markdown HTML to wrap LaTeX for MathJax.
-
-Julia's Markdown.html renders LaTeX as `&#36;formula&#36;` (escaped dollar signs).
-- Display math (top-level, not inside `<p>`): `&#36;formula&#36;` → `<p class="tex">\\$\\$formula\\$\\$</p>`
-- Inline math (inside `<p>`): `&#36;formula&#36;` → `<span class="tex">\\$formula\\$</span>`
-
-This matches Pluto's LaTeX.jl approach — MathJax only processes elements with class="tex".
-"""
+# Post-process Markdown HTML to wrap LaTeX for MathJax.
+# Julia's Markdown.html renders LaTeX as &#36;formula&#36; (escaped dollar signs).
+# We wrap them in .tex spans/paragraphs so MathJax can typeset them
+# (same approach as Pluto's LaTeX.jl).
 function _wrap_latex_for_mathjax(html::AbstractString)
     # Display math: bare &#36;...&#36; on its own line (not inside <p>)
     html = replace(html, r"(?<![>a-zA-Z])&#36;((?:[^&]|&(?!#36;))+)&#36;\n" =>
