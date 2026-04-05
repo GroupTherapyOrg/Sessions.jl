@@ -967,10 +967,28 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
         err_msg = _html_esc(output.text_representation)
         return """<div class="jl-error"><div class="jl-error-message">$(err_msg)</div></div>"""
     end
-    # Fallback: VNode → string
-    vnode = _render_output(cell, prerendered)
-    vnode === nothing && return ""
-    Therapy.render_to_string(vnode)
+    # SVG
+    if output.output_type == :image_svg
+        svg = output.text_representation
+        return isempty(svg) ? "" : """<div class="overflow-x-auto">$(svg)</div>"""
+    end
+    # Text — plain monospace
+    if output.output_type == :text
+        text = output.text_representation
+        return isempty(text) ? "" : """<pre class="text-sm font-mono whitespace-pre-wrap" style="color:var(--output-text);line-height:1.5;">$(_html_esc(text))</pre>"""
+    end
+    # Image PNG — base64
+    if output.output_type == :image_png && output.image_data !== nothing
+        b64 = Base64.base64encode(output.image_data)
+        return """<img src="data:image/png;base64,$(b64)" alt="Plot output" class="rounded-lg max-w-full">"""
+    end
+    # Dataframe/table from text_representation
+    if output.output_type == :dataframe
+        text = output.text_representation
+        return isempty(text) ? "" : """<pre class="text-sm font-mono whitespace-pre-wrap" style="color:var(--output-text);">$(_html_esc(text))</pre>"""
+    end
+    # Nothing / unknown — empty
+    ""
 end
 
 # =============================================================================
