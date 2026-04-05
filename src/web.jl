@@ -980,8 +980,13 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
     end
     # Error — structured if available, plain text fallback
     if output.output_type == :error
-        if output.structured_error !== nothing
-            return _render_structured_error_html(output.structured_error)
+        se = output.structured_error
+        # Parse on the fly if no structured error (e.g. cached from .sessions.toml)
+        if se === nothing && !isempty(output.text_representation)
+            se = _parse_error_text(output.text_representation)
+        end
+        if se !== nothing
+            return _render_structured_error_html(se)
         end
         err_msg = _html_esc(output.text_representation)
         return """<div class="jl-error"><div class="jl-error-message">$(err_msg)</div></div>"""
