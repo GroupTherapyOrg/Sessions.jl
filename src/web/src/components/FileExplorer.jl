@@ -472,13 +472,5 @@ function FileExplorer()
         RawHtml(_file_context_menu_html()),
 
         # Client-side JS
-        RawHtml(string("<script>", _file_explorer_js(root_dir), "</script>")),
-
-        # Status bar (JETLS diagnostics disabled — just show cell count)
-        Div(:class => "flex items-center gap-1.5 px-3 py-2 shrink-0",
-            :style => "border-top:1px solid var(--divider); font-size:11px; color:var(--text-3);",
-            Span(:class => "flex-1"),
-            Span(:class => "font-mono",
-                :style => "font-size:10px;",
-                "$(done_count)/$(cell_count) cells")))
+        RawHtml(string("<script>", _file_explorer_js(root_dir), "</script>")))
 end

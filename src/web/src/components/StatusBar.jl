@@ -42,8 +42,6 @@
 
         Span(:style => "color:var(--accent);", "\u25CF"),
         Span("Sessions.jl"),
-        Span("\u00B7"),
-        Span(cc, " cells"),
         Span(:style => "flex:1;"),
         Span(:style => "color:var(--status-done);", "\u25CF connected"),
 
