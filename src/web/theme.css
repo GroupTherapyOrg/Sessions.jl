@@ -115,9 +115,9 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Code Cells ── */
-.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:0 8px 8px 8px;transition:border-color .2s;}
-/* When no output above, restore full rounding */
-.cell-wrap:not(.has-output) .code-cell,.cell-wrap.code-hidden .code-cell{border-radius:8px;}
+.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
+/* Flatten top-left when output connector is visible */
+.cell-wrap.has-output:not(.code-hidden) .code-cell{border-top-left-radius:0 !important;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
 /* code-cell left accent bar removed — traffic light bar on cell-wrap handles this */
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
@@ -145,7 +145,7 @@
 /* ── Cell connector bar (links output to code, Pluto-style) ── */
 .cell-wrap{position:relative;}
 /* Output gets left border matching code cell border — visually extends the code cell upward */
-.cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:14px !important;}
+.cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:14px !important;padding-bottom:0 !important;margin-bottom:-1px;}
 /* Traffic light color variables */
 :root{--cell-trafficlight:rgba(0,0,0,.08);}
 .dark{--cell-trafficlight:rgba(255,255,255,.06);}
