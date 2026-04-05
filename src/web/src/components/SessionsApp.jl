@@ -58,6 +58,7 @@ function SessionsApp(children...)
     var repl = document.getElementById('repl-panel');
     var sb = localStorage.getItem('sessions-sidebar');
     var rp = localStorage.getItem('sessions-repl');
+    var ws = document.getElementById('workspace');
     if (fp && sb === '1') fp.style.display = '';
     if (repl && rp === '1') repl.style.display = '';
     customElements.whenDefined('sl-tree').then(function() {
@@ -71,29 +72,77 @@ function SessionsApp(children...)
     var savedH = localStorage.getItem('sessions-terminal-h');
     if (repl && savedH) { var r = repl.querySelector('#repl'); if (r) r.style.height = savedH + 'px'; }
 
+    // ── Restore terminal orientation ──
+    var orient = localStorage.getItem('sessions-terminal-orient');
+    if (orient === 'v' && repl && ws) {
+        ws.appendChild(repl);
+        ws.classList.add('terminal-right');
+        var r = repl.querySelector('#repl');
+        if (r) {
+            r.style.height = '';
+            r.style.width = (localStorage.getItem('sessions-terminal-w') || '350') + 'px';
+        }
+    }
+
+    // ── Toggle terminal orientation ──
+    window._sessionsToggleTerminalOrientation = function() {
+        var ea = document.getElementById('editor-area');
+        var rp = document.getElementById('repl-panel');
+        var r = document.getElementById('repl');
+        if (!ws || !ea || !rp || !r) return;
+        var isVert = ws.classList.contains('terminal-right');
+        if (isVert) {
+            // → horizontal (bottom)
+            ea.appendChild(rp);
+            ws.classList.remove('terminal-right');
+            r.style.width = '';
+            r.style.height = (localStorage.getItem('sessions-terminal-h') || '220') + 'px';
+            localStorage.setItem('sessions-terminal-orient', 'h');
+        } else {
+            // → vertical (right)
+            ws.appendChild(rp);
+            ws.classList.add('terminal-right');
+            r.style.height = '';
+            r.style.width = (localStorage.getItem('sessions-terminal-w') || '350') + 'px';
+            localStorage.setItem('sessions-terminal-orient', 'v');
+        }
+        // Re-fit all xterm instances
+        setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 100);
+        // Update toggle button icon
+        var btn = document.getElementById('term-orient-btn');
+        if (btn) btn.title = isVert ? 'Terminal to right' : 'Terminal to bottom';
+    };
+
     // ── Resize logic (uses ::after/::before pseudo-elements on panels) ──
     function setupEdgeResize(panel, target, prop, lsKey, min, max, axis) {
       if (!panel || !target) return;
       panel.addEventListener('mousedown', function(e) {
         var rect = panel.getBoundingClientRect();
         // Only activate if click is in the resize zone (near the edge)
-        if (axis === 'x' && e.clientX < rect.right - 4) return;
-        if (axis === 'y' && e.clientY > rect.top + 4) return;
+        // For vertical terminal: resize zone is on the LEFT edge
+        var isTermVert = ws.classList.contains('terminal-right') && panel.id === 'repl';
+        if (isTermVert) {
+            if (e.clientX > rect.left + 8) return;
+        } else if (axis === 'x' && e.clientX < rect.right - 4) return;
+        else if (axis === 'y' && e.clientY > rect.top + 4) return;
+
         e.preventDefault();
-        document.body.classList.add(axis === 'x' ? 'resizing-x' : 'resizing-y');
-        var start = axis === 'x' ? e.clientX : e.clientY;
-        var startSize = target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height'];
+        var actualAxis = isTermVert ? 'x' : axis;
+        document.body.classList.add(actualAxis === 'x' ? 'resizing-x' : 'resizing-y');
+        var start = actualAxis === 'x' ? e.clientX : e.clientY;
+        var startSize = target.getBoundingClientRect()[actualAxis === 'x' ? 'width' : 'height'];
         var onMove = function(e2) {
-          var delta = (axis === 'x' ? e2.clientX : e2.clientY) - start;
-          var newSize = Math.round(Math.max(min, Math.min(max, startSize + (axis === 'y' ? -delta : delta))));
-          target.style[prop] = newSize + 'px';
-          if (axis === 'y') window.dispatchEvent(new Event('resize'));
+          var delta = (actualAxis === 'x' ? e2.clientX : e2.clientY) - start;
+          var newSize = Math.round(Math.max(min, Math.min(max, startSize + (actualAxis === 'y' ? -delta : -delta))));
+          target.style[actualAxis === 'x' ? 'width' : 'height'] = newSize + 'px';
+          window.dispatchEvent(new Event('resize'));
         };
         var onUp = function() {
           document.body.classList.remove('resizing-x', 'resizing-y');
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
-          localStorage.setItem(lsKey, Math.round(target.getBoundingClientRect()[axis === 'x' ? 'width' : 'height']));
+          var sz = Math.round(target.getBoundingClientRect()[actualAxis === 'x' ? 'width' : 'height']);
+          localStorage.setItem(isTermVert ? 'sessions-terminal-w' : lsKey, sz);
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);

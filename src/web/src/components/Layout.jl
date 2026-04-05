@@ -176,6 +176,10 @@ $(Main.Sessions.NOTEBOOK_CSS)
 #fpanel::after{content:'';position:absolute;top:0;bottom:0;right:-8px;width:12px;cursor:col-resize;z-index:10;}
 #repl{position:relative;}
 #repl::before{content:'';position:absolute;left:0;right:0;top:-8px;height:12px;cursor:row-resize;z-index:10;}
+/* Vertical terminal orientation (right column) */
+#workspace.terminal-right #repl-panel{flex-shrink:0;}
+#workspace.terminal-right #repl{height:100% !important;width:350px;border-radius:12px;}
+#workspace.terminal-right #repl::before{left:-8px;right:auto;top:0;bottom:0;width:12px;height:auto;cursor:col-resize;}
 body.resizing-x *{cursor:col-resize!important;user-select:none!important;}
 body.resizing-y *{cursor:row-resize!important;user-select:none!important;}
 
