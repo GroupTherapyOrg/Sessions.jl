@@ -127,17 +127,14 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 .ab-btn[data-state="on"]{background:rgba(212,117,154,.1) !important;color:var(--accent) !important;}
 .ab-btn:hover{background:rgba(128,128,128,.08) !important;color:var(--text-2) !important;}
 
-/* ═══ Notebook CSS (cell chrome, markdown prose, tables) ═══ */
-$(Main.Sessions.NOTEBOOK_CSS)
+/* Notebook CSS: defined in theme.css (single source of truth for live app) */
+/* NOTEBOOK_CSS in web.jl is only used for static export */
 
 /* ═══ Cell States ═══ */
 /* Stale: connector bar turns amber */
 .cell-wrap:has(.code-cell.stale).has-output:not(.code-hidden) .cell-out{border-left-color:var(--status-running) !important;}
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
-.cell-collapsed .cm-cell{display:none;}
-.cell-collapsed .cell-ctrls{display:none;}
-.cell-collapsed::before{opacity:.15!important;}
-.cell-collapsed{border-style:dashed!important;opacity:.4;max-height:8px;overflow:hidden;}
+/* .cell-collapsed removed — dead code, class never added to DOM */
 /* Cell execution state — border on .cell-wrap (visible even when code folded), suppress inner borders */
 @property --border-angle{syntax:"<angle>";initial-value:0deg;inherits:false;}
 /* Queued: amber border on wrap + suppress inner borders */

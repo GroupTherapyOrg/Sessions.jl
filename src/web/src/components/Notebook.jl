@@ -138,8 +138,7 @@ function _notebook_cm_script_body()
     function _collectCodes() { var codes = {}; for (var cid in editors) { codes[cid] = editors[cid].state.doc.toString(); } return codes; }
     window._sessionsRunAll = function() { var codes = _collectCodes(); for (var cid in codes) { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'update_code',cell_id:cid,code:codes[cid]}); } if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_all'}); };
     window._sessionsRunStale = function() { if (TherapyWS&&TherapyWS.sendMessage) TherapyWS.sendMessage('notebook',{action:'run_stale',codes:_collectCodes()}); };
-    // Basic save — works for file tabs without WS bridge. WS bridge overrides with optimistic version.
-    window._sessionsSave = function() { if (!TherapyWS||!TherapyWS.sendMessage) return; var fe=window._fileEditorView; if(fe){TherapyWS.sendMessage('notebook',{action:'save',content:fe.state.doc.toString()});return;} TherapyWS.sendMessage('notebook',{action:'save',codes:_collectCodes()}); };
+    // _sessionsSave defined in WS bridge (optimistic version with mutate/rollback)
 
     var _syncTimers = {};
     if (!window._sessSuppressSync) window._sessSuppressSync = {};

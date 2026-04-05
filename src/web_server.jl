@@ -185,8 +185,7 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_reorder_cell!(state, conn, data)
             elseif action == "reorder_cells"
                 handle_reorder_cells!(state, conn, data)
-            elseif action == "delete_cells"
-                handle_delete_cells!(state, conn, data)
+            # delete_cells removed — client sends individual delete_cell calls
             elseif action == "update_code"
                 handle_update_code!(state, conn, data)
             elseif action == "toggle_fold"
@@ -703,24 +702,7 @@ function handle_reorder_cells!(state::WebNotebookState, conn, data)
     broadcast_channel!("notebook", msg)
 end
 
-"""Handle bulk cell deletion."""
-function handle_delete_cells!(state::WebNotebookState, conn, data)
-    nb = active_nb(state)
-    cell_id_strs = get(data, "cell_ids", String[])
-    mutation_id = get(data, "mutation_id", nothing)
-    isempty(cell_id_strs) && return
-
-    for cid in cell_id_strs
-        remove_cell!(nb, UUID(String(cid)))
-    end
-
-    msg = Dict(
-        "event" => "cells_deleted",
-        "cell_ids" => cell_id_strs
-    )
-    mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
-    broadcast_channel!("notebook", msg)
-end
+    # handle_delete_cells! removed — client sends individual delete_cell actions
 
 """Handle fold/unfold toggle — persisted in .jl file as ╟─ (folded) vs ╠═ (visible)."""
 function handle_toggle_fold!(state::WebNotebookState, conn, data)
