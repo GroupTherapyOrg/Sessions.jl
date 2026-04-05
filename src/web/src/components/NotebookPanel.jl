@@ -148,24 +148,25 @@ function NotebookPanel(state)
         Span(:class => "dot-pulse"))
 
     # ═══════════════════════════════════════════════════════════
-    # Table of Contents panel (inside notebook, right sidebar)
+    # Table of Contents (floating fixed panel — PlutoUI parity)
     # ═══════════════════════════════════════════════════════════
-    toc_panel = Div(:id => "toc-panel",
-        :style => "display:none;width:220px;flex-shrink:0;overflow-y:auto;border-left:1px solid var(--divider);",
-        Div(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);padding:10px 12px 6px;", "Contents"),
-        Div(:id => "toc-content", :style => "padding:0 4px 8px;"))
+    toc_panel = RawHtml("""<nav id="toc-panel" class="sessions-toc aside indent hide">
+        <header>
+            <span class="toc-toggle open-toc"></span>
+            <span class="toc-toggle closed-toc"></span>
+            Contents
+        </header>
+        <section id="toc-content"></section>
+    </nav>""")
 
     # ═══════════════════════════════════════════════════════════
-    # Assemble — content + ToC in a flex-row
+    # Assemble
     # ═══════════════════════════════════════════════════════════
-    content_with_toc = Div(:class => "flex flex-1 min-h-0 overflow-hidden",
-        content_area,
-        toc_panel)
-
     Div(:id => "nb-island",
         :class => "flex-1 flex flex-col rounded-xl overflow-hidden min-h-0",
         :style => "background:var(--panel-bg);border:1px solid var(--cell-border);position:relative;",
         tab_bar,
         loading_overlay,
-        content_with_toc)
+        content_area,
+        toc_panel)
 end

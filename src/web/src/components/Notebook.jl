@@ -1253,82 +1253,104 @@ function _notebook_island_js()
       }
     }
   });
-  // ── Table of Contents ──
+  // ── Table of Contents (PlutoUI parity) ──
   (function() {
+    var tocNav = document.getElementById('toc-panel');
+    if (!tocNav) return;
+    var tocSection = document.getElementById('toc-content');
+    var headerMap = new Map();
+    var inViewSet = new Set();
+    var obs1, obs2;
+
+    // Toggle: toolbar button toggles hide class
     window._sessionsToggleToc = function() {
-      var tp = document.getElementById('toc-panel');
-      if (!tp) return;
-      var show = tp.style.display === 'none';
-      tp.style.display = show ? '' : 'none';
-      localStorage.setItem('sessions-toc', show ? '1' : '0');
-      if (show) _buildToc();
+      tocNav.classList.toggle('hide');
+      localStorage.setItem('sessions-toc', tocNav.classList.contains('hide') ? '0' : '1');
+      if (!tocNav.classList.contains('hide')) buildToc();
     };
 
-    // Restore ToC state from localStorage
-    var tocState = localStorage.getItem('sessions-toc');
-    if (tocState === '1') {
-      var tp = document.getElementById('toc-panel');
-      if (tp) tp.style.display = '';
+    // Toggle: clicking the toc-toggle icon
+    document.addEventListener('click', function(e) {
+      var toggle = e.target.closest('.toc-toggle');
+      if (toggle && toggle.closest('.sessions-toc')) {
+        e.stopImmediatePropagation();
+        tocNav.classList.toggle('hide');
+        localStorage.setItem('sessions-toc', tocNav.classList.contains('hide') ? '0' : '1');
+      }
+    });
+
+    // Restore state
+    if (localStorage.getItem('sessions-toc') === '1') tocNav.classList.remove('hide');
+
+    function getHeaders() {
+      return Array.from(document.querySelectorAll('#nb .md-prose h1, #nb .md-prose h2, #nb .md-prose h3, #nb .md-prose h4'));
     }
 
-    function _buildToc() {
-      var toc = document.getElementById('toc-content');
-      if (!toc) return;
-      var headers = document.querySelectorAll('#nb .md-prose h1, #nb .md-prose h2, #nb .md-prose h3, #nb .md-prose h4');
-      if (!headers.length) { toc.innerHTML = '<div class="toc-empty">No headings found</div>'; return; }
-      var html = '';
+    function buildToc() {
+      var headers = getHeaders();
+      if (!headers.length) { tocSection.innerHTML = '<div class="toc-empty">No headings</div>'; return; }
+
+      // Disconnect old observers
+      if (obs1) obs1.disconnect();
+      if (obs2) obs2.disconnect();
+      headerMap.clear();
+      inViewSet.clear();
+
+      var frag = document.createDocumentFragment();
       headers.forEach(function(h) {
-        var level = h.tagName;
+        var cls = h.tagName; // H1, H2, H3, H4
         var text = h.textContent.trim();
         if (!text) return;
-        var id = h.id || (h.id = 'h-' + text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-\\x24/g, ''));
-        html += '<a class="toc-entry toc-' + level + '" data-toc-id="' + id + '" href="#' + id + '">' + text.replace(/</g, '&lt;') + '</a>';
-      });
-      toc.innerHTML = html;
+        if (!h.id) h.id = 'h-' + text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+\\x24/g, '');
 
-      // Click handler: smooth scroll
-      toc.querySelectorAll('.toc-entry').forEach(function(a) {
+        var row = document.createElement('div');
+        row.className = 'toc-row ' + cls;
+        var a = document.createElement('a');
+        a.className = cls;
+        a.href = '#' + h.id;
+        a.title = text;
+        a.textContent = text;
         a.onclick = function(e) {
           e.preventDefault();
-          var el = document.getElementById(a.dataset.tocId);
-          if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+          h.scrollIntoView({behavior: 'smooth', block: 'start'});
         };
+        row.appendChild(a);
+        frag.appendChild(row);
+        headerMap.set(h, row);
       });
+      tocSection.innerHTML = '';
+      tocSection.appendChild(frag);
 
-      // IntersectionObserver: highlight active heading
-      if (window._tocObserver) window._tocObserver.disconnect();
-      var nb = document.getElementById('nb');
-      window._tocObserver = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          var a = toc.querySelector('[data-toc-id="' + entry.target.id + '"]');
-          if (a) { if (entry.isIntersecting) a.classList.add('toc-active'); else a.classList.remove('toc-active'); }
+      // IntersectionObserver: highlight heading in top half of viewport
+      var ixCallback = function(entries) {
+        entries.forEach(function(ix) {
+          if (ix.intersectionRatio > 0 && ix.intersectionRect.y < ix.rootBounds.height / 2) {
+            inViewSet.forEach(function(r) { r.classList.remove('in-view'); });
+            inViewSet.clear();
+            var row = headerMap.get(ix.target);
+            if (row) { row.classList.add('in-view'); inViewSet.add(row); }
+          }
         });
-      }, {root: nb, rootMargin: '0px 0px -70% 0px'});
-      headers.forEach(function(h) { if (h.id) window._tocObserver.observe(h); });
+      };
+      obs1 = new IntersectionObserver(ixCallback, {root: null, threshold: 1, rootMargin: '-15px'});
+      obs2 = new IntersectionObserver(ixCallback, {root: null, threshold: 1, rootMargin: '15px'});
+      headers.forEach(function(h) { obs1.observe(h); obs2.observe(h); });
     }
 
-    // Rebuild ToC when notebook content changes
+    // Auto-rebuild on DOM changes
     var _tocTimer = null;
-    function _debouncedBuildToc() {
+    function debouncedBuild() {
       if (_tocTimer) clearTimeout(_tocTimer);
-      _tocTimer = setTimeout(function() {
-        var tp = document.getElementById('toc-panel');
-        if (tp && tp.style.display !== 'none') _buildToc();
-      }, 500);
+      _tocTimer = setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 300);
     }
-    window._sessionsBuildToc = _debouncedBuildToc;
+    window._sessionsBuildToc = debouncedBuild;
 
-    // Watch #nb for DOM changes (cells added/removed/content changed)
     var nb = document.getElementById('nb');
-    if (nb) {
-      new MutationObserver(_debouncedBuildToc).observe(nb, {childList: true, subtree: true, characterData: true});
-    }
+    if (nb) new MutationObserver(debouncedBuild).observe(nb, {childList: true, subtree: true});
 
-    // Initial build
-    setTimeout(function() {
-      var tp = document.getElementById('toc-panel');
-      if (tp && tp.style.display !== 'none') _buildToc();
-    }, 1500);
+    // Initial builds with retries (PlutoUI pattern)
+    setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 500);
+    setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 2000);
   })();
 
 })();
