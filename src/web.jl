@@ -175,6 +175,163 @@ function _html_esc(s::AbstractString)
     replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
 end
 
+"""Render a StructuredError as rich HTML with collapsible stack trace."""
+function _render_structured_error_html(se::StructuredError)
+    buf = IOBuffer()
+    print(buf, """<div class="jl-error">""")
+    print(buf, """<div class="jl-error-header">""", _html_esc(se.type_name), "</div>")
+    print(buf, """<div class="jl-error-message">""", _html_esc(se.message), "</div>")
+
+    if !isempty(se.frames)
+        n_visible = length(se.frames)
+        n_important = count(f -> f.importance == :important, se.frames)
+        summary_text = "Stack trace ($(n_visible) frames"
+        se.hidden_frame_count > 0 && (summary_text *= ", $(se.hidden_frame_count) hidden")
+        summary_text *= ")"
+
+        # Auto-open if few frames, closed if many
+        open_attr = n_visible <= 8 ? " open" : ""
+        print(buf, """<details class="jl-error-stacktrace"$(open_attr)>""")
+        print(buf, "<summary>", summary_text, "</summary>")
+        print(buf, "<ol>")
+        for (i, frame) in enumerate(se.frames)
+            cls = string(frame.importance)
+            frame.from_user && (cls *= " user-frame")
+            print(buf, """<li class="jl-frame $(cls)" title="$(_html_esc(frame.func))">""")
+            print(buf, """<span class="jl-frame-idx">$(i)</span>""")
+            print(buf, """<span class="jl-frame-func">""", _html_esc(frame.func_short), "</span>")
+            print(buf, """<span class="jl-frame-loc">@ """, _html_esc(frame.file_short), ":", frame.line, "</span>")
+            if frame.inlined
+                print(buf, """<span class="jl-frame-tag">inlined</span>""")
+            end
+            print(buf, "</li>")
+        end
+        print(buf, "</ol></details>")
+    end
+
+    print(buf, "</div>")
+    String(take!(buf))
+end
+
+"""Render a Julia value as a collapsible HTML tree view."""
+function _render_tree_html(@nospecialize(value); depth::Int=0, max_depth::Int=3, max_items::Int=25)
+    buf = IOBuffer()
+    _render_tree_node!(buf, value; depth, max_depth, max_items)
+    String(take!(buf))
+end
+
+function _render_tree_node!(buf::IOBuffer, @nospecialize(value); depth::Int=0, max_depth::Int=3, max_items::Int=25)
+    # Leaf: scalar values or max depth exceeded
+    if depth >= max_depth || _is_leaf_value(value)
+        text = try
+            sprint(; context=IOContext(devnull, :color => false, :limit => true, :displaysize => (1, 80))) do io
+                Base.invokelatest(show, io, MIME"text/plain"(), value)
+            end
+        catch
+            repr(value)
+        end
+        print(buf, """<span class="jl-tree-val">""", _html_esc(text), "</span>")
+        return
+    end
+
+    T = typeof(value)
+    type_name = _short_type_name(T)
+    open_attr = ""
+
+    if value isa AbstractVector
+        n = length(value)
+        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(type_name)</span> <span class="jl-tree-count">($(n) element$(n == 1 ? "" : "s"))</span></summary><div class="jl-tree-items">""")
+        _render_indexed_items!(buf, value, n; depth, max_depth, max_items)
+        print(buf, "</div></details>")
+
+    elseif value isa AbstractDict
+        n = length(value)
+        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(type_name)</span> <span class="jl-tree-count">($(n) entr$(n == 1 ? "y" : "ies"))</span></summary><div class="jl-tree-items">""")
+        for (i, (k, v)) in enumerate(value)
+            i > max_items && (print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>"""); break)
+            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">""", _html_esc(repr(k)), """</span><span class="jl-tree-sep"> → </span>""")
+            _render_tree_node!(buf, v; depth=depth+1, max_depth, max_items)
+            print(buf, "</div>")
+        end
+        print(buf, "</div></details>")
+
+    elseif value isa Tuple
+        n = length(value)
+        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">Tuple</span> <span class="jl-tree-count">($(n) element$(n == 1 ? "" : "s"))</span></summary><div class="jl-tree-items">""")
+        for i in 1:min(n, max_items)
+            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(i)</span><span class="jl-tree-sep"> : </span>""")
+            _render_tree_node!(buf, value[i]; depth=depth+1, max_depth, max_items)
+            print(buf, "</div>")
+        end
+        n > max_items && print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>""")
+        print(buf, "</div></details>")
+
+    elseif value isa NamedTuple
+        n = length(value)
+        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">NamedTuple</span> <span class="jl-tree-count">($(n) field$(n == 1 ? "" : "s"))</span></summary><div class="jl-tree-items">""")
+        for k in keys(value)
+            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(k)</span><span class="jl-tree-sep"> = </span>""")
+            _render_tree_node!(buf, value[k]; depth=depth+1, max_depth, max_items)
+            print(buf, "</div>")
+        end
+        print(buf, "</div></details>")
+
+    elseif value isa AbstractSet
+        n = length(value)
+        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(type_name)</span> <span class="jl-tree-count">($(n) element$(n == 1 ? "" : "s"))</span></summary><div class="jl-tree-items">""")
+        for (i, v) in enumerate(value)
+            i > max_items && (print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>"""); break)
+            print(buf, """<div class="jl-tree-row">""")
+            _render_tree_node!(buf, v; depth=depth+1, max_depth, max_items)
+            print(buf, "</div>")
+        end
+        print(buf, "</div></details>")
+
+    elseif value isa Pair
+        print(buf, """<span class="jl-tree-val">""")
+        _render_tree_node!(buf, value.first; depth=depth+1, max_depth, max_items)
+        print(buf, """<span class="jl-tree-sep"> => </span>""")
+        _render_tree_node!(buf, value.second; depth=depth+1, max_depth, max_items)
+        print(buf, "</span>")
+
+    else
+        # Struct with fields
+        fnames = fieldnames(T)
+        n = length(fnames)
+        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(type_name)</span> <span class="jl-tree-count">($(n) field$(n == 1 ? "" : "s"))</span></summary><div class="jl-tree-items">""")
+        for fname in fnames
+            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(fname)</span><span class="jl-tree-sep"> = </span>""")
+            fval = try getfield(value, fname) catch; "#undef" end
+            _render_tree_node!(buf, fval; depth=depth+1, max_depth, max_items)
+            print(buf, "</div>")
+        end
+        print(buf, "</div></details>")
+    end
+end
+
+function _render_indexed_items!(buf::IOBuffer, value, n::Int; depth, max_depth, max_items)
+    show_count = min(n, max_items)
+    for i in 1:show_count
+        print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(i)</span><span class="jl-tree-sep"> : </span>""")
+        _render_tree_node!(buf, value[i]; depth=depth+1, max_depth, max_items)
+        print(buf, "</div>")
+    end
+    n > max_items && print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>""")
+end
+
+function _is_leaf_value(@nospecialize(value))::Bool
+    value isa Number || value isa AbstractString || value isa Symbol ||
+    value isa AbstractChar || value isa Type || value isa Enum ||
+    value isa Regex || value === nothing || value === missing
+end
+
+function _short_type_name(T::Type)::String
+    s = string(T)
+    # Truncate long parametric types
+    length(s) > 60 && return s[1:57] * "..."
+    _html_esc(s)
+end
+
 function _parse_json_string_array(s::String)
     results = String[]
     i = 1
@@ -481,11 +638,17 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
         html_str = sprint(io -> Markdown.html(io, result))
         return Div(:class => "md-prose", RawHtml(html_str))
 
+    elseif output.output_type == :tree
+        tree_html = _render_tree_html(result)
+        return isempty(tree_html) ? nothing : RawHtml(tree_html)
+
     elseif output.output_type == :error
+        if output.structured_error !== nothing
+            return RawHtml(_render_structured_error_html(output.structured_error))
+        end
         err_msg = output.text_representation
-        return Div(:class => "bg-accent-secondary-50 dark:bg-accent-secondary-950 border border-accent-secondary-300 dark:border-accent-secondary-800 rounded-lg px-4 py-3",
-            Pre(:class => "text-sm font-mono text-accent-secondary-700 dark:text-accent-secondary-400 whitespace-pre-wrap",
-                Code(err_msg)))
+        return Div(:class => "jl-error",
+            Div(:class => "jl-error-message", err_msg))
 
     elseif output.output_type == :dataframe
         gallery = get(prerendered, cell.id, nothing)
@@ -792,6 +955,23 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
         html = output.text_representation
         return isempty(html) ? "" : html
     end
+    # Tree view (collapsible arrays, dicts, structs)
+    if output.output_type == :tree
+        # In-process path: render from actual object
+        if output.result !== nothing
+            return _render_tree_html(output.result)
+        end
+        # Worker path: HTML already rendered in text_representation
+        return output.text_representation
+    end
+    # Error — structured if available, plain text fallback
+    if output.output_type == :error
+        if output.structured_error !== nothing
+            return _render_structured_error_html(output.structured_error)
+        end
+        err_msg = _html_esc(output.text_representation)
+        return """<div class="jl-error"><div class="jl-error-message">$(err_msg)</div></div>"""
+    end
     # Fallback: VNode → string
     vnode = _render_output(cell, prerendered)
     vnode === nothing && return ""
@@ -924,6 +1104,17 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
         code_cell
     end)
+
+    # Stdout container — below code, above next cell gap (like Pluto's log section)
+    if mode == :live
+        stdout_text = output.stdout
+        if !isempty(stdout_text)
+            push!(parts, Div(:class => "cell-stdout", :data_cell_id => cell_id,
+                RawHtml(_html_esc(stdout_text))))
+        else
+            push!(parts, RawHtml("""<div class="cell-stdout" data-cell-id="$(cell_id)" style="display:none"></div>"""))
+        end
+    end
 
     # Cell shoulder (drag handle) — only in live mode
     if mode == :live

@@ -218,9 +218,9 @@ function _notebook_ws_bridge_body()
     function stopCellTimer(cellId) { var t=_cellTimers[cellId]; if(t){clearInterval(t.interval);delete _cellTimers[cellId];} }
     function setCellState(el,state,cellId) {
       if(!el)return;
-      // Apply state to code-cell (visible when code shown)
-      if(el.code){el.code.classList.remove('idle','stale','executing');if(state==='cell_queued'||state==='cell_running'){el.code.style.borderColor=state==='cell_queued'?'var(--status-running)':'#7bb8e8';el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);el.code.style.borderColor=state==='cell_errored'?'var(--status-error)':'';}}
-      // Also apply state to cell-wrap (visible even when code is hidden/folded)
+      // Apply state to code-cell
+      if(el.code){el.code.classList.remove('idle','stale','executing');if(state==='cell_queued'||state==='cell_running'){el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);}}
+      // Apply state to cell-wrap (CSS targets .cell-wrap.wrap-* .code-cell)
       if(el.wrap){el.wrap.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored');if(state==='cell_queued')el.wrap.classList.add('wrap-queued');else if(state==='cell_running')el.wrap.classList.add('wrap-running');else if(state==='cell_errored')el.wrap.classList.add('wrap-errored');}
     }
 
@@ -411,11 +411,30 @@ function _notebook_ws_bridge_body()
         if (!el) return;
         if (el.out) {
           var html = data.output_html || '';
+          // Assignee badge (above output)
+          var assigneeHtml = '';
+          if (data.rootassignee && data.rootassignee.length > 0) {
+            assigneeHtml = '<div class="cell-assignee">' + data.rootassignee.replace(/</g,'&lt;') + ' =</div>';
+          }
           if (html) {
-            el.out.innerHTML=html; el.out.style.display=''; el.out.style.padding='6px 0 10px';
+            el.out.innerHTML = assigneeHtml + html;
+            el.out.style.display=''; el.out.style.padding='6px 0 10px';
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
+          } else if (assigneeHtml) {
+            el.out.innerHTML = assigneeHtml; el.out.style.display=''; el.out.style.padding='6px 0 10px';
           } else { el.out.innerHTML=''; el.out.style.display='none'; }
+        }
+        // Stdout — below code cell (separate container)
+        var stdoutEl = el.wrap ? el.wrap.querySelector('.cell-stdout[data-cell-id="'+data.cell_id+'"]') : null;
+        if (stdoutEl) {
+          if (data.stdout && data.stdout.length > 0) {
+            stdoutEl.textContent = data.stdout;
+            stdoutEl.style.display = '';
+          } else {
+            stdoutEl.textContent = '';
+            stdoutEl.style.display = 'none';
+          }
         }
         setCellState(el, data.state, data.cell_id);
         if (el.ctrls && data.runtime_ns && data.runtime_ns > 0) {

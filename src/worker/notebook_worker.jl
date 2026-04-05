@@ -130,6 +130,8 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
         cell.state = cell_errored
         cell.output.error = CapturedException(
             ErrorException(worker_output.error_text), backtrace())
+        # Build structured error from the error text for rich display
+        cell.output.structured_error = _parse_error_text(worker_output.error_text)
     else
         cell.state = cell_done
     end
@@ -159,4 +161,66 @@ end
 """Check if worker is alive."""
 function is_worker_alive(nw::NotebookWorker)::Bool
     nw.booted && Malt.isrunning(nw.worker)
+end
+
+"""Parse a plain error text (from worker) into a StructuredError for rich display."""
+function _parse_error_text(error_text::String)::StructuredError
+    lines = split(error_text, '\n')
+    isempty(lines) && return StructuredError("Error", error_text, StructuredFrame[], 0, error_text)
+
+    # First line(s) before "Stacktrace:" are the error message
+    msg_lines = String[]
+    stack_start = 0
+    for (i, line) in enumerate(lines)
+        if startswith(strip(line), "Stacktrace:")
+            stack_start = i + 1
+            break
+        end
+        push!(msg_lines, String(line))
+    end
+    message = strip(join(msg_lines, '\n'))
+
+    # Extract error type from message (e.g. "LoadError: ..." → "LoadError")
+    type_name = "Error"
+    m = match(r"^([A-Za-z]+Error|[A-Za-z]+Exception)", message)
+    m !== nothing && (type_name = m.match)
+
+    # Parse stack frames: pattern is " [N] func_name\n    @ Module path:line"
+    frames = StructuredFrame[]
+    i = stack_start
+    while i <= length(lines)
+        line = String(lines[i])
+        # Match frame header: " [N] function_name(args...)"
+        fm = match(r"^\s*\[(\d+)\]\s+(.+)$", line)
+        if fm !== nothing
+            func = strip(fm.captures[2])
+            func_short = replace(func, r"\{.*\}" => "")  # strip type params
+            # Look for location on next line: "    @ Module file:line"
+            file_short = ""
+            file_full = ""
+            line_no = 0
+            from_base = false
+            from_user = false
+            inlined = false
+            if i + 1 <= length(lines)
+                loc = String(lines[i + 1])
+                lm = match(r"^\s+@\s+(\S+)\s+(.+):(\d+)$", loc)
+                if lm !== nothing
+                    mod_name = lm.captures[1]
+                    file_full = lm.captures[2]
+                    line_no = parse(Int, lm.captures[3])
+                    file_short = basename(file_full)
+                    from_base = contains(file_full, "Base") || contains(file_full, "Core") || startswith(file_full, ".")
+                    from_user = contains(mod_name, "SW_") || contains(mod_name, "SessionsWorkspace")
+                    i += 1
+                end
+            end
+            inlined = contains(func, " [inlined]")
+            importance = from_user ? :important : from_base ? :dim : :normal
+            push!(frames, StructuredFrame(func, func_short, file_full, file_short, line_no, inlined, false, from_base, from_user, importance))
+        end
+        i += 1
+    end
+
+    StructuredError(type_name, message, frames, 0, error_text)
 end

@@ -74,7 +74,12 @@ function classify_output(value)::Symbol
         return :dataframe
     end
 
-    # 4. Images — always check BEFORE text/plain. With a graphics protocol
+    # 4b. Inspectable collections (arrays, dicts, tuples, structs with fields)
+    if _is_tree_value(value)
+        return :tree
+    end
+
+    # 5. Images — always check BEFORE text/plain. With a graphics protocol
     #    (Kitty/Sixel) images render as sharp raster. Without one, images
     #    render as braille/unicode-block fallback — still far better than
     #    showing "Figure()" text. This ensures CairoMakie, Plots.jl, etc.
@@ -118,6 +123,32 @@ function _is_table_value(@nospecialize(value))::Bool
             return Base.invokelatest(tables_mod.istable, value)::Bool
         catch; end
     end
+    false
+end
+
+"""Check if a value should be rendered as a collapsible tree (collections, structs)."""
+function _is_tree_value(@nospecialize(value))::Bool
+    # Scalar-like types — never tree
+    value isa Number && return false
+    value isa AbstractString && return false
+    value isa Symbol && return false
+    value isa AbstractChar && return false
+    value isa Type && return false
+    value isa Enum && return false
+    value isa Regex && return false
+    value isa Nothing && return false
+    value isa Missing && return false
+    # Collections — always tree
+    value isa AbstractVector && return true
+    value isa AbstractDict && return true
+    value isa Tuple && return length(value) > 0
+    value isa NamedTuple && return true
+    value isa AbstractSet && return true
+    value isa Pair && return true
+    # Structs with fields (but not Base/Core types with custom show)
+    T = typeof(value)
+    nf = fieldcount(T)
+    nf > 0 && !(T <: IO) && !(T <: Ref) && return true
     false
 end
 

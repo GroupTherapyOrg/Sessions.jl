@@ -125,12 +125,20 @@ $(Main.Sessions.NOTEBOOK_CSS)
 .cell-collapsed .cell-ctrls{display:none;}
 .cell-collapsed::before{opacity:.15!important;}
 .cell-collapsed{border-style:dashed!important;opacity:.4;max-height:8px;overflow:hidden;}
-/* Cell-wrap execution state — visible even when code is hidden/folded */
+/* Cell execution state — border on .cell-wrap (visible even when code folded), suppress inner borders */
 @property --border-angle{syntax:"<angle>";initial-value:0deg;inherits:false;}
-.cell-wrap.wrap-queued{outline:2.5px solid var(--status-running);outline-offset:-2px;border-radius:8px;min-height:6px;box-shadow:0 0 12px rgba(212,160,86,.2),0 0 4px rgba(212,160,86,.15);}
-.cell-wrap.wrap-running{outline:none;border-radius:8px;min-height:6px;position:relative;box-shadow:0 0 16px rgba(123,184,232,.15);}
+/* Queued: amber border on wrap + suppress inner borders */
+.cell-wrap.wrap-queued{border:2px solid var(--status-running);border-radius:8px;box-shadow:0 0 10px rgba(212,160,86,.12);}
+.cell-wrap.wrap-queued .code-cell{border-color:transparent !important;}
+.cell-wrap.wrap-queued .jl-error{border-color:transparent !important;}
+/* Running: spinning border on wrap */
+.cell-wrap.wrap-running{position:relative;border:2px solid transparent;border-radius:8px;box-shadow:0 0 12px rgba(123,184,232,.1);}
+.cell-wrap.wrap-running .code-cell{border-color:transparent !important;}
 .cell-wrap.wrap-running::after{content:'';position:absolute;inset:-2px;border-radius:10px;padding:2px;background:conic-gradient(from var(--border-angle),#7bb8e8 0%,transparent 30%,transparent 70%,#7bb8e8 100%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;animation:spin-border 2.5s linear infinite;pointer-events:none;z-index:60;}
-.cell-wrap.wrap-errored{outline:2.5px solid var(--status-error);outline-offset:-2px;border-radius:8px;min-height:6px;box-shadow:0 0 10px rgba(220,53,69,.15);}
+/* Errored: red border on wrap + suppress inner borders */
+.cell-wrap.wrap-errored{border:2px solid var(--status-error);border-radius:8px;}
+.cell-wrap.wrap-errored .code-cell{border-color:transparent !important;}
+.cell-wrap.wrap-errored .jl-error{border-color:transparent !important;border-top-left-radius:0;border-top-right-radius:0;}
 @keyframes spin-border{to{--border-angle:360deg;}}
 
 /* ═══ Tab Bar + Cell Gaps ═══ */

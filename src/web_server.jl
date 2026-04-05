@@ -6,6 +6,7 @@
 
 using Therapy
 using UUIDs
+import ExpressionExplorer
 # Note: Markdown is already imported by web.jl (included earlier in the module)
 
 # ═══════════════════════════════════════════════════════════
@@ -296,6 +297,18 @@ function serialize_cells_json(state::WebNotebookState)::String
     end
 end
 
+"""Compute the root assignee variable name for a cell (e.g. `x` for `x = 42`)."""
+function _rootassignee(cell::Cell)::String
+    isempty(strip(cell.code)) && return ""
+    try
+        expr = Meta.parse("begin\n$(cell.code)\nend")
+        ra = ExpressionExplorer.get_rootassignee(expr)
+        ra === nothing ? "" : string(ra)
+    catch
+        ""
+    end
+end
+
 """Convert a Cell to a serializable Dict for the client."""
 function _cell_to_dict(cell::Cell)
     output_html = render_output_html(cell)
@@ -306,6 +319,7 @@ function _cell_to_dict(cell::Cell)
         "output_html" => output_html,
         "runtime_ns" => cell.output.runtime_ns,
         "stdout" => cell.output.stdout,
+        "rootassignee" => _rootassignee(cell),
         "folded" => cell.folded,
         "disabled" => cell.disabled,
         "stale" => is_stale(cell)
@@ -395,6 +409,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                     "output_html" => render_output_html(c),
                     "runtime_ns" => c.output.runtime_ns,
                     "stdout" => c.output.stdout,
+                    "rootassignee" => _rootassignee(c),
                     "state" => string(c.state)
                 ))
             end
