@@ -131,9 +131,8 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 $(Main.Sessions.NOTEBOOK_CSS)
 
 /* ═══ Cell States ═══ */
-.code-cell.idle::before{opacity:0;}
-.code-cell.stale::before{background:var(--status-running);opacity:.6;}
-.code-cell.executing::before{opacity:0;}
+/* Stale: traffic light bar turns amber */
+.cell-wrap:has(.code-cell.stale)::before{background:var(--status-running) !important;opacity:.7 !important;}
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
 .cell-collapsed .cm-cell{display:none;}
 .cell-collapsed .cell-ctrls{display:none;}

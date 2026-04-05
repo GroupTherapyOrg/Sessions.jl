@@ -117,8 +117,7 @@
 /* ── Code Cells ── */
 .code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
-.code-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;opacity:0;transition:opacity .2s,background .2s;border-radius:2px 0 0 2px;}
-.code-cell:hover::before{opacity:0;}
+/* code-cell left accent bar removed — traffic light bar on cell-wrap handles this */
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
 .rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#219669;opacity:.8;background:rgba(33,150,105,.08);border:1px solid rgba(33,150,105,.12);}
@@ -141,11 +140,16 @@
 :root{--disabled-cell-bg:var(--warm-100);}
 .dark{--disabled-cell-bg:#151a22;}
 
-/* ── Output-to-Code connector line (Pluto style) ── */
-.cell-out:not([style*="display:none"]) + .cell-island .cell-code-wrap .code-cell{margin-top:0;}
-.cell-out:not([style*="display:none"]){padding-bottom:2px !important;position:relative;}
-.cell-out:not([style*="display:none"])::after{content:'';position:absolute;bottom:0;left:28px;width:1px;height:8px;background:var(--cell-border);}
-.dark .cell-out:not([style*="display:none"])::after{background:var(--cell-border-hov);}
+/* ── Cell traffic light bar (Pluto style — left edge connector) ── */
+.cell-wrap{position:relative;}
+.cell-wrap::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;background:var(--cell-trafficlight);transition:background .15s,opacity .15s;opacity:1;z-index:1;}
+.code-cell{border-left:none !important;border-top-left-radius:0 !important;border-bottom-left-radius:0 !important;}
+/* When code is folded/hidden, hide the bar */
+.cell-wrap:has(.cell-code-wrap[style*="display:none"])::before,.cell-wrap:has(.cell-code-wrap:empty)::before{opacity:0;}
+.cell-wrap:hover::before{opacity:1;}
+/* Traffic light color variables */
+:root{--cell-trafficlight:rgba(0,0,0,.08);}
+.dark{--cell-trafficlight:rgba(255,255,255,.06);}
 
 /* ── Cell Shoulder (drag handle) ── */
 .cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
@@ -161,7 +165,7 @@
 #select-area{position:absolute;background:rgba(212,117,154,.15);border:1px solid rgba(212,117,154,.3);border-radius:3px;z-index:100;pointer-events:none;display:none;}
 
 /* ── Code Cells — Dark Overrides ── */
-.dark .code-cell::before{background:transparent;}
+/* code-cell ::before removed — traffic light on cell-wrap */
 .dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
