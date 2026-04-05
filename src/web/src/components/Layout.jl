@@ -156,7 +156,11 @@ $(Main.Sessions.NOTEBOOK_CSS)
 @keyframes spin-border{to{--border-angle:360deg;}}
 
 /* ═══ Tab Bar + Cell Gaps ═══ */
+.cdiv{height:10px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;}
+.cdiv-inner{opacity:0;transition:opacity .15s;display:flex;align-items:center;justify-content:center;position:absolute;z-index:5;}
 .cdiv:hover .cdiv-inner{opacity:1;}
+.cdiv-btn{width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--cell-border);background:var(--panel-bg);color:var(--text-3);cursor:pointer;font-size:12px;padding:0;transition:all .12s;}
+.cdiv-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
 .chv{transition:transform .12s ease;}
 .chv.open{transform:rotate(90deg);}
 .tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
