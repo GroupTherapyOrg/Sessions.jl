@@ -1282,8 +1282,7 @@ function _notebook_island_js()
       }
     });
 
-    // Restore state
-    if (localStorage.getItem('sessions-toc') === '1') tocNav.classList.remove('hide');
+    // Always start closed on fresh page load (user opens manually)
 
     function getHeaders() {
       return Array.from(document.querySelectorAll('#nb .md-prose h1, #nb .md-prose h2, #nb .md-prose h3, #nb .md-prose h4'));
