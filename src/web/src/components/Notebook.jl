@@ -1278,7 +1278,7 @@ function _notebook_island_js()
       if (toggle && toggle.closest('.sessions-toc')) {
         e.stopImmediatePropagation();
         tocNav.classList.toggle('hide');
-        localStorage.setItem('sessions-toc', tocNav.classList.contains('hide') ? '0' : '1');
+        if (!tocNav.classList.contains('hide')) buildToc();
       }
     });
 
