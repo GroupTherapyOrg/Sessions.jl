@@ -125,6 +125,12 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell)
     cell.output.stdout = worker_output.stdout_text
     cell.output.runtime_ns = worker_output.runtime_ns
     cell.output.image_data = worker_output.image_bytes
+    # Map log records from worker (NamedTuple) to LogRecord structs
+    cell.output.logs = try
+        [LogRecord(r.level, r.message, r.file, r.line, r.module_name, r.kwargs) for r in worker_output.logs]
+    catch
+        LogRecord[]
+    end
 
     if worker_output.output_type == :error
         cell.state = cell_errored

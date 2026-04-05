@@ -297,6 +297,13 @@ function serialize_cells_json(state::WebNotebookState)::String
     end
 end
 
+"""Serialize log records for WebSocket transmission."""
+function _serialize_logs(logs::Vector{LogRecord})
+    [Dict("level" => Int(r.level), "message" => r.message, "line" => r.line,
+          "kwargs" => [Dict("k" => k, "v" => v) for (k, v) in r.kwargs])
+     for r in logs]
+end
+
 """Compute the root assignee variable name for a cell (e.g. `x` for `x = 42`)."""
 function _rootassignee(cell::Cell)::String
     isempty(strip(cell.code)) && return ""
@@ -322,7 +329,8 @@ function _cell_to_dict(cell::Cell)
         "rootassignee" => _rootassignee(cell),
         "folded" => cell.folded,
         "disabled" => cell.disabled,
-        "stale" => is_stale(cell)
+        "stale" => is_stale(cell),
+        "logs" => _serialize_logs(cell.output.logs)
     )
 end
 
@@ -410,6 +418,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                     "runtime_ns" => c.output.runtime_ns,
                     "stdout" => c.output.stdout,
                     "rootassignee" => _rootassignee(c),
+                    "logs" => _serialize_logs(c.output.logs),
                     "state" => string(c.state)
                 ))
             end
@@ -490,6 +499,8 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
             "output_html" => render_output_html(c),
             "runtime_ns" => c.output.runtime_ns,
             "stdout" => c.output.stdout,
+            "rootassignee" => _rootassignee(c),
+            "logs" => _serialize_logs(c.output.logs),
             "state" => string(c.state)
         ))
     end

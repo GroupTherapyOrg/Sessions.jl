@@ -461,6 +461,29 @@ function _notebook_ws_bridge_body()
             stdoutEl.style.display = 'none';
           }
         }
+        // Logs display (below stdout, below code)
+        var logsEl = el.wrap ? el.wrap.querySelector('.cell-logs[data-cell-id="'+data.cell_id+'"]') : null;
+        if (logsEl) {
+          if (data.logs && data.logs.length > 0) {
+            var lhtml = '';
+            data.logs.forEach(function(log) {
+              var cls = log.level >= 2000 ? 'log-error' : log.level >= 1000 ? 'log-warn' : log.level >= 0 ? 'log-info' : 'log-debug';
+              var icon = log.level >= 2000 ? '\\u2715' : log.level >= 1000 ? '\\u26A0' : log.level >= 0 ? '\\u2139' : '\\u2299';
+              var msg = (log.message||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+              var kw = '';
+              if (log.kwargs && log.kwargs.length) {
+                kw = log.kwargs.map(function(p){return '<span class="log-kw-key">'+p.k+'</span> = <span class="log-kw-val">'+(p.v||'').replace(/</g,'&lt;')+'</span>';}).join(', ');
+                kw = '<span class="log-kwargs"> \\u2502 '+kw+'</span>';
+              }
+              lhtml += '<div class="log-entry '+cls+'"><span class="log-icon">'+icon+'</span><span class="log-msg">'+msg+'</span>'+kw+'</div>';
+            });
+            logsEl.innerHTML = lhtml;
+            logsEl.style.display = '';
+          } else {
+            logsEl.innerHTML = '';
+            logsEl.style.display = 'none';
+          }
+        }
         setCellState(el, data.state, data.cell_id);
         if (el.ctrls && data.runtime_ns && data.runtime_ns > 0) {
           var old = el.ctrls.querySelector('.rt-badge'); if(old)old.remove();

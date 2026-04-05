@@ -32,6 +32,16 @@ struct StructuredError
     plain_text::String          # flat string for clipboard/fallback
 end
 
+"""A captured log record from @info/@warn/@error/@debug."""
+struct LogRecord
+    level::Int32                       # Debug=-1000, Info=0, Warn=1000, Error=2000
+    message::String
+    file::String
+    line::Int
+    module_name::String
+    kwargs::Vector{Pair{String,String}}  # stringified key-value pairs
+end
+
 """Captured output from a cell execution."""
 mutable struct CellOutput
     result::Any                        # Return value of the cell (actual Julia object)
@@ -42,9 +52,10 @@ mutable struct CellOutput
     text_representation::String        # Fallback text rendering for any output type
     image_data::Union{Nothing, Vector{UInt8}}  # PNG bytes for :image_png output (not serialized)
     structured_error::Union{Nothing, StructuredError}  # Pluto-style structured error
+    logs::Vector{LogRecord}            # Captured @info/@warn/@error/@debug records
 end
 
-CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "", nothing, nothing)
+CellOutput() = CellOutput(nothing, "", nothing, UInt64(0), :nothing, "", nothing, nothing, LogRecord[])
 
 """A single notebook cell."""
 mutable struct Cell

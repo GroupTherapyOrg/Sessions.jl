@@ -4,6 +4,33 @@
 # No module wrapper — Malt eval can't define modules.
 
 import Markdown
+using Logging
+
+# ── Log Capture ──
+
+struct _LogRecord
+    level::Int32
+    message::String
+    file::String
+    line::Int
+    module_name::String
+    group::String
+    kwargs::Vector{Pair{String,String}}
+end
+
+mutable struct _SessionsLogger <: AbstractLogger
+    logs::Vector{_LogRecord}
+    min_level::LogLevel
+end
+
+Logging.shouldlog(l::_SessionsLogger, level, _module, group, id) = level >= l.min_level
+Logging.min_enabled_level(l::_SessionsLogger) = l.min_level
+Logging.catch_exceptions(::_SessionsLogger) = true
+
+function Logging.handle_message(l::_SessionsLogger, level, message, _module, group, id, file, line; kwargs...)
+    kw = Pair{String,String}[string(k) => try sprint(show, v) catch; "?" end for (k, v) in kwargs]
+    push!(l.logs, _LogRecord(Int32(level.level), string(message), string(file), Int(line), string(_module), string(group), kw))
+end
 
 # ── Workspace ──
 
@@ -35,7 +62,7 @@ end
 # ── Output struct ──
 
 # Use NamedTuple for output — serializes across process boundary without type issues
-const _empty_output = (output_type=:nothing, text_representation="", stdout_text="", runtime_ns=UInt64(0), error_text="", image_bytes=nothing)
+const _empty_output = (output_type=:nothing, text_representation="", stdout_text="", runtime_ns=UInt64(0), error_text="", image_bytes=nothing, logs=_LogRecord[])
 
 # ── Cell execution ──
 
@@ -47,61 +74,65 @@ function _worker_execute(ws::SessionsWorkspace, code::String)
     result = nothing
     had_error = false
     error_text = ""
+    logs_buffer = _LogRecord[]
+    logger = _SessionsLogger(logs_buffer, Logging.Debug)
 
-    try
-        old_stdout = stdout
-        rd, wr = redirect_stdout()
-        stdout_task = @async try; read(rd, String); catch; ""; end
-
+    Logging.with_logger(logger) do
         try
-            result = Base.invokelatest(include_string, ws.mod, code,
-                isempty(ws.notebook_path) ? "cell" : ws.notebook_path)
+            old_stdout = stdout
+            rd, wr = redirect_stdout()
+            stdout_task = @async try; read(rd, String); catch; ""; end
+
+            try
+                result = Base.invokelatest(include_string, ws.mod, code,
+                    isempty(ws.notebook_path) ? "cell" : ws.notebook_path)
+            catch e
+                had_error = true
+                error_text = sprint(showerror, e, catch_backtrace())
+            finally
+                redirect_stdout(old_stdout)
+                close(wr)
+                stdout_str = fetch(stdout_task)
+                close(rd)
+            end
         catch e
             had_error = true
             error_text = sprint(showerror, e, catch_backtrace())
-        finally
-            redirect_stdout(old_stdout)
-            close(wr)
-            stdout_str = fetch(stdout_task)
-            close(rd)
         end
-    catch e
-        had_error = true
-        error_text = sprint(showerror, e, catch_backtrace())
     end
 
     runtime = UInt64(time_ns() - t0)
     suppress = !isempty(strip(code)) && endswith(rstrip(code), ';')
 
     if had_error
-        return (output_type=:error, text_representation=error_text, stdout_text=stdout_str, runtime_ns=runtime, error_text=error_text, image_bytes=nothing)
+        return (output_type=:error, text_representation=error_text, stdout_text=stdout_str, runtime_ns=runtime, error_text=error_text, image_bytes=nothing, logs=logs_buffer)
     end
 
     if suppress || result === nothing
-        return (output_type=:nothing, text_representation="", stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+        return (output_type=:nothing, text_representation="", stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
     end
 
-    _classify_and_capture(result, stdout_str, runtime)
+    _classify_and_capture(result, stdout_str, runtime, logs_buffer)
 end
 
-function _classify_and_capture(result, stdout_str, runtime)
+function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogRecord[])
     # Bond (@bind widget) — detect by duck typing (has .element and .defines fields)
     if hasproperty(result, :element) && hasproperty(result, :defines)
         widget = result.element
         var_name = result.defines
         # Return structured bond data — coordinator renders with @island SSR
         bond_data = _serialize_bond(widget, var_name)
-        return (output_type=:bond, text_representation=bond_data, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+        return (output_type=:bond, text_representation=bond_data, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
     end
 
     # Markdown
-    result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+    result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
 
     # Tables.jl — detect BEFORE text/html (DataFrames registers text/html but we want our own rendering)
     if _is_table_like(result)
         table_json = try _serialize_table(result) catch; "" end
         if !isempty(table_json)
-            return (output_type=:table, text_representation=table_json, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+            return (output_type=:table, text_representation=table_json, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
         end
     end
 
@@ -111,7 +142,7 @@ function _classify_and_capture(result, stdout_str, runtime)
             sprint(io -> Base.invokelatest(show, io, MIME"text/html"(), result))
         catch; ""; end
         if !isempty(html)
-            return (output_type=:html, text_representation=html, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+            return (output_type=:html, text_representation=html, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
         end
     end
 
@@ -122,7 +153,7 @@ function _classify_and_capture(result, stdout_str, runtime)
             Base.invokelatest(show, io, MIME"image/png"(), result)
             bytes = take!(io)
             text = _text_repr(result)
-            return (output_type=:image_png, text_representation=text, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=bytes)
+            return (output_type=:image_png, text_representation=text, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=bytes, logs=logs_buffer)
         catch; end
     end
 
@@ -130,7 +161,7 @@ function _classify_and_capture(result, stdout_str, runtime)
     if _try_showable(MIME"image/svg+xml"(), result)
         try
             svg = sprint(io -> Base.invokelatest(show, io, MIME"image/svg+xml"(), result))
-            return (output_type=:image_svg, text_representation=svg, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+            return (output_type=:image_svg, text_representation=svg, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
         catch; end
     end
 
@@ -138,13 +169,13 @@ function _classify_and_capture(result, stdout_str, runtime)
     if _is_tree_value(result)
         tree_html = try _render_tree_html(result) catch; "" end
         if !isempty(tree_html)
-            return (output_type=:tree, text_representation=tree_html, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+            return (output_type=:tree, text_representation=tree_html, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
         end
     end
 
     # text/plain
     text = _text_repr(result)
-    return (output_type=:text, text_representation=text, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing)
+    return (output_type=:text, text_representation=text, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
 end
 
 # ── Table detection + serialization ──
