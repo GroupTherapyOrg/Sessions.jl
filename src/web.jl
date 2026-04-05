@@ -176,16 +176,34 @@ function _html_esc(s::AbstractString)
 end
 
 # Post-process Markdown HTML to wrap LaTeX for MathJax.
-# Julia's Markdown.html renders LaTeX as &#36;formula&#36; (escaped dollar signs).
-# We wrap them in .tex spans/paragraphs so MathJax can typeset them
-# (same approach as Pluto's LaTeX.jl).
+# Julia's Markdown.html renders LaTeX as &#36;formula&#36; with HTML-escaped
+# braces/operators. We unescape and wrap in .tex elements for MathJax.
+function _unescape_latex(s::AbstractString)
+    s = replace(s, "&#123;" => "{")
+    s = replace(s, "&#125;" => "}")
+    s = replace(s, "&#61;" => "=")
+    s = replace(s, "&#43;" => "+")
+    s = replace(s, "&lt;" => "<")
+    s = replace(s, "&gt;" => ">")
+    s = replace(s, "&amp;" => "&")
+    s
+end
+
 function _wrap_latex_for_mathjax(html::AbstractString)
-    # Display math: bare &#36;...&#36; on its own line (not inside <p>)
+    # Display math: bare &#36;...&#36; NOT inside a <p> tag (top-level)
     html = replace(html, r"(?<![>a-zA-Z])&#36;((?:[^&]|&(?!#36;))+)&#36;\n" =>
-        SubstitutionString("""<p class="tex">\$\$\\1\$\$</p>\n"""))
+        m -> begin
+            inner = match(r"&#36;((?:[^&]|&(?!#36;))+)&#36;", m)
+            inner === nothing && return m
+            string("""<p class="tex">""", raw"$$", _unescape_latex(inner.captures[1]), raw"$$", "</p>\n")
+        end)
     # Inline math: &#36;...&#36; inside text
     html = replace(html, r"&#36;((?:[^&]|&(?!#36;))+?)&#36;" =>
-        SubstitutionString("""<span class="tex">\$\\1\$</span>"""))
+        m -> begin
+            inner = match(r"&#36;((?:[^&]|&(?!#36;))+?)&#36;", m)
+            inner === nothing && return m
+            string("""<span class="tex">""", raw"$", _unescape_latex(inner.captures[1]), raw"$", "</span>")
+        end)
     html
 end
 

@@ -139,13 +139,16 @@
 .md-prose p{margin-block-start:0;margin-block-end:1em;line-height:1.6em;}
 .md-prose p:first-child{margin-block-start:0;}
 .md-prose p:last-child{margin-block-end:0;}
-/* Lists (Pluto uses browser defaults — we add minimal styling) */
-.md-prose ul,.md-prose ol{margin-block-start:0;margin-block-end:1em;padding-left:1.5em;line-height:1.6em;}
-.md-prose li{margin:0.2em 0;}
+/* Lists — restore bullets/numbers (global reset strips them) */
+.md-prose ul{list-style:disc;margin-block-start:0;margin-block-end:1em;padding-left:2em;line-height:1.6em;}
+.md-prose ol{list-style:decimal;margin-block-start:0;margin-block-end:1em;padding-left:2em;line-height:1.6em;}
+.md-prose ul ul{list-style:circle;}
+.md-prose ul ul ul{list-style:square;}
+.md-prose li{margin:0.2em 0;display:list-item;}
 .md-prose li p{margin:0 0 0.4em;}
 .md-prose li p+ul,.md-prose li p+ol{margin-block-start:-0.6em;}
 /* Blockquotes: rounded pill bg (Pluto style) with Sessions accent border */
-.md-prose blockquote{margin:0 1rem 1em;padding:15px;border-radius:12px;background:var(--md-blockquote-bg);color:var(--md-blockquote-color);border-left:3px solid var(--accent);}
+.md-prose blockquote{margin:0 0 1em;padding:15px;border-radius:12px;background:var(--md-blockquote-bg);color:var(--md-blockquote-color);border-left:3px solid var(--accent);}
 .md-prose blockquote:last-child{margin-block-end:0;}
 /* Inline code: pill-shaped (Pluto: border-radius 8px) */
 .md-prose code{font-family:'JetBrains Mono',monospace;font-size:0.85em;padding:0.18em 0.4em;border-radius:6px;background:var(--md-code-bg);color:var(--md-code-color);font-variant-ligatures:none;}
