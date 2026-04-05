@@ -378,7 +378,7 @@
 /* ── Table of Contents (PlutoUI exact parity) ── */
 .sessions-toc{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen-Sans,Cantarell,system-ui,sans-serif;--toc-bg:#fafafa;--toc-color:hsl(0,0%,36%);--toc-color-h:hsl(0,0%,21%);--toc-active-bg:rgb(235,235,235);--toc-icon-filter:unset;}
 .dark .sessions-toc{--toc-bg:#303030;--toc-color:hsl(0,0%,90%);--toc-color-h:hsl(0,0%,97%);--toc-active-bg:rgb(82,82,82);--toc-icon-filter:invert(1);}
-.sessions-toc.aside{color:var(--toc-color);position:fixed;right:1rem;top:5rem;width:min(80vw,300px);padding:0.5rem;padding-top:0;border-radius:10px;max-height:calc(100vh - 5rem - 90px);overflow:auto;z-index:40;background:var(--toc-bg);transition:transform 300ms cubic-bezier(0.18,0.89,0.45,1.12);}
+.sessions-toc.aside{color:var(--toc-color);position:absolute;right:0.5rem;top:3rem;width:min(80vw,280px);padding:0.5rem;padding-top:0;border-radius:10px;max-height:calc(100% - 4rem);overflow:auto;z-index:40;background:var(--toc-bg);transition:transform 300ms cubic-bezier(0.18,0.89,0.45,1.12);}
 .sessions-toc.aside:not(.hide){box-shadow:0 0 11px 0px rgba(0,0,0,.06);}
 .sessions-toc.aside.hide{transform:translateX(calc(100% - 28px));color:transparent;}
 .sessions-toc.aside.hide section{display:none;}
