@@ -36,6 +36,8 @@
                     var folded = !codeCell || codeCell.offsetParent === null;
                     if (folded !== lastFolded) {
                         lastFolded = folded;
+                        // Toggle traffic light bar visibility
+                        if (cellWrap) { if (folded) cellWrap.classList.add('code-hidden'); else cellWrap.classList.remove('code-hidden'); }
                         if (window.TherapyWS && TherapyWS.sendMessage) {
                             TherapyWS.sendMessage('notebook', {action: 'toggle_fold', cell_id: cellId, folded: folded});
                         }
@@ -663,16 +665,8 @@ end
 function _notebook_island_js()
 """
 (function() {
-  // ── Cell menu + toggle fold + hover + keyboard shortcuts ──
-  window._toggleFold = function(cellId) {
-    var wrap = document.querySelector('.cell-wrap[data-cell-id="' + cellId + '"]');
-    if (!wrap) return;
-    var code = wrap.querySelector('.code-cell');
-    if (code) code.style.display = code.style.display === 'none' ? '' : 'none';
-    if (window.TherapyWS && TherapyWS.sendMessage) {
-      TherapyWS.sendMessage('notebook', {action:'toggle_fold', cell_id:cellId, folded:code && code.style.display==='none'});
-    }
-  };
+  // ── Cell menu + hover + keyboard shortcuts ──
+  // (Code fold is handled by CellToggle @island + MutationObserver — no JS fallback needed)
 
   var _cellMenu = null;
   window._sessionsShowCellMenu = function(btn, cellId) {

@@ -1164,7 +1164,9 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
         push!(parts, RawHtml("""<div class="cell-shoulder" draggable="true" title="Drag to move cell"></div>"""))
     end
 
-    wrap_cls = cell.disabled ? "cell-wrap relative cell-disabled" : "cell-wrap relative"
+    wrap_cls = "cell-wrap relative"
+    cell.disabled && (wrap_cls *= " cell-disabled")
+    cell.folded && (wrap_cls *= " code-hidden")
     Div(:data_cell_id => cell_id, :class => wrap_cls, parts...)
 end
 
