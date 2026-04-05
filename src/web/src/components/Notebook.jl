@@ -1268,8 +1268,10 @@ function _notebook_island_js()
     // Toggle: toolbar button toggles hide class
     window._sessionsToggleToc = function() {
       tocNav.classList.toggle('hide');
-      localStorage.setItem('sessions-toc', tocNav.classList.contains('hide') ? '0' : '1');
-      if (!tocNav.classList.contains('hide')) buildToc();
+      var isOpen = !tocNav.classList.contains('hide');
+      var nb = document.getElementById('nb');
+      if (nb) nb.classList.toggle('toc-open', isOpen);
+      if (isOpen) buildToc();
     };
 
     // Toggle: clicking the toc-toggle icon
@@ -1278,7 +1280,10 @@ function _notebook_island_js()
       if (toggle && toggle.closest('.sessions-toc')) {
         e.stopImmediatePropagation();
         tocNav.classList.toggle('hide');
-        if (!tocNav.classList.contains('hide')) buildToc();
+        var isOpen = !tocNav.classList.contains('hide');
+        var nb = document.getElementById('nb');
+        if (nb) nb.classList.toggle('toc-open', isOpen);
+        if (isOpen) buildToc();
       }
     });
 

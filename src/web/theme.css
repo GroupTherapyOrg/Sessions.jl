@@ -396,6 +396,8 @@
 .sessions-toc.indent section a.H3{padding-left:20px;}
 .sessions-toc.indent section a.H4{padding-left:30px;}
 .toc-empty{color:var(--toc-color);opacity:.5;font-size:12px;font-style:italic;padding:8px;}
+/* When ToC is open: shrink notebook content to make room (if panel wide enough) */
+#nb.toc-open > div{max-width:min(900px, calc(100% - 300px));margin-left:0;margin-right:auto;}
 
 /* ── CodeMirror Overrides ── */
 .cm-cell .cm-editor{background:transparent!important;}
