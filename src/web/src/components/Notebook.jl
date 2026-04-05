@@ -454,7 +454,7 @@ function _notebook_ws_bridge_body()
           }
           if (html) {
             el.out.innerHTML = assigneeHtml + html;
-            el.out.style.display=''; el.out.style.padding='6px 0 10px';
+            el.out.style.display=''; el.out.style.padding='4px 0 2px';
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
             // Typeset LaTeX via MathJax

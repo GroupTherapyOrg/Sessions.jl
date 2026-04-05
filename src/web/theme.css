@@ -141,6 +141,12 @@
 :root{--disabled-cell-bg:var(--warm-100);}
 .dark{--disabled-cell-bg:#151a22;}
 
+/* ── Output-to-Code connector line (Pluto style) ── */
+.cell-out:not([style*="display:none"]) + .cell-island .cell-code-wrap .code-cell{margin-top:0;}
+.cell-out:not([style*="display:none"]){padding-bottom:2px !important;position:relative;}
+.cell-out:not([style*="display:none"])::after{content:'';position:absolute;bottom:0;left:28px;width:1px;height:8px;background:var(--cell-border);}
+.dark .cell-out:not([style*="display:none"])::after{background:var(--cell-border-hov);}
+
 /* ── Cell Shoulder (drag handle) ── */
 .cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
 .cell-shoulder:active{cursor:grabbing;}

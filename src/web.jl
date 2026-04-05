@@ -1073,12 +1073,12 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
                 if is_rich_output
                     Div(:class => "cell-out",
                         :data_cell_id => cell_id,
-                        :style => "padding:4px 0 8px;overflow-x:auto;",
+                        :style => "padding:4px 0 2px;overflow-x:auto;",
                         out_content)
                 else
                     Div(:class => "cell-out font-mono text-xs text-tout whitespace-pre overflow-x-auto",
                         :data_cell_id => cell_id,
-                        :style => "padding:6px 0 10px;line-height:1.5;",
+                        :style => "padding:4px 0 2px;line-height:1.5;",
                         out_content)
                 end
             else
