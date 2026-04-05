@@ -44,6 +44,12 @@ function Layout(children...; title="Sessions.jl")
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
 <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>"""),
 
+        # --- MathJax 3 (LaTeX rendering — only processes .tex class elements, like Pluto) ---
+        RawHtml("""<script>
+window.MathJax={options:{ignoreHtmlClass:"no-mathjax",processHtmlClass:"tex"},startup:{typeset:false},tex:{inlineMath:[["\\$","\\$"],["\\\\(","\\\\)"]]},svg:{fontCache:"global"}};
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg-full.js"></script>"""),
+
         # --- xterm.js (terminal emulator) ---
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
@@ -183,8 +189,7 @@ sl-tree:defined,sl-tree-item:defined{opacity:1;height:auto;transition:opacity .2
 .cblink{animation:blink 1s step-end infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 
-/* ═══ Markdown Prose ═══ */
-.md-prose h5,.md-prose h6{font-family:'Fraunces',Georgia,serif;font-size:1rem;font-weight:600;color:var(--text-1);margin:0.6em 0 0.2em;}
+/* Markdown prose defined in theme.css (single source of truth) */
 
 /* ═══ Shoelace Overrides (adapt to current mode) ═══ */
 :root{--sl-color-primary-600:var(--accent);--sl-font-sans:'DM Sans',system-ui,sans-serif;--sl-font-mono:'JetBrains Mono',monospace;--sl-font-size-small:12px;}
