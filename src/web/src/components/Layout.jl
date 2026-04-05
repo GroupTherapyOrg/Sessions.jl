@@ -34,6 +34,9 @@ function Layout(children...; title="Sessions.jl")
 })();
 </script>"""),
 
+        # --- Favicon ---
+        RawHtml("""<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cpath d='M22 20C22 20 31 20 40 33C49 20 58 20 58 20' fill='none' stroke='%23d4759a' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M22 38C22 38 31 38 40 51C49 38 58 38 58 38' fill='none' stroke='%23d4759a' stroke-width='6' stroke-linecap='round' opacity='0.55'/%3E%3Cpath d='M22 56C22 56 31 56 40 69C49 56 58 56 58 56' fill='none' stroke='%23d4759a' stroke-width='6' stroke-linecap='round' opacity='0.22'/%3E%3C/svg%3E">"""),
+
         # --- Google Fonts ---
         RawHtml("""<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

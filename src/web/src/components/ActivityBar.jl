@@ -3,7 +3,7 @@
 # Destructures shared signal tuples from SharedSignals.jl.
 # Follows DarkModeToggle pattern: module-level tuple → destructure inside @island.
 
-const _JULIA_LOGO_SVG = """<svg width="16" height="14" viewBox="0 0 40 34" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="6" r="5.5" fill="#56d4a0"/><circle cx="10" cy="28" r="5.5" fill="#e06b65"/><circle cx="30" cy="28" r="5.5" fill="#b08fd8"/></svg>"""
+const _SESSIONS_LOGO_SVG = """<svg width="20" height="20" viewBox="0 0 80 80" fill="none"><path d="M22 20C22 20 31 20 40 33C49 20 58 20 58 20" stroke="#d4759a" stroke-width="6" stroke-linecap="round"/><path d="M22 38C22 38 31 38 40 51C49 38 58 38 58 38" stroke="#d4759a" stroke-width="6" stroke-linecap="round" opacity="0.55"/><path d="M22 56C22 56 31 56 40 69C49 56 58 56 58 56" stroke="#d4759a" stroke-width="6" stroke-linecap="round" opacity="0.22"/></svg>"""
 const _FOLDER_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>"""
 const _TERMINAL_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>"""
 const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>"""
@@ -43,7 +43,7 @@ const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
         :style => "background:var(--panel-bg);border:1px solid var(--cell-border);",
 
         Div(:class => "flex items-center justify-center w-8 h-8 mb-2",
-            RawHtml(_JULIA_LOGO_SVG)),
+            RawHtml(_SESSIONS_LOGO_SVG)),
 
         # Sidebar toggle
         Button(:class => "ab-btn",
