@@ -166,6 +166,8 @@ function _notebook_cm_script_body()
       // Typeset LaTeX on initial load (wait for MathJax to be ready)
       function _typesetAll(){if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise().catch(function(){});}else{setTimeout(_typesetAll,500);}}
       setTimeout(_typesetAll,1000);
+      // Highlight markdown code blocks
+      if(window.hljs){document.querySelectorAll('.md-prose pre code').forEach(function(el){hljs.highlightElement(el);});}
     };
     window._sessionsInitNewCells = window._initAllCM;
   }
@@ -456,6 +458,8 @@ function _notebook_ws_bridge_body()
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
             // Typeset LaTeX via MathJax
             if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise([el.out]).catch(function(){});}
+            // Highlight markdown code blocks
+            if(window.hljs){el.out.querySelectorAll('.md-prose pre code').forEach(function(b){hljs.highlightElement(b);});}
           } else if (assigneeHtml) {
             el.out.innerHTML = assigneeHtml; el.out.style.display=''; el.out.style.padding='6px 0 10px';
           } else { el.out.innerHTML=''; el.out.style.display='none'; }

@@ -52,6 +52,12 @@ window.MathJax={tex:{inlineMath:[['$(ds)','$(ds)'],['\\\\(','\\\\)']]},svg:{font
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg-full.js"></script>""")
         end,
 
+        # --- highlight.js (syntax highlighting for markdown code blocks, like Pluto) ---
+        RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/default.min.css" disabled>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/julia.min.js"></script>
+<script>hljs.configure({cssSelector:'.md-prose pre code', ignoreUnescapedHTML:true});</script>"""),
+
         # --- xterm.js (terminal emulator) ---
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>

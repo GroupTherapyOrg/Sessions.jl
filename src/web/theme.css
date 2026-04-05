@@ -353,6 +353,19 @@
 .jl-tree-more{color:var(--text-3);font-size:11px;font-style:italic;padding:2px 0;}
 .dark .jl-tree-key{color:#b08fd8;}
 
+/* ── highlight.js overrides (markdown code blocks — use CM syntax vars) ── */
+.md-prose pre code.hljs{background:transparent;padding:0;}
+.hljs{color:var(--cm-editor-text);}
+.hljs-keyword{color:var(--cm-keyword);}
+.hljs-built_in,.hljs-type{color:var(--cm-variable);}
+.hljs-literal,.hljs-number{color:var(--cm-literal);}
+.hljs-string{color:var(--cm-string);}
+.hljs-comment{color:var(--cm-comment);font-style:italic;}
+.hljs-function,.hljs-title{color:var(--cm-function);}
+.hljs-symbol{color:var(--cm-symbol);}
+.hljs-meta{color:var(--cm-macro);font-weight:bold;}
+.hljs-variable{color:var(--cm-variable);}
+
 /* ── CodeMirror Overrides ── */
 .cm-cell .cm-editor{background:transparent!important;}
 .cm-cell .cm-scroller{overflow-x:auto;}
