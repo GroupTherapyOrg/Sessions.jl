@@ -149,6 +149,52 @@ function update_topology!(nb::Notebook)
 end
 
 """
+Filter disabled cells and cells that depend on disabled cells from the runnable list.
+Returns (filtered_runnable, disabled_errable).
+"""
+function _filter_disabled(runnable::Vector{Cell}, topology)
+    topology === nothing && return (runnable, Dict{Cell, Any}())
+
+    # Collect symbols defined by disabled cells
+    disabled_defs = Set{Symbol}()
+    for cell in runnable
+        cell.disabled || continue
+        try
+            node = analyze_cell(cell)
+            union!(disabled_defs, node.definitions)
+            union!(disabled_defs, node.funcdefs_without_signatures)
+        catch; end
+    end
+
+    filtered = Cell[]
+    errable = Dict{Cell, Any}()
+
+    for cell in runnable
+        if cell.disabled
+            errable[cell] = ErrorException("Cell is disabled")
+        elseif !isempty(disabled_defs)
+            # Check if this cell references any symbol from a disabled cell
+            refs = try analyze_cell(cell).references catch; Set{Symbol}() end
+            if !isempty(intersect(refs, disabled_defs))
+                errable[cell] = ErrorException("Depends on disabled cell")
+                # This cell's definitions are also unavailable downstream
+                try
+                    node = analyze_cell(cell)
+                    union!(disabled_defs, node.definitions)
+                    union!(disabled_defs, node.funcdefs_without_signatures)
+                catch; end
+            else
+                push!(filtered, cell)
+            end
+        else
+            push!(filtered, cell)
+        end
+    end
+
+    (filtered, errable)
+end
+
+"""
 Compute the topological execution order for a notebook (all cells).
 Returns (runnable_cells, errable_cells).
 """
@@ -156,8 +202,13 @@ function execution_order(nb::Notebook)
     nb.topology === nothing && update_topology!(nb)
     topo_order = _topological_order(nb)
 
-    runnable = Cell[sc.cell for sc in topo_order.runnable]
+    all_runnable = Cell[sc.cell for sc in topo_order.runnable]
     errable = Dict{Cell, Any}(sc.cell => err for (sc, err) in topo_order.errable)
+
+    # Filter disabled cells and their dependents (PDE tracks disabled_cells but
+    # doesn't filter them from runnable — Pluto does this on the application side)
+    runnable, disabled_errable = _filter_disabled(all_runnable, nb.topology)
+    merge!(errable, disabled_errable)
 
     (runnable=runnable, errable=errable)
 end
@@ -180,8 +231,11 @@ function execution_order(nb::Notebook, changed_cells::Vector{Cell})
 
     topo_order = PDE.topological_order(topo, changed_sc)
 
-    runnable = Cell[sc.cell for sc in topo_order.runnable]
+    all_runnable = Cell[sc.cell for sc in topo_order.runnable]
     errable = Dict{Cell, Any}(sc.cell => err for (sc, err) in topo_order.errable)
+
+    runnable, disabled_errable = _filter_disabled(all_runnable, topo)
+    merge!(errable, disabled_errable)
 
     (runnable=runnable, errable=errable)
 end
