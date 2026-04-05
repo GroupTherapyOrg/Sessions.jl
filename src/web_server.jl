@@ -380,7 +380,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
             update_topology!(nb)
             order = execution_order(nb)
 
-            # Mark all as queued
+            # PDE already excludes disabled cells from order.runnable
             for c in order.runnable
                 c.state = cell_queued
                 broadcast_channel!("notebook", Dict(
@@ -465,7 +465,29 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     update_topology!(nb, changed_cells)
     order = execution_order(nb, changed_cells)
 
-    # Mark all runnable as queued — update both channel + server signal
+    # PDE already filters disabled cells from order.runnable and puts
+    # their dependents in order.errable (via is_disabled on SessionCell)
+
+    # Mark errable cells (disabled deps, cycles, etc.)
+    for (cell, err) in order.errable
+        cell.state = cell_errored
+        cell.output = CellOutput()
+        cell.output.error = CapturedException(
+            ErrorException("Skipped: $(typeof(err))"), backtrace())
+        cell.output.text_representation = "Cell skipped — depends on a disabled cell"
+        broadcast_channel!("notebook", Dict(
+            "event" => "cell_output",
+            "cell_id" => string(cell.id),
+            "output_html" => render_output_html(cell),
+            "runtime_ns" => UInt64(0),
+            "stdout" => "",
+            "rootassignee" => "",
+            "logs" => Any[],
+            "state" => "cell_errored"
+        ))
+    end
+
+    # Mark all runnable as queued
     for c in order.runnable
         c.state = cell_queued
         _update_cell_signal!(c)

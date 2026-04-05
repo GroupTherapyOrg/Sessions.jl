@@ -14,6 +14,9 @@ struct SessionCell <: PDE.AbstractCell
     cell::Cell
 end
 
+# Tell PDE which cells are disabled — PDE skips them and marks dependents
+PDE.is_disabled(::PDE.NotebookTopology, sc::SessionCell) = sc.cell.disabled
+
 """Analyze a single cell's code and return its ReactiveNode (definitions, references, etc.)."""
 function analyze_cell(cell::Cell)
     if isempty(strip(cell.code))
