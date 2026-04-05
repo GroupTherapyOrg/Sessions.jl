@@ -375,6 +375,17 @@
 .hljs-meta{color:var(--cm-macro);font-weight:bold;}
 .hljs-variable{color:var(--cm-variable);}
 
+/* ── Table of Contents ── */
+#toc-panel{font-family:'DM Sans',system-ui,sans-serif;}
+.toc-entry{display:block;padding:4px 10px;font-size:12px;color:var(--text-2);text-decoration:none;border-radius:4px;transition:background .12s,color .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4;}
+.toc-entry:hover{background:rgba(128,128,128,.06);color:var(--text-1);}
+.toc-entry.toc-active{background:var(--accent-dim);color:var(--accent);font-weight:500;}
+.toc-H1{font-weight:600;font-size:13px;}
+.toc-H2{padding-left:16px !important;}
+.toc-H3{padding-left:28px !important;font-size:11px;}
+.toc-H4{padding-left:40px !important;font-size:11px;color:var(--text-3);}
+.toc-empty{color:var(--text-3);font-size:11px;font-style:italic;padding:8px 10px;}
+
 /* ── CodeMirror Overrides ── */
 .cm-cell .cm-editor{background:transparent!important;}
 .cm-cell .cm-scroller{overflow-x:auto;}

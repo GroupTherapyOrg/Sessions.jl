@@ -99,6 +99,14 @@ function NotebookPanel(state)
             "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
             "TherapyWS.sendMessage('notebook',{action:'format_all'})",
         :title => is_file_tab ? "Format file" : "Format all cells", "Format"))
+    if !is_file_tab
+        push!(toolbar, RawHtml("""<span class="toolbar-sep"></span>"""))
+        push!(toolbar, Button(:id => "toc-toggle-btn", :class => "tb-btn",
+            :on_click => "window._sessionsToggleToc&&_sessionsToggleToc()",
+            :title => "Table of Contents",
+            RawHtml("""<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 3h12M2 8h8M2 13h10"/></svg>"""),
+            " ToC"))
+    end
     push!(tab_items, Div(:style => "display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;",
         toolbar...))
 
@@ -140,12 +148,24 @@ function NotebookPanel(state)
         Span(:class => "dot-pulse"))
 
     # ═══════════════════════════════════════════════════════════
-    # Assemble
+    # Table of Contents panel (inside notebook, right sidebar)
     # ═══════════════════════════════════════════════════════════
+    toc_panel = Div(:id => "toc-panel",
+        :style => "display:none;width:220px;flex-shrink:0;overflow-y:auto;border-left:1px solid var(--divider);",
+        Div(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);padding:10px 12px 6px;", "Contents"),
+        Div(:id => "toc-content", :style => "padding:0 4px 8px;"))
+
+    # ═══════════════════════════════════════════════════════════
+    # Assemble — content + ToC in a flex-row
+    # ═══════════════════════════════════════════════════════════
+    content_with_toc = Div(:class => "flex flex-1 min-h-0 overflow-hidden",
+        content_area,
+        toc_panel)
+
     Div(:id => "nb-island",
         :class => "flex-1 flex flex-col rounded-xl overflow-hidden min-h-0",
         :style => "background:var(--panel-bg);border:1px solid var(--cell-border);position:relative;",
         tab_bar,
         loading_overlay,
-        content_area)
+        content_with_toc)
 end

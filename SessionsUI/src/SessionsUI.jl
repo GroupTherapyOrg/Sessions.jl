@@ -14,8 +14,11 @@ using UUIDs
 # Widget types + bond registry + @bind macro
 include("widgets.jl")
 
+# Table of Contents widget
+include("toc.jl")
+
 # User-facing exports
-export @bind, BoundSlider
+export @bind, BoundSlider, TableOfContents
 
 # Internal exports (used by Sessions.jl engine, not by notebook users)
 export AbstractWidget, initial_value, possible_values, validate_value
