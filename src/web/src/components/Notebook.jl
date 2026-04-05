@@ -166,8 +166,9 @@ function _notebook_cm_script_body()
       // Typeset LaTeX on initial load (wait for MathJax to be ready)
       function _typesetAll(){if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise().catch(function(){});}else{setTimeout(_typesetAll,500);}}
       setTimeout(_typesetAll,1000);
-      // Highlight markdown code blocks
-      if(window.hljs){document.querySelectorAll('.md-prose pre code').forEach(function(el){hljs.highlightElement(el);});}
+      // Highlight markdown code blocks (retry until hljs loads from CDN)
+      function _highlightAll(){if(window.hljs){document.querySelectorAll('.md-prose pre code:not(.hljs)').forEach(function(el){hljs.highlightElement(el);});}else{setTimeout(_highlightAll,500);}}
+      setTimeout(_highlightAll,300);
     };
     window._sessionsInitNewCells = window._initAllCM;
   }
