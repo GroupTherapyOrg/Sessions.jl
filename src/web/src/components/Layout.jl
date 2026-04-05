@@ -149,9 +149,7 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 .cell-wrap.wrap-running .code-cell{border-color:transparent !important;}
 .cell-wrap.wrap-running::after{content:'';position:absolute;inset:-2px;border-radius:10px;padding:2px;background:conic-gradient(from var(--border-angle),#7bb8e8 0%,transparent 30%,transparent 70%,#7bb8e8 100%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;animation:spin-border 2.5s linear infinite;pointer-events:none;z-index:60;}
 /* Errored: red border on wrap + suppress inner borders */
-.cell-wrap.wrap-errored{border:2px solid var(--status-error);border-radius:8px;}
-.cell-wrap.wrap-errored .code-cell{border-color:transparent !important;}
-.cell-wrap.wrap-errored .jl-error{border-color:transparent !important;border-top-left-radius:0;border-top-right-radius:0;}
+/* Errored: no extra styling — .jl-error output has its own border */
 @keyframes spin-border{to{--border-angle:360deg;}}
 
 /* ═══ Tab Bar + Cell Gaps ═══ */
