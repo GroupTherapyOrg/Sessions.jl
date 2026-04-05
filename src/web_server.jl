@@ -379,91 +379,7 @@ function handle_run_all!(state::WebNotebookState, conn, data)
             nb = active_nb(state)
             update_topology!(nb)
             order = execution_order(nb)
-
-            # Handle errable cells (disabled deps, cycles) — PDE puts them here
-            for (cell, err) in order.errable
-                cell.state = cell_errored
-                cell.output = CellOutput()
-                is_self_disabled = cell.disabled
-                msg = is_self_disabled ? "Cell is disabled" : "Skipped — depends on a disabled cell"
-                cell.output.text_representation = msg
-                broadcast_channel!("notebook", Dict(
-                    "event" => "cell_output",
-                    "cell_id" => string(cell.id),
-                    "output_html" => is_self_disabled ? "" : """<div class="cell-skipped-msg">$(msg)</div>""",
-                    "runtime_ns" => UInt64(0),
-                    "stdout" => "",
-                    "rootassignee" => "",
-                    "logs" => Any[],
-                    "state" => "cell_skipped"
-                ))
-            end
-
-            # PDE already excludes disabled cells from order.runnable
-            for c in order.runnable
-                c.state = cell_queued
-                broadcast_channel!("notebook", Dict(
-                    "event" => "cell_state",
-                    "cell_id" => string(c.id),
-                    "state" => "cell_queued"
-                ))
-            end
-
-            # Execute in topological order — check interrupted between cells
-            n_total = length(order.runnable)
-            for (i, c) in enumerate(order.runnable)
-                if state.interrupted
-                    println("[WebNotebook] Run All interrupted — skipping remaining cells")
-                    break
-                end
-
-                c.state = cell_running
-                broadcast_channel!("notebook", Dict(
-                    "event" => "cell_state",
-                    "cell_id" => string(c.id),
-                    "state" => "cell_running"
-                ))
-                broadcast_channel!("notebook", Dict(
-                    "event" => "run_progress",
-                    "running_index" => i,
-                    "total" => n_total,
-                    "cell_id" => string(c.id)
-                ))
-
-                remote_execute_cell!(active_worker(state), c; log_callback=rec -> begin
-                    try broadcast_channel!("notebook", Dict(
-                        "event" => "cell_log",
-                        "cell_id" => string(c.id),
-                        "log" => Dict("level" => Int(rec.level), "message" => rec.message,
-                                     "kwargs" => [Dict("k" => k, "v" => v) for (k, v) in rec.kwargs])
-                    )) catch; end
-                end)
-
-                broadcast_channel!("notebook", Dict(
-                    "event" => "cell_output",
-                    "cell_id" => string(c.id),
-                    "output_html" => render_output_html(c),
-                    "runtime_ns" => c.output.runtime_ns,
-                    "stdout" => c.output.stdout,
-                    "rootassignee" => _rootassignee(c),
-                    "logs" => _serialize_logs(c.output.logs),
-                    "state" => string(c.state)
-                ))
-            end
-
-            # Clear progress indicator
-            broadcast_channel!("notebook", Dict(
-                "event" => "run_progress",
-                "running_index" => 0,
-                "total" => 0
-            ))
-
-            # Errable cells already handled above (before execution loop)
-            # Just save their session state
-            for (c, _err) in order.errable
-                c.produced_by_hash = source_hash(c)
-            end
-
+            _run_order!(state, order)
             save_session!(nb)
             _broadcast_stale!(state)
         finally
@@ -477,13 +393,18 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
     nb = active_nb(state)
     update_topology!(nb, changed_cells)
     order = execution_order(nb, changed_cells)
+    _run_order!(state, order)
+end
 
-    # PDE already filters disabled cells from order.runnable and puts
-    # their dependents in order.errable (via is_disabled on SessionCell)
+"""Shared execution loop — handles errable, queued, running, output for a topological order.
+Used by both handle_run_all! and _execute_cells! to avoid duplicate logic."""
+function _run_order!(state::WebNotebookState, order)
+    nb = active_nb(state)
 
-    # Mark errable cells (disabled deps, cycles, etc.)
+    # 1. Handle errable cells (disabled deps, cycles)
     for (cell, err) in order.errable
         cell.state = cell_errored
+        cell.produced_by_hash = source_hash(cell)
         cell.output = CellOutput()
         is_self_disabled = cell.disabled
         msg = is_self_disabled ? "Cell is disabled" : "Skipped — depends on a disabled cell"
@@ -500,7 +421,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         ))
     end
 
-    # Mark all runnable as queued
+    # 2. Mark all runnable as queued
     for c in order.runnable
         c.state = cell_queued
         _update_cell_signal!(c)
@@ -511,10 +432,9 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         ))
     end
 
-    # Execute in topological order — check interrupted flag between cells
+    # 3. Execute in topological order
     n_total = length(order.runnable)
     for (i, c) in enumerate(order.runnable)
-        # Check if interrupted before starting next cell
         if state.interrupted
             println("[WebNotebook] Execution interrupted — skipping remaining cells")
             break
@@ -534,7 +454,14 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
             "cell_id" => string(c.id)
         ))
 
-        remote_execute_cell!(active_worker(state), c)
+        remote_execute_cell!(active_worker(state), c; log_callback=rec -> begin
+            try broadcast_channel!("notebook", Dict(
+                "event" => "cell_log",
+                "cell_id" => string(c.id),
+                "log" => Dict("level" => Int(rec.level), "message" => rec.message,
+                             "kwargs" => [Dict("k" => k, "v" => v) for (k, v) in rec.kwargs])
+            )) catch; end
+        end)
         _update_cell_signal!(c)
 
         broadcast_channel!("notebook", Dict(
@@ -549,7 +476,7 @@ function _execute_cells!(state::WebNotebookState, changed_cells::Vector{Cell})
         ))
     end
 
-    # Clear progress indicator
+    # 4. Clear progress indicator
     broadcast_channel!("notebook", Dict(
         "event" => "run_progress",
         "running_index" => 0,
