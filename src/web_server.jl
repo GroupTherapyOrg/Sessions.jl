@@ -388,12 +388,12 @@ function handle_run_all!(state::WebNotebookState, conn, data)
                 broadcast_channel!("notebook", Dict(
                     "event" => "cell_output",
                     "cell_id" => string(cell.id),
-                    "output_html" => render_output_html(cell),
+                    "output_html" => """<div class="cell-skipped-msg">Skipped — depends on a disabled cell</div>""",
                     "runtime_ns" => UInt64(0),
                     "stdout" => "",
                     "rootassignee" => "",
                     "logs" => Any[],
-                    "state" => "cell_errored"
+                    "state" => "cell_skipped"
                 ))
             end
 

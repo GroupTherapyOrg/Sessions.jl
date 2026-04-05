@@ -244,7 +244,7 @@ function _notebook_ws_bridge_body()
       // Apply state to code-cell
       if(el.code){el.code.classList.remove('idle','stale','executing');if(state==='cell_queued'||state==='cell_running'){el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);}}
       // Apply state to cell-wrap (CSS targets .cell-wrap.wrap-* .code-cell)
-      if(el.wrap){el.wrap.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored');if(state==='cell_queued')el.wrap.classList.add('wrap-queued');else if(state==='cell_running')el.wrap.classList.add('wrap-running');else if(state==='cell_errored')el.wrap.classList.add('wrap-errored');}
+      if(el.wrap){el.wrap.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored','wrap-skipped');if(state==='cell_queued')el.wrap.classList.add('wrap-queued');else if(state==='cell_running')el.wrap.classList.add('wrap-running');else if(state==='cell_errored')el.wrap.classList.add('wrap-errored');else if(state==='cell_skipped')el.wrap.classList.add('wrap-skipped');}
     }
 
     // ── Find gap after a cell (or first gap if null) ──
