@@ -99,14 +99,7 @@ function NotebookPanel(state)
             "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
             "TherapyWS.sendMessage('notebook',{action:'format_all'})",
         :title => is_file_tab ? "Format file" : "Format all cells", "Format"))
-    if !is_file_tab
-        push!(toolbar, RawHtml("""<span class="toolbar-sep"></span>"""))
-        push!(toolbar, Button(:id => "toc-toggle-btn", :class => "tb-btn",
-            :on_click => "window._sessionsToggleToc&&_sessionsToggleToc()",
-            :title => "Table of Contents",
-            RawHtml("""<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 3h12M2 8h8M2 13h10"/></svg>"""),
-            " ToC"))
-    end
+    # ToC toggle handled by the floating panel's own open/close icons
     push!(tab_items, Div(:style => "display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;",
         toolbar...))
 
