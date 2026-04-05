@@ -125,7 +125,6 @@
 .cell-wrap:hover .cell-eye{opacity:1;}
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
 .cell-eye:hover svg{color:#219669;}
-.eye-closed-overlay{position:absolute;inset:0;background:var(--workspace-bg);}
 .cell-out{overflow-x:auto;}
 /* ── Disabled Cell (skipped during execution) ── */
 .cell-wrap.cell-disabled{opacity:0.45;filter:saturate(0.3);}
