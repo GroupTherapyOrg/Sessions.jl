@@ -380,6 +380,23 @@ function handle_run_all!(state::WebNotebookState, conn, data)
             update_topology!(nb)
             order = execution_order(nb)
 
+            # Handle errable cells (disabled deps, cycles) — PDE puts them here
+            for (cell, err) in order.errable
+                cell.state = cell_errored
+                cell.output = CellOutput()
+                cell.output.text_representation = "Cell skipped — depends on a disabled cell"
+                broadcast_channel!("notebook", Dict(
+                    "event" => "cell_output",
+                    "cell_id" => string(cell.id),
+                    "output_html" => render_output_html(cell),
+                    "runtime_ns" => UInt64(0),
+                    "stdout" => "",
+                    "rootassignee" => "",
+                    "logs" => Any[],
+                    "state" => "cell_errored"
+                ))
+            end
+
             # PDE already excludes disabled cells from order.runnable
             for c in order.runnable
                 c.state = cell_queued
@@ -805,9 +822,13 @@ end
 function handle_toggle_disable!(state::WebNotebookState, conn, data)
     cell_id_str = get(data, "cell_id", "")
     isempty(cell_id_str) && return
-    cell = get_cell(active_nb(state), UUID(cell_id_str))
+    nb = active_nb(state)
+    cell = get_cell(nb, UUID(cell_id_str))
     cell === nothing && return
     cell.disabled = get(data, "disabled", false)
+    # Invalidate topology cache — PDE needs to re-evaluate is_disabled
+    nb.topology = nothing
+    nb._cached_topological_order = nothing
     broadcast_channel!("notebook", Dict(
         "event" => "cell_disabled",
         "cell_id" => cell_id_str,
