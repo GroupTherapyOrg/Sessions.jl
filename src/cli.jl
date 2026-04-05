@@ -48,22 +48,32 @@ function (@main)(args)
     end
 
     # Web IDE mode — launch the web server
-    nb_path = if !isempty(args) && endswith(args[1], ".jl")
-        abspath(user_cwd, args[1])
-    else
-        nothing
+    nb_path = nothing
+    work_dir = user_cwd
+    if !isempty(args)
+        arg = abspath(user_cwd, args[1])
+        if endswith(args[1], ".jl") && isfile(arg)
+            nb_path = arg
+            work_dir = dirname(arg)
+        elseif isdir(arg)
+            # Directory: open explorer rooted here, no notebook
+            work_dir = arg
+        end
     end
 
-    _launch_web(nb_path)
+    _launch_web(nb_path; work_dir)
 end
 
-function _launch_web(nb_path::Union{String, Nothing})
+function _launch_web(nb_path::Union{String, Nothing}; work_dir::String=pwd())
     # The web app entry point
     web_app_path = joinpath(@__DIR__, "web", "app.jl")
     if !isfile(web_app_path)
         println("Error: web app not found at $web_app_path")
         return
     end
+
+    # Set working directory so file explorer + terminal root there
+    try cd(work_dir) catch; end
 
     # Build ARGS for the web app
     web_args = ["dev"]
