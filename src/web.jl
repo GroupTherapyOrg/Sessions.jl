@@ -175,6 +175,24 @@ function _html_esc(s::AbstractString)
     replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
 end
 
+"""Post-process Markdown HTML to wrap LaTeX for MathJax.
+
+Julia's Markdown.html renders LaTeX as `&#36;formula&#36;` (escaped dollar signs).
+- Display math (top-level, not inside `<p>`): `&#36;formula&#36;` → `<p class="tex">\\$\\$formula\\$\\$</p>`
+- Inline math (inside `<p>`): `&#36;formula&#36;` → `<span class="tex">\\$formula\\$</span>`
+
+This matches Pluto's LaTeX.jl approach — MathJax only processes elements with class="tex".
+"""
+function _wrap_latex_for_mathjax(html::AbstractString)
+    # Display math: bare &#36;...&#36; on its own line (not inside <p>)
+    html = replace(html, r"(?<![>a-zA-Z])&#36;((?:[^&]|&(?!#36;))+)&#36;\n" =>
+        SubstitutionString("""<p class="tex">\$\$\\1\$\$</p>\n"""))
+    # Inline math: &#36;...&#36; inside text
+    html = replace(html, r"&#36;((?:[^&]|&(?!#36;))+?)&#36;" =>
+        SubstitutionString("""<span class="tex">\$\\1\$</span>"""))
+    html
+end
+
 """Render a StructuredError as rich HTML with collapsible stack trace."""
 function _render_structured_error_html(se::StructuredError)
     buf = IOBuffer()
@@ -626,64 +644,45 @@ function _render_html_gallery(cell::Cell, prerendered)
         variant_divs...)
 end
 
-"""Render cell output based on output_type."""
+"""Render cell output as a VNode for SSR (static export + initial render).
+
+Delegates to `render_output_html` for most types. Only keeps VNode-specific
+paths for bonds/galleries that need live Julia objects for @island SSR.
+"""
 function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}())
     output = cell.output
     result = output.result
 
-    if output.output_type == :nothing
-        return nothing
+    output.output_type == :nothing && return nothing
 
-    elseif output.output_type == :markdown
-        html_str = sprint(io -> Markdown.html(io, result))
-        return Div(:class => "md-prose", RawHtml(html_str))
+    # Bond — needs live result for @island SSR
+    if output.output_type == :bond
+        return _render_bond_output(result, cell, prerendered)
+    end
 
-    elseif output.output_type == :tree
-        tree_html = _render_tree_html(result)
-        return isempty(tree_html) ? nothing : RawHtml(tree_html)
+    # Plotly — needs live result for gallery pre-rendering
+    if output.output_type == :plotly_json
+        return _render_plotly_output(cell, prerendered)
+    end
 
-    elseif output.output_type == :error
-        if output.structured_error !== nothing
-            return RawHtml(_render_structured_error_html(output.structured_error))
-        end
-        err_msg = output.text_representation
-        return Div(:class => "jl-error",
-            Div(:class => "jl-error-message", err_msg))
+    # Image — needs gallery pre-rendering
+    if output.output_type == :image_png
+        return _render_image_output(cell, prerendered)
+    end
 
-    elseif output.output_type == :dataframe
+    # Dataframe — needs live result for gallery/reactive table
+    if output.output_type == :dataframe
         gallery = get(prerendered, cell.id, nothing)
         if gallery !== nothing
             return _render_reactive_table(result, gallery)
         end
-        return _render_table_output(result)
-
-    elseif output.output_type == :bond
-        return _render_bond_output(result, cell, prerendered)
-
-    elseif output.output_type == :plotly_json
-        return _render_plotly_output(cell, prerendered)
-
-    elseif output.output_type == :image_png
-        return _render_image_output(cell, prerendered)
-
-    elseif output.output_type == :image_svg
-        # SVG: render as inline SVG or img tag
-        svg_src = output.text_representation
-        if !isempty(svg_src)
-            return Div(:class => "overflow-x-auto", RawHtml(svg_src))
+        if result !== nothing
+            return _render_table_output(result)
         end
-        return nothing
+    end
 
-    elseif output.output_type == :html
-        # Raw HTML output (from packages with text/html MIME method)
-        html_str = output.text_representation
-        if !isempty(html_str)
-            return Div(:class => "overflow-x-auto", RawHtml(html_str))
-        end
-        return nothing
-
-    elseif output.output_type == :text
-        # Live WASM binding for trivial numeric cells downstream of a slider
+    # Text with live WASM binding for slider-bound values
+    if output.output_type == :text
         gallery = get(prerendered, cell.id, nothing)
         if gallery !== nothing && result isa Integer
             slider_id = string(gallery.slider_cell_id)
@@ -691,16 +690,13 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
                 :data_bound_to => slider_id,
                 BoundValue(value=Int(result)))
         end
-        # Pre-rendered gallery fallback for non-numeric text
         gallery_node = _render_html_gallery(cell, prerendered)
         gallery_node !== nothing && return gallery_node
-        text = output.text_representation
-        isempty(text) && return nothing
-        return Pre(:class => "text-sm font-mono text-warm-600 dark:text-warm-500 whitespace-pre-wrap",
-            Code(text))
     end
 
-    nothing
+    # All other types: delegate to render_output_html (single source of truth)
+    html = render_output_html(cell; prerendered)
+    isempty(html) ? nothing : RawHtml(html)
 end
 
 function _render_image_output(cell::Cell, prerendered)
@@ -940,6 +936,9 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
         else
             output.text_representation
         end
+        # Post-process LaTeX: Julia's Markdown renders $formula$ as &#36;formula&#36;
+        # Wrap in .tex spans so MathJax can typeset them (same approach as Pluto's LaTeX.jl)
+        md_html = _wrap_latex_for_mathjax(md_html)
         return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
     end
     # Bond
