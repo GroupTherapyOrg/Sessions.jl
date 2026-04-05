@@ -1167,6 +1167,8 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     wrap_cls = "cell-wrap relative"
     cell.disabled && (wrap_cls *= " cell-disabled")
     cell.folded && (wrap_cls *= " code-hidden")
+    has_visible_output = output.output_type != :nothing && !isempty(output.text_representation)
+    has_visible_output && (wrap_cls *= " has-output")
     Div(:data_cell_id => cell_id, :class => wrap_cls, parts...)
 end
 

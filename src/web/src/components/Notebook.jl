@@ -459,13 +459,13 @@ function _notebook_ws_bridge_body()
             el.out.style.display=''; el.out.style.padding='4px 0 2px';
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
-            // Typeset LaTeX via MathJax
             if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise([el.out]).catch(function(){});}
-            // Highlight markdown code blocks
             if(window.hljs){el.out.querySelectorAll('.md-prose pre code').forEach(function(b){hljs.highlightElement(b);});}
+            if(el.wrap)el.wrap.classList.add('has-output');
           } else if (assigneeHtml) {
-            el.out.innerHTML = assigneeHtml; el.out.style.display=''; el.out.style.padding='6px 0 10px';
-          } else { el.out.innerHTML=''; el.out.style.display='none'; }
+            el.out.innerHTML = assigneeHtml; el.out.style.display=''; el.out.style.padding='4px 0 2px';
+            if(el.wrap)el.wrap.classList.add('has-output');
+          } else { el.out.innerHTML=''; el.out.style.display='none'; if(el.wrap)el.wrap.classList.remove('has-output'); }
         }
         // Stdout — below code cell (separate container)
         var stdoutEl = el.wrap ? el.wrap.querySelector('.cell-stdout[data-cell-id="'+data.cell_id+'"]') : null;

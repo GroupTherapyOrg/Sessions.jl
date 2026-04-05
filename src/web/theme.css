@@ -140,12 +140,11 @@
 :root{--disabled-cell-bg:var(--warm-100);}
 .dark{--disabled-cell-bg:#151a22;}
 
-/* ── Cell traffic light bar (connects output above to code cell) ── */
+/* ── Cell connector bar (links output to code, Pluto-style) ── */
 .cell-wrap{position:relative;padding-left:6px;}
-.cell-out{position:relative;}
-.cell-out:not([style*="display:none"])::before{content:'';position:absolute;left:-6px;top:0;bottom:-2px;width:3px;border-radius:3px 0 0 3px;background:var(--cell-trafficlight);z-index:1;}
-/* When code is folded/hidden, hide the connector bar */
-.cell-wrap.code-hidden .cell-out::before{display:none;}
+.cell-wrap::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px;background:var(--cell-trafficlight);z-index:1;pointer-events:none;display:none;}
+/* Show bar only when output is visible AND code is visible */
+.cell-wrap.has-output:not(.code-hidden)::after{display:block;}
 /* Traffic light color variables */
 :root{--cell-trafficlight:rgba(0,0,0,.08);}
 .dark{--cell-trafficlight:rgba(255,255,255,.06);}
