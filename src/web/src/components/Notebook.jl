@@ -476,7 +476,8 @@ function _notebook_ws_bridge_body()
         if (logsEl) {
           if (data.logs && data.logs.length > 0) {
             logsEl.innerHTML = data.logs.map(function(log){return _renderLogEntry(log);}).join('');
-            logsEl.style.display = '';
+            // Only show if show_logs is enabled
+            if (logsEl.dataset.showLogs !== '0') logsEl.style.display = '';
           } else if (!logsEl.innerHTML) {
             logsEl.style.display = 'none';
           }
@@ -545,7 +546,7 @@ function _notebook_ws_bridge_body()
           var logsEl = wrap.querySelector('.cell-logs[data-cell-id="'+data.cell_id+'"]');
           if (logsEl && window._renderLogEntry) {
             logsEl.insertAdjacentHTML('beforeend', _renderLogEntry(data.log));
-            logsEl.style.display = '';
+            if (logsEl.dataset.showLogs !== '0') logsEl.style.display = '';
           }
         }
       }
@@ -677,7 +678,7 @@ function _notebook_island_js()
     // Detect current cell state for toggle labels
     var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
     var logsEl = wrap ? wrap.querySelector('.cell-logs') : null;
-    var logsVisible = logsEl && logsEl.style.display !== 'none' && logsEl.innerHTML !== '';
+    var logsVisible = logsEl && logsEl.style.display !== 'none';
     var isDisabled = wrap ? wrap.classList.contains('cell-disabled') : false;
 
     var actions = [
@@ -685,7 +686,9 @@ function _notebook_island_js()
       {label:'Move Down', icon:'\\u2193', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
       {sep:true},
       {label:logsVisible?'Hide Logs':'Show Logs', icon:'\\u{1F4CB}', action:function(){
-        if(logsEl){logsEl.style.display=logsEl.style.display==='none'?'':'none';}
+        var newVisible = !logsVisible;
+        if(logsEl){logsEl.style.display=newVisible?'':'none';logsEl.dataset.showLogs=newVisible?'1':'0';}
+        TherapyWS.sendMessage('notebook',{action:'toggle_show_logs',cell_id:cellId,show_logs:newVisible});
       }},
       {label:isDisabled?'Enable Cell':'Disable Cell', icon:isDisabled?'\\u25B6':'\\u23F8', action:function(){
         TherapyWS.sendMessage('notebook',{action:'toggle_disable',cell_id:cellId,disabled:!isDisabled});

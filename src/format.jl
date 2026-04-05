@@ -41,6 +41,7 @@ function parse_notebook(content::String; path::String="Untitled.jl")
     # Parse cell bodies: collect UUID → code mappings
     cell_codes = Dict{UUID, String}()
     disabled_uuids = Set{UUID}()
+    hide_logs_uuids = Set{UUID}()
     current_uuid = nothing
     current_lines = String[]
     in_cell_order = false
@@ -92,13 +93,13 @@ function parse_notebook(content::String; path::String="Untitled.jl")
                 uuid_str = strip(sline[ncodeunits(CELL_VISIBLE_PREFIX)+1:end])
                 id = UUID(uuid_str)
                 code = get(cell_codes, id, "")
-                cell = Cell(; id, code, folded=false, disabled=(id in disabled_uuids))
+                cell = Cell(; id, code, folded=false, disabled=(id in disabled_uuids), show_logs=!(id in hide_logs_uuids))
                 add_cell!(nb, cell)
             elseif startswith(sline, CELL_FOLDED_PREFIX)
                 uuid_str = strip(sline[ncodeunits(CELL_FOLDED_PREFIX)+1:end])
                 id = UUID(uuid_str)
                 code = get(cell_codes, id, "")
-                cell = Cell(; id, code, folded=true, disabled=(id in disabled_uuids))
+                cell = Cell(; id, code, folded=true, disabled=(id in disabled_uuids), show_logs=!(id in hide_logs_uuids))
                 add_cell!(nb, cell)
             end
         elseif startswith(sline, CELL_MARKER) && !startswith(sline, CELL_ORDER_MARKER)
@@ -115,6 +116,8 @@ function parse_notebook(content::String; path::String="Untitled.jl")
                 meta = strip(sline[ncodeunits("# ╠═╡ ")+1:end])
                 if meta == "disabled = true"
                     push!(disabled_uuids, current_uuid)
+                elseif meta == "show_logs = false"
+                    push!(hide_logs_uuids, current_uuid)
                 end
                 continue  # Skip metadata lines
             end
@@ -178,6 +181,9 @@ function serialize_notebook(nb::Notebook)
         println(io, CELL_MARKER, cell.id)
         if cell.disabled
             println(io, "# ╠═╡ disabled = true")
+        end
+        if !cell.show_logs
+            println(io, "# ╠═╡ show_logs = false")
         end
         if !isempty(cell.code)
             println(io, cell.code)

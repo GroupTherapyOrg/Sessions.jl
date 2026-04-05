@@ -193,6 +193,8 @@ function setup_web_notebook!(state::WebNotebookState)
                 handle_toggle_fold!(state, conn, data)
             elseif action == "toggle_disable"
                 handle_toggle_disable!(state, conn, data)
+            elseif action == "toggle_show_logs"
+                handle_toggle_show_logs!(state, conn, data)
             elseif action == "save"
                 handle_save!(state, conn, data)
             elseif action == "run_stale"
@@ -747,6 +749,15 @@ function handle_toggle_disable!(state::WebNotebookState, conn, data)
     ))
 end
 
+"""Handle show/hide logs toggle — persisted in .jl file as # ╠═╡ show_logs = false."""
+function handle_toggle_show_logs!(state::WebNotebookState, conn, data)
+    cell_id_str = get(data, "cell_id", "")
+    isempty(cell_id_str) && return
+    cell = get_cell(active_nb(state), UUID(cell_id_str))
+    cell === nothing && return
+    cell.show_logs = get(data, "show_logs", true)
+end
+
 """Handle code update (without execution). Broadcasts stale count so UI updates."""
 function handle_update_code!(state::WebNotebookState, conn, data)
     cell_id_str = get(data, "cell_id", "")
@@ -1210,7 +1221,7 @@ function _snapshot_notebook(nb::Notebook)
     for id in nb.cell_order
         haskey(nb.cells, id) || continue
         cell = nb.cells[id]
-        add_cell!(snap, Cell(; id=cell.id, code=cell.code, folded=cell.folded, disabled=cell.disabled))
+        add_cell!(snap, Cell(; id=cell.id, code=cell.code, folded=cell.folded, disabled=cell.disabled, show_logs=cell.show_logs))
     end
     snap.cell_order = copy(nb.cell_order)
     snap

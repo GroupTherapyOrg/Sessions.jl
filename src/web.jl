@@ -1154,7 +1154,8 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
 
     # Logs container — below code, below stdout (for @info/@warn/@error/@debug)
     if mode == :live
-        push!(parts, RawHtml("""<div class="cell-logs" data-cell-id="$(cell_id)" style="display:none"></div>"""))
+        logs_display = cell.show_logs ? "" : "display:none"
+        push!(parts, RawHtml("""<div class="cell-logs" data-cell-id="$(cell_id)" data-show-logs="$(cell.show_logs ? "1" : "0")" style="$(logs_display)"></div>"""))
     end
 
     # Cell shoulder (drag handle) — only in live mode
