@@ -654,6 +654,8 @@ function _notebook_ws_bridge_body()
           if(nbIsland){nbIsland.outerHTML=data.nb_html;if(window._initAllCM)_initAllCM();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
         }
         var lo=document.getElementById('nb-loading');if(lo){lo.classList.add('loaded');setTimeout(function(){lo.remove();},400);}
+        // Re-init ToC after tab switch (DOM was replaced)
+        if(window._sessionsReinitToc) setTimeout(_sessionsReinitToc, 300);
       }
     });
   };
@@ -1221,6 +1223,7 @@ function _notebook_island_js()
           setTimeout(function() {
             if (window._initAllCM) _initAllCM();
             if (window.__hydrateTherapyIslands) { var nb = document.getElementById('nb-island'); if (nb) __hydrateTherapyIslands(nb); }
+            if (window._sessionsReinitToc) _sessionsReinitToc();
           }, 50);
         }
       }
@@ -1347,6 +1350,18 @@ function _notebook_island_js()
 
     var nb = document.getElementById('nb');
     if (nb) new MutationObserver(debouncedBuild).observe(nb, {childList: true, subtree: true});
+
+    // Re-init after tab switch (DOM replaced, old refs stale)
+    window._sessionsReinitToc = function() {
+      tocNav = document.getElementById('toc-panel');
+      tocSection = document.getElementById('toc-content');
+      if (!tocNav || !tocSection) return;
+      if (localStorage.getItem('sessions-toc') === '1') tocNav.classList.remove('hide');
+      if (!tocNav.classList.contains('hide')) buildToc();
+      // Re-attach MutationObserver to new #nb
+      var newNb = document.getElementById('nb');
+      if (newNb) new MutationObserver(debouncedBuild).observe(newNb, {childList: true, subtree: true});
+    };
 
     // Initial builds with retries (PlutoUI pattern)
     setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 500);
