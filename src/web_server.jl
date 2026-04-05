@@ -401,9 +401,9 @@ Used by both handle_run_all! and _execute_cells! to avoid duplicate logic."""
 function _run_order!(state::WebNotebookState, order)
     nb = active_nb(state)
 
-    # 1. Handle errable cells (disabled deps, cycles)
+    # 1. Handle errable cells (disabled deps, cycles) — use cell_idle, not cell_errored
     for (cell, err) in order.errable
-        cell.state = cell_errored
+        cell.state = cell_idle
         cell.produced_by_hash = source_hash(cell)
         cell.output = CellOutput()
         is_self_disabled = cell.disabled
