@@ -108,32 +108,34 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell; log_callback=nothi
 
     # Start log poller — reads new lines from the file every 150ms and calls log_callback
     poll_running = Ref(true)
-    lines_read = Ref(0)
+    last_pos = Ref(0)  # byte offset into file
     poller_task = if log_callback !== nothing
         @async begin
             while poll_running[]
                 try
-                    all_lines = readlines(log_file)
-                    n = length(all_lines)
-                    if n > lines_read[]
-                        for i in (lines_read[]+1):n
-                            parts = split(all_lines[i], "|"; limit=3)
-                            if length(parts) >= 2
-                                level = tryparse(Int32, parts[1])
-                                level === nothing && continue
-                                msg = parts[2]
-                                kw_str = length(parts) >= 3 ? parts[3] : ""
-                                kwargs = Pair{String,String}[]
-                                if !isempty(kw_str)
-                                    for p in split(kw_str, ",")
-                                        eq = findfirst('=', p)
-                                        eq !== nothing && push!(kwargs, p[1:eq-1] => p[eq+1:end])
-                                    end
-                                end
-                                log_callback(LogRecord(level, msg, "", 0, "", kwargs))
-                            end
+                    sz = filesize(log_file)
+                    if sz > last_pos[]
+                        new_bytes = open(log_file) do io
+                            seek(io, last_pos[])
+                            read(io, String)
                         end
-                        lines_read[] = n
+                        last_pos[] = sz
+                        for line in split(new_bytes, '\n'; keepempty=false)
+                            parts = split(line, "|"; limit=3)
+                            length(parts) >= 2 || continue
+                            level = tryparse(Int32, parts[1])
+                            level === nothing && continue
+                            msg = String(parts[2])
+                            kw_str = length(parts) >= 3 ? String(parts[3]) : ""
+                            kwargs = Pair{String,String}[]
+                            if !isempty(kw_str)
+                                for p in split(kw_str, ",")
+                                    eq = findfirst('=', p)
+                                    eq !== nothing && push!(kwargs, String(p[1:eq-1]) => String(p[eq+1:end]))
+                                end
+                            end
+                            log_callback(LogRecord(level, msg, "", 0, "", kwargs))
+                        end
                     end
                 catch; end
                 sleep(0.15)
