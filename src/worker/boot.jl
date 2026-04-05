@@ -7,19 +7,12 @@ import Markdown
 using Logging
 
 # ── Log Capture ──
+# Use NamedTuples (not custom structs) so Malt can serialize across process boundary
 
-struct _LogRecord
-    level::Int32
-    message::String
-    file::String
-    line::Int
-    module_name::String
-    group::String
-    kwargs::Vector{Pair{String,String}}
-end
+const _LogRecordNT = @NamedTuple{level::Int32, message::String, file::String, line::Int, module_name::String, kwargs::Vector{Pair{String,String}}}
 
 mutable struct _SessionsLogger <: AbstractLogger
-    logs::Vector{_LogRecord}
+    logs::Vector{_LogRecordNT}
     min_level::LogLevel
 end
 
@@ -29,7 +22,7 @@ Logging.catch_exceptions(::_SessionsLogger) = true
 
 function Logging.handle_message(l::_SessionsLogger, level, message, _module, group, id, file, line; kwargs...)
     kw = Pair{String,String}[string(k) => try sprint(show, v) catch; "?" end for (k, v) in kwargs]
-    push!(l.logs, _LogRecord(Int32(level.level), string(message), string(file), Int(line), string(_module), string(group), kw))
+    push!(l.logs, (level=Int32(level.level), message=string(message), file=string(file), line=Int(line), module_name=string(_module), kwargs=kw))
 end
 
 # ── Workspace ──
@@ -62,7 +55,7 @@ end
 # ── Output struct ──
 
 # Use NamedTuple for output — serializes across process boundary without type issues
-const _empty_output = (output_type=:nothing, text_representation="", stdout_text="", runtime_ns=UInt64(0), error_text="", image_bytes=nothing, logs=_LogRecord[])
+const _empty_output = (output_type=:nothing, text_representation="", stdout_text="", runtime_ns=UInt64(0), error_text="", image_bytes=nothing, logs=_LogRecordNT[])
 
 # ── Cell execution ──
 
@@ -74,7 +67,7 @@ function _worker_execute(ws::SessionsWorkspace, code::String)
     result = nothing
     had_error = false
     error_text = ""
-    logs_buffer = _LogRecord[]
+    logs_buffer = _LogRecordNT[]
     logger = _SessionsLogger(logs_buffer, Logging.Debug)
 
     Logging.with_logger(logger) do
@@ -115,7 +108,7 @@ function _worker_execute(ws::SessionsWorkspace, code::String)
     _classify_and_capture(result, stdout_str, runtime, logs_buffer)
 end
 
-function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogRecord[])
+function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogRecordNT[])
     # Bond (@bind widget) — detect by duck typing (has .element and .defines fields)
     if hasproperty(result, :element) && hasproperty(result, :defines)
         widget = result.element
