@@ -82,6 +82,11 @@ function SessionsApp(children...)
             r.style.height = '';
             r.style.width = (localStorage.getItem('sessions-terminal-w') || '350') + 'px';
         }
+        var btn = document.getElementById('term-orient-btn');
+        if (btn) {
+            btn.title = 'Terminal to bottom';
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M5 10l3 3 3-3"/></svg>';
+        }
     }
 
     // ── Toggle terminal orientation ──
@@ -108,9 +113,14 @@ function SessionsApp(children...)
         }
         // Re-fit all xterm instances
         setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 100);
-        // Update toggle button icon
+        // Update toggle button icon + title
         var btn = document.getElementById('term-orient-btn');
-        if (btn) btn.title = isVert ? 'Terminal to right' : 'Terminal to bottom';
+        if (btn) {
+            btn.title = ws.classList.contains('terminal-right') ? 'Terminal to bottom' : 'Terminal to right';
+            btn.innerHTML = ws.classList.contains('terminal-right')
+                ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M5 10l3 3 3-3"/></svg>'
+                : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8h10M10 5l3 3-3 3"/></svg>';
+        }
     };
 
     // ── Resize logic (uses ::after/::before pseudo-elements on panels) ──
@@ -133,7 +143,7 @@ function SessionsApp(children...)
         var startSize = target.getBoundingClientRect()[actualAxis === 'x' ? 'width' : 'height'];
         var onMove = function(e2) {
           var delta = (actualAxis === 'x' ? e2.clientX : e2.clientY) - start;
-          var newSize = Math.round(Math.max(min, Math.min(max, startSize + (actualAxis === 'y' ? -delta : -delta))));
+          var newSize = Math.round(Math.max(min, Math.min(max, startSize + (actualAxis === 'y' ? -delta : isTermVert ? -delta : delta))));
           target.style[actualAxis === 'x' ? 'width' : 'height'] = newSize + 'px';
           window.dispatchEvent(new Event('resize'));
         };
