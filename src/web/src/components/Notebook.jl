@@ -143,8 +143,9 @@ function _notebook_cm_script_body()
       // Fade out loading overlay once editors are ready
       var lo = document.getElementById('nb-loading');
       if (lo) { lo.classList.add('loaded'); setTimeout(function(){ lo.remove(); }, 400); }
-      // Typeset LaTeX on initial load
-      if(window.MathJax&&MathJax.typesetPromise){var texEls=document.querySelectorAll('.tex');if(texEls.length)MathJax.typesetPromise(Array.from(texEls)).catch(function(){});}
+      // Typeset LaTeX on initial load (wait for MathJax to be ready)
+      function _typesetAll(){if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise().catch(function(){});}else{setTimeout(_typesetAll,500);}}
+      setTimeout(_typesetAll,1000);
     };
     window._sessionsInitNewCells = window._initAllCM;
   }
@@ -423,8 +424,8 @@ function _notebook_ws_bridge_body()
             el.out.style.display=''; el.out.style.padding='6px 0 10px';
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
-            // Typeset LaTeX (.tex elements) via MathJax
-            if(window.MathJax&&MathJax.typesetPromise){var texEls=el.out.querySelectorAll('.tex');if(texEls.length)MathJax.typesetPromise(Array.from(texEls)).catch(function(){});}
+            // Typeset LaTeX via MathJax
+            if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise([el.out]).catch(function(){});}
           } else if (assigneeHtml) {
             el.out.innerHTML = assigneeHtml; el.out.style.display=''; el.out.style.padding='6px 0 10px';
           } else { el.out.innerHTML=''; el.out.style.display='none'; }

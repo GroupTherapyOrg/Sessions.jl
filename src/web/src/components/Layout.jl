@@ -44,10 +44,10 @@ function Layout(children...; title="Sessions.jl")
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
 <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>"""),
 
-        # --- MathJax 3 (LaTeX rendering — only processes .tex class elements, like Pluto) ---
+        # --- MathJax 3 (LaTeX rendering) ---
         let ds = '\$'  # dollar sign, escaped from Julia interpolation
             RawHtml("""<script>
-window.MathJax={options:{ignoreHtmlClass:'no-mathjax',processHtmlClass:'tex'},startup:{typeset:false},tex:{inlineMath:[['$(ds)','$(ds)'],['\\\\(','\\\\)']]},svg:{fontCache:'global'}};
+window.MathJax={tex:{inlineMath:[['$(ds)','$(ds)'],['\\\\(','\\\\)']]},svg:{fontCache:'global'}};
 </script>
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg-full.js"></script>""")
         end,
