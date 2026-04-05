@@ -141,10 +141,9 @@
 .dark{--disabled-cell-bg:#151a22;}
 
 /* ── Cell connector bar (links output to code, Pluto-style) ── */
-.cell-wrap{position:relative;padding-left:6px;}
-.cell-wrap::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px;background:var(--cell-trafficlight);z-index:1;pointer-events:none;display:none;}
-/* Show bar only when output is visible AND code is visible */
-.cell-wrap.has-output:not(.code-hidden)::after{display:block;}
+.cell-wrap{position:relative;}
+/* Output indented; code cell stays flush left. Bar connects them. */
+.cell-wrap.has-output:not(.code-hidden) .cell-out{margin-left:6px;border-left:2px solid var(--cell-trafficlight);padding-left:4px;}
 /* Traffic light color variables */
 :root{--cell-trafficlight:rgba(0,0,0,.08);}
 .dark{--cell-trafficlight:rgba(255,255,255,.06);}
