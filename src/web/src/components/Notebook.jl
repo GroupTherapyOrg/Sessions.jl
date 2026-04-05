@@ -1281,7 +1281,7 @@ function _notebook_island_js()
         var level = h.tagName;
         var text = h.textContent.trim();
         if (!text) return;
-        var id = h.id || (h.id = 'h-' + text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+        var id = h.id || (h.id = 'h-' + text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-\\x24/g, ''));
         html += '<a class="toc-entry toc-' + level + '" data-toc-id="' + id + '" href="#' + id + '">' + text.replace(/</g, '&lt;') + '</a>';
       });
       toc.innerHTML = html;
