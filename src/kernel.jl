@@ -139,8 +139,8 @@ function _is_tree_value(@nospecialize(value))::Bool
     value isa Nothing && return false
     value isa Missing && return false
     # Collections — always tree
-    value isa AbstractVector && return true
-    value isa AbstractDict && return true
+    value isa AbstractVector && return !isempty(value)
+    value isa AbstractDict && return !isempty(value)
     value isa Tuple && return length(value) > 0
     value isa NamedTuple && return true
     value isa AbstractSet && return true

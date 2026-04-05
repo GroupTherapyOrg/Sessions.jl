@@ -8,8 +8,8 @@ using Markdown: @md_str, MD
         @test classify_output(42) == :text
         @test classify_output(3.14) == :text
         @test classify_output("hello") == :text
-        @test classify_output([1, 2, 3]) == :text
-        @test classify_output(Dict(:a => 1)) == :text
+        @test classify_output([1, 2, 3]) == :tree
+        @test classify_output(Dict(:a => 1)) == :tree
         @test classify_output(true) == :text
         @test classify_output(:symbol) == :text
     end
@@ -118,7 +118,7 @@ using Markdown: @md_str, MD
         ws = Workspace()
         c = Cell("[1, 2, 3]")
         execute_cell!(ws, c)
-        @test c.output.output_type == :text
+        @test c.output.output_type == :tree
         @test !isempty(c.output.text_representation)
     end
 end
