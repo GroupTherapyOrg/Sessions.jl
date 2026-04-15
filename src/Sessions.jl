@@ -10,11 +10,11 @@ using UUIDs
 include("debug_log.jl")
 
 # Layer 1: Engine
-include("color.jl")
+include("engine/color.jl")
 export ColorRGB
 
-include("types.jl")
-include("format.jl")
+include("engine/types.jl")
+include("engine/format.jl")
 
 export CellState, cell_idle, cell_queued, cell_running, cell_done, cell_errored
 export LogRecord, CellOutput, Cell, Notebook
@@ -22,27 +22,24 @@ export add_cell!, insert_cell!, remove_cell!, get_cell, ordered_cells, swap_cell
 export source_hash, is_stale, is_never_run, stale_cells, never_run_cells, mark_executed!
 export load_notebook, save_notebook, parse_notebook, serialize_notebook, is_notebook_file
 
-include("analysis.jl")
+include("engine/analysis.jl")
 export analyze_cell, cell_definitions, cell_references, update_topology!, execution_order, downstream_dependents
 
-include("bind.jl")
+include("engine/bind.jl")
 export Bond, set_bond_value!, initial_value, possible_values, validate_value
 
-include("kernel.jl")
+include("engine/kernel.jl")
 export Workspace, execute_cell!, execute_notebook!, execute_changed!
 export classify_output, text_representation
 export format_error, format_cell_error, build_structured_error
 export StructuredFrame, StructuredError
 
-include("png_decoder.jl")
-export decode_png
+include("engine/output.jl")
+export decode_png, decode_jpeg
 
-include("jpeg_decoder.jl")
-export decode_jpeg
+include("engine/run.jl")
 
-include("run.jl")
-
-include("session.jl")
+include("engine/session.jl")
 
 # Layer 1.5: Web Export (types, execution pipeline, stubs for rendering)
 # Rendering to VNodes is provided by ext/SessionsTherapyExt when Therapy.jl is loaded.
@@ -58,7 +55,7 @@ export PTY, pty_spawn, pty_write, pty_resize!, pty_close!, pty_alive
 include("watcher.jl")
 
 # Layer 1.5: Notebook Worker (Malt.jl per-notebook process)
-include("worker/notebook_worker.jl")
+include("engine/worker/manager.jl")
 export NotebookWorker, remote_execute_cell!, stop_worker!, restart_worker!, is_worker_alive
 
 # Layer 1.5: Web Server (channel handlers for web UI)
