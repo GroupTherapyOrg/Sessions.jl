@@ -57,16 +57,16 @@ include("services/watcher.jl")
 include("engine/worker/manager.jl")
 export NotebookWorker, remote_execute_cell!, stop_worker!, restart_worker!, is_worker_alive
 
-# Layer 1.5: Web Server (channel handlers for web UI)
-include("web_server.jl")
+# Channels: WebSocket handlers (replaces web_server.jl)
+include("channels/notebook.jl")
 export WebTab, WebNotebookState, active_tab, active_nb, active_worker
-export setup_web_notebook!, send_full_state!, create_cell_signals!, start_web_watchers!
-export setup_file_explorer!
-export FileNode, _build_file_tree
+export setup_notebook_channel!, send_full_state!, create_cell_signals!, start_web_watchers!
 
-# Services: Terminal
-include("services/terminal.jl")
-export TerminalTab, TerminalState, setup_terminal!, stop_all_terminals!
+include("channels/files.jl")
+export FileNode, _build_file_tree, setup_files_channel!
+
+include("channels/terminal.jl")
+export TerminalTab, TerminalState, setup_terminal_channel!, stop_all_terminals!
 
 # Services: Static Analysis (JET.jl + JETLS LSP)
 include("services/jet.jl")
@@ -120,13 +120,16 @@ y = x * 2
 end
 
 function __init__()
-    # Re-register @islands into Therapy's ISLAND_REGISTRY at runtime
-    # (precompilation doesn't persist cross-module Dict mutations)
+    isdefined(Main, :Therapy) || return
+    _Therapy = getfield(Main, :Therapy)
+    isdefined(_Therapy, :IslandDef) || return
+    _IslandDef = getfield(_Therapy, :IslandDef)
+    _Registry = getfield(_Therapy, :ISLAND_REGISTRY)
     for name in (:CellToggle, :WebSlider, :BoundValue)
         if isdefined(@__MODULE__, name)
             island = getfield(@__MODULE__, name)
-            if island isa Therapy.IslandDef
-                Therapy.ISLAND_REGISTRY[island.name] = island
+            if island isa _IslandDef
+                _Registry[island.name] = island
             end
         end
     end

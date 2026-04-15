@@ -59,23 +59,22 @@ end
 # --- App ---
 
 app = App(
-    routes_dir = "src/web/src/routes",
-    components_dir = "src/web/src/components",
+    routes_dir = "src/routes",
+    components_dir = "src/components",
     title = "Sessions.jl",
-    output_dir = "src/web/dist",
+    output_dir = "dist",
     layout = :Layout
 )
 
-# --- WebSocket handlers ---
+# --- WebSocket channel handlers ---
 
-Sessions._setup_ws_dispatch!()
-Sessions.setup_web_notebook!(WEB_STATE[])
-Sessions.setup_file_explorer!(WEB_STATE[])
+Sessions.setup_notebook_channel!(WEB_STATE[])
+Sessions.setup_files_channel!(WEB_STATE[])
 Sessions.create_cell_signals!(WEB_STATE[])
 Sessions.start_web_watchers!(WEB_STATE[])
 
 const TERM_STATE = Sessions.TerminalState()
-Sessions.setup_terminal!(TERM_STATE, WEB_STATE[])
+Sessions.setup_terminal_channel!(TERM_STATE, WEB_STATE[])
 
 on_ws_connect() do conn
     println("[WS] Client connected: $(conn.id)")

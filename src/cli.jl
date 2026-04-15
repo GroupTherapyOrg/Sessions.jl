@@ -66,7 +66,7 @@ end
 
 function _launch_web(nb_path::Union{String, Nothing}; work_dir::String=pwd())
     # The web app entry point
-    web_app_path = joinpath(@__DIR__, "web", "app.jl")
+    web_app_path = joinpath(@__DIR__, "..", "app.jl")
     if !isfile(web_app_path)
         println("Error: web app not found at $web_app_path")
         return
