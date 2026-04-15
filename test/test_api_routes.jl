@@ -2,7 +2,7 @@
 
     # ── Notebook API route definitions ──
     @testset "notebook_api_routes returns route pairs" begin
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "notebook.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "notebook.jl")
         @test isfile(routes_file)
         fn = include(routes_file)
         @test fn isa Function
@@ -30,7 +30,7 @@
         tab = Sessions.WebTab(uuid4(), nb, worker, "mynotebook.jl", abspath("mynotebook.jl"))
         state = Sessions.WebNotebookState([tab], 1, false, false)
 
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "notebook.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "notebook.jl")
         fn = include(routes_file)
         routes = fn(() -> state)
 
@@ -39,7 +39,7 @@
     end
 
     @testset "notebook routes with nil state" begin
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "notebook.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "notebook.jl")
         fn = include(routes_file)
         routes = fn(() -> nothing)
 
@@ -49,7 +49,7 @@
 
     # ── Files API route definitions ──
     @testset "files_api_routes returns route pairs" begin
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "files.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "files.jl")
         @test isfile(routes_file)
         fn = include(routes_file)
         @test fn isa Function
@@ -65,7 +65,7 @@
     end
 
     @testset "files tree handler returns tree structure" begin
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "files.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "files.jl")
         fn = include(routes_file)
 
         mktempdir() do tmpdir
@@ -81,7 +81,7 @@
 
     # ── Terminal API route definitions ──
     @testset "terminal_api_routes returns route pairs" begin
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "terminal.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "terminal.jl")
         @test isfile(routes_file)
         fn = include(routes_file)
         @test fn isa Function
@@ -104,7 +104,7 @@
     end
 
     @testset "terminal tabs handler with empty state" begin
-        routes_file = joinpath(@__DIR__, "..", "src", "routes", "api", "terminal.jl")
+        routes_file = joinpath(@__DIR__, "..", "src", "api", "terminal.jl")
         fn = include(routes_file)
 
         ts = Sessions.TerminalState()
