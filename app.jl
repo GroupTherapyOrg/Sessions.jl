@@ -15,6 +15,7 @@ using Therapy
 using Sessions
 using SessionsUI
 using UUIDs
+import HTTP
 
 const USER_CWD = pwd()
 cd(@__DIR__)
@@ -56,6 +57,76 @@ else
     WEB_STATE[] = Sessions.WebNotebookState([tab], 1, false, false)
 end
 
+# --- Terminal state (needed before API middleware) ---
+const TERM_STATE = Sessions.TerminalState()
+
+# --- API routes middleware ---
+# API route files define parameterized route tables; Therapy's page renderer
+# can't call them, so we register them as HTTP middleware via create_api_router.
+
+include("src/api/files.jl")
+include("src/api/notebook.jl")
+include("src/api/terminal.jl")
+
+function _get_root_dir()
+    try
+        dirname(abspath(Sessions.active_tab(WEB_STATE[]).path))
+    catch
+        USER_CWD
+    end
+end
+
+_api_routes = vcat(
+    files_api_routes(_get_root_dir),
+    notebook_api_routes(() -> WEB_STATE[]),
+    terminal_api_routes(() -> TERM_STATE, () -> WEB_STATE[])
+)
+const _api_handler = create_api_router(_api_routes)
+
+function ApiMiddleware()
+    return function(handler)
+        return function(req::HTTP.Request)
+            path = HTTP.URI(req.target).path
+            if startswith(path, "/api/")
+                return _api_handler(req)
+            end
+            return handler(req)
+        end
+    end
+end
+
+# --- Static files middleware ---
+# Serve files from static/ at /static/<path>. Runs before route resolution so
+# /static/editor.js, /static/favicon.svg, etc. get proper Content-Type responses
+# instead of falling through to Therapy's 404.
+
+function StaticFilesMiddleware(; dir::String = "static", url_prefix::String = "/static")
+    abs_dir = abspath(dir)
+    return function(handler)
+        return function(req::HTTP.Request)
+            path = HTTP.URI(req.target).path
+            if startswith(path, url_prefix * "/")
+                rel = lstrip(path[length(url_prefix)+1:end], '/')
+                file_path = abspath(joinpath(abs_dir, rel))
+                if startswith(file_path, abs_dir) && isfile(file_path)
+                    ct = if endswith(file_path, ".js"); "application/javascript"
+                    elseif endswith(file_path, ".css"); "text/css"
+                    elseif endswith(file_path, ".svg"); "image/svg+xml"
+                    elseif endswith(file_path, ".ico"); "image/x-icon"
+                    elseif endswith(file_path, ".png"); "image/png"
+                    else; "application/octet-stream"
+                    end
+                    return HTTP.Response(200,
+                        ["Content-Type" => ct, "Cache-Control" => "public, max-age=3600"],
+                        body=read(file_path))
+                end
+                return HTTP.Response(404, body="Not Found: $path")
+            end
+            return handler(req)
+        end
+    end
+end
+
 # --- App ---
 
 app = App(
@@ -63,7 +134,8 @@ app = App(
     components_dir = "src/components",
     title = "Sessions.jl",
     output_dir = "dist",
-    layout = :Layout
+    layout = :Layout,
+    middleware = [ApiMiddleware(), StaticFilesMiddleware(dir = joinpath(@__DIR__, "static"))]
 )
 
 # --- WebSocket channel handlers ---
@@ -73,7 +145,6 @@ Sessions.setup_files_channel!(WEB_STATE[])
 Sessions.create_cell_signals!(WEB_STATE[])
 Sessions.start_web_watchers!(WEB_STATE[])
 
-const TERM_STATE = Sessions.TerminalState()
 Sessions.setup_terminal_channel!(TERM_STATE, WEB_STATE[])
 
 on_ws_connect() do conn

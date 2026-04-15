@@ -11,7 +11,6 @@ Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 ExpressionExplorer = "21656369-7473-754a-2065-74616d696c43"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
-JavaScriptTarget = "91c6ed5a-2d04-438e-9585-7332732578c7"
 Malt = "36869731-bdee-424d-aa32-cab38c994e3b"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
@@ -24,9 +23,8 @@ Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [sources]
-JavaScriptTarget = {url = "https://github.com/GroupTherapyOrg/JavaScriptTarget.jl.git"}
-SessionsUI = {url = "https://github.com/GroupTherapyOrg/Sessions.jl.git", subdir = "SessionsUI"}
-Therapy = {url = "https://github.com/GroupTherapyOrg/Therapy.jl.git"}
+SessionsUI = {subdir = "SessionsUI", url = "https://github.com/GroupTherapyOrg/Sessions.jl.git"}
+Therapy = {path = "../Therapy.jl"}
 
 [compat]
 ExpressionExplorer = "1"

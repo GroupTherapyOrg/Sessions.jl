@@ -30,6 +30,7 @@ function Layout(children...; title="Sessions.jl")
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>"""),
         RawHtml("""<script src="/static/editor.js"></script>"""),
+        RawHtml("<script>" * _notebook_island_js() * "</script>"),
         RawHtml("""<div id="app-root" class="font-sans">"""),
         children...,
         RawHtml("""</div>"""),
