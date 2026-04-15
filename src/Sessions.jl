@@ -41,9 +41,11 @@ include("engine/run.jl")
 
 include("engine/session.jl")
 
-# Layer 1.5: Web Export (types, execution pipeline, stubs for rendering)
-# Rendering to VNodes is provided by ext/SessionsTherapyExt when Therapy.jl is loaded.
-include("web.jl")
+# Layer 1.5: Web Islands (WASM-compiled @island components)
+include("engine/islands.jl")
+
+# Layer 1.5: Web Rendering (notebook → VNodes, static export pipeline)
+include("engine/web_rendering.jl")
 export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
