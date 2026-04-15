@@ -6,7 +6,28 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-mono: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --font-display: 'Fraunces', Georgia, serif;
+  --color-workspace: var(--workspace-bg);
+  --color-panel: var(--panel-bg);
+  --color-cell: var(--cell-bg);
+  --color-chrome: var(--chrome-bg);
+  --color-divider: var(--divider);
+  --color-accent: var(--accent);
+  --color-rose: var(--accent);
+  --color-status-done: var(--status-done);
+  --color-status-running: var(--status-running);
+  --color-status-error: var(--status-error);
+  --color-warm-50: var(--warm-50);
+  --color-warm-100: var(--warm-100);
+  --color-warm-200: var(--warm-200);
+  --color-warm-300: var(--warm-300);
+  --color-warm-400: var(--warm-400);
+  --color-warm-500: var(--warm-500);
+  --color-warm-600: var(--warm-600);
+  --color-warm-700: var(--warm-700);
+  --color-warm-800: var(--warm-800);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
