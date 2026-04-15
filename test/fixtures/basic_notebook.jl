@@ -48,8 +48,11 @@ function add_2(x)
     return x + 10
 end
 
+# ╔═╡ c7d3ba36-6917-4b62-86ef-96badabb0e3c
+# This is stale and so is this 
+
 # ╔═╡ 4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
-add_2(20)
+add_2(20) #this stale
 
 # ╔═╡ 16b64a46-205f-45e0-839a-79ae9d0398ce
 add_2(40)
@@ -76,6 +79,9 @@ c = string("Result: ", b)
 begin
     l = 10
     sleep(4)
+    md"""
+    # HI This is pending
+    """
 end
 
 # ╔═╡ 2c624f59-53d4-462a-8ed1-fb6a0d982c64
@@ -120,6 +126,7 @@ end
 # ╠═1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6
 # ╠═3d413fde-745c-4222-836a-24e5a6e7a481
 # ╠═6e7bfb3a-23f5-499a-92b3-66207a5d898f
+# ╠═c7d3ba36-6917-4b62-86ef-96badabb0e3c
 # ╠═4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
 # ╠═16b64a46-205f-45e0-839a-79ae9d0398ce
 # ╠═00000001-0000-0000-0000-000000000001

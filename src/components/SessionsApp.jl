@@ -61,6 +61,22 @@ function SessionsApp(children...)
     var ws = document.getElementById('workspace');
     if (fp && sb === '1') fp.style.display = '';
     if (repl && rp === '1') repl.style.display = '';
+
+    // ── Seed ActivityBar @island kwargs from localStorage before hydration.
+    // Therapy's compiled hydration reads props.initial_sidebar / initial_terminal
+    // and writes them to signal_0/signal_1 via `ex.signal_N.value = BigInt(...)`
+    // BEFORE the initial _rt_flush. That way the first effect fire sees the
+    // restored values and sets the DOM + localStorage to match. Must run
+    // before requestIdleCallback wakes hydrate_activitybar.
+    var ab = document.querySelector('[data-component="activitybar"]');
+    if (ab) {
+        var props = {};
+        try { props = JSON.parse(ab.dataset.props || '{}'); } catch (e) {}
+        props.initial_sidebar  = sb === '1' ? 1 : 0;
+        props.initial_terminal = rp === '1' ? 1 : 0;
+        ab.dataset.props = JSON.stringify(props);
+    }
+
     customElements.whenDefined('sl-tree').then(function() {
         var loader = document.getElementById('explorer-loading');
         if (loader) loader.style.display = 'none';

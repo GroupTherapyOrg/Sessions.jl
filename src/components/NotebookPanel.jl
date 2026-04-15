@@ -4,7 +4,7 @@
 # Tab switching and toolbar actions use direct WS calls via onclick.
 # Cell rendering delegates to Sessions.render_cell() and Sessions.CellGap().
 #
-# All colors via CSS vars from theme.css. Ghost toolbar buttons via .tb-btn class.
+# All colors via CSS vars from theme.css. Toolbar is a single .nb-pill container.
 
 # SVG icons
 const _SVG_JL_WORDMARK = """<svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>"""
@@ -66,42 +66,58 @@ function NotebookPanel(state)
     push!(tab_items, Div(:style => "display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;",
         tab_views...))
 
-    # Toolbar (right, always visible) — ghost buttons
-    toolbar = Any[]
+    # Toolbar — a single pill container grouping execution + status + file actions.
+    # Layout is: [exec group] | [status zone] | [file group].
+    # The exec group swaps between an "idle" pair (Run all + Run stale) and a
+    # "running" slot (Stop). The status zone is hidden when idle and fills with
+    # dot/count/bar/jump-to-cell during run + a transient green-check on finish.
+    is_jl_file = is_file_tab && endswith(tab.path, ".jl")
+    can_format = !is_file_tab || is_jl_file
+
+    pill_children = Any[]
     if !is_file_tab
         sc = nb !== nothing ? _Sess.stale_cells(nb) : _Sess.Cell[]
         n = length(sc)
-        push!(toolbar, Button(:id => "run-stale-btn", :class => n == 0 ? "tb-btn stale tb-disabled" : "tb-btn stale",
-            :on_click => "window._sessionsRunStale()",
-            :title => "Run stale cells",
-            RawHtml(_SVG_RUN_SMALL),
-            Span(:id => "run-stale-label", n > 0 ? " Run Stale ($n)" : " Run Stale")))
-        push!(toolbar, Button(:id => "run-all-btn", :class => "tb-btn",
-            :on_click => "window._sessionsRunAll()",
-            :title => "Run all cells",
-            RawHtml(_SVG_RUN_SMALL), " Run All"))
-        push!(toolbar, Button(:id => "stop-btn", :class => "tb-btn stop tb-disabled",
-            :on_click => "TherapyWS.sendMessage('notebook',{action:'interrupt'})",
-            :title => "Stop execution",
-            RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""),
-            " Stop"))
-        push!(toolbar, RawHtml("""<span id="run-progress" style="font-size:11px;color:var(--status-done);font-family:'JetBrains Mono',monospace;"></span><button id="jump-running-btn" class="tb-btn tb-disabled" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell" style="padding:2px 6px;font-size:10px;"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg></button>"""))
-        push!(toolbar, RawHtml("""<span class="toolbar-sep"></span>"""))
+        stale_cls = n == 0 ? "pill-btn pill-stale tb-disabled" : "pill-btn pill-stale"
+        count_style = n > 0 ? "" : "display:none"
+
+        push!(pill_children,
+            Div(:class => "pill-group", :id => "pill-exec-idle",
+                Button(:id => "run-all-btn", :class => "pill-btn pill-primary",
+                    :on_click => "window._sessionsRunAll()",
+                    :title => "Run all cells",
+                    RawHtml(_SVG_RUN_SMALL), " Run all"),
+                Button(:id => "run-stale-btn", :class => stale_cls,
+                    :on_click => "window._sessionsRunStale()",
+                    :title => "Run stale cells",
+                    RawHtml(_SVG_RUN_SMALL), " Run stale",
+                    Span(:id => "run-stale-count", :class => "pill-count-badge",
+                        :style => count_style, string(n)))))
+        push!(pill_children,
+            Div(:class => "pill-group", :id => "pill-exec-running", :style => "display:none",
+                Button(:id => "stop-btn", :class => "pill-btn pill-stop",
+                    :on_click => "TherapyWS.sendMessage('notebook',{action:'interrupt'})",
+                    :title => "Stop execution",
+                    RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""),
+                    " Stop")))
+        push!(pill_children,
+            RawHtml("""<span class="pill-sep" id="pill-sep-status" style="display:none"></span><div class="pill-status" id="pill-status-zone" style="display:none"></div>"""))
+        push!(pill_children, RawHtml("""<span class="pill-sep"></span>"""))
     end
-    push!(toolbar, Button(:id => "save-indicator", :class => "tb-btn",
-        :on_click => "window._sessionsSave()",
-        :title => "Save (Ctrl+S)", "Save"))
-    is_jl_file = is_file_tab && endswith(tab.path, ".jl")
-    can_format = !is_file_tab || is_jl_file  # notebooks always, files only .jl
-    push!(toolbar, Button(Symbol("data-format-btn") => "1",
-        :class => can_format ? "tb-btn" : "tb-btn tb-disabled",
-        :on_click => is_file_tab ?
-            "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
-            "TherapyWS.sendMessage('notebook',{action:'format_all'})",
-        :title => is_file_tab ? "Format file" : "Format all cells", "Format"))
-    # ToC toggle handled by the floating panel's own open/close icons
-    push!(tab_items, Div(:style => "display:flex;align-items:center;gap:2px;padding:0 8px;margin-left:auto;flex-shrink:0;",
-        toolbar...))
+    push!(pill_children,
+        Div(:class => "pill-group",
+            Button(:id => "save-indicator", :class => "pill-btn pill-ghost",
+                :on_click => "window._sessionsSave()",
+                :title => "Save (Ctrl+S)", "Save"),
+            Button(Symbol("data-format-btn") => "1",
+                :class => can_format ? "pill-btn pill-ghost" : "pill-btn pill-ghost tb-disabled",
+                :on_click => is_file_tab ?
+                    "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
+                    "TherapyWS.sendMessage('notebook',{action:'format_all'})",
+                :title => is_file_tab ? "Format file" : "Format all cells", "Format")))
+
+    push!(tab_items, Div(:style => "margin-left:auto;padding:0 8px;flex-shrink:0;display:flex;align-items:center;",
+        Div(:class => "nb-pill", pill_children...)))
 
     tab_bar = Div(:class => "h-[38px] flex items-stretch shrink-0",
         :style => "background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;",

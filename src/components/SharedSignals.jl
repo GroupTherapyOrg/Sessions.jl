@@ -18,10 +18,9 @@ const LS_TERMINAL = "sessions-repl"
 # ═══════════════════════════════════════════════════════════
 # Shared signals
 # ═══════════════════════════════════════════════════════════
-
-# Panel visibility (ActivityBar ↔ FileExplorer, ActivityBar ↔ Terminal)
-const sidebar_signal = create_signal(0)
-const terminal_signal = create_signal(0)
+#
+# Panel visibility (sidebar/terminal) is handled by direct DOM + localStorage
+# in SessionsApp.jl's IIFE, not by shared signals — see ActivityBar.jl for why.
 
 # Notebook state (Notebook ↔ StatusBar)
 const cellcount_signal = create_signal(0)

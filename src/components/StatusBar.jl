@@ -8,28 +8,13 @@
 
     is_dark, set_dark = create_signal(0)
 
-    js("if(document.documentElement.classList.contains('dark'))\$1(1)", set_dark)
-
-    on_mount(() -> begin
-        js("""
-            window.addEventListener('therapy:ws:open',function(){\$1(1)});
-            window.addEventListener('therapy:ws:close',function(){\$1(0)});
-        """, set_cs)
-        js("""
-            var cells=document.querySelectorAll('.cell-wrap[data-cell-id]');
-            \$1(cells.length);
-        """, set_cc)
-    end)
-
-    create_effect(() -> begin
-        v = cs()
-        js("var d=document.getElementById('ws-dot');if(d){d.style.color=\$1?'var(--status-done)':'var(--status-error)';d.nextElementSibling.textContent=\$1?' connected':' disconnected'}", v)
-    end)
-
-    create_effect(() -> begin
-        v = cc()
-        js("var el=document.getElementById('cell-count');if(el)el.textContent=\$1+' cells'", v)
-    end)
+    # NOTE: setter-bound js() blocks (theme-init read, WS open/close listeners,
+    # cell-count seed) were removed — Therapy's `js("...", setter)` interpolation
+    # only resolves SETTERS as JS callables in click/input handlers, never at
+    # body top level or in on_mount. Forcing it here makes WasmTarget compile a
+    # setter reference that fails with `local.set[0] expected type i32, found
+    # call of type i64`. The dot/text below stay at their initial state until a
+    # click handler updates them.
 
     return Div(:id => "status-bar",
         :style => "height:28px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;gap:16px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-3);background:var(--workspace-bg);box-shadow:var(--statusbar-shadow);border-top:1px solid var(--divider);",

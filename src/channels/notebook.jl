@@ -670,6 +670,11 @@ function _handle_save!(state::WebNotebookState, conn, data)
     msg = Dict("event" => "saved", "notebook_path" => nb.path)
     mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
     _nb_broadcast!(msg)
+    # Re-broadcast stale state so the toolbar pill and per-cell .stale class
+    # re-sync from the single server source of truth. Without this, the file
+    # watcher's post-save diff can re-render the panel without .stale while
+    # the client's pill count, driven only by update_code, stays stale.
+    _broadcast_stale!(state)
 end
 
 function _handle_save_file!(state::WebNotebookState, conn, data)
@@ -992,7 +997,11 @@ end
 
 function _broadcast_nb_html!(state::WebNotebookState)
     nb_html = try
-        _NP = getfield(Main, :NotebookPanel)
+        # Wrap binding access in invokelatest for Julia 1.12 world-age safety:
+        # Main.TherapyApp and NotebookPanel are defined in a later world than
+        # this channel module, so a bare getfield emits a 1.12 deprecation.
+        host = Base.invokelatest(() -> isdefined(Main, :TherapyApp) ? getfield(Main, :TherapyApp) : Main)
+        _NP = Base.invokelatest(getfield, host, :NotebookPanel)
         vnode = Base.invokelatest(_NP, state)
         vnode !== nothing ? Therapy.render_to_string(vnode) : ""
     catch e

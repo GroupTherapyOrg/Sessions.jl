@@ -1074,7 +1074,11 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     cell.folded && (wrap_cls *= " code-hidden")
     has_visible_output = output.output_type != :nothing && !isempty(output.text_representation)
     has_visible_output && (wrap_cls *= " has-output")
-    Div(:data_cell_id => cell_id, :class => wrap_cls, parts...)
+    # .cell-body wraps the visual contents so running/stale states can translate
+    # the whole block as a unit while the shadow pseudo-element on .cell-wrap
+    # stays fixed beneath.
+    Div(:data_cell_id => cell_id, :class => wrap_cls,
+        Div(:class => "cell-body", parts...))
 end
 
 # =============================================================================

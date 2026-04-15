@@ -147,19 +147,26 @@
 .cell-wrap.cell-disabled .code-cell::before{display:none !important;}
 .cell-wrap.cell-disabled .cell-out{opacity:0.5;}
 .cell-wrap.cell-disabled .cell-ctrls{opacity:1 !important;transform:none !important;pointer-events:auto !important;}
-.cell-wrap.wrap-skipped{opacity:0.4;border:1.5px dashed var(--warm-300);border-radius:8px;}
+.cell-wrap.wrap-skipped{opacity:0.4;}
+.cell-wrap.wrap-skipped .cell-body{border:1.5px dashed var(--warm-300);border-radius:8px;}
 .cell-wrap.wrap-skipped .code-cell{border-color:transparent !important;}
 .cell-skipped-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);font-style:italic;padding:4px 0;}
 .dark .cell-wrap.wrap-skipped{border-color:var(--warm-700);}
 :root{--disabled-cell-bg:var(--warm-100);}
 .dark{--disabled-cell-bg:#151a22;}
 
-.cell-wrap{position:relative;}
+/* Cell wrap reserves space (bottom-right padding) so the lift-shadow on
+   .cell-body doesn't overlap neighbouring cells. The shadow itself is a
+   box-shadow on .cell-body — drawn OUTSIDE the border-box, so it physically
+   cannot bleed through transparent cell content. Completed cells have no
+   transform and no box-shadow, so visually identical to a plain cell. */
+.cell-wrap{position:relative;padding-bottom:5px;padding-right:5px;}
+.cell-body{position:relative;border-radius:8px;transform:translate(0,0);transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .3s ease;}
 .cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:14px !important;padding-bottom:0 !important;margin-bottom:-1px;}
 
 .cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
 .cell-shoulder:active{cursor:grabbing;}
-.cell-wrap:hover > .cell-shoulder{background:rgba(0,0,0,.03);}
+.cell-wrap:hover .cell-shoulder{background:rgba(0,0,0,.03);}
 #drop-ruler{position:absolute;display:none;left:0;right:0;height:4px;background:var(--accent);border-radius:2px;z-index:50;pointer-events:none;transition:top .05s ease-out;box-shadow:0 0 8px rgba(212,117,154,.3);}
 .cell-wrap.dragging{opacity:.4;}
 .cell-wrap.selected{background:rgba(212,117,154,.1);border-radius:0 8px 8px 0;}
@@ -169,7 +176,7 @@
 .dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
-.dark .cell-wrap:hover > .cell-shoulder{background:rgba(255,255,255,.04);}
+.dark .cell-wrap:hover .cell-shoulder{background:rgba(255,255,255,.04);}
 .dark .cell-wrap.selected{background:rgba(212,117,154,.08);}
 .dark .cell-wrap.selected .code-cell{border-color:var(--accent);}
 
@@ -396,17 +403,35 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 .ab-btn[data-state="on"]{background:rgba(212,117,154,.1) !important;color:var(--accent) !important;}
 .ab-btn:hover{background:rgba(128,128,128,.08) !important;color:var(--text-2) !important;}
 
-/* ── Cell States ── */
-.cell-wrap:has(.code-cell.stale).has-output:not(.code-hidden) .cell-out{border-left-color:var(--status-running) !important;}
+/* ── Cell States ──
+   Completed = flat (default). Running = lifted with pulsing blue block.
+   Stale = lifted with static amber block + dimmed output.
+   Shadow is drawn via box-shadow on .cell-body (outside its border-box) so
+   it's only ever visible on the 4px bottom+right offset strip — never bleeds
+   through transparent cell content. */
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
-@property --border-angle{syntax:"<angle>";initial-value:0deg;inherits:false;}
-.cell-wrap.wrap-queued{border:2px solid var(--status-running);border-radius:8px;box-shadow:0 0 10px rgba(212,160,86,.12);}
-.cell-wrap.wrap-queued .code-cell{border-color:transparent !important;}
-.cell-wrap.wrap-queued .jl-error{border-color:transparent !important;}
-.cell-wrap.wrap-running{position:relative;border:2px solid transparent;border-radius:8px;box-shadow:0 0 12px rgba(123,184,232,.1);}
-.cell-wrap.wrap-running .code-cell{border-color:transparent !important;}
-.cell-wrap.wrap-running::after{content:'';position:absolute;inset:-2px;border-radius:10px;padding:2px;background:conic-gradient(from var(--border-angle),#7bb8e8 0%,transparent 30%,transparent 70%,#7bb8e8 100%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;animation:spin-border 2.5s linear infinite;pointer-events:none;z-index:60;}
-@keyframes spin-border{to{--border-angle:360deg;}}
+
+/* Running — blue pulsing offset block */
+.cell-wrap.wrap-running .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.45);animation:shadow-pulse-light 3s ease-in-out infinite;}
+.cell-wrap.wrap-running .code-cell{border-color:rgba(55,138,221,.25) !important;}
+
+/* Queued — same blue, no pulse */
+.cell-wrap.wrap-queued .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.3);}
+.cell-wrap.wrap-queued .code-cell{border-color:rgba(55,138,221,.2) !important;}
+
+/* Stale — amber, static, dim output. Suppressed while running/queued so
+   transitions don't double-stack. */
+.cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(239,159,39,.22);}
+.cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .code-cell{border-color:rgba(186,117,23,.2) !important;}
+.cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-out{opacity:.5;}
+
+/* Dark mode: bump block contrast against near-black surfaces. */
+.dark .cell-wrap.wrap-running .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.6);animation-name:shadow-pulse-dark;}
+.dark .cell-wrap.wrap-queued .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.38);}
+.dark .cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-body{box-shadow:4px 4px 0 rgba(239,159,39,.3);}
+
+@keyframes shadow-pulse-light{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.45);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.7);}}
+@keyframes shadow-pulse-dark{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.6);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.85);}}
 
 /* ── Tab Bar + Cell Gaps ── */
 .cdiv{height:10px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;}
@@ -500,15 +525,89 @@ sl-tree-item::part(item):hover{background:rgba(128,128,128,.06);}
 .cm-file-editor{flex:1;min-height:0;}
 .cm-file-editor .cm-editor{height:100%;}
 
-/* ── Ghost Toolbar Buttons ── */
-.tb-btn{display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:5px;font-size:11px;font-family:-apple-system,sans-serif;border:none;background:transparent;color:var(--text-3);cursor:pointer;transition:all .12s;white-space:nowrap;}
-.tb-btn:hover{color:var(--text-1);background:rgba(128,128,128,.1);}
-.tb-btn:active{background:rgba(128,128,128,.15);}
-.tb-btn.stale{color:var(--status-running);}
-.tb-btn.stale:hover{background:rgba(212,160,86,.08);}
-.tb-btn.stop{color:var(--status-error);}
-.tb-btn.stop:hover{background:rgba(220,53,69,.08);}
-.tb-btn.tb-disabled{opacity:.3;pointer-events:none;}
-.tb-btn svg{width:9px;height:9px;}
-.toolbar-sep{width:1px;height:14px;background:var(--divider);margin:0 4px;}
+/* ── Notebook Toolbar Pill ──
+   One cohesive pill in the top-right: [exec group] | [status zone] | [file group].
+   Button + token palette switches on .dark; everything else is structural. */
+:root{
+  --tb-pill-bg:#FFFFFF;
+  --tb-pill-border:rgba(0,0,0,.1);
+  --tb-primary-text:#6B4C3B;
+  --tb-primary-bg:#F0EBE4;
+  --tb-default-text:#6B4C3B;
+  --tb-ghost-text:#9B8F82;
+  --tb-disabled-text:#CEC6BB;
+  --tb-stale-text:#854F0B;
+  --tb-stale-bg:#FAEEDA;
+  --tb-stale-icon:#BA7517;
+  --tb-stop-text:#993C1D;
+  --tb-stop-icon:#D85A30;
+  --tb-status-text:#9B8F82;
+  --tb-dot:#B5A898;
+  --tb-bar-track:#E5DED5;
+  --tb-bar-fill:#B5A898;
+  --tb-done:#6B8F3B;
+  --tb-sep:rgba(0,0,0,.1);
+  --tb-hover:rgba(0,0,0,.04);
+  --tb-active:rgba(0,0,0,.08);
+}
+.dark{
+  --tb-pill-bg:#282A3A;
+  --tb-pill-border:rgba(255,255,255,.08);
+  --tb-primary-text:#E8DFD2;
+  --tb-primary-bg:#353749;
+  --tb-default-text:#C7BEAD;
+  --tb-ghost-text:#6B6A7A;
+  --tb-disabled-text:#4A4A58;
+  --tb-stale-text:#FAC775;
+  --tb-stale-bg:rgba(250,199,117,.1);
+  --tb-stale-icon:#FAC775;
+  --tb-stop-text:#F09595;
+  --tb-stop-icon:#F09595;
+  --tb-status-text:#6B6A7A;
+  --tb-dot:#7A7A8E;
+  --tb-bar-track:#353749;
+  --tb-bar-fill:#7A7A8E;
+  --tb-done:#97C459;
+  --tb-sep:rgba(255,255,255,.08);
+  --tb-hover:rgba(255,255,255,.05);
+  --tb-active:rgba(255,255,255,.09);
+}
+
+.nb-pill{display:inline-flex;align-items:center;gap:2px;padding:4px 6px;border-radius:20px;background:var(--tb-pill-bg);border:1px solid var(--tb-pill-border);font-family:'DM Sans',system-ui,sans-serif;font-size:11px;line-height:1;}
+.pill-group{display:inline-flex;align-items:center;gap:2px;}
+.pill-sep{display:inline-block;width:1px;height:16px;background:var(--tb-sep);margin:0 4px;flex-shrink:0;}
+
+.pill-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:16px;border:none;background:transparent;color:var(--tb-default-text);cursor:pointer;font-size:11px;font-weight:500;white-space:nowrap;line-height:1;font-family:inherit;}
+.pill-btn:hover{background:var(--tb-hover);}
+.pill-btn:active{background:var(--tb-active);}
+.pill-btn svg{width:10px;height:10px;flex-shrink:0;}
+
+.pill-btn.pill-primary{color:var(--tb-primary-text);background:var(--tb-primary-bg);}
+.pill-btn.pill-primary:hover{filter:brightness(.97);}
+.dark .pill-btn.pill-primary:hover{filter:brightness(1.1);}
+
+.pill-btn.pill-ghost{color:var(--tb-ghost-text);}
+.pill-btn.pill-ghost-icon{padding:3px 6px;color:var(--tb-ghost-text);border-radius:12px;}
+
+.pill-btn.pill-stale{color:var(--tb-stale-text);background:var(--tb-stale-bg);}
+.pill-btn.pill-stale svg{color:var(--tb-stale-icon);}
+.pill-btn.pill-stale:hover{filter:brightness(.98);}
+.dark .pill-btn.pill-stale:hover{filter:brightness(1.1);}
+
+.pill-btn.pill-stop{color:var(--tb-stop-text);}
+.pill-btn.pill-stop svg{color:var(--tb-stop-icon);}
+
+.pill-btn.tb-disabled{color:var(--tb-disabled-text);background:transparent;pointer-events:none;}
+.pill-btn.tb-disabled svg{color:var(--tb-disabled-text);}
+
+.pill-count-badge{margin-left:2px;font-weight:600;}
+
+.pill-status{display:inline-flex;align-items:center;gap:8px;padding:0 4px;color:var(--tb-status-text);font-size:11px;font-family:'JetBrains Mono',monospace;}
+.pill-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--tb-dot);flex-shrink:0;animation:pill-dot-pulse 2.5s ease-in-out infinite;}
+@keyframes pill-dot-pulse{0%,100%{opacity:.35;}50%{opacity:1;}}
+.pill-bar{width:60px;height:2px;background:var(--tb-bar-track);border-radius:1px;overflow:hidden;flex-shrink:0;}
+.pill-bar-fill{height:100%;background:var(--tb-bar-fill);border-radius:1px;transition:width .3s ease;}
+
+.pill-check{color:var(--tb-done);font-size:12px;font-weight:700;line-height:1;}
+.pill-count.pill-done{color:var(--tb-done);font-family:'JetBrains Mono',monospace;}
 #theme-toggle-btn:hover{background:rgba(212,117,154,.18) !important;border-color:var(--accent) !important;}

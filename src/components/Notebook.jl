@@ -6,23 +6,21 @@
 # 3. SSR preserves full HTML inside <therapy-island>
 # 4. on_mount hydrates: CM editors, WS bridge, fold observers
 #
-# Signals track state (cell_order, is_executing, stale_count)
-# but DOM is the source of truth for cell positions.
+# DOM is the source of truth — no signals needed on this island.
 
 @island function NotebookIsland(children...)
-    # State tracking signals
-    cell_order, set_cell_order = create_signal(Vector{String}())
-    is_executing, set_executing = create_signal(0)
-    stale_count, set_stale_count = create_signal(0)
+    # NOTE: All setter-bound js() blocks were removed — on_mount's js() $N
+    # interpolation emits Julia-side setter reprs, not JS callables, so calls
+    # into the bridge threw `undefined is not a function` on every WS message.
+    # The WS bridge now owns cell-order tracking via DOM traversal instead.
 
     # Hydrate: wire CM editors + WS bridge to existing SSR'd DOM
     on_mount(() -> begin
         # Init CM editors on existing .cm-cell elements
         js("if(window._initAllCM) _initAllCM()")
 
-        # Setup WS bridge with signal setters for structural changes
-        js("if(window._setupWSBridge) _setupWSBridge(\$1, \$2, \$3)",
-            set_cell_order, set_executing, set_stale_count)
+        # Setup WS bridge — no setter crosses the boundary
+        js("if(window._setupWSBridge) _setupWSBridge()")
 
         # Init fold observers on existing .cell-island elements
         js("""
@@ -46,15 +44,6 @@
                 observer.observe(island, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
             });
         """)
-
-        # Build initial cell_order from DOM
-        js("""
-            var ids = [];
-            document.querySelectorAll('.cell-wrap[data-cell-id]').forEach(function(el) {
-                ids.push(el.dataset.cellId);
-            });
-            \$1(ids);
-        """, set_cell_order)
     end)
 
     # SSR'd children (render_cell output) rendered directly — no For(), no skeletons
@@ -224,8 +213,12 @@ function _notebook_ws_bridge_body()
   // ══════════════════════════════════════════════════════════════
   // WS Bridge — sets up event listener + exposes optimistic APIs
   // ══════════════════════════════════════════════════════════════
-  window._setupWSBridge = function(setCellOrder, setExecuting, setStaleCount) {
+  window._setupWSBridge = function() {
     console.log('[Sessions WS] Bridge initialized');
+    // No-ops for removed signal setters; surrounding DOM updates handle state.
+    var setCellOrder = function(){};
+    var setExecuting = function(){};
+    var setStaleCount = function(){};
 
     // ── Save state ──
     window._sessionsUnsaved = false;
@@ -583,8 +576,17 @@ function _notebook_ws_bridge_body()
       // ── Stale cells update ──
       else if (data.event === 'stale_update') {
         setStaleCount(data.count || 0);
-        var btn=document.getElementById('run-stale-btn');var label=document.getElementById('run-stale-label');
-        if(btn){if(data.count>0&&!window._sessionsExecuting){btn.classList.remove('tb-disabled');if(label)label.textContent=' Run Stale ('+data.count+')';}else{btn.classList.add('tb-disabled');if(label)label.textContent=' Run Stale';}}
+        window._sessionsStaleCount = data.count || 0;
+        var btn=document.getElementById('run-stale-btn');
+        var badge=document.getElementById('run-stale-count');
+        if(btn){
+          if(data.count>0 && !window._sessionsExecuting){btn.classList.remove('tb-disabled');}
+          else{btn.classList.add('tb-disabled');}
+        }
+        if(badge){
+          if(data.count>0){badge.textContent=data.count;badge.style.display='';}
+          else{badge.style.display='none';}
+        }
         var staleSet=new Set(data.stale_ids||[]);
         document.querySelectorAll('.code-cell').forEach(function(el){var wrap=el.closest('.cell-wrap');var cid=wrap?wrap.dataset.cellId:null;if(cid&&staleSet.has(cid)){el.classList.add('stale');}else{el.classList.remove('stale');}});
       }
@@ -592,14 +594,66 @@ function _notebook_ws_bridge_body()
       // ── Run progress ──
       else if (data.event === 'run_progress') {
         var isRunning=data.running_index>0&&data.total>0;
+        var wasRunning=window._sessionsExecuting||false;
         window._sessionsExecuting=isRunning;
         window._sessionsRunningCellId=isRunning&&data.cell_id?data.cell_id:null;
         setExecuting(isRunning ? 1 : 0);
-        var el=document.getElementById('run-progress');if(el){if(isRunning){el.textContent='Running '+data.running_index+'/'+data.total+'...';}else{el.textContent='';}}
-        var jumpBtn=document.getElementById('jump-running-btn');
-        if(jumpBtn){if(isRunning){jumpBtn.classList.remove('tb-disabled');}else{jumpBtn.classList.add('tb-disabled');}}
-        var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');var runStaleBtn=document.getElementById('run-stale-btn');
-        if(runAllBtn&&stopBtn){if(isRunning){runAllBtn.classList.add('tb-disabled');stopBtn.classList.remove('tb-disabled');if(runStaleBtn)runStaleBtn.classList.add('tb-disabled');}else{runAllBtn.classList.remove('tb-disabled');stopBtn.classList.add('tb-disabled');}}
+
+        var execIdle=document.getElementById('pill-exec-idle');
+        var execRunning=document.getElementById('pill-exec-running');
+        var sepStatus=document.getElementById('pill-sep-status');
+        var statusZone=document.getElementById('pill-status-zone');
+        var jumpSVG='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg>';
+
+        if(isRunning){
+          if(window._sessCompletedTimer){clearTimeout(window._sessCompletedTimer);window._sessCompletedTimer=null;}
+          window._sessionsLastTotal=data.total;
+          if(execIdle)execIdle.style.display='none';
+          if(execRunning)execRunning.style.display='';
+          if(sepStatus)sepStatus.style.display='';
+          if(statusZone){
+            statusZone.style.display='';
+            var pct=Math.max(0,Math.min(100,Math.round((data.running_index/data.total)*100)));
+            statusZone.innerHTML=
+              '<span class="pill-dot"></span>'+
+              '<span class="pill-count">'+data.running_index+' / '+data.total+'</span>'+
+              '<div class="pill-bar"><div class="pill-bar-fill" style="width:'+pct+'%"></div></div>'+
+              '<button class="pill-btn pill-ghost-icon" id="jump-running-btn" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell">'+jumpSVG+'</button>';
+          }
+        } else {
+          if(execIdle)execIdle.style.display='';
+          if(execRunning)execRunning.style.display='none';
+          // Re-enable run-all; re-enable run-stale only if there are stale cells.
+          var runAllBtn=document.getElementById('run-all-btn');
+          if(runAllBtn)runAllBtn.classList.remove('tb-disabled');
+          var runStaleBtn=document.getElementById('run-stale-btn');
+          if(runStaleBtn){
+            if((window._sessionsStaleCount||0)>0)runStaleBtn.classList.remove('tb-disabled');
+            else runStaleBtn.classList.add('tb-disabled');
+          }
+          // Transient completed state: green check + final count for ~2.2s.
+          var finalTotal=window._sessionsLastTotal||0;
+          if(wasRunning && finalTotal>0){
+            if(sepStatus)sepStatus.style.display='';
+            if(statusZone){
+              statusZone.style.display='';
+              statusZone.innerHTML=
+                '<span class="pill-check">\u2713</span>'+
+                '<span class="pill-count pill-done">'+finalTotal+' / '+finalTotal+'</span>';
+            }
+            if(window._sessCompletedTimer)clearTimeout(window._sessCompletedTimer);
+            window._sessCompletedTimer=setTimeout(function(){
+              if(!window._sessionsExecuting){
+                if(sepStatus)sepStatus.style.display='none';
+                if(statusZone){statusZone.style.display='none';statusZone.innerHTML='';}
+              }
+              window._sessCompletedTimer=null;
+            },2200);
+          } else {
+            if(sepStatus)sepStatus.style.display='none';
+            if(statusZone){statusZone.style.display='none';statusZone.innerHTML='';}
+          }
+        }
       }
 
       // ── Format progress ──
@@ -612,8 +666,32 @@ function _notebook_ws_bridge_body()
       // ── Interrupted ──
       else if (data.event === 'interrupted') {
         window._sessionsExecuting=false; setExecuting(0);
-        var el=document.getElementById('run-progress');if(el){el.textContent='Interrupted';el.style.color='var(--status-error)';setTimeout(function(){el.textContent='';el.style.color='';},2000);}
-        var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');if(runAllBtn&&stopBtn){runAllBtn.classList.remove('tb-disabled');stopBtn.classList.add('tb-disabled');}
+        var execIdle=document.getElementById('pill-exec-idle');
+        var execRunning=document.getElementById('pill-exec-running');
+        var sepStatus=document.getElementById('pill-sep-status');
+        var statusZone=document.getElementById('pill-status-zone');
+        if(execIdle)execIdle.style.display='';
+        if(execRunning)execRunning.style.display='none';
+        var runAllBtn=document.getElementById('run-all-btn');
+        var runStaleBtn=document.getElementById('run-stale-btn');
+        if(runAllBtn)runAllBtn.classList.remove('tb-disabled');
+        if(runStaleBtn){
+          if((window._sessionsStaleCount||0)>0)runStaleBtn.classList.remove('tb-disabled');
+          else runStaleBtn.classList.add('tb-disabled');
+        }
+        if(sepStatus)sepStatus.style.display='';
+        if(statusZone){
+          statusZone.style.display='';
+          statusZone.innerHTML='<span class="pill-count" style="color:var(--tb-stop-text)">Interrupted</span>';
+        }
+        if(window._sessCompletedTimer)clearTimeout(window._sessCompletedTimer);
+        window._sessCompletedTimer=setTimeout(function(){
+          if(!window._sessionsExecuting){
+            if(sepStatus)sepStatus.style.display='none';
+            if(statusZone){statusZone.style.display='none';statusZone.innerHTML='';}
+          }
+          window._sessCompletedTimer=null;
+        },2000);
       }
 
       // ── Full state (SSR already rendered, skip) ──
@@ -631,18 +709,28 @@ function _notebook_ws_bridge_body()
         if (data.executing) {
           window._sessionsExecuting = true;
           setExecuting(1);
-          var runAllBtn=document.getElementById('run-all-btn');var stopBtn=document.getElementById('stop-btn');var runStaleBtn=document.getElementById('run-stale-btn');
-          if(runAllBtn)runAllBtn.classList.add('tb-disabled');
-          if(stopBtn)stopBtn.classList.remove('tb-disabled');
-          if(runStaleBtn)runStaleBtn.classList.add('tb-disabled');
-          // Count running/queued cells for progress text + find running cell
-          var running=0,queued=0,total=0,runningCid=null;
-          if(data.cells){data.cells.forEach(function(c){if(c.state==='cell_running'){running++;total++;runningCid=c.cell_id;}else if(c.state==='cell_queued'){queued++;total++;}});}
+          var running=0,queued=0,total=0,runningCid=null,runningIdx=0,cellIdx=0;
+          if(data.cells){data.cells.forEach(function(c){cellIdx++;if(c.state==='cell_running'){running++;total++;runningCid=c.cell_id;runningIdx=cellIdx;}else if(c.state==='cell_queued'){queued++;total++;}});}
           window._sessionsRunningCellId=runningCid;
-          var el=document.getElementById('run-progress');
-          if(el&&total>0){el.textContent='Running '+(running>0?1:0)+'/'+(total)+'...';}
-          var jumpBtn=document.getElementById('jump-running-btn');
-          if(jumpBtn)jumpBtn.classList.remove('tb-disabled');
+          window._sessionsLastTotal=total;
+          var execIdle=document.getElementById('pill-exec-idle');
+          var execRunning=document.getElementById('pill-exec-running');
+          var sepStatus=document.getElementById('pill-sep-status');
+          var statusZone=document.getElementById('pill-status-zone');
+          if(execIdle)execIdle.style.display='none';
+          if(execRunning)execRunning.style.display='';
+          if(sepStatus)sepStatus.style.display='';
+          if(statusZone && total>0){
+            statusZone.style.display='';
+            var idx=runningIdx||1;
+            var pct=Math.max(0,Math.min(100,Math.round((idx/total)*100)));
+            var jumpSVG='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg>';
+            statusZone.innerHTML=
+              '<span class="pill-dot"></span>'+
+              '<span class="pill-count">'+idx+' / '+total+'</span>'+
+              '<div class="pill-bar"><div class="pill-bar-fill" style="width:'+pct+'%"></div></div>'+
+              '<button class="pill-btn pill-ghost-icon" id="jump-running-btn" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell">'+jumpSVG+'</button>';
+          }
         }
       }
 
