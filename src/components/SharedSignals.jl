@@ -20,11 +20,11 @@ const LS_TERMINAL = "sessions-repl"
 # ═══════════════════════════════════════════════════════════
 
 # Panel visibility (ActivityBar ↔ FileExplorer, ActivityBar ↔ Terminal)
-const sidebar_signal = create_signal(Int32(0))
-const terminal_signal = create_signal(Int32(0))
+const sidebar_signal = create_signal(0)
+const terminal_signal = create_signal(0)
 
 # Notebook state (Notebook ↔ StatusBar)
-const cellcount_signal = create_signal(Int32(0))
+const cellcount_signal = create_signal(0)
 
 # Connection status (StatusBar polls WS state)
-const connection_signal = create_signal(Int32(1))
+const connection_signal = create_signal(1)
