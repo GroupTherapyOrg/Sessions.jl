@@ -47,12 +47,11 @@ include("web.jl")
 export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
-# Layer 1.5: PTY (standalone pseudo-terminal for web terminal)
-include("pty.jl")
+# Services: PTY, Watcher
+include("services/pty.jl")
 export PTY, pty_spawn, pty_write, pty_resize!, pty_close!, pty_alive
 
-# Layer 1.5: File Watcher (needed by web_server.jl for DebouncedWatcher)
-include("watcher.jl")
+include("services/watcher.jl")
 
 # Layer 1.5: Notebook Worker (Malt.jl per-notebook process)
 include("engine/worker/manager.jl")
@@ -65,15 +64,15 @@ export setup_web_notebook!, send_full_state!, create_cell_signals!, start_web_wa
 export setup_file_explorer!
 export FileNode, _build_file_tree
 
-# Layer 1.5: Terminal Server (xterm.js ↔ PTY bridge)
-include("terminal_server.jl")
+# Services: Terminal
+include("services/terminal.jl")
 export TerminalTab, TerminalState, setup_terminal!, stop_all_terminals!
 
-# Layer 1.5: Static Analysis (JET.jl + JETLS LSP)
-include("jet_analysis.jl")
+# Services: Static Analysis (JET.jl + JETLS LSP)
+include("services/jet.jl")
 export Diagnostic, CellDiagnostics, analyze_cell_jet, analyze_notebook_jet, total_diagnostics, cell_diagnostics
 
-include("lsp_client.jl")
+include("services/lsp.jl")
 export LspClient, LspDiagnostic, LspStatus, lsp_off, lsp_starting, lsp_ready, lsp_error
 export start_lsp!, stop_lsp!, lsp_sync_notebook!, lsp_did_save!, lsp_cell_diagnostics
 export LspCompletionItem, parse_completions, lsp_completion!, lsp_complete_with_timeout!
@@ -82,8 +81,8 @@ export LspLocation, parse_definition, lsp_definition!, lsp_definition_with_timeo
 export LspSignatureHelp, parse_signature_help, lsp_signature_help!, lsp_signature_help_with_timeout!
 export LspTextEdit, parse_workspace_edit, lsp_rename!, lsp_rename_with_timeout!
 
-# Layer 1.5: Code Formatting (Runic.jl runtime-loaded)
-include("formatting.jl")
+# Services: Code Formatting (Runic.jl runtime-loaded)
+include("services/formatter.jl")
 export format_code, format_code_available
 
 # CLI entry point (sessions command — uses @main for Pkg.Apps)
