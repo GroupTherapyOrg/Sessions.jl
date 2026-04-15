@@ -38,7 +38,7 @@ function Layout(children...; title="Sessions.jl")
   function _waitForWS() {
     if (window.TherapyWS && TherapyWS.send) {
       TherapyWS.sendMessage = function(channel, data) {
-        TherapyWS.send(Object.assign({type:'action', channel:channel}, data));
+        TherapyWS.send(Object.assign({type:'channel_message', channel:channel}, data));
       };
     } else { setTimeout(_waitForWS, 100); }
   }
