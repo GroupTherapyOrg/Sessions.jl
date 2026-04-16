@@ -302,7 +302,7 @@
    with inner `<div>` for the Firefox layout workaround. */
 .pluto-table-wrap{position:relative;max-width:100%;overflow:auto;}
 .pluto-table-dim{font-size:13px;color:var(--md-text);padding:2px 0 8px;font-family:'JetBrains Mono',monospace;}
-.pluto-table{table-layout:fixed;border-collapse:collapse;background:var(--cell-bg);}
+.pluto-table{table-layout:fixed;border-collapse:collapse;background:var(--cell-bg);line-height:1.3;font-size:13px;}
 .pluto-table td{max-width:300px;overflow:auto;padding:6px 12px;border-bottom:1px solid rgba(125,125,125,.15);font-family:'JetBrains Mono',monospace;font-size:13px;vertical-align:top;color:var(--md-heading);}
 .pluto-table td > div{overflow:hidden;text-overflow:ellipsis;}
 @supports (-moz-appearance: none) {

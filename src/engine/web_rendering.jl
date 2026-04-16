@@ -716,16 +716,11 @@ function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}()
         return _render_image_output(cell, prerendered)
     end
 
-    # Dataframe — needs live result for gallery/reactive table
-    if output.output_type == :dataframe
-        gallery = get(prerendered, cell.id, nothing)
-        if gallery !== nothing
-            return _render_reactive_table(result, gallery)
-        end
-        if result !== nothing
-            return _render_table_output(result)
-        end
-    end
+    # NOTE: Tables.jl values are now classified as :table in worker
+    # boot.jl (was :dataframe) and rendered through the
+    # standard render_output_html() path which delegates to
+    # _render_table_html() for pluto-table HTML. The old _render_table_output
+    # and _render_reactive_table helpers were deleted with that refactor.
 
     # Text with live WASM binding for slider-bound values
     if output.output_type == :text
@@ -813,135 +808,6 @@ function _render_bond_output(result, cell::Cell, prerendered)
     nothing
 end
 
-"""Render a table (DataFrames, NamedTuple vectors, any Tables.jl type) as a Pluto-style HTML table."""
-function _render_table_output(result)
-    # Extract rows via Tables.jl interface or NamedTuple fallback
-    rows_data = try
-        Base.invokelatest(Tables.rowtable, result)
-    catch
-        if result isa AbstractVector && !isempty(result) && first(result) isa NamedTuple
-            result
-        else
-            nothing
-        end
-    end
-
-    rows_data === nothing && return Pre(:class => "text-sm font-mono text-tout", Code(sprint(show, result)))
-    isempty(rows_data) && return Span(:class => "text-sm text-t3", "0 rows")
-
-    cols = keys(first(rows_data))
-    nrows = length(rows_data)
-    max_display = 25  # Pluto-style: show first N rows, collapse the rest
-
-    # Dimension label (e.g. "8×7 DataFrame")
-    ncols = length(cols)
-    type_name = nameof(typeof(result))
-    dim_label = Div(:style => "font-size:12px;color:#6b7d93;font-family:'JetBrains Mono',monospace;margin-bottom:6px;",
-        "$(nrows)×$(ncols) $(type_name)")
-
-    # Column type names (if available via Tables.schema)
-    col_types = try
-        schema = Base.invokelatest(Tables.schema, result)
-        schema !== nothing ? [string(T) for T in schema.types] : nothing
-    catch
-        nothing
-    end
-
-    # Header row
-    header_cells = Any[Th(:class => "sst-th sst-row-label", "#")]
-    for col in cols
-        push!(header_cells, Th(:class => "sst-th", string(col)))
-    end
-
-    # Type row (under header)
-    type_cells = if col_types !== nothing
-        tc = Any[Th(:class => "sst-type-th", "")]
-        for t in col_types
-            push!(tc, Th(:class => "sst-type-th", t))
-        end
-        Tr(:class => "sst-type-row", tc...)
-    else
-        nothing
-    end
-
-    # Data rows (show first max_display, hide the rest)
-    show_all = nrows <= max_display
-    visible_rows = Any[]
-    for (i, row) in enumerate(rows_data)
-        is_hidden = !show_all && i > max_display && i < nrows  # hide middle rows
-        is_last = i == nrows
-        row_style = (is_hidden && !is_last) ? "display:none;" : ""
-
-        cells = Any[Td(:class => "sst-td sst-row-label", string(i))]
-        for col in cols
-            val = getfield(row, col)
-            push!(cells, Td(:class => "sst-td", string(val)))
-        end
-        push!(visible_rows, Tr(:class => "sst-row", :style => row_style,
-            :data_row_idx => string(i), cells...))
-    end
-
-    # "⋮ more" expand button (if rows truncated)
-    expand_btn = if !show_all
-        hidden_count = nrows - max_display - 1
-        Tr(Td(:class => "sst-more",
-            :colspan => string(ncols + 1),
-            :on_click => "var t=this.closest('table');t.querySelectorAll('tr[style*=none]').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'",
-            "⋮ $(hidden_count) more rows"))
-    else
-        nothing
-    end
-
-    thead_children = Any[Tr(header_cells...)]
-    type_cells !== nothing && push!(thead_children, type_cells)
-
-    tbody_children = Any[]
-    for (i, row_el) in enumerate(visible_rows)
-        push!(tbody_children, row_el)
-        # Insert expand button after visible rows
-        if !show_all && i == max_display
-            expand_btn !== nothing && push!(tbody_children, expand_btn)
-        end
-    end
-
-    Div(:class => "sst-wrap",
-        dim_label,
-        Div(:style => "overflow-x:auto;",
-            Table(:class => "sst-table",
-                Thead(thead_children...),
-                Tbody(tbody_children...))))
-end
-
-"""
-Render a slider-bound table with all rows present and data-row-index attributes.
-
-Instead of pre-rendering N separate tables (one per slider value), render the
-full table once. JavaScript toggles row visibility: rows with index ≤ slider
-value are shown, others are hidden. This eliminates build-time pre-rendering
-for dataframe outputs.
-"""
-function _render_reactive_table(result, gallery::PrerenderedGallery)
-    slider_id = string(gallery.slider_cell_id)
-
-    if result isa AbstractVector && !isempty(result) && first(result) isa NamedTuple
-        cols = keys(first(result))
-        header = Thead(Tr([Th(:class => _WEB_TH_CLS, string(col)) for col in cols]...))
-        default_val = Int(gallery.slider.default)
-        rows = [
-            Tr(:class => _WEB_TR_CLS, :data_row_index => string(i),
-                :style => i <= default_val ? "" : "display:none",
-                [Td(:class => _WEB_TD_CLS, string(getfield(row, col))) for col in cols]...)
-            for (i, row) in enumerate(result)
-        ]
-        return Div(:class => "overflow-x-auto notebook-reactive-table",
-            :data_slider_table => slider_id,
-            Table(:class => "w-full text-sm", header, Tbody(rows...)))
-    end
-
-    # Fallback for non-NamedTuple dataframes — static render
-    _render_table_output(result)
-end
-
 # =============================================================================
 # render_output_html — single source of truth for cell output as HTML string
 # =============================================================================
@@ -1025,11 +891,6 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
         b64 = Base64.base64encode(output.image_data)
         return """<img src="data:image/png;base64,$(b64)" alt="Plot output" class="rounded-lg max-w-full">"""
     end
-    # Dataframe/table from text_representation
-    if output.output_type == :dataframe
-        text = output.text_representation
-        return isempty(text) ? "" : """<pre class="text-sm font-mono whitespace-pre-wrap" style="color:var(--output-text);">$(_html_esc(text))</pre>"""
-    end
     # Nothing / unknown — empty
     ""
 end
@@ -1082,7 +943,7 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
         output_html = render_output_html(cell)
         has_text_output = !isempty(output.text_representation) && output.output_type != :nothing && output.output_type != :markdown
         has_output = has_text_output || !isempty(output_html)
-        is_rich_output = output.output_type in (:markdown, :html, :dataframe, :table, :image_png, :image_svg, :bond)
+        is_rich_output = output.output_type in (:markdown, :html, :table, :image_png, :image_svg, :bond)
 
         out_div = if has_output
             out_content = !isempty(output_html) ? RawHtml(output_html) :
@@ -1344,7 +1205,7 @@ function execute_notebook_for_web(path; verbose=false)
         deps = downstream_dependents(nb, [cell])
         # Include ALL dependent cells with visible output, not just plots
         reactive_deps = filter(d -> d.output.output_type in (
-            :image_png, :plotly_json, :text, :dataframe
+            :image_png, :plotly_json, :text, :table
         ), deps)
         isempty(reactive_deps) && continue
 
@@ -1356,7 +1217,7 @@ function execute_notebook_for_web(path; verbose=false)
             # Dataframe deps use reactive table (SSR all rows + JS row toggling)
             # instead of pre-rendering separate tables for each slider value.
             # The cell was already executed at the default value, so result has all rows.
-            if dep.output.output_type == :dataframe
+            if dep.output.output_type == :table
                 prerendered[dep.id] = PrerenderedGallery(
                     cell.id, var_name, slider,
                     Dict{Any,Vector{UInt8}}(), Dict{Any,String}(), Dict{Any,String}()
@@ -1394,7 +1255,7 @@ function execute_notebook_for_web(path; verbose=false)
                 end
 
                 # Capture rendered HTML for text/dataframe outputs
-                if dep.output.output_type in (:text, :dataframe)
+                if dep.output.output_type in (:text, :table)
                     vnode = _render_output(dep)  # no prerendered arg → plain render
                     if vnode !== nothing
                         html_variants[val] = render_to_string(vnode)
