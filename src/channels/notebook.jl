@@ -875,10 +875,8 @@ function _handle_set_bond!(state::WebNotebookState, conn, data)
 
     nb = active_nb(state)
     worker = active_worker(state)
-    worker === nothing && (@info "[bond] no worker"; return)
+    worker === nothing && return
     name_sym = Symbol(bond_name)
-
-    @info "[bond] received" name=bond_name raw_value=raw_value raw_type=typeof(raw_value)
 
     @async begin
         state.executing = true
@@ -888,16 +886,18 @@ function _handle_set_bond!(state::WebNotebookState, conn, data)
                     :(Sessions.SessionsUI.apply_bond_update!(_workspace.mod,
                         $(QuoteNode(name_sym)), $(QuoteNode(raw_value)))))
             catch e
-                @warn "[bond] remote_eval_fetch threw" exception=(e, catch_backtrace())
+                @warn "[bond] worker call failed" name=bond_name exception=(e, catch_backtrace())
                 return
             end
-            @info "[bond] apply_bond_update!" cell_id=cell_id ok=ok
 
-            ok || (@info "[bond] validation failed — no re-run"; return)
-            cell_id === nothing && (@info "[bond] no cell_id"; return)
+            ok || return
+            cell_id === nothing && return
 
             bond_cell = get(nb.cells, cell_id, nothing)
-            bond_cell === nothing && (@info "[bond] cell_id not in notebook" cell_id=cell_id; return)
+            if bond_cell === nothing
+                @warn "[bond] cell_id from registry not found in notebook" name=bond_name cell_id=cell_id
+                return
+            end
 
             deps = try
                 downstream_dependents(nb, [bond_cell])
@@ -905,7 +905,6 @@ function _handle_set_bond!(state::WebNotebookState, conn, data)
                 @warn "[bond] downstream_dependents failed" exception=e
                 Cell[]
             end
-            @info "[bond] downstream cells" count=length(deps) ids=[string(c.id) for c in deps]
             isempty(deps) || _execute_cells!(state, deps)
         catch e
             @warn "[bond] outer error" exception=(e, catch_backtrace())

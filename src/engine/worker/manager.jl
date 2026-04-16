@@ -153,8 +153,10 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell; log_callback=nothi
     end
 
     # Execute in worker
+    cid_str = string(cell.id)
     worker_output = try
-        Malt.remote_eval_fetch(nw.worker, :(_worker_execute(_workspace, $(code); log_file=$(log_file))))
+        Malt.remote_eval_fetch(nw.worker,
+            :(_worker_execute(_workspace, $(code); log_file=$(log_file), cell_id=$(cid_str))))
     catch e
         @warn "[Worker] Execution failed" exception=e
         (output_type=:error,

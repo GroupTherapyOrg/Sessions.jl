@@ -72,7 +72,7 @@ const _empty_output = (output_type=:nothing, text_representation="", stdout_text
 
 # ── Cell execution ──
 
-function _worker_execute(ws::SessionsWorkspace, code::String; log_file::String="")
+function _worker_execute(ws::SessionsWorkspace, code::String; log_file::String="", cell_id::String="")
     isempty(strip(code)) && return _empty_output
 
     t0 = time_ns()
@@ -83,6 +83,17 @@ function _worker_execute(ws::SessionsWorkspace, code::String; log_file::String="
     logs_buffer = _LogRecordNT[]
     lf = isempty(log_file) ? nothing : log_file
     logger = _SessionsLogger(logs_buffer, lf, Logging.Debug)
+
+    # Tell SessionsUI's @bind macro which cell is executing so bonds get
+    # registered against a real cell_id. Without this every bond was
+    # stored under UUID(0) (the "no cell context" sentinel) and the
+    # coordinator's `get(nb.cells, UUID(0), nothing)` lookup always
+    # failed, so downstream cells never re-ran on slider drags.
+    if !isempty(cell_id)
+        try
+            Sessions.SessionsUI._EXECUTING_CELL_ID[] = Base.UUID(cell_id)
+        catch; end
+    end
 
     Logging.with_logger(logger) do
         try
