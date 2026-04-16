@@ -19,7 +19,7 @@ function Layout(children...; title="Sessions.jl")
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css" />
 <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>"""),
-        RawHtml("""<script>window.MathJax={tex:{inlineMath:[['\$','\$'],['\\\\(','\\\\)']]},svg:{fontCache:'global'}};</script>
+        RawHtml("""<script>window.MathJax={tex:{inlineMath:[['\$','\$'],['\\\\(','\\\\)']]},svg:{fontCache:'global'},options:{ignoreHtmlClass:'cm-editor|tex2jax_ignore',processHtmlClass:'tex2jax_process'}};</script>
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg-full.js"></script>"""),
         RawHtml("""<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/default.min.css" disabled>
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
