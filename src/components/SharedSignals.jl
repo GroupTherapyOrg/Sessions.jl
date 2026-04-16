@@ -64,3 +64,7 @@ const cellcount_signal = create_signal(0)
 # Connection status (WS open / closed / reconnecting).
 # Read by: StatusBar (connected/disconnected dot + label).
 const connection_signal = create_signal(1)
+
+# Format-in-progress flag (Format button text + disabled state).
+# Read by: NotebookToolbar.
+const is_formatting_signal = create_signal(0)

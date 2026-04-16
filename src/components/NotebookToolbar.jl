@@ -26,11 +26,12 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
     # Names below MUST match what NotebookSignals.jl exports (after
     # destructuring) so window.__therapy.set('is_executing', …) etc.
     # actually wakes us up.
-    is_executing, _            = sig_is_executing
-    is_unsaved, _              = sig_is_unsaved
-    run_progress_current, _    = sig_run_progress_current
-    run_progress_total, _      = sig_run_progress_total
-    stale_count, _             = sig_stale_count
+    is_executing, _            = is_executing_signal
+    is_unsaved, _              = is_unsaved_signal
+    run_progress_current, _    = run_progress_current_signal
+    run_progress_total, _      = run_progress_total_signal
+    stale_count, _             = stale_count_signal
+    is_formatting, _           = is_formatting_signal
 
     # ── Notebook-tab-only group: run controls + progress ──
     notebook_controls = is_file_tab == 1 ? nothing : Fragment(
@@ -87,13 +88,18 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
             :title => "Save (Ctrl+S)",
             () -> is_unsaved() == 1 ? "● Save" : "Save"),
         Therapy.Button(Symbol("data-format-btn") => "1",
-            :class => can_format == 1 ?
-                "pill-btn pill-ghost" : "pill-btn pill-ghost tb-disabled",
+            :class => () -> begin
+                base = "pill-btn pill-ghost"
+                if can_format == 0 || is_formatting() == 1
+                    base *= " tb-disabled"
+                end
+                base
+            end,
             :on_click => is_file_tab == 1 ?
                 "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
                 "TherapyWS.sendMessage('notebook',{action:'format_all'})",
             :title => is_file_tab == 1 ? "Format file" : "Format all cells",
-            "Format"))
+            () -> is_formatting() == 1 ? "Formatting..." : "Format"))
 
     Div(:class => "nb-pill", notebook_controls, save_format)
 end

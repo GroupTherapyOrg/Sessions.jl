@@ -233,31 +233,30 @@ function _notebook_ws_bridge_body()
     }
 
     // No-ops for removed signal setters; surrounding DOM updates handle state.
-    var setCellOrder = function(){};
     function setExecuting(running) { S('is_executing', running ? 1 : 0); }
     function setStaleCount(n) { S('stale_count', n|0); }
 
     // ── Save state ──
+    // The SAVE INDICATOR (text + color) is rendered by NotebookToolbar's
+    // reactive bindings against is_unsaved_signal. We just write the
+    // signal and keep a mirror flag for the keyboard-shortcut gate.
     window._sessionsUnsaved = false;
     function markUnsaved() {
       if (window._sessionsUnsaved) return;
       window._sessionsUnsaved = true;
       S('is_unsaved', 1);
-      var btn = document.getElementById('save-indicator');
-      if (btn) { btn.textContent='\\u25CF Save'; btn.style.color='var(--status-running)'; }
     }
     function markSaved() {
       window._sessionsUnsaved = false;
       S('is_unsaved', 0);
-      var btn = document.getElementById('save-indicator');
-      if (btn) { btn.textContent='Saved'; btn.style.color=''; setTimeout(function(){if(!window._sessionsUnsaved)btn.textContent='Save';},2000); }
     }
     window._sessionsMarkUnsaved = markUnsaved;
 
     // ── DOM helpers ──
     function cellEls(cellId) { var wrap=document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]'); if(!wrap)return null; return {wrap:wrap,code:wrap.querySelector('.code-cell'),out:wrap.querySelector('.cell-out'),ctrls:wrap.querySelector('.cell-ctrls')}; }
     function nbContainer() { return document.querySelector('#nb > div'); }
-    function fmtRuntime(ns) { var ms=ns/1e6; if(ms<1)return(ns/1e3).toFixed(1)+'\\u00b5s'; if(ms<1000)return ms.toFixed(1)+'ms'; var s=ms/1000; if(s<60)return s.toFixed(1)+'s'; var m=s/60; if(m<60)return m.toFixed(1)+'min'; return(m/60).toFixed(1)+'hr'; }
+    // fmtRuntime is dead — CellView's runtime_ns reactive text-node
+    // (formatted by Julia _cv_fmt_runtime) writes the badge text now.
     function fmtSeconds(s) { return s<1?s.toFixed(2)+'s':s<60?s.toFixed(1)+'s':(s/60).toFixed(1)+'min'; }
 
     // ── Cell execution timer (live-tick badge while a cell runs) ──
@@ -322,13 +321,16 @@ function _notebook_ws_bridge_body()
     }
 
     // ── Footer cell-count helper (delta-based) ──
+    // No DOM mutation — StatusBar's reactive text-node binding renders
+    // "<n> cells" automatically when the cellcount signal changes.
+    var _cellCountVal = 0;
     function _bumpCellCount(delta) {
-      var el = document.getElementById('cell-count'); if (!el) return;
-      var m = (el.textContent || '').match(/(\\d+)/);
-      var n = m ? parseInt(m[1], 10) : 0;
-      var next = Math.max(0, n + delta);
-      el.textContent = next + ' cells';
-      S('total_cells', next);
+      _cellCountVal = Math.max(0, _cellCountVal + (delta|0));
+      S('cellcount', _cellCountVal);
+    }
+    function _setCellCount(n) {
+      _cellCountVal = Math.max(0, n|0);
+      S('cellcount', _cellCountVal);
     }
 
     // ── Find gap after a cell (or first gap if null) ──
@@ -491,6 +493,13 @@ function _notebook_ws_bridge_body()
         mutate('notebook', {action:'save',codes:codes}, function(){ markUnsaved(); });
       }
     };
+
+    // ══════════════════════════════════════════════════════════════
+    // WS connection state → connection signal (StatusBar reacts)
+    // Therapy already dispatches these events from its WS client.
+    // ══════════════════════════════════════════════════════════════
+    window.addEventListener('therapy:ws:connected',    function(){ S('connection', 1); });
+    window.addEventListener('therapy:ws:disconnected', function(){ S('connection', 0); });
 
     // ══════════════════════════════════════════════════════════════
     // WS Event Handler — processes server events, reconciles mutations
@@ -666,24 +675,12 @@ function _notebook_ws_bridge_body()
       }
 
       // ── Stale cells update ──
-      // Toolbar count + per-cell stale class are now both signal-driven.
-      // setStaleCount() writes the global stale_count signal (NotebookSignals);
-      // setCellStale() pokes each CellView's is_stale signal.
-      // Toolbar button enable/disable is still imperative — it'll move to
-      // NotebookToolbar @island in Stage 4.
+      // Fully signal-driven now: stale_count_signal updates the
+      // toolbar's button enable + badge text/visibility via reactive
+      // bindings in NotebookToolbar; per-cell stale class is set via
+      // each CellView's is_stale signal.
       else if (data.event === 'stale_update') {
         setStaleCount(data.count || 0);
-        window._sessionsStaleCount = data.count || 0;
-        var btn=document.getElementById('run-stale-btn');
-        var badge=document.getElementById('run-stale-count');
-        if(btn){
-          if(data.count>0 && !window._sessionsExecuting){btn.classList.remove('tb-disabled');}
-          else{btn.classList.add('tb-disabled');}
-        }
-        if(badge){
-          if(data.count>0){badge.textContent=data.count;badge.style.display='';}
-          else{badge.style.display='none';}
-        }
         var staleSet=new Set(data.stale_ids||[]);
         // Walk every CellView island; flip its is_stale signal based on set membership.
         document.querySelectorAll('.cell-wrap[data-cell-id]').forEach(function(wrap){
@@ -709,41 +706,23 @@ function _notebook_ws_bridge_body()
       }
 
       // ── Format progress ──
-      else if (data.event === 'format_started') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent='Formatting...';btn.classList.add('tb-disabled');}); }
-      else if (data.event === 'format_done') { document.querySelectorAll('[data-format-btn]').forEach(function(btn){btn.textContent='Format';btn.classList.remove('tb-disabled');}); }
+      else if (data.event === 'format_started') { S('is_formatting', 1); }
+      else if (data.event === 'format_done')    { S('is_formatting', 0); }
 
       // ── Save confirmed ──
       else if (data.event === 'saved') { if(!data.ack_mutation) markSaved(); }
 
       // ── Interrupted ──
+      // Signal flips drive the toolbar back to idle mode; progress pill
+      // disappears because total goes to 0. (Lost the "Interrupted"
+      // transient text overlay in the simplification — small UX
+      // regression, easy to add back as an interrupted_signal if
+      // needed.)
       else if (data.event === 'interrupted') {
-        window._sessionsExecuting=false; setExecuting(0);
-        var execIdle=document.getElementById('pill-exec-idle');
-        var execRunning=document.getElementById('pill-exec-running');
-        var sepStatus=document.getElementById('pill-sep-status');
-        var statusZone=document.getElementById('pill-status-zone');
-        if(execIdle)execIdle.style.display='';
-        if(execRunning)execRunning.style.display='none';
-        var runAllBtn=document.getElementById('run-all-btn');
-        var runStaleBtn=document.getElementById('run-stale-btn');
-        if(runAllBtn)runAllBtn.classList.remove('tb-disabled');
-        if(runStaleBtn){
-          if((window._sessionsStaleCount||0)>0)runStaleBtn.classList.remove('tb-disabled');
-          else runStaleBtn.classList.add('tb-disabled');
-        }
-        if(sepStatus)sepStatus.style.display='';
-        if(statusZone){
-          statusZone.style.display='';
-          statusZone.innerHTML='<span class="pill-count" style="color:var(--tb-stop-text)">Interrupted</span>';
-        }
-        if(window._sessCompletedTimer)clearTimeout(window._sessCompletedTimer);
-        window._sessCompletedTimer=setTimeout(function(){
-          if(!window._sessionsExecuting){
-            if(sepStatus)sepStatus.style.display='none';
-            if(statusZone){statusZone.style.display='none';statusZone.innerHTML='';}
-          }
-          window._sessCompletedTimer=null;
-        },2000);
+        window._sessionsExecuting = false;
+        setExecuting(0);
+        S('run_progress_total', 0);
+        S('run_progress_current', 0);
       }
 
       // ── Full state (SSR already rendered, skip) ──
@@ -761,28 +740,19 @@ function _notebook_ws_bridge_body()
         if (data.executing) {
           window._sessionsExecuting = true;
           setExecuting(1);
-          var running=0,queued=0,total=0,runningCid=null,runningIdx=0,cellIdx=0;
-          if(data.cells){data.cells.forEach(function(c){cellIdx++;if(c.state==='cell_running'){running++;total++;runningCid=c.cell_id;runningIdx=cellIdx;}else if(c.state==='cell_queued'){queued++;total++;}});}
-          window._sessionsRunningCellId=runningCid;
-          window._sessionsLastTotal=total;
-          var execIdle=document.getElementById('pill-exec-idle');
-          var execRunning=document.getElementById('pill-exec-running');
-          var sepStatus=document.getElementById('pill-sep-status');
-          var statusZone=document.getElementById('pill-status-zone');
-          if(execIdle)execIdle.style.display='none';
-          if(execRunning)execRunning.style.display='';
-          if(sepStatus)sepStatus.style.display='';
-          if(statusZone && total>0){
-            statusZone.style.display='';
-            var idx=runningIdx||1;
-            var pct=Math.max(0,Math.min(100,Math.round((idx/total)*100)));
-            var jumpSVG='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg>';
-            statusZone.innerHTML=
-              '<span class="pill-dot"></span>'+
-              '<span class="pill-count">'+idx+' / '+total+'</span>'+
-              '<div class="pill-bar"><div class="pill-bar-fill" style="width:'+pct+'%"></div></div>'+
-              '<button class="pill-btn pill-ghost-icon" id="jump-running-btn" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell">'+jumpSVG+'</button>';
-          }
+          var running = 0, total = 0, runningCid = null, runningIdx = 0, cellIdx = 0;
+          if (data.cells) data.cells.forEach(function(c) {
+            cellIdx++;
+            if (c.state === 'cell_running') {
+              running++; total++; runningCid = c.cell_id; runningIdx = cellIdx;
+            } else if (c.state === 'cell_queued') {
+              total++;
+            }
+          });
+          window._sessionsRunningCellId = runningCid;
+          // Toolbar pill rendering driven by reactive bindings on these:
+          S('run_progress_current', runningIdx);
+          S('run_progress_total', total);
         }
       }
 
@@ -804,9 +774,9 @@ function _notebook_ws_bridge_body()
             if(window.MathJax&&MathJax.typesetPromise&&newNb){MathJax.typesetPromise([newNb]).catch(function(){});}
           }
         }
-        // Sync footer cell count to the active notebook
-        var ccEl=document.getElementById('cell-count');
-        if(ccEl && typeof data.total_cells==='number'){ ccEl.textContent=data.total_cells+' cells'; S('total_cells', data.total_cells|0); }
+        // Sync footer cell count to the active notebook (StatusBar
+        // re-renders via its reactive cellcount text-node binding).
+        if (typeof data.total_cells === 'number') _setCellCount(data.total_cells);
         var lo=document.getElementById('nb-loading');if(lo){lo.classList.add('loaded');setTimeout(function(){lo.remove();},400);}
         // Re-init ToC after tab switch (DOM was replaced)
         if(window._sessionsReinitToc) setTimeout(_sessionsReinitToc, 300);
@@ -1412,9 +1382,10 @@ function _notebook_island_js()
           }, 50);
         }
       }
-      // Sync footer cell count to the active notebook
-      var ccEl = document.getElementById('cell-count');
-      if (ccEl && typeof d.total_cells === 'number') { ccEl.textContent = d.total_cells + ' cells'; }
+      // Sync footer cell count to the active notebook (signal-driven)
+      if (typeof d.total_cells === 'number' && window.__therapy && window.__therapy.set) {
+        window.__therapy.set('cellcount', d.total_cells | 0);
+      }
       // Remove loading overlay if present
       var lo = document.getElementById('nb-loading');
       if (lo) { lo.classList.add('loaded'); setTimeout(function(){ lo.remove(); }, 400); }
