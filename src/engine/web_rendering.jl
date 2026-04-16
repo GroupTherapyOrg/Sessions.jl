@@ -831,6 +831,7 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     menu_handler = mode == :live ? "window._sessionsShowCellMenu(this,'$(cell_id)')" : ""
 
     push!(parts, CellView(
+            cell_id = cell_id,
             initial_state = state_int,
             initial_stale = initial_stale,
             initial_runtime_ns = initial_runtime,

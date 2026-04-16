@@ -150,9 +150,9 @@
 .cell-wrap.cell-disabled .code-cell::before{display:none !important;}
 .cell-wrap.cell-disabled .cell-out{opacity:0.5;}
 .cell-wrap.cell-disabled .cell-ctrls{opacity:1 !important;transform:none !important;pointer-events:auto !important;}
-.cell-wrap.wrap-skipped{opacity:0.4;}
-.cell-wrap.wrap-skipped .cell-body{border:1.5px dashed var(--warm-300);border-radius:8px;}
-.cell-wrap.wrap-skipped .code-cell{border-color:transparent !important;}
+.cell-wrap:has(.code-cell.cv-skipped){opacity:0.4;}
+.cell-wrap:has(.code-cell.cv-skipped) .cell-body{border:1.5px dashed var(--warm-300);border-radius:8px;}
+.cell-wrap:has(.code-cell.cv-skipped) .code-cell{border-color:transparent !important;}
 .cell-skipped-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);font-style:italic;padding:4px 0;}
 .dark .cell-wrap.wrap-skipped{border-color:var(--warm-700);}
 :root{--disabled-cell-bg:var(--warm-100);}
@@ -516,31 +516,37 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
    through transparent cell content. */
 .md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
 
+/* All depth-state styling is driven from classes on the inner .code-cell
+   (managed by the CellView @island via reactive `:class` bindings).
+   `.cell-wrap:has(.code-cell.X)` lets a parent style react to a child
+   class — no need for the @island to reach across its own boundary
+   to flip classes on .cell-wrap. Same trick already used for stale. */
+
 /* Running — blue pulsing offset block */
-.cell-wrap.wrap-running .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.45);animation:shadow-pulse-light 3s ease-in-out infinite;}
-.cell-wrap.wrap-running .code-cell{border-color:rgba(55,138,221,.25) !important;}
+.cell-wrap:has(.code-cell.cv-running) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.45);animation:shadow-pulse-light 3s ease-in-out infinite;}
+.cell-wrap:has(.code-cell.cv-running) .code-cell{border-color:rgba(55,138,221,.25) !important;}
 
 /* Queued — same blue, no pulse */
-.cell-wrap.wrap-queued .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.3);}
-.cell-wrap.wrap-queued .code-cell{border-color:rgba(55,138,221,.2) !important;}
+.cell-wrap:has(.code-cell.cv-queued) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.3);}
+.cell-wrap:has(.code-cell.cv-queued) .code-cell{border-color:rgba(55,138,221,.2) !important;}
 
 /* Stale — amber, static, dim output. Suppressed while running/queued so
    transitions don't double-stack. */
-.cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(239,159,39,.22);}
-.cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .code-cell{border-color:rgba(186,117,23,.2) !important;}
-.cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-out{opacity:.5;}
+.cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(239,159,39,.22);}
+.cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .code-cell{border-color:rgba(186,117,23,.2) !important;}
+.cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .cell-out{opacity:.5;}
 
 /* Errored — red, static (no pulse). Same depth offset as stale; the cell
    stays lifted until the next successful re-run transitions it back to flat. */
-.cell-wrap.wrap-errored .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.18);}
-.cell-wrap.wrap-errored .code-cell{border-color:rgba(226,75,74,.15) !important;}
+.cell-wrap:has(.code-cell.cv-errored) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.18);}
+.cell-wrap:has(.code-cell.cv-errored) .code-cell{border-color:rgba(226,75,74,.15) !important;}
 
 /* Dark mode: bump block contrast against near-black surfaces. */
-.dark .cell-wrap.wrap-running .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.6);animation-name:shadow-pulse-dark;}
-.dark .cell-wrap.wrap-queued .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.38);}
-.dark .cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-body{box-shadow:4px 4px 0 rgba(239,159,39,.3);}
-.dark .cell-wrap.wrap-errored .cell-body{box-shadow:4px 4px 0 rgba(226,75,74,.22);}
-.dark .cell-wrap.wrap-errored .code-cell{border-color:rgba(226,75,74,.2) !important;}
+.dark .cell-wrap:has(.code-cell.cv-running) .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.6);animation-name:shadow-pulse-dark;}
+.dark .cell-wrap:has(.code-cell.cv-queued) .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.38);}
+.dark .cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .cell-body{box-shadow:4px 4px 0 rgba(239,159,39,.3);}
+.dark .cell-wrap:has(.code-cell.cv-errored) .cell-body{box-shadow:4px 4px 0 rgba(226,75,74,.22);}
+.dark .cell-wrap:has(.code-cell.cv-errored) .code-cell{border-color:rgba(226,75,74,.2) !important;}
 
 @keyframes shadow-pulse-light{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.45);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.7);}}
 @keyframes shadow-pulse-dark{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.6);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.85);}}

@@ -74,50 +74,14 @@ function NotebookPanel(state)
     is_jl_file = is_file_tab && endswith(tab.path, ".jl")
     can_format = !is_file_tab || is_jl_file
 
-    pill_children = Any[]
-    if !is_file_tab
-        sc = nb !== nothing ? _Sess.stale_cells(nb) : _Sess.Cell[]
-        n = length(sc)
-        stale_cls = n == 0 ? "pill-btn pill-stale tb-disabled" : "pill-btn pill-stale"
-        count_style = n > 0 ? "" : "display:none"
-
-        push!(pill_children,
-            Div(:class => "pill-group", :id => "pill-exec-idle",
-                Button(:id => "run-all-btn", :class => "pill-btn pill-primary",
-                    :on_click => "window._sessionsRunAll()",
-                    :title => "Run all cells",
-                    RawHtml(_SVG_RUN_SMALL), " Run all"),
-                Button(:id => "run-stale-btn", :class => stale_cls,
-                    :on_click => "window._sessionsRunStale()",
-                    :title => "Run stale cells",
-                    RawHtml(_SVG_RUN_SMALL), " Run stale",
-                    Span(:id => "run-stale-count", :class => "pill-count-badge",
-                        :style => count_style, string(n)))))
-        push!(pill_children,
-            Div(:class => "pill-group", :id => "pill-exec-running", :style => "display:none",
-                Button(:id => "stop-btn", :class => "pill-btn pill-stop",
-                    :on_click => "TherapyWS.sendMessage('notebook',{action:'interrupt'})",
-                    :title => "Stop execution",
-                    RawHtml("""<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""),
-                    " Stop")))
-        push!(pill_children,
-            RawHtml("""<span class="pill-sep" id="pill-sep-status" style="display:none"></span><div class="pill-status" id="pill-status-zone" style="display:none"></div>"""))
-        push!(pill_children, RawHtml("""<span class="pill-sep"></span>"""))
-    end
-    push!(pill_children,
-        Div(:class => "pill-group",
-            Button(:id => "save-indicator", :class => "pill-btn pill-ghost",
-                :on_click => "window._sessionsSave()",
-                :title => "Save (Ctrl+S)", "Save"),
-            Button(Symbol("data-format-btn") => "1",
-                :class => can_format ? "pill-btn pill-ghost" : "pill-btn pill-ghost tb-disabled",
-                :on_click => is_file_tab ?
-                    "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
-                    "TherapyWS.sendMessage('notebook',{action:'format_all'})",
-                :title => is_file_tab ? "Format file" : "Format all cells", "Format")))
-
+    # Toolbar pill is now a Therapy @island (NotebookToolbar) — visibility,
+    # progress bar, stale-count badge, and save-indicator state are all
+    # driven by the page-level signals defined in NotebookSignals.jl.
+    # The WS bridge writes those signals via window.__therapy.set(...).
     push!(tab_items, Div(:style => "margin-left:auto;padding:0 8px;flex-shrink:0;display:flex;align-items:center;",
-        Div(:class => "nb-pill", pill_children...)))
+        NotebookToolbar(
+            is_file_tab = is_file_tab ? 1 : 0,
+            can_format = can_format ? 1 : 0)))
 
     tab_bar = Div(:class => "h-[38px] flex items-stretch shrink-0",
         :style => "background:var(--chrome-bg);border-radius:12px 12px 0 0;",

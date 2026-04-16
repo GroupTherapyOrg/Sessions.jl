@@ -45,7 +45,32 @@ const CV_STATE_DONE     = 3
 const CV_STATE_ERRORED  = 4
 const CV_STATE_SKIPPED  = 5
 
+# Format an Int nanosecond duration into a compact human string for
+# the runtime badge. Pure Julia (runs in WASM via Therapy reactive
+# text-node binding — no js() needed).
+function _cv_fmt_runtime(ns::Int)::String
+    ns <= 0 && return ""
+    ms = ns / 1e6
+    ms < 1     && return string(round(ns / 1e3; digits=1), "µs")
+    ms < 1000  && return string(round(ms;       digits=1), "ms")
+    s = ms / 1000
+    s < 60     && return string(round(s;        digits=1), "s")
+    m = s / 60
+    m < 60     && return string(round(m;        digits=1), "min")
+    return string(round(m / 60; digits=1), "hr")
+end
+
+# Map a state code to the `cv-X` modifier class CSS keys off via :has().
+function _cv_state_class(s::Int)::String
+    s == CV_STATE_QUEUED  && return " cv-queued"
+    s == CV_STATE_RUNNING && return " cv-running"
+    s == CV_STATE_ERRORED && return " cv-errored"
+    s == CV_STATE_SKIPPED && return " cv-skipped"
+    ""
+end
+
 @island function CellView(children...;
+                          cell_id::String="",
                           initial_state::Int=CV_STATE_IDLE,
                           initial_stale::Int=0,
                           initial_runtime_ns::Int=0,
@@ -53,95 +78,53 @@ const CV_STATE_SKIPPED  = 5
                           run_handler::String="",
                           menu_handler::String="")
     # ── Signal layout (KEEP THIS ORDER — see header docstring) ──
-    state, set_state = create_signal(initial_state)
-    is_stale, set_stale = create_signal(initial_stale)
-    runtime_ns, set_runtime = create_signal(initial_runtime_ns)
-    is_open, set_open = create_signal(initial_open)
+    state, set_state         = create_signal(initial_state)
+    is_stale, set_stale      = create_signal(initial_stale)
+    runtime_ns, set_runtime  = create_signal(initial_runtime_ns)
+    is_open, set_open        = create_signal(initial_open)
 
-    # ── Eye toggle (fold/unfold + WS dispatch on user click) ──
-    create_effect(() -> begin
-        v = is_open()
-        js("""
-            var c=island.querySelector('.cell-code-wrap');
-            if(c)c.style.display=\$1?'':'none';
-            if(!island._foldInit){island._foldInit=true;return;}
-            var wrap=island.closest('.cell-wrap');
-            var cid=wrap?wrap.dataset.cellId:'';
-            if(cid&&window.TherapyWS&&TherapyWS.sendMessage){
-                TherapyWS.sendMessage('notebook',{action:'toggle_fold',cell_id:cid,folded:!\$1});
-            }
-        """, v)
-    end)
-
-    # ── State → classes on .code-cell + wrap-* on .cell-wrap ──
-    create_effect(() -> begin
-        s = state()
-        js("""
-            var cc=island.querySelector('.code-cell');
-            if(cc){
-                cc.classList.remove('idle','executing');
-                if(\$1===1||\$1===2)cc.classList.add('executing');
-            }
-            var w=island.closest('.cell-wrap');
-            if(w){
-                w.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored','wrap-skipped');
-                if(\$1===1)w.classList.add('wrap-queued');
-                else if(\$1===2)w.classList.add('wrap-running');
-                else if(\$1===4)w.classList.add('wrap-errored');
-                else if(\$1===5)w.classList.add('wrap-skipped');
-            }
-        """, s)
-    end)
-
-    # ── is_stale → .stale class on .code-cell ──
-    create_effect(() -> begin
-        v = is_stale()
-        js("""
-            var cc=island.querySelector('.code-cell');
-            if(cc){if(\$1)cc.classList.add('stale');else cc.classList.remove('stale');}
-        """, v)
-    end)
-
-    # ── runtime_ns → .rt-badge text ──
-    # Format inline: ns < 1ms → µs, ms < 1000 → ms, etc.
-    create_effect(() -> begin
-        ns = runtime_ns()
-        js("""
-            var b=island.querySelector('.rt-badge');
-            if(!b)return;
-            var n=\$1;
-            if(n<=0){b.textContent='';return;}
-            var ms=n/1e6;
-            if(ms<1){b.textContent=(n/1e3).toFixed(1)+'\\u00b5s';return;}
-            if(ms<1000){b.textContent=ms.toFixed(1)+'ms';return;}
-            var s=ms/1000;
-            if(s<60){b.textContent=s.toFixed(1)+'s';return;}
-            var m=s/60;
-            if(m<60){b.textContent=m.toFixed(1)+'min';return;}
-            b.textContent=(m/60).toFixed(1)+'hr';
-        """, ns)
-    end)
-
-    # ── Render: cell-island > cell-eye + cell-code-wrap > code-cell ──
+    # ── Render — pure declarative Therapy. No js() except in the eye
+    #            click handler (WS dispatch — browser API, unavoidable).
+    #            All visual state comes from reactive bindings:
+    #              :class => () -> ...   reactive class string
+    #              :style => () -> ...   reactive style
+    #              () -> "text"          reactive text node
+    #            Parent .cell-wrap styling is driven by CSS :has(...)
+    #            against the .code-cell modifiers — see input.css.
     Div(:class => "cell-island",
-        # Eye toggle (click flips is_open signal)
+        # Eye toggle — clicks flip is_open AND dispatch WS toggle_fold.
         Div(:class => "cell-eye",
-            :on_click => () -> set_open(1 - is_open()),
+            :on_click => () -> begin
+                new_open = 1 - is_open()
+                set_open(new_open)
+                # The single js() in this @island: WS send is a browser
+                # API call (TherapyWS), not state mutation. Cell id is
+                # interpolated at SSR time via the kwarg.
+                js("""if(window.TherapyWS&&TherapyWS.sendMessage){
+                          TherapyWS.sendMessage('notebook',{action:'toggle_fold',cell_id:'""" * cell_id * """',folded:!\$1});
+                      }""", new_open)
+            end,
             Div(:style => "position:relative;width:14px;height:14px;",
                 RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>"""),
                 Show(is_open) do
                     Div(:style => "position:absolute;inset:0;background:var(--panel-bg);",
                         RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""))
                 end)),
+        # cell-code-wrap — visibility driven by reactive style binding
+        # (NOT Show() — Show() unmounts/remounts and CodeMirror would
+        # lose its DOM state every fold/unfold).
         Div(:class => "cell-code-wrap",
-            Div(:class => "code-cell relative overflow-hidden",
+            :style => () -> is_open() == 1 ? "" : "display:none",
+            # code-cell — class is reactive: state modifier (cv-running
+            # etc.) + stale modifier. CSS :has() picks these up to
+            # style the parent .cell-wrap (input.css).
+            Div(:class => () -> string("code-cell relative overflow-hidden",
+                                       _cv_state_class(state()),
+                                       is_stale() == 1 ? " stale" : ""),
                 # Hover controls — runtime badge + run + menu buttons.
-                # The badge text is updated by the runtime_ns effect above.
-                # Buttons use string handlers (interpolated cell_id) since
-                # they dispatch to global IDE JS and don't need per-island
-                # WASM compilation of the click logic.
                 Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
-                    Span(:class => "rt-badge", ""),
+                    # Reactive text-node — formatted on every runtime_ns change.
+                    Span(:class => "rt-badge", () -> _cv_fmt_runtime(runtime_ns())),
                     isempty(run_handler) ? nothing :
                         Therapy.Button(:class => "ctrl-btn run-btn",
                             :title => "Run cell (Shift+Enter)",

@@ -223,8 +223,9 @@ function _notebook_ws_bridge_body()
     // ── Page-level signal setters (Therapy nanostores pub/sub) ──
     // Defined as a thin adapter: noop if __therapy isn't ready yet
     // (e.g. very first WS event arrives before any island hydrates).
-    // Names MUST match the closure-field names in NotebookSignals.jl
-    // and any @island that destructures those consts.
+    // Names MUST match the destructured-variable names in @islands
+    // (compiler tags `shared_name = closure field name`). See
+    // src/components/SharedSignals.jl for the canonical list.
     function S(name, value) {
       if (window.__therapy && window.__therapy.set) {
         window.__therapy.set(name, value);
@@ -692,70 +693,19 @@ function _notebook_ws_bridge_body()
       }
 
       // ── Run progress ──
+      // The toolbar pill mode (idle vs running), progress bar, and
+      // run-stale/run-all enable state are all driven by the
+      // NotebookToolbar @island's effects subscribed to is_executing,
+      // run_progress_current, run_progress_total, stale_count.
+      // We just set those signals and update the global flags that
+      // the Ctrl-S / Shift-Enter keyboard shortcuts gate on.
       else if (data.event === 'run_progress') {
-        var isRunning=data.running_index>0&&data.total>0;
-        var wasRunning=window._sessionsExecuting||false;
-        window._sessionsExecuting=isRunning;
-        window._sessionsRunningCellId=isRunning&&data.cell_id?data.cell_id:null;
+        var isRunning = data.running_index > 0 && data.total > 0;
+        window._sessionsExecuting = isRunning;
+        window._sessionsRunningCellId = isRunning && data.cell_id ? data.cell_id : null;
         setExecuting(isRunning ? 1 : 0);
         S('run_progress_current', (data.running_index|0));
-        S('run_progress_total', (data.total|0));
-
-        var execIdle=document.getElementById('pill-exec-idle');
-        var execRunning=document.getElementById('pill-exec-running');
-        var sepStatus=document.getElementById('pill-sep-status');
-        var statusZone=document.getElementById('pill-status-zone');
-        var jumpSVG='<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg>';
-
-        if(isRunning){
-          if(window._sessCompletedTimer){clearTimeout(window._sessCompletedTimer);window._sessCompletedTimer=null;}
-          window._sessionsLastTotal=data.total;
-          if(execIdle)execIdle.style.display='none';
-          if(execRunning)execRunning.style.display='';
-          if(sepStatus)sepStatus.style.display='';
-          if(statusZone){
-            statusZone.style.display='';
-            var pct=Math.max(0,Math.min(100,Math.round((data.running_index/data.total)*100)));
-            statusZone.innerHTML=
-              '<span class="pill-dot"></span>'+
-              '<span class="pill-count">'+data.running_index+' / '+data.total+'</span>'+
-              '<div class="pill-bar"><div class="pill-bar-fill" style="width:'+pct+'%"></div></div>'+
-              '<button class="pill-btn pill-ghost-icon" id="jump-running-btn" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell">'+jumpSVG+'</button>';
-          }
-        } else {
-          if(execIdle)execIdle.style.display='';
-          if(execRunning)execRunning.style.display='none';
-          // Re-enable run-all; re-enable run-stale only if there are stale cells.
-          var runAllBtn=document.getElementById('run-all-btn');
-          if(runAllBtn)runAllBtn.classList.remove('tb-disabled');
-          var runStaleBtn=document.getElementById('run-stale-btn');
-          if(runStaleBtn){
-            if((window._sessionsStaleCount||0)>0)runStaleBtn.classList.remove('tb-disabled');
-            else runStaleBtn.classList.add('tb-disabled');
-          }
-          // Transient completed state: green check + final count for ~2.2s.
-          var finalTotal=window._sessionsLastTotal||0;
-          if(wasRunning && finalTotal>0){
-            if(sepStatus)sepStatus.style.display='';
-            if(statusZone){
-              statusZone.style.display='';
-              statusZone.innerHTML=
-                '<span class="pill-check">\u2713</span>'+
-                '<span class="pill-count pill-done">'+finalTotal+' / '+finalTotal+'</span>';
-            }
-            if(window._sessCompletedTimer)clearTimeout(window._sessCompletedTimer);
-            window._sessCompletedTimer=setTimeout(function(){
-              if(!window._sessionsExecuting){
-                if(sepStatus)sepStatus.style.display='none';
-                if(statusZone){statusZone.style.display='none';statusZone.innerHTML='';}
-              }
-              window._sessCompletedTimer=null;
-            },2200);
-          } else {
-            if(sepStatus)sepStatus.style.display='none';
-            if(statusZone){statusZone.style.display='none';statusZone.innerHTML='';}
-          }
-        }
+        S('run_progress_total', isRunning ? (data.total|0) : 0);
       }
 
       // ── Format progress ──
