@@ -17,7 +17,7 @@ struct Currency
     rate_to_usd::Float64
 end
 
-const USD = Currency(:USD, 1.000)
+const USD = Currency(:USD, 1.0)
 const EUR = Currency(:EUR, 1.087)
 const JPY = Currency(:JPY, 0.0064)
 const GBP = Currency(:GBP, 1.283)
@@ -34,7 +34,7 @@ end
 
 # Quick smoke test
 let breakfast_yen = 850
-    breakfast_usd = round(convert_to(breakfast_yen, JPY, USD); digits=2)
+    breakfast_usd = round(convert_to(breakfast_yen, JPY, USD); digits = 2)
     println("¥$breakfast_yen  ≈  \$", breakfast_usd)
 end
 

@@ -37,9 +37,26 @@ function _initial_disk_hash(path)
     isfile(path) ? hash(read(path)) : zero(UInt64)
 end
 
+"""Cheap notebook snapshot — copies only the fields the watcher diff
+reads (cell_order + per-cell {id, code, folded, disabled}). `deepcopy`
+on a Notebook can fail when an errored cell holds a CapturedException
+whose backtrace points at a Module (Julia's deepcopy refuses Modules);
+a snapshot for diff purposes never needs the output/error/result
+fields anyway."""
+function _snapshot_notebook(nb::Notebook)
+    snap = Notebook(; path=nb.path)
+    snap.cell_order = copy(nb.cell_order)
+    for (id, c) in nb.cells
+        snap.cells[id] = Cell(; id=c.id, code=c.code,
+                                folded=c.folded, disabled=c.disabled,
+                                show_logs=c.show_logs)
+    end
+    snap
+end
+
 WebTab(id, nb::Notebook, worker, label, path) =
     WebTab(id, :notebook, nb, worker, label, path, "", nothing,
-           Ref(deepcopy(nb)), Ref(_initial_disk_hash(path)))
+           Ref(_snapshot_notebook(nb)), Ref(_initial_disk_hash(path)))
 WebTab(id, label, path, content::String) =
     WebTab(id, :file, nothing, nothing, label, path, content, nothing,
            Ref(Notebook(; path)), Ref(_initial_disk_hash(path)))
@@ -685,7 +702,7 @@ function _handle_save!(state::WebNotebookState, conn, data)
     serialized = serialize_notebook(nb)
     write(nb.path, serialized)
     tab.last_written_hash[] = hash(codeunits(serialized))
-    tab.snapshot[] = deepcopy(nb)
+    tab.snapshot[] = _snapshot_notebook(nb)
     save_session!(nb)
 
     msg = Dict("event" => "saved", "notebook_path" => nb.path)
