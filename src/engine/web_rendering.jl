@@ -602,8 +602,14 @@ function _render_table_html(table_json::String)
         end
         hidden_count = total_serialized - initial_visible - 1
         more_label = nrow > total_serialized ? "more" : "$(hidden_count) more"
+        # Stateful expand/collapse toggle (Pluto only ships "more"; the
+        # collapse direction is our addition). The button's data-state
+        # tracks whether the hidden rows are revealed; clicking flips
+        # display on every .pluto-table-hidden row and swaps the label.
+        toggle_js = """var btn=this;var t=btn.closest('table');var rows=t.querySelectorAll('.pluto-table-hidden');var collapsed=btn.dataset.state!=='open';rows.forEach(function(r){r.style.display=collapsed?'':'none'});btn.dataset.state=collapsed?'open':'closed';btn.textContent=collapsed?'⌃ less':'⋮ '+btn.dataset.moreLabel;"""
         print(buf, """<tr><td colspan="$(ncol + 1)" class="pluto-tree-more-td">""")
-        print(buf, """<pluto-tree-more onclick="this.closest('table').querySelectorAll('.pluto-table-hidden').forEach(function(r){r.style.display=''});this.closest('tr').remove()">⋮ """,
+        print(buf, """<pluto-tree-more data-state="closed" data-more-label=\"""",
+              more_label, """\" onclick=\"""", toggle_js, """\">⋮ """,
               more_label, "</pluto-tree-more></td></tr>")
         # Anchor row: the very last row so the user sees both endpoints
         _write_pluto_table_row(buf, total_serialized, rows[end])

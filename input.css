@@ -245,9 +245,15 @@
 .cell-out blockquote{margin:0 0 1em;padding:0.5em 1em;border-left:4px solid var(--md-rule);color:var(--md-blockquote-color);}
 .cell-out blockquote:last-child{margin-block-end:0;}
 .cell-out code{font-family:'JetBrains Mono',monospace;font-size:0.85em;padding:0.18em 0.4em;border-radius:6px;background:var(--md-code-bg);color:var(--md-code-color);font-variant-ligatures:none;}
-.cell-out pre{display:block;margin-block-start:0;margin-block-end:1em;padding:15px;border-radius:12px;background:var(--md-blockquote-bg);color:var(--md-blockquote-color);overflow-x:auto;tab-size:4;white-space:pre-wrap;font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-variant-ligatures:none;}
+/* Bare <pre> (text/dataframe output, error stack traces): just
+   monospace, no card chrome — Pluto behavior. */
+.cell-out pre{display:block;margin-block-start:0;margin-block-end:0;padding:0;background:transparent;color:inherit;overflow-x:auto;tab-size:4;white-space:pre-wrap;font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-variant-ligatures:none;}
+/* Markdown fenced code blocks (```julia ... ```): Markdown.jl wraps
+   them as <pre><code class="language-X">. Apply the card chrome only
+   to those by scoping with `:has(code)`. */
+.cell-out pre:has(> code){margin-block-end:1em;padding:15px;border-radius:12px;background:var(--md-blockquote-bg);color:var(--md-blockquote-color);}
 .cell-out pre:last-child{margin-block-end:0;}
-.cell-out pre code{background:none;padding:0;border-radius:0;font-size:inherit;color:inherit;white-space:pre;}
+.cell-out pre > code{background:none;padding:0;border-radius:0;font-size:inherit;color:inherit;white-space:pre;}
 .cell-out strong{color:var(--md-heading);font-weight:600;}
 .cell-out em{font-style:italic;}
 .cell-out a{color:var(--md-link);text-decoration:underline;text-decoration-thickness:2px;text-decoration-color:var(--md-link-underline);}

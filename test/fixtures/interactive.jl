@@ -118,7 +118,7 @@ count mirrors the slider exactly.
 # String => column form (rather than kwargs) so we can use unicode column
 # names like √i — the parser would otherwise read `√i = …` as the unary
 # √ operator applied to `i`, not a keyword name.
-DataFrame("i" => 1:n, "i²" => (1:n) .^ 2, "√i" => sqrt.(1:n))
+DataFrame("i²" => (1:n) .^ 2, "√i" => sqrt.(1:n))
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000c
 md"""
