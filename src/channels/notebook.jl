@@ -21,12 +21,11 @@ mutable struct WebTab
     label::String
     path::String
     file_content::String
-    last_disk_nb::Union{Notebook, Nothing}
     watcher::Union{DebouncedWatcher, Nothing}
 end
 
-WebTab(id, nb::Notebook, worker, label, path) = WebTab(id, :notebook, nb, worker, label, path, "", nothing, nothing)
-WebTab(id, label, path, content::String) = WebTab(id, :file, nothing, nothing, label, path, content, nothing, nothing)
+WebTab(id, nb::Notebook, worker, label, path) = WebTab(id, :notebook, nb, worker, label, path, "", nothing)
+WebTab(id, label, path, content::String) = WebTab(id, :file, nothing, nothing, label, path, content, nothing)
 
 """Server-side notebook state for the web UI (multi-tab)."""
 mutable struct WebNotebookState
@@ -668,19 +667,6 @@ function _handle_save!(state::WebNotebookState, conn, data)
     save_notebook(nb)
     save_session!(nb)
 
-    # CRITICAL: refresh the watcher's last-disk snapshot immediately after
-    # saving. Without this, when the watcher fires ~0.5s later it sees
-    # disk=NEW vs last_disk_nb=OLD, computes a non-empty diff, and
-    # broadcasts `cell_code_updated` for every cell we just saved. The JS
-    # then dispatches those into the CodeMirror editors, which silently
-    # overwrites any typing the user has done since save (e.g. typing a
-    # `$` for interpolation). Updating the snapshot here makes the
-    # post-save diff empty, so the watcher only fires on TRUE external
-    # edits (agent file writes, git pulls, etc.).
-    if tab.watcher !== nothing
-        tab.last_disk_nb = _snapshot_notebook(nb)
-    end
-
     msg = Dict("event" => "saved", "notebook_path" => nb.path)
     mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
     _nb_broadcast!(msg)
@@ -1077,17 +1063,6 @@ end
 # File watcher — detect external changes (agent edits, git, IDE)
 # ═══════════════════════════════════════════════════════════════
 
-function _snapshot_notebook(nb::Notebook)
-    snap = Notebook(; path=nb.path)
-    for id in nb.cell_order
-        haskey(nb.cells, id) || continue
-        cell = nb.cells[id]
-        add_cell!(snap, Cell(; id=cell.id, code=cell.code, folded=cell.folded, disabled=cell.disabled, show_logs=cell.show_logs))
-    end
-    snap.cell_order = copy(nb.cell_order)
-    snap
-end
-
 function start_web_watchers!(state::WebNotebookState)
     for tab in state.tabs
         _start_tab_watcher!(state, tab)
@@ -1098,20 +1073,21 @@ function _start_tab_watcher!(state::WebNotebookState, tab::WebTab)
     tab.watcher !== nothing && stop_watching!(tab.watcher)
     (!isfile(tab.path) || isempty(tab.path)) && return
 
-    tab.last_disk_nb = _snapshot_notebook(tab.nb)
     tab.watcher = DebouncedWatcher(tab.nb, _ -> _on_web_external_change!(state, tab);
                                     delay=0.5, poll_interval=0.5)
     start_watching!(tab.watcher)
 end
 
 function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
-    tab.last_disk_nb === nothing && return
     state.executing && return
 
     try
-        old_order = copy(tab.last_disk_nb.cell_order)
-        diff = merge_external_changes!(tab.nb, tab.last_disk_nb)
-        tab.last_disk_nb = _snapshot_notebook(tab.nb)
+        old_order = copy(tab.nb.cell_order)
+        # merge_external_changes diffs disk against in-memory nb directly —
+        # no separate snapshot to keep in sync. Our own saves echo back as
+        # a no-op diff (disk == in-memory); only true external edits
+        # produce a non-empty diff.
+        diff = merge_external_changes!(tab.nb)
 
         reordered = diff.new_order != old_order
         n_changes = length(diff.added) + length(diff.changed) + length(diff.removed) + length(diff.metadata_changed)
