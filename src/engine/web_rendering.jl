@@ -830,18 +830,32 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     run_handler = mode == :live ? "window._sessionsRunCell('$(cell_id)')" : ""
     menu_handler = mode == :live ? "window._sessionsShowCellMenu(this,'$(cell_id)')" : ""
 
-    push!(parts, CellView(
-            cell_id = cell_id,
-            initial_state = state_int,
-            initial_stale = initial_stale,
-            initial_runtime_ns = initial_runtime,
-            initial_open = initial_open,
-            run_handler = run_handler,
-            menu_handler = menu_handler) do
-        Div(:class => "cm-cell",
+    # CellView lives in src/components/CellView.jl, loaded into Main by
+    # Therapy.load_app! at app startup (same path as every other
+    # Sessions @island). Look it up at SSR time rather than depending
+    # on it at package-load time.
+    cell_view = isdefined(Main, :CellView) ? getfield(Main, :CellView) : nothing
+    if cell_view !== nothing
+        push!(parts, cell_view(
+                cell_id = cell_id,
+                initial_state = state_int,
+                initial_stale = initial_stale,
+                initial_runtime_ns = initial_runtime,
+                initial_open = initial_open,
+                run_handler = run_handler,
+                menu_handler = menu_handler) do
+            Div(:class => "cm-cell",
+                :data_cell_id => cell_id,
+                :data_src => String(code))
+        end)
+    else
+        # Fallback when running outside an app (e.g. precompile step):
+        # render the cm-cell host bare so render_cell stays callable
+        # without the component layer.
+        push!(parts, Div(:class => "cm-cell",
             :data_cell_id => cell_id,
-            :data_src => String(code))
-    end)
+            :data_src => String(code)))
+    end
 
     # Stdout container — below code, above next cell gap (like Pluto's log section)
     if mode == :live

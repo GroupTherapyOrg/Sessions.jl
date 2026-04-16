@@ -1,10 +1,15 @@
-# islands.jl — WASM-compiled @island components for live notebook UI
+# CellView.jl — per-cell @island (WASM-compiled)
 #
-# CellView: per-cell @island. Owns ALL reactive chrome state for one
-# cell — eye toggle (fold/unfold), state classes (queued/running/etc.),
-# .stale class, runtime badge text, run + menu buttons. CodeMirror is
-# passed as the `children` slot and lives as a child DOM node that CM
-# manages itself.
+# Owns ALL reactive chrome state for one cell — eye toggle
+# (fold/unfold), state classes (queued/running/etc.), .stale class,
+# runtime badge text, run + menu buttons. CodeMirror is passed as the
+# `children` slot and lives as a child DOM node that CM manages itself.
+#
+# Loaded like every other @island by Therapy.load_app! at app startup.
+# render_cell() (src/engine/web_rendering.jl) looks this up at SSR time
+# via `Main.CellView` since the package layer doesn't depend on the
+# component layer (one-way arrow: components → package, not the
+# reverse).
 #
 # Per-cell state signals are PRIVATE to each CellView instance (no
 # cross-island sharing — each cell owns its own). The WS bridge

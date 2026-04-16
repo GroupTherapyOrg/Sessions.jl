@@ -41,10 +41,10 @@ include("engine/run.jl")
 
 include("engine/session.jl")
 
-# Layer 1.5: Web Islands (WASM-compiled @island components)
-include("engine/islands.jl")
-
-# Layer 1.5: Web Rendering (notebook → VNodes, static export pipeline)
+# Layer 1.5: Web Rendering (notebook → VNodes, static export pipeline).
+# All Therapy @island components live in src/components/ and are loaded
+# by the app's component auto-discovery (Therapy.load_app!), NOT here.
+# render_cell() looks up CellView via Main.CellView at SSR time.
 include("engine/web_rendering.jl")
 export notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
@@ -122,19 +122,10 @@ y = x * 2
 end
 
 function __init__()
-    isdefined(Main, :Therapy) || return
-    _Therapy = getfield(Main, :Therapy)
-    isdefined(_Therapy, :IslandDef) || return
-    _IslandDef = getfield(_Therapy, :IslandDef)
-    _Registry = getfield(_Therapy, :ISLAND_REGISTRY)
-    for name in (:CellView,)
-        if isdefined(@__MODULE__, name)
-            island = getfield(@__MODULE__, name)
-            if island isa _IslandDef
-                _Registry[island.name] = island
-            end
-        end
-    end
+    # No @island components registered at package-load time. All
+    # Sessions @islands live in src/components/ and are discovered by
+    # Therapy.load_app! when the app starts — same path as every other
+    # component (Layout, StatusBar, NotebookToolbar, CellView, …).
 end
 
 end # module
