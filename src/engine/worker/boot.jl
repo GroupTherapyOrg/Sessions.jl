@@ -123,14 +123,11 @@ function _worker_execute(ws::SessionsWorkspace, code::String; log_file::String="
 end
 
 function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogRecordNT[])
-    # Bond (@bind widget) — detect by duck typing (has .element and .defines fields)
-    if hasproperty(result, :element) && hasproperty(result, :defines)
-        widget = result.element
-        var_name = result.defines
-        # Return structured bond data — coordinator renders with @island SSR
-        bond_data = _serialize_bond(widget, var_name)
-        return (output_type=:bond, text_representation=bond_data, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
-    end
+    # Bonds, BoundSlider, BoundCheckBox, etc. all define MIME"text/html" via
+    # SessionsUI.Base.show, so they fall through to the generic html branch
+    # below — no per-widget intercept here. SessionsUI's show emits the
+    # canonical `<bond def="x">…widget…</bond>` HTML; the page-level
+    # BOND_BRIDGE_JS in Sessions wires input events back over WS.
 
     # Markdown
     result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
@@ -282,24 +279,6 @@ function _cell_str(val)
     val isa AbstractString && return val
     val isa Bool && return val ? "true" : "false"
     sprint(show, val; context=IOContext(devnull, :compact => true, :limit => true))
-end
-
-# ── Bond serialization ──
-
-"""Serialize bond widget info for the coordinator to render with @island SSR."""
-function _serialize_bond(widget, var_name)
-    # Duck-type slider detection: has .values and .default fields
-    if hasproperty(widget, :values) && hasproperty(widget, :default)
-        vals = widget.values
-        min_v = first(vals)
-        max_v = last(vals)
-        step_v = length(vals) > 1 ? vals[2] - vals[1] : 1
-        def_v = widget.default
-        return "slider:$(var_name):$(min_v):$(max_v):$(step_v):$(def_v)"
-    end
-    # Fallback
-    wtype = nameof(typeof(widget))
-    return "widget:$(var_name):$(wtype)"
 end
 
 function _try_showable(mime, value)

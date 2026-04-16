@@ -594,43 +594,11 @@ function _render_table_html(table_json::String)
     String(take!(buf))
 end
 
-"""Render a bond widget as a WebSlider @island (SSR + WASM hydration)."""
-function _render_bond_island_html(bond_data::String)
-    parts = split(bond_data, ":")
-    if length(parts) >= 6 && parts[1] == "slider"
-        var_name = String(parts[2])
-        min_v = parse(Int, parts[3])
-        max_v = parse(Int, parts[4])
-        step_v = parse(Int, parts[5])
-        def_v = parse(Int, parts[6])
-
-        try
-            island = get(Therapy.ISLAND_REGISTRY, :WebSlider, nothing)
-            if island !== nothing
-                vnode = Base.invokelatest(island;
-                    min_val=min_v, max_val=max_v, value=def_v, step_val=step_v, var_name=var_name)
-                html = Therapy.render_to_string(vnode)
-                bridge_js = """<script>(function(){var el=document.currentScript.previousElementSibling;if(!el)return;var inp=el.querySelector('input[type=range]');if(!inp)return;inp.addEventListener('input',function(){if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})})})();</script>"""
-                return html * bridge_js
-            end
-        catch e
-            @warn "[Sessions] WebSlider SSR failed, falling back to plain HTML" exception=e
-        end
-
-        return """<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">
-            <span style="font-size:13px;font-family:monospace;color:#6b7d93;">$(var_name) =</span>
-            <input type="range" min="$(min_v)" max="$(max_v)" step="$(step_v)" value="$(def_v)"
-                style="flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;"
-                oninput="this.nextElementSibling.textContent=this.value;if(window.TherapyWS)TherapyWS.sendMessage('notebook',{action:'set_bond',name:'$(var_name)',value:parseFloat(this.value)})">
-            <span style="font-size:13px;font-family:monospace;color:#56d4a0;min-width:2em;text-align:right;">$(def_v)</span>
-        </div>"""
-    elseif length(parts) >= 3 && parts[1] == "widget"
-        var_name = String(parts[2])
-        wtype = String(parts[3])
-        return """<span style="font-size:12px;font-family:monospace;color:#6b7d93;padding:4px 8px;border:1px solid #2a3a4f;border-radius:6px;">$(wtype) → :$(var_name)</span>"""
-    end
-    ""
-end
+# Bond rendering is now owned by SessionsUI.Bond's MIME"text/html" show
+# (emits canonical `<bond def="x">…widget…</bond>`); cells flow through
+# the generic html branch in worker boot.jl. The page-level
+# SessionsUI.BOND_BRIDGE_JS attaches input listeners and sends set_bond
+# WS messages. No bond-specific renderer needed here.
 
 # =============================================================================
 # Notebook Helpers
@@ -814,28 +782,12 @@ function _render_plotly_output(cell::Cell, prerendered)
 end
 
 function _render_bond_output(result, cell::Cell, prerendered)
+    # SessionsUI's `Bond` defines MIME"text/html" — render via the standard
+    # HTML path (sprint(show, MIME"text/html"(), result)) so all widget
+    # types share one code path. The page-level BOND_BRIDGE_JS wires
+    # input → WS, no custom VNode wrapper needed.
     if result isa Bond
-        widget = result.element
-        var_name = result.defines
-
-        if widget isa BoundSlider
-            vals = widget.values
-            min_v = Int(first(vals))
-            max_v = Int(last(vals))
-            step_v = length(vals) > 1 ? Int(vals[2] - vals[1]) : 1
-            def_v = Int(widget.default)
-
-            slider_id = string(cell.id)
-            return Div(:class => "notebook-slider",
-                :data_bind_var => string(var_name),
-                :data_bind_slider_id => slider_id,
-                WebSlider(min_val=min_v, max_val=max_v, value=def_v, step_val=step_v,
-                    var_name=string(var_name)))
-        end
-
-        widget_type = nameof(typeof(widget))
-        val = initial_value(widget)
-        return _WebBadge(variant="outline", "$(widget_type) → :$(var_name) = $(val)")
+        return RawHtml(sprint(show, MIME"text/html"(), result))
     end
     nothing
 end
@@ -998,9 +950,10 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
         md_html = _wrap_latex_for_mathjax(md_html)
         return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
     end
-    # Bond
+    # Bond — only reachable for cached old sessions; new bonds flow through
+    # the :html branch below since SessionsUI's Bond.show emits text/html.
     if output.output_type == :bond
-        return _render_bond_island_html(output.text_representation)
+        return output.text_representation
     end
     # Table
     if output.output_type == :table
