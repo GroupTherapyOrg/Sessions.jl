@@ -88,24 +88,37 @@ function reload_notebook!(nb::Notebook)
     diff
 end
 
-"""Smart merge: diff disk against the in-memory notebook directly.
+"""Smart 3-way merge: distinguish our own writes from true external edits,
+and preserve in-memory edits to cells the external editor didn't touch.
 
-If they match, the change came from us (our own save echoing back through
-the watcher) — `diff` is empty and we apply nothing. If they differ, it's
-a TRUE external edit (agent file write, git pull, manual editor save) and
-we apply the disk version to in-memory `nb`.
+Inputs:
+- `snapshot` — the last `Notebook` we either loaded from disk or wrote to
+  disk. The diff `(snapshot → disk)` is the set of changes the external
+  editor introduced; everything else is the user's local in-memory work.
+- `last_written_hash` — hash of the bytes we last wrote. If the disk file
+  byte-for-byte matches that hash, the watcher is seeing its own write
+  echo back through the file system and skips the diff entirely.
 
-Comparing against `nb` itself (rather than a separately-tracked snapshot)
-removes a class of bookkeeping bugs where post-save the watcher's snapshot
-was stale, causing it to mis-classify our own writes as external and
-broadcast cell_code_updated for every cell — silently overwriting any
-typing the user had done since save."""
-function merge_external_changes!(nb::Notebook, _ignored=nothing)
+Both are required to avoid losing typing. Without `last_written_hash`,
+typing that lands in CodeMirror between save and the watcher poll cycle
+gets clobbered when the watcher applies the just-saved disk content over
+the newer in-memory state. Without `snapshot`, an external change to one
+cell would reset every other cell on disk back over user-local edits."""
+function merge_external_changes!(nb::Notebook, snapshot::Ref{Notebook},
+                                  last_written_hash::Ref{UInt64})
     isfile(nb.path) || error("File not found: $(nb.path)")
-    disk_nb = load_notebook(nb.path)
+    disk_bytes = read(nb.path)
+    if hash(disk_bytes) == last_written_hash[]
+        return NotebookDiff(Cell[], UUID[], Tuple{UUID,String}[],
+                            Tuple{UUID,Bool,Bool}[], UUID[],
+                            copy(nb.cell_order))
+    end
+    disk_nb = parse_notebook(String(disk_bytes); path=nb.path)
 
-    # Diff: what does disk say that in-memory doesn't?
-    diff = diff_notebooks(nb, disk_nb)
+    # 3-way diff: what changed between (last seen on disk) → (current disk)?
+    # That is the external editor's contribution; everything else is the
+    # user's local in-memory work, which we must not touch.
+    diff = diff_notebooks(snapshot[], disk_nb)
 
     # Apply only disk-originated changes to in-memory notebook:
     # 1. Remove cells deleted on disk
@@ -133,6 +146,9 @@ function merge_external_changes!(nb::Notebook, _ignored=nothing)
 
     # 4. Update cell order to match disk
     nb.cell_order = copy(diff.new_order)
+
+    # 5. Snapshot now matches disk; future diffs start from here.
+    snapshot[] = disk_nb
 
     diff
 end

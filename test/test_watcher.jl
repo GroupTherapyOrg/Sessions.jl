@@ -482,8 +482,8 @@ using UUIDs
         c2 = add_cell!(nb, "b = 2")
         save_notebook(nb)
 
-        # Take snapshot (simulates last_disk_nb)
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb))
+        last_hash = Ref(hash(read(path)))
 
         # User edits c1 locally (in-memory only)
         nb.cells[c1.id].code = "a = 100"
@@ -494,7 +494,7 @@ using UUIDs
         save_notebook(nb_ext, path)
 
         # Smart merge: should update c2 from disk, preserve user's c1 edit
-        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+        diff = Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test nb.cells[c1.id].code == "a = 100"  # user edit preserved
         @test nb.cells[c2.id].code == "b = 200"  # agent edit applied
@@ -508,7 +508,7 @@ using UUIDs
         c1 = add_cell!(nb, "x = 1")
         save_notebook(nb)
 
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb)); last_hash = Ref(hash(read(path)))
 
         # User edits c1 locally
         nb.cells[c1.id].code = "x = 999"
@@ -518,7 +518,7 @@ using UUIDs
         c2 = add_cell!(nb_ext, "y = 2")
         save_notebook(nb_ext, path)
 
-        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+        diff = Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test nb.cells[c1.id].code == "x = 999"  # user edit preserved
         @test haskey(nb.cells, c2.id)             # agent cell added
@@ -533,14 +533,14 @@ using UUIDs
         c2 = add_cell!(nb, "b = 2")
         save_notebook(nb)
 
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb)); last_hash = Ref(hash(read(path)))
 
         # Agent removes c2 on disk
         nb_ext = load_notebook(path)
         remove_cell!(nb_ext, c2.id)
         save_notebook(nb_ext, path)
 
-        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+        diff = Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test haskey(nb.cells, c1.id)
         @test !haskey(nb.cells, c2.id)
@@ -554,14 +554,14 @@ using UUIDs
         c2 = add_cell!(nb, "second = 2")
         save_notebook(nb)
 
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb)); last_hash = Ref(hash(read(path)))
 
         # Agent reorders on disk
         nb_ext = load_notebook(path)
         nb_ext.cell_order = [c2.id, c1.id]
         save_notebook(nb_ext, path)
 
-        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+        diff = Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test nb.cell_order == [c2.id, c1.id]
     end
@@ -575,14 +575,14 @@ using UUIDs
         c1.output.result = 1
         save_notebook(nb)
 
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb)); last_hash = Ref(hash(read(path)))
 
         # Agent changes c1 on disk
         nb_ext = load_notebook(path)
         nb_ext.cells[c1.id].code = "s = 999"
         save_notebook(nb_ext, path)
 
-        Sessions.merge_external_changes!(nb, last_disk_nb)
+        Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test nb.cells[c1.id].code == "s = 999"
         @test is_stale(nb.cells[c1.id])
@@ -595,12 +595,12 @@ using UUIDs
         c1 = add_cell!(nb, "noop = 42")
         save_notebook(nb)
 
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb)); last_hash = Ref(hash(read(path)))
 
         # User edits locally
         nb.cells[c1.id].code = "noop = 999"
 
-        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+        diff = Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test isempty(diff.added)
         @test isempty(diff.removed)
@@ -618,7 +618,7 @@ using UUIDs
         c3 = add_cell!(nb, "c = 3")
         save_notebook(nb)
 
-        last_disk_nb = deepcopy(nb)
+        snapshot = Ref(deepcopy(nb)); last_hash = Ref(hash(read(path)))
 
         # User edits c3 locally
         nb.cells[c3.id].code = "c = 300"
@@ -630,7 +630,7 @@ using UUIDs
         c4 = add_cell!(nb_ext, "d = 4")
         save_notebook(nb_ext, path)
 
-        diff = Sessions.merge_external_changes!(nb, last_disk_nb)
+        diff = Sessions.merge_external_changes!(nb, snapshot, last_hash)
 
         @test nb.cells[c1.id].code == "a = 100"   # agent change
         @test !haskey(nb.cells, c2.id)              # agent removal

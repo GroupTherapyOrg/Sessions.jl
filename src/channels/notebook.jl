@@ -22,10 +22,27 @@ mutable struct WebTab
     path::String
     file_content::String
     watcher::Union{DebouncedWatcher, Nothing}
+    # Last `Notebook` we either loaded or wrote to disk. The watcher does
+    # a 3-way merge `(snapshot → disk) ⇒ in-memory` so external edits
+    # apply without clobbering cells the user is editing locally.
+    snapshot::Ref{Notebook}
+    # Hash of the file bytes we last wrote. The watcher uses this to
+    # recognize its own writes (disk byte-for-byte == hash → skip), so a
+    # save followed by more typing in CodeMirror cannot lose the new
+    # keystrokes via a stale-disk diff.
+    last_written_hash::Ref{UInt64}
 end
 
-WebTab(id, nb::Notebook, worker, label, path) = WebTab(id, :notebook, nb, worker, label, path, "", nothing)
-WebTab(id, label, path, content::String) = WebTab(id, :file, nothing, nothing, label, path, content, nothing)
+function _initial_disk_hash(path)
+    isfile(path) ? hash(read(path)) : zero(UInt64)
+end
+
+WebTab(id, nb::Notebook, worker, label, path) =
+    WebTab(id, :notebook, nb, worker, label, path, "", nothing,
+           Ref(deepcopy(nb)), Ref(_initial_disk_hash(path)))
+WebTab(id, label, path, content::String) =
+    WebTab(id, :file, nothing, nothing, label, path, content, nothing,
+           Ref(Notebook(; path)), Ref(_initial_disk_hash(path)))
 
 """Server-side notebook state for the web UI (multi-tab)."""
 mutable struct WebNotebookState
@@ -648,6 +665,7 @@ function _handle_save!(state::WebNotebookState, conn, data)
         if content !== nothing
             tab.file_content = String(content)
             write(tab.path, tab.file_content)
+            tab.last_written_hash[] = hash(codeunits(tab.file_content))
             msg = Dict("event" => "saved", "notebook_path" => tab.path)
             mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
             _nb_broadcast!(msg)
@@ -664,7 +682,10 @@ function _handle_save!(state::WebNotebookState, conn, data)
         end
     end
 
-    save_notebook(nb)
+    serialized = serialize_notebook(nb)
+    write(nb.path, serialized)
+    tab.last_written_hash[] = hash(codeunits(serialized))
+    tab.snapshot[] = deepcopy(nb)
     save_session!(nb)
 
     msg = Dict("event" => "saved", "notebook_path" => nb.path)
@@ -682,6 +703,7 @@ function _handle_save_file!(state::WebNotebookState, conn, data)
     content === nothing && return
     tab.file_content = String(content)
     write(tab.path, tab.file_content)
+    tab.last_written_hash[] = hash(codeunits(tab.file_content))
     _nb_broadcast!(Dict(
         "event" => "saved",
         "notebook_path" => tab.path
@@ -1083,11 +1105,12 @@ function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
 
     try
         old_order = copy(tab.nb.cell_order)
-        # merge_external_changes diffs disk against in-memory nb directly —
-        # no separate snapshot to keep in sync. Our own saves echo back as
-        # a no-op diff (disk == in-memory); only true external edits
-        # produce a non-empty diff.
-        diff = merge_external_changes!(tab.nb)
+        # merge_external_changes hashes the disk bytes and compares against
+        # the hash recorded after our last save. If they match, the watcher
+        # is seeing its own write echo back and skips the diff entirely —
+        # so typing that lands in CodeMirror between save and the watcher
+        # poll cycle cannot be reverted by a stale-disk apply.
+        diff = merge_external_changes!(tab.nb, tab.snapshot, tab.last_written_hash)
 
         reordered = diff.new_order != old_order
         n_changes = length(diff.added) + length(diff.changed) + length(diff.removed) + length(diff.metadata_changed)
