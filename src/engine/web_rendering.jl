@@ -568,9 +568,11 @@ function _render_table_html(table_json::String)
 
     buf = IOBuffer()
 
-    print(buf, """<div class="pluto-table-wrap"><div class="pluto-table-dim">""",
-          nrow, "×", ncol, " DataFrame</div>")
-    print(buf, """<table class="pluto-table"><thead>""")
+    # Pluto emits a bare <table.pluto-table> with no caption and no
+    # surrounding card. The wrap is a thin overflow-x:auto container so
+    # wide tables get a horizontal scrollbar without disturbing the
+    # cell-out flow.
+    print(buf, """<div class="pluto-table-wrap"><table class="pluto-table"><thead>""")
     # schema-names row (always visible)
     print(buf, """<tr class="schema-names"><th></th>""")
     for name in cols
