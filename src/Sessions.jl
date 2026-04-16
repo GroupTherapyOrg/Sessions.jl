@@ -127,7 +127,7 @@ function __init__()
     isdefined(_Therapy, :IslandDef) || return
     _IslandDef = getfield(_Therapy, :IslandDef)
     _Registry = getfield(_Therapy, :ISLAND_REGISTRY)
-    for name in (:CellToggle,)
+    for name in (:CellView,)
         if isdefined(@__MODULE__, name)
             island = getfield(@__MODULE__, name)
             if island isa _IslandDef

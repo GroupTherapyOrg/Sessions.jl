@@ -812,51 +812,34 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     end
 
     # =======================================================================
-    # Hover controls (top-right)
+    # CellView @island — owns ALL per-cell reactive chrome (eye toggle,
+    # state classes, .stale class, runtime badge text, run/menu buttons).
+    # The `cm-cell` host is passed as a child so CodeMirror initializes
+    # against the same DOM node it always has.
     # =======================================================================
-    ctrl_children = Any[]
-    if !isempty(runtime_str)
-        push!(ctrl_children, Span(:class => "rt-badge", runtime_str))
-    end
-    if mode == :live
-        push!(ctrl_children,
-            Therapy.Button(:class => "ctrl-btn run-btn",
-                :title => "Run cell (Shift+Enter)",
-                :on_click => "window._sessionsRunCell('$(cell_id)')",
-                RawHtml(_SVG_RUN)))
-        push!(ctrl_children,
-            Therapy.Button(:class => "ctrl-btn menu-btn",
-                :title => "Cell actions",
-                :on_click => "window._sessionsShowCellMenu(this,'$(cell_id)')",
-                RawHtml(_SVG_MENU)))
-    end
-    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
-        ctrl_children...)
+    state_int = if cell.state == cell_idle;     0
+                elseif cell.state == cell_queued; 1
+                elseif cell.state == cell_running; 2
+                elseif cell.state == cell_done;    3
+                elseif cell.state == cell_errored; 4
+                else 0 end
+    needs_run = is_stale(cell) || (is_never_run(cell) && !isempty(strip(cell.code)))
+    initial_stale = (mode == :live && needs_run) ? 1 : 0
+    initial_open = cell.folded ? 0 : 1
+    initial_runtime = mode == :live ? Int(output.runtime_ns) : 0
+    run_handler = mode == :live ? "window._sessionsRunCell('$(cell_id)')" : ""
+    menu_handler = mode == :live ? "window._sessionsShowCellMenu(this,'$(cell_id)')" : ""
 
-    # =======================================================================
-    # Code cell
-    # =======================================================================
-    cls = "code-cell relative overflow-hidden"
-    if mode == :live
-        cell.state == cell_idle && (cls *= " idle")
-        # Match stale_cells() semantics: never-run cells with code are visually
-        # equivalent to stale (both need a run). Without this, externally-added
-        # cells render without the amber depth treatment even though the
-        # run-stale counter includes them.
-        needs_run = is_stale(cell) || (is_never_run(cell) && !isempty(strip(cell.code)))
-        needs_run && (cls *= " stale")
-    end
-    code_cell_classes = cls
-
-    code_cell = Div(:class => code_cell_classes,
-        ctrls,
+    push!(parts, CellView(
+            initial_state = state_int,
+            initial_stale = initial_stale,
+            initial_runtime_ns = initial_runtime,
+            initial_open = initial_open,
+            run_handler = run_handler,
+            menu_handler = menu_handler) do
         Div(:class => "cm-cell",
             :data_cell_id => cell_id,
-            :data_src => String(code)))
-
-    # CellToggle island (eye toggle + fold) wrapping the code-cell
-    push!(parts, CellToggle(; initial_open = cell.folded ? 0 : 1) do
-        code_cell
+            :data_src => String(code))
     end)
 
     # Stdout container — below code, above next cell gap (like Pluto's log section)

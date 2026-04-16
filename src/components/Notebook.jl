@@ -259,16 +259,65 @@ function _notebook_ws_bridge_body()
     function fmtRuntime(ns) { var ms=ns/1e6; if(ms<1)return(ns/1e3).toFixed(1)+'\\u00b5s'; if(ms<1000)return ms.toFixed(1)+'ms'; var s=ms/1000; if(s<60)return s.toFixed(1)+'s'; var m=s/60; if(m<60)return m.toFixed(1)+'min'; return(m/60).toFixed(1)+'hr'; }
     function fmtSeconds(s) { return s<1?s.toFixed(2)+'s':s<60?s.toFixed(1)+'s':(s/60).toFixed(1)+'min'; }
 
-    // ── Cell execution timer ──
+    // ── Cell execution timer (live-tick badge while a cell runs) ──
+    // Note: the BADGE TEXT for completed runs (the recorded runtime_ns)
+    // is now driven by the CellView @island's runtime_ns signal; this
+    // timer just paints elapsed-seconds during execution, which is a
+    // visual-only effect not worth wiring through a signal.
     var _cellTimers = {};
     function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var t0=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText=''; badge.textContent='0.0s'; var iv=setInterval(function(){badge.textContent=fmtSeconds((performance.now()-t0)/1000);},100); _cellTimers[cellId]={interval:iv}; }
     function stopCellTimer(cellId) { var t=_cellTimers[cellId]; if(t){clearInterval(t.interval);delete _cellTimers[cellId];} }
-    function setCellState(el,state,cellId) {
-      if(!el)return;
-      // Apply state to code-cell
-      if(el.code){el.code.classList.remove('idle','stale','executing');if(state==='cell_queued'||state==='cell_running'){el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);}}
-      // Apply state to cell-wrap (CSS targets .cell-wrap.wrap-* .code-cell)
-      if(el.wrap){el.wrap.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored','wrap-skipped');if(state==='cell_queued')el.wrap.classList.add('wrap-queued');else if(state==='cell_running')el.wrap.classList.add('wrap-running');else if(state==='cell_errored')el.wrap.classList.add('wrap-errored');else if(state==='cell_skipped')el.wrap.classList.add('wrap-skipped');}
+
+    // ── Per-cell signal write helpers (CellView @island poke) ──
+    // Find a CellView island by data-cell-id and update its private
+    // signals via the documented WASM-exports API. This is exactly
+    // the pattern Therapy's HMR uses (Therapy/Server/WebSocketClient.jl
+    // line 208) — the supported public way to mutate an island's
+    // signal from outside its runtime.
+    //
+    // SIGNAL LAYOUT (must match islands.jl CellView's create_signal order):
+    //   signal_0 = state (0=idle 1=queued 2=running 3=done 4=errored 5=skipped)
+    //   signal_1 = is_stale (0/1)
+    //   signal_2 = runtime_ns (Int)
+    //   signal_3 = is_open (0/1)
+    function _cellViewIsland(cellId) {
+      // cell-wrap[data-cell-id] wraps the cell-body; therapy-island sits
+      // inside cell-body. So look up the wrap, then descend.
+      var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
+      if (!wrap) return null;
+      return wrap.querySelector('therapy-island[data-component="cellview"]');
+    }
+    function _setIslandSignal(island, idx, jsValue) {
+      if (!island || !island._wasmExports) return;
+      var ex = island._wasmExports;
+      var g = ex['signal_'+idx];
+      if (!g) return;
+      // Therapy's i64 signals expect BigInt; smaller types accept Number.
+      g.value = (typeof g.value === 'bigint') ? BigInt(jsValue|0) : jsValue;
+      var subs = ex['_rt_subs_'+idx];
+      if (subs && ex._rt_flush) ex._rt_flush(subs.value);
+    }
+    var _STATE_CODE = {
+      cell_idle: 0, cell_queued: 1, cell_running: 2,
+      cell_done: 3, cell_errored: 4, cell_skipped: 5
+    };
+    function setCellState(el, state, cellId) {
+      // Drive the CellView @island's state signal — its effects flip
+      // .executing on .code-cell and wrap-* classes on .cell-wrap.
+      var island = _cellViewIsland(cellId);
+      _setIslandSignal(island, 0, _STATE_CODE[state] || 0);
+      // Live elapsed-seconds badge during execution (visual only)
+      if (state === 'cell_running' && cellId) {
+        startCellTimer(cellId, el);
+      } else if (cellId) {
+        stopCellTimer(cellId);
+      }
+    }
+    function setCellStale(cellId, isStale) {
+      _setIslandSignal(_cellViewIsland(cellId), 1, isStale ? 1 : 0);
+    }
+    function setCellRuntime(cellId, ns) {
+      _setIslandSignal(_cellViewIsland(cellId), 2, ns|0);
     }
 
     // ── Footer cell-count helper (delta-based) ──
@@ -520,11 +569,15 @@ function _notebook_ws_bridge_body()
           }
         }
         setCellState(el, data.state, data.cell_id);
-        if (el.ctrls && data.runtime_ns && data.runtime_ns > 0) {
-          var old = el.ctrls.querySelector('.rt-badge'); if(old)old.remove();
-          var badge=document.createElement('span'); badge.className='rt-badge';
-          if (data.state==='cell_errored') badge.style.color='var(--status-error)';
-          badge.textContent=fmtRuntime(data.runtime_ns); el.ctrls.insertBefore(badge,el.ctrls.firstChild);
+        // Runtime badge text is now driven by the CellView runtime_ns
+        // signal (its effect formats and writes the text). The error
+        // tint stays imperative — it's a one-off color set, not state.
+        if (data.runtime_ns && data.runtime_ns > 0) {
+          setCellRuntime(data.cell_id, data.runtime_ns);
+        }
+        if (data.state === 'cell_errored' && el.ctrls) {
+          var b = el.ctrls.querySelector('.rt-badge');
+          if (b) b.style.color = 'var(--status-error)';
         }
       }
 
@@ -612,6 +665,11 @@ function _notebook_ws_bridge_body()
       }
 
       // ── Stale cells update ──
+      // Toolbar count + per-cell stale class are now both signal-driven.
+      // setStaleCount() writes the global stale_count signal (NotebookSignals);
+      // setCellStale() pokes each CellView's is_stale signal.
+      // Toolbar button enable/disable is still imperative — it'll move to
+      // NotebookToolbar @island in Stage 4.
       else if (data.event === 'stale_update') {
         setStaleCount(data.count || 0);
         window._sessionsStaleCount = data.count || 0;
@@ -626,7 +684,11 @@ function _notebook_ws_bridge_body()
           else{badge.style.display='none';}
         }
         var staleSet=new Set(data.stale_ids||[]);
-        document.querySelectorAll('.code-cell').forEach(function(el){var wrap=el.closest('.cell-wrap');var cid=wrap?wrap.dataset.cellId:null;if(cid&&staleSet.has(cid)){el.classList.add('stale');}else{el.classList.remove('stale');}});
+        // Walk every CellView island; flip its is_stale signal based on set membership.
+        document.querySelectorAll('.cell-wrap[data-cell-id]').forEach(function(wrap){
+          var cid = wrap.dataset.cellId;
+          setCellStale(cid, staleSet.has(cid));
+        });
       }
 
       // ── Run progress ──
