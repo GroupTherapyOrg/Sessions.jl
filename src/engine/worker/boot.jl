@@ -135,15 +135,11 @@ function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogReco
     # Markdown
     result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
 
-    # Tables.jl — detect BEFORE text/html (DataFrames registers text/html but we want our own rendering)
-    if _is_table_like(result)
-        table_json = try _serialize_table(result) catch; "" end
-        if !isempty(table_json)
-            return (output_type=:table, text_representation=table_json, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
-        end
-    end
-
-    # text/html
+    # text/html — Pluto parity: anything that defines `show(io, MIME"text/html"(), x)`
+    # gets to render itself (DataFrames, HypertextLiteral, custom widgets, etc.).
+    # We do NOT intercept Tables.jl-compatible objects with a custom renderer —
+    # that diverges from Pluto and breaks any third-party widget that ships its
+    # own HTML representation.
     if _try_showable(MIME"text/html"(), result)
         html = try
             sprint(io -> Base.invokelatest(show, io, MIME"text/html"(), result))

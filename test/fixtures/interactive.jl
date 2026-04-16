@@ -9,10 +9,15 @@
 begin
     import Pkg
     Pkg.activate(mktempdir())
+    # Unregistered transitive deps must be added at the root: WasmPlot
+    # depends on WasmTarget, but neither is in the General Registry, so the
+    # resolver fails with "WasmTarget has no known versions" unless we list
+    # it explicitly here.
     Pkg.add([
+        Pkg.PackageSpec(url = "https://github.com/GroupTherapyOrg/WasmTarget.jl.git"),
+        Pkg.PackageSpec(url = "https://github.com/GroupTherapyOrg/WasmPlot.jl.git"),
         Pkg.PackageSpec(url = "https://github.com/GroupTherapyOrg/Sessions.jl.git",
                         subdir = "SessionsUI"),
-        Pkg.PackageSpec(url = "https://github.com/GroupTherapyOrg/WasmPlot.jl.git"),
         Pkg.PackageSpec(name = "DataFrames"),
         Pkg.PackageSpec(name = "Markdown"),
     ])
@@ -29,6 +34,7 @@ using SessionsUI: @bind, BoundSlider
 using WasmPlot
 
 # ╔═╡ 20000000-0000-0000-0000-000000000004
+# ╠═╡ show_logs = false
 using DataFrames
 
 # ╔═╡ 20000000-0000-0000-0000-000000000001
@@ -90,7 +96,7 @@ end
 
 # ╔═╡ 20000000-0000-0000-0000-000000000009
 let
-    fig = Figure(size=(640, 360))
+    fig = Figure(size=(750, 360))
     ax  = Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares — n=$(n)")
     xs  = Float64.(1:n)
     barplot!(ax, xs, xs.^2; color=:steelblue)
@@ -106,7 +112,10 @@ count mirrors the slider exactly.
 """
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000b
-DataFrame(i = 1:n, i² = (1:n) .^ 2, √i = sqrt.(1:n))
+# String => column form (rather than kwargs) so we can use unicode column
+# names like √i — the parser would otherwise read `√i = …` as the unary
+# √ operator applied to `i`, not a keyword name.
+DataFrame("i" => 1:n, "i²" => (1:n) .^ 2, "√i" => sqrt.(1:n))
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000c
 md"""
@@ -133,7 +142,7 @@ recompute locally. No server.
 # ╠═20000000-0000-0000-0000-000000000002
 # ╠═20000000-0000-0000-0000-000000000003
 # ╠═20000000-0000-0000-0000-000000000004
-# ╠═20000000-0000-0000-0000-000000000001
+# ╟─20000000-0000-0000-0000-000000000001
 # ╟─20000000-0000-0000-0000-000000000005
 # ╠═20000000-0000-0000-0000-000000000006
 # ╟─20000000-0000-0000-0000-000000000007
