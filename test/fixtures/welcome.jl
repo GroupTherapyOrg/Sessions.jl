@@ -2,6 +2,7 @@
 # v0.19.0
 
 # ╔═╡ 10000000-0000-0000-0000-000000000000
+# ╠═╡ show_logs = false
 # Notebook-local environment so this notebook is self-contained — nothing
 # it imports leaks into the host project. Markdown + Dates are stdlibs;
 # Sessions worker envs don't auto-include stdlibs, so we Pkg.add them.
@@ -11,8 +12,11 @@ begin
     Pkg.add(["Markdown", "Dates"])
 end
 
-# ╔═╡ 10000000-0000-0000-0000-00000000000F
+# ╔═╡ 10000000-0000-0000-0000-00000000000f
 using Markdown
+
+# ╔═╡ 10000000-0000-0000-0000-00000000000b
+using Dates
 
 # ╔═╡ 10000000-0000-0000-0000-000000000001
 md"""
@@ -106,7 +110,7 @@ end
 …and bare ones for shell or plain text:
 
 ```
-\$ julia +1.12 --project=. app.jl dev welcome.jl
+$ julia +1.12 --project=. app.jl dev welcome.jl
 ```
 """
 
@@ -114,14 +118,14 @@ end
 md"""
 ## Math
 
-Inline math via double-backticks: ``e^{i\\pi} + 1 = 0`` (Euler's identity).
+Inline math via double-backticks: ``e^{i\pi} + 1 = 0`` (Euler's identity).
 
-Display math via `\$\$ … \$\$`:
+Display math via `…`:
 
-\$\$ \\int_{-\\infty}^{\\infty} e^{-x^2}\\, dx = \\sqrt{\\pi} \$\$
+∫−∞∞e−x2dx=π
 
 The renderer is MathJax under the hood, so anything LaTeX understands works:
-``\\sum_{k=0}^{\\infty} \\frac{x^k}{k!}``.
+``\sum_{k=0}^{\infty} \frac{x^k}{k!}``.
 """
 
 # ╔═╡ 10000000-0000-0000-0000-000000000008
@@ -152,23 +156,20 @@ You can also footnote inline like this[^why-pluto-style] for asides.
     portable between the two.
 """
 
-# ╔═╡ 10000000-0000-0000-0000-00000000000A
+# ╔═╡ 10000000-0000-0000-0000-00000000000a
 md"""
 ## Live values
 
-Markdown cells can interpolate live Julia with `\$(…)`:
+Markdown cells can interpolate live Julia with `$(…)`:
 
-The current Julia version is **\$(VERSION)**, the day of the week is
-**\$(Dates.dayname(Dates.today()))**, and `2 + 2 = \$(2 + 2)`.
+The current Julia version is **$(VERSION)**, the day of the week is
+**$(Dates.dayname(Dates.today()))**,and 2+2=$(2 + 2).
 """
 
-# ╔═╡ 10000000-0000-0000-0000-00000000000B
-using Dates
-
-# ╔═╡ 10000000-0000-0000-0000-00000000000C
+# ╔═╡ 10000000-0000-0000-0000-00000000000c
 greeting = "Hello, Sessions.jl 👋"
 
-# ╔═╡ 10000000-0000-0000-0000-00000000000D
+# ╔═╡ 10000000-0000-0000-0000-00000000000d
 md"""
 ---
 
@@ -177,9 +178,10 @@ left) to see the markdown source — and welcome aboard.
 """
 
 # ╔═╡ Cell order:
-# ╟─10000000-0000-0000-0000-000000000000
-# ╠═10000000-0000-0000-0000-00000000000F
 # ╟─10000000-0000-0000-0000-000000000001
+# ╠═10000000-0000-0000-0000-000000000000
+# ╠═10000000-0000-0000-0000-00000000000f
+# ╠═10000000-0000-0000-0000-00000000000b
 # ╟─10000000-0000-0000-0000-000000000002
 # ╟─10000000-0000-0000-0000-000000000003
 # ╟─10000000-0000-0000-0000-000000000004
@@ -188,7 +190,6 @@ left) to see the markdown source — and welcome aboard.
 # ╟─10000000-0000-0000-0000-000000000007
 # ╟─10000000-0000-0000-0000-000000000008
 # ╟─10000000-0000-0000-0000-000000000009
-# ╠═10000000-0000-0000-0000-00000000000B
-# ╟─10000000-0000-0000-0000-00000000000A
-# ╠═10000000-0000-0000-0000-00000000000C
-# ╟─10000000-0000-0000-0000-00000000000D
+# ╠═10000000-0000-0000-0000-00000000000a
+# ╠═10000000-0000-0000-0000-00000000000c
+# ╟─10000000-0000-0000-0000-00000000000d
