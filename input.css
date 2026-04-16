@@ -298,7 +298,6 @@
 .dark .cell-out table:not(.pluto-table) tbody tr:hover{background:rgba(193,192,235,.12);}
 
 /* ── Notebook Widgets ── */
-.notebook-slider{display:flex;align-items:center;gap:12px;padding:8px 0;}
 .notebook-plotly{border-radius:8px;overflow:hidden;}
 
 /* ── DataFrame / Tables.jl renderer — Pluto-table parity ──

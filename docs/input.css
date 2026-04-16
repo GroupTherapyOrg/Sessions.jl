@@ -129,4 +129,4 @@
   .suite-hl-operator { color: #89ddff; }
 }
 
-/* Notebook rendering CSS is self-injected by Sessions.NotebookPage(). */
+/* Notebook rendering CSS will arrive via the Phase 3 publish pipeline. */

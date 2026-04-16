@@ -186,9 +186,14 @@ function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogReco
         catch; end
     end
 
-    # Inspectable collections — render as collapsible tree HTML
-    if _is_tree_value(result)
-        tree_html = try _render_tree_html(result) catch; "" end
+    # Inspectable collections — render as collapsible tree HTML.
+    # Delegate both the predicate and the renderer to the canonical
+    # implementations in Sessions.web_rendering so worker + server stay
+    # in sync (same DOM, same depth, no parameter drift).
+    if Base.invokelatest(getfield(Sessions, :_is_tree_value), result)
+        tree_html = try
+            Base.invokelatest(getfield(Sessions, :_render_tree_html), result)
+        catch; ""; end
         if !isempty(tree_html)
             return (output_type=:tree, text_representation=tree_html, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
         end
@@ -307,145 +312,12 @@ function _try_showable(mime, value)
 end
 
 # ── Tree view (collapsible inspect) ──
-
-function _is_tree_value(@nospecialize(value))::Bool
-    value isa Number && return false
-    value isa AbstractString && return false
-    value isa Symbol && return false
-    value isa AbstractChar && return false
-    value isa Type && return false
-    value isa Enum && return false
-    value isa Regex && return false
-    value === nothing && return false
-    value === missing && return false
-    value isa AbstractVector && return true
-    value isa AbstractDict && return true
-    value isa Tuple && return length(value) > 0
-    value isa NamedTuple && return true
-    value isa AbstractSet && return true
-    value isa Pair && return true
-    T = typeof(value)
-    nf = fieldcount(T)
-    nf > 0 && !(T <: IO) && !(T <: Ref) && return true
-    false
-end
-
-function _is_leaf(@nospecialize(v))::Bool
-    v isa Number || v isa AbstractString || v isa Symbol || v isa AbstractChar ||
-    v isa Type || v isa Enum || v isa Regex || v === nothing || v === missing
-end
-
-function _html_esc(s::AbstractString)
-    replace(replace(replace(s, '&' => "&amp;"), '<' => "&lt;"), '>' => "&gt;")
-end
-
-function _short_type(T::Type)
-    s = string(T)
-    length(s) > 60 && return _html_esc(s[1:57] * "...")
-    _html_esc(s)
-end
-
-function _leaf_repr(@nospecialize(v))
-    try
-        sprint(; context=IOContext(devnull, :color => false, :limit => true, :displaysize => (1, 80))) do io
-            Base.invokelatest(show, io, MIME"text/plain"(), v)
-        end
-    catch
-        repr(v)
-    end
-end
-
-function _render_tree_html(@nospecialize(value); depth::Int=0, max_depth::Int=4, max_items::Int=25)
-    buf = IOBuffer()
-    _tree_node!(buf, value; depth, max_depth, max_items)
-    String(take!(buf))
-end
-
-function _tree_node!(buf::IOBuffer, @nospecialize(value); depth::Int=0, max_depth::Int=4, max_items::Int=25)
-    if depth >= max_depth || _is_leaf(value)
-        print(buf, """<span class="jl-tree-val">""", _html_esc(_leaf_repr(value)), "</span>")
-        return
-    end
-
-    T = typeof(value)
-    tname = _short_type(T)
-    open_attr = ""
-
-    if value isa AbstractDict
-        n = length(value)
-        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(tname)</span> <span class="jl-tree-count">with $(n) entr$(n == 1 ? "y" : "ies")</span></summary><div class="jl-tree-items">""")
-        for (i, (k, v)) in enumerate(value)
-            i > max_items && (print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>"""); break)
-            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">""", _html_esc(repr(k)), """</span><span class="jl-tree-sep"> ⇒ </span>""")
-            _tree_node!(buf, v; depth=depth+1, max_depth, max_items)
-            print(buf, "</div>")
-        end
-        print(buf, "</div></details>")
-
-    elseif value isa AbstractVector
-        n = length(value)
-        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(tname)</span> <span class="jl-tree-count">with $(n) element$(n == 1 ? "" : "s")</span></summary><div class="jl-tree-items">""")
-        for i in 1:min(n, max_items)
-            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(i)</span><span class="jl-tree-sep"> : </span>""")
-            _tree_node!(buf, value[i]; depth=depth+1, max_depth, max_items)
-            print(buf, "</div>")
-        end
-        n > max_items && print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>""")
-        print(buf, "</div></details>")
-
-    elseif value isa Tuple
-        n = length(value)
-        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">Tuple</span> <span class="jl-tree-count">with $(n) element$(n == 1 ? "" : "s")</span></summary><div class="jl-tree-items">""")
-        for i in 1:min(n, max_items)
-            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(i)</span><span class="jl-tree-sep"> : </span>""")
-            _tree_node!(buf, value[i]; depth=depth+1, max_depth, max_items)
-            print(buf, "</div>")
-        end
-        print(buf, "</div></details>")
-
-    elseif value isa NamedTuple
-        ks = keys(value)
-        n = length(ks)
-        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">NamedTuple</span> <span class="jl-tree-count">with $(n) field$(n == 1 ? "" : "s")</span></summary><div class="jl-tree-items">""")
-        for k in ks
-            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(k)</span><span class="jl-tree-sep"> = </span>""")
-            _tree_node!(buf, value[k]; depth=depth+1, max_depth, max_items)
-            print(buf, "</div>")
-        end
-        print(buf, "</div></details>")
-
-    elseif value isa AbstractSet
-        n = length(value)
-        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(tname)</span> <span class="jl-tree-count">with $(n) element$(n == 1 ? "" : "s")</span></summary><div class="jl-tree-items">""")
-        for (i, v) in enumerate(value)
-            i > max_items && (print(buf, """<div class="jl-tree-more">… $(n - max_items) more</div>"""); break)
-            print(buf, """<div class="jl-tree-row">""")
-            _tree_node!(buf, v; depth=depth+1, max_depth, max_items)
-            print(buf, "</div>")
-        end
-        print(buf, "</div></details>")
-
-    elseif value isa Pair
-        print(buf, """<span class="jl-tree-val">""")
-        _tree_node!(buf, value.first; depth=depth+1, max_depth, max_items)
-        print(buf, """<span class="jl-tree-sep"> => </span>""")
-        _tree_node!(buf, value.second; depth=depth+1, max_depth, max_items)
-        print(buf, "</span>")
-
-    else
-        # Struct with fields
-        fnames = fieldnames(T)
-        n = length(fnames)
-        print(buf, """<details class="jl-tree"$(open_attr)><summary><span class="jl-tree-prefix">$(tname)</span> <span class="jl-tree-count">with $(n) field$(n == 1 ? "" : "s")</span></summary><div class="jl-tree-items">""")
-        for fname in fnames
-            print(buf, """<div class="jl-tree-row"><span class="jl-tree-key">$(fname)</span><span class="jl-tree-sep"> = </span>""")
-            fval = try getfield(value, fname) catch; "#undef" end
-            _tree_node!(buf, fval; depth=depth+1, max_depth, max_items)
-            print(buf, "</div>")
-        end
-        print(buf, "</div></details>")
-    end
-end
+# Tree predicate + HTML renderer live in Sessions/src/engine/web_rendering.jl
+# (`_is_tree_value`, `_render_tree_html`). The worker reaches them via
+# `Base.invokelatest(getfield(Sessions, :…), …)` so there is exactly one
+# implementation, and worker and server stay in sync (max_depth=3,
+# matching Pluto). The duplicate worker-local helpers used to live here
+# and drifted to max_depth=4 — removed in the cleanup.
 
 function _text_repr(value)
     try

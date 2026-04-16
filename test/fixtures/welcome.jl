@@ -245,7 +245,7 @@ md"""Errors render with the exception type, message, and a collapsed
 stack trace — click the trace to expand. Try uncommenting the line below:"""
 
 # ╔═╡ 10000000-0000-0000-0000-000000000023
-# sqrt(-1)
+sqrt(-1)
 
 # ╔═╡ 10000000-0000-0000-0000-00000000000d
 md"""

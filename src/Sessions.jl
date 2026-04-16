@@ -46,7 +46,7 @@ include("engine/islands.jl")
 
 # Layer 1.5: Web Rendering (notebook → VNodes, static export pipeline)
 include("engine/web_rendering.jl")
-export PrerenderedGallery, execute_notebook_for_web, NotebookPage, notebook_title
+export notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
 
 # Services: PTY, Watcher
@@ -127,7 +127,7 @@ function __init__()
     isdefined(_Therapy, :IslandDef) || return
     _IslandDef = getfield(_Therapy, :IslandDef)
     _Registry = getfield(_Therapy, :ISLAND_REGISTRY)
-    for name in (:CellToggle, :WebSlider, :BoundValue)
+    for name in (:CellToggle,)
         if isdefined(@__MODULE__, name)
             island = getfield(@__MODULE__, name)
             if island isa _IslandDef

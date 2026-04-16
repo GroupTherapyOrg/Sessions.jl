@@ -1,8 +1,13 @@
 # islands.jl — WASM-compiled @island components for live notebook UI
 #
 # CellToggle: code visibility toggle (fold/unfold)
-# WebSlider: interactive @bind slider
-# BoundValue: live WASM display for bound variable
+#
+# WebSlider + BoundValue (predecessors of SessionsUI's BoundSlider)
+# were removed when bonds switched to the SessionsUI MIME"text/html"
+# pipeline. The canonical interactive widget is now
+# `<bond def="x">…SessionsUI widget HTML…</bond>` plus BOND_BRIDGE_JS
+# (in dev mode) or a per-widget Therapy @island (in publish mode,
+# Phase 3).
 
 using Therapy
 
@@ -36,31 +41,4 @@ using Therapy
                 end)),
 
         Div(:class => "cell-code-wrap", children...))
-end
-
-@island function WebSlider(; min_val::Int=0, max_val::Int=100, value::Int=50, step_val::Int=1, var_name::String="x")
-    current, set_current = create_signal(value)
-
-    Div(:style => "display:flex;align-items:center;gap:12px;padding:8px 0;",
-        Span(:style => "font-size:13px;font-family:'JetBrains Mono',ui-monospace,monospace;color:#6b7d93;",
-            string(var_name), " = "),
-        Input(:type => "range",
-            :min => string(min_val),
-            :max => string(max_val),
-            :step => string(step_val),
-            :value => string(value),
-            :style => "flex:1;max-width:300px;accent-color:#56d4a0;cursor:pointer;",
-            :on_input => () -> set_current(unsafe_trunc(Int, get_target_value_f64()))),
-        Span(:style => "font-size:13px;font-family:'JetBrains Mono',ui-monospace,monospace;color:#56d4a0;min-width:2em;text-align:right;",
-            current))
-end
-
-@island function BoundValue(; value::Int=0)
-    current, set_current = create_signal(value)
-
-    Div(:class => "inline-flex items-baseline",
-        Input(:type => "hidden", :value => string(value),
-            :on_input => () -> set_current(unsafe_trunc(Int, get_target_value_f64()))),
-        Span(:class => "text-sm font-mono text-warm-600 dark:text-warm-500",
-            current))
 end

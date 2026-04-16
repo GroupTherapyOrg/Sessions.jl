@@ -1,7 +1,10 @@
 # web_rendering.jl — Web rendering: notebook → Therapy.jl VNodes
 #
-# Provides: PrerenderedGallery, execute_notebook_for_web, NotebookPage,
-#           render_cell, render_output_html, CellGap, notebook helpers.
+# Provides: render_cell, render_output_html, _render_output, CellGap,
+#           _render_table_html, _render_tree_html, notebook_title.
+#
+# Single source of truth for cell-output HTML. Used by the live IDE
+# (over WS) and (after Phase 3 lands) by the publish build pipeline.
 
 using Therapy
 import Markdown
@@ -29,52 +32,8 @@ const _SVG_RUN = """<svg width="10" height="10" viewBox="0 0 16 16" fill="curren
 const _SVG_MENU = """<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""
 const _SVG_PLUS = """<svg width="8" height="8" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 2v12M2 8h12"/></svg>"""
 
-# Load CodeMirror 6 bundle at include time (same pattern as app Layout.jl)
-const _EDITOR_BUNDLE_JS = let
-    p = joinpath(@__DIR__, "web", "static", "editor.js")
-    isfile(p) ? read(p, String) : "/* editor.js not found */"
-end
-
 # =============================================================================
-# Pre-rendered Gallery
-# =============================================================================
-
-"""
-Pre-rendered variants for a cell driven by a slider.
-
-Used by `execute_notebook_for_web` to capture output variants
-for each slider value, enabling client-side switching without server roundtrips.
-"""
-struct PrerenderedGallery
-    slider_cell_id::UUID
-    var_name::Symbol
-    slider::BoundSlider
-    images::Dict{Any, Vector{UInt8}}    # slider_value → PNG bytes (fallback)
-    plotly_data::Dict{Any, String}      # slider_value → Plotly JSON string
-    html_variants::Dict{Any, String}    # slider_value → rendered HTML string (text/dataframe/etc.)
-end
-
-# =============================================================================
-# Table Styling
-# =============================================================================
-
-const _WEB_TH_CLS = "px-4 py-3 text-left text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider"
-const _WEB_TR_CLS = "border-b border-warm-200 dark:border-warm-700"
-const _WEB_TD_CLS = "px-4 py-3 text-sm text-warm-700 dark:text-warm-300"
-
-# =============================================================================
-# Badge Component (for bond output rendering)
-# =============================================================================
-
-function _WebBadge(children...; variant::String="default", class::String="")
-    base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-    vc = variant == "outline" ? "border border-warm-300 dark:border-warm-600 text-warm-700 dark:text-warm-300" :
-        "bg-accent-100 dark:bg-accent-900 text-accent-700 dark:text-accent-300"
-    Span(:class => "$(base) $(vc) $(class)", children...)
-end
-
-# =============================================================================
-# HTML String Renderers (shared: live app WS + static export fallback)
+# HTML String Renderers (shared: live app WS + Phase 3 publish)
 # =============================================================================
 
 function _html_esc(s::AbstractString)
@@ -669,151 +628,28 @@ function _extract_markdown_content(code::AbstractString)
     stripped
 end
 
-"""
-Render pre-rendered HTML variants for a slider-dependent cell.
+"""Render cell output as a VNode for SSR.
 
-Returns a container with all slider value variants embedded as hidden/shown divs.
-The interaction script toggles visibility client-side when the slider moves.
-"""
-function _render_html_gallery(cell::Cell, prerendered)
-    gallery = get(prerendered, cell.id, nothing)
-    gallery === nothing && return nothing
-    isempty(gallery.html_variants) && return nothing
-
-    slider_id = string(gallery.slider_cell_id)
-    variant_divs = []
-    for val in gallery.slider.values
-        html_str = get(gallery.html_variants, val, nothing)
-        html_str === nothing && continue
-        is_default = val == gallery.slider.default
-        push!(variant_divs,
-            Div(:data_slider_value => string(val),
-                :style => is_default ? "display:block" : "display:none",
-                RawHtml(html_str)))
-    end
-    isempty(variant_divs) && return nothing
-
-    Div(:class => "notebook-html-gallery",
-        :data_slider_html => slider_id,
-        variant_divs...)
-end
-
-"""Render cell output as a VNode for SSR (static export + initial render).
-
-Delegates to `render_output_html` for most types. Only keeps VNode-specific
-paths for bonds/galleries that need live Julia objects for @island SSR.
-"""
-function _render_output(cell::Cell, prerendered=Dict{UUID, PrerenderedGallery}())
+Delegates to `render_output_html` for most types. Only keeps a VNode
+shortcut for bonds (so RawHtml composes cleanly into the parent VNode
+tree without a string-detour). Everything else flows through the
+unified HTML-string renderer at the bottom of this fallthrough."""
+function _render_output(cell::Cell)
     output = cell.output
     result = output.result
 
     output.output_type == :nothing && return nothing
 
-    # Bond — needs live result for @island SSR
-    if output.output_type == :bond
-        return _render_bond_output(result, cell, prerendered)
-    end
-
-    # Plotly — needs live result for gallery pre-rendering
-    if output.output_type == :plotly_json
-        return _render_plotly_output(cell, prerendered)
-    end
-
-    # Image — needs gallery pre-rendering
-    if output.output_type == :image_png
-        return _render_image_output(cell, prerendered)
-    end
-
-    # NOTE: Tables.jl values are now classified as :table in worker
-    # boot.jl (was :dataframe) and rendered through the
-    # standard render_output_html() path which delegates to
-    # _render_table_html() for pluto-table HTML. The old _render_table_output
-    # and _render_reactive_table helpers were deleted with that refactor.
-
-    # Text with live WASM binding for slider-bound values
-    if output.output_type == :text
-        gallery = get(prerendered, cell.id, nothing)
-        if gallery !== nothing && result isa Integer
-            slider_id = string(gallery.slider_cell_id)
-            return Div(:class => "notebook-bound-value",
-                :data_bound_to => slider_id,
-                BoundValue(value=Int(result)))
-        end
-        gallery_node = _render_html_gallery(cell, prerendered)
-        gallery_node !== nothing && return gallery_node
-    end
-
-    # All other types: delegate to render_output_html (single source of truth)
-    html = render_output_html(cell; prerendered)
-    isempty(html) ? nothing : RawHtml(html)
-end
-
-function _render_image_output(cell::Cell, prerendered)
-    gallery = get(prerendered, cell.id, nothing)
-
-    if gallery !== nothing
-        slider_id = string(gallery.slider_cell_id)
-        img_tags = []
-        for val in gallery.slider.values
-            bytes = get(gallery.images, val, nothing)
-            bytes === nothing && continue
-            b64 = Base64.base64encode(bytes)
-            is_default = val == gallery.slider.default
-            push!(img_tags,
-                Img(:src => "data:image/png;base64,$b64",
-                    :alt => "Plot for $(gallery.var_name) = $val",
-                    :data_slider_value => string(val),
-                    :style => is_default ? "display:block" : "display:none",
-                    :class => "rounded-lg max-w-full"))
-        end
-        return Div(:class => "notebook-plot-gallery",
-            :data_slider_images => slider_id, img_tags...)
-    end
-
-    if cell.output.image_data !== nothing
-        b64 = Base64.base64encode(cell.output.image_data)
-        return Img(:src => "data:image/png;base64,$b64",
-            :alt => "Plot output", :class => "rounded-lg max-w-full")
-    end
-
-    nothing
-end
-
-function _render_plotly_output(cell::Cell, prerendered)
-    gallery = get(prerendered, cell.id, nothing)
-    plot_id = "plotly-" * string(cell.id)[1:8]
-
-    if gallery !== nothing && !isempty(gallery.plotly_data)
-        slider_id = string(gallery.slider_cell_id)
-        scripts = [
-            RawHtml("""<script type="application/json" data-plotly-for="$plot_id" data-plotly-value="$val">$(gallery.plotly_data[val])</script>""")
-            for val in gallery.slider.values if haskey(gallery.plotly_data, val)
-        ]
-        return Div(:class => "notebook-plotly",
-            Div(:id => plot_id,
-                :data_plotly_plot => slider_id,
-                :data_plotly_default => string(gallery.slider.default),
-                :class => "w-full rounded-lg",
-                :style => "min-height:400px;"),
-            scripts...)
-    end
-
-    json_str = _to_json(cell.output.result)
-    return Div(:class => "notebook-plotly",
-        Div(:id => plot_id, :class => "w-full rounded-lg", :style => "min-height:400px;"),
-        RawHtml("""<script type="application/json" data-plotly-for="$plot_id">$json_str</script>"""),
-        RawHtml("""<script>(function(){var el=document.getElementById('$plot_id');var s=document.querySelector('[data-plotly-for="$plot_id"]');if(el&&s&&window.Plotly){var d=JSON.parse(s.textContent);Plotly.newPlot(el,d.data,d.layout,{responsive:true})}})();</script>"""))
-end
-
-function _render_bond_output(result, cell::Cell, prerendered)
-    # SessionsUI's `Bond` defines MIME"text/html" — render via the standard
-    # HTML path (sprint(show, MIME"text/html"(), result)) so all widget
-    # types share one code path. The page-level BOND_BRIDGE_JS wires
-    # input → WS, no custom VNode wrapper needed.
-    if result isa Bond
+    # Bond — SessionsUI's Bond defines MIME"text/html" → wrap as RawHtml.
+    # In dev mode the page-level BOND_BRIDGE_JS attaches input listeners.
+    # In publish mode (Phase 3) the wrapping @island will own the signal.
+    if output.output_type == :bond && result isa Bond
         return RawHtml(sprint(show, MIME"text/html"(), result))
     end
-    nothing
+
+    # All types: delegate to render_output_html (single source of truth)
+    html = render_output_html(cell)
+    isempty(html) ? nothing : RawHtml(html)
 end
 
 # =============================================================================
@@ -821,13 +657,12 @@ end
 # =============================================================================
 
 """
-    render_output_html(cell::Cell; prerendered=Dict()) -> String
+    render_output_html(cell::Cell) -> String
 
 Render cell output to an HTML string. Used by the live app (WS updates)
-and as a fallback in static export. Single source of truth — replaces both
-`_web_render_output_html` (web_server.jl) and `_render_cell_output_html` (CellView.jl).
+and by `_render_output` for SSR. Single source of truth.
 """
-function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGallery}())
+function render_output_html(cell::Cell)
     output = cell.output
     # Markdown
     if output.output_type == :markdown
@@ -908,7 +743,7 @@ end
 # =============================================================================
 
 """
-    render_cell(cell::Cell; mode=:static, index=0, prerendered=Dict()) -> VNode
+    render_cell(cell::Cell; mode=:static, index=0) -> VNode
 
 Unified cell rendering function — single source of truth.
 
@@ -918,8 +753,7 @@ and stale/idle/executing CSS classes.
 
 Both modes share: CellToggle @island, CM editor host, runtime badge, cell-wrap/code-cell structure.
 """
-function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
-                     prerendered=Dict{UUID, PrerenderedGallery}())
+function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     # Static export: skip disabled/empty cells. Live app: render all (disabled shown dimmed)
     mode == :static && cell.disabled && return nothing
     code = strip(cell.code)
@@ -935,7 +769,7 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     # Output area — ABOVE code (Pluto-style: output before code)
     # =======================================================================
     if mode == :static
-        output_node = _render_output(cell, prerendered)
+        output_node = _render_output(cell)
         if output_node !== nothing
             push!(parts, Div(:class => "cell-out", :style => "padding:4px 0 8px;overflow-x:auto;",
                 output_node))
@@ -1074,411 +908,3 @@ function CellGap(; after_cell_id::String="")
                 RawHtml(_SVG_PLUS))))
 end
 
-function _slider_interaction_script()
-    RawHtml("""<script>
-(function() {
-  // Initialize Plotly datasets
-  document.querySelectorAll('[data-plotly-plot]').forEach(function(el) {
-    var plotId = el.id;
-    var def = el.dataset.plotlyDefault;
-    var scripts = document.querySelectorAll('[data-plotly-for="' + plotId + '"]');
-    el._plotlyDatasets = {};
-    scripts.forEach(function(s) {
-      var val = s.dataset.plotlyValue || 'default';
-      el._plotlyDatasets[val] = JSON.parse(s.textContent);
-    });
-    if (el._plotlyDatasets[def] && window.Plotly) {
-      var d = el._plotlyDatasets[def];
-      Plotly.newPlot(el, d.data, d.layout, {responsive:true});
-    }
-  });
-
-  // Bind slider interactions — works with WASM island sliders
-  document.querySelectorAll('[data-bind-slider-id]').forEach(function(bondEl) {
-    var sliderId = bondEl.dataset.bindSliderId;
-    var rangeInput = bondEl.querySelector('therapy-island input[type="range"]');
-    if (!rangeInput) rangeInput = bondEl.querySelector('input[type="range"]');
-    if (!rangeInput) return;
-
-    rangeInput.addEventListener('input', function() {
-      var val = rangeInput.value;
-
-      // Swap image galleries
-      document.querySelectorAll('[data-slider-images="' + sliderId + '"] img').forEach(function(img) {
-        img.style.display = img.dataset.sliderValue === val ? 'block' : 'none';
-      });
-
-      // Swap Plotly plots
-      var plotEl = document.querySelector('[data-plotly-plot="' + sliderId + '"]');
-      if (plotEl && plotEl._plotlyDatasets && plotEl._plotlyDatasets[val] && window.Plotly) {
-        Plotly.react(plotEl, plotEl._plotlyDatasets[val].data, plotEl._plotlyDatasets[val].layout);
-      }
-
-      // Swap pre-rendered HTML variants (text, etc.)
-      document.querySelectorAll('[data-slider-html="' + sliderId + '"] > [data-slider-value]').forEach(function(div) {
-        div.style.display = div.dataset.sliderValue === val ? 'block' : 'none';
-      });
-
-      // Toggle reactive table rows — show rows where index ≤ slider value
-      document.querySelectorAll('[data-slider-table="' + sliderId + '"] tbody tr[data-row-index]').forEach(function(tr) {
-        tr.style.display = parseInt(tr.dataset.rowIndex) <= parseInt(val) ? '' : 'none';
-      });
-
-      // Live WASM bridge: dispatch input event to BoundValue islands
-      // The hidden input inside each BoundValue island receives the value,
-      // triggering the WASM handler which updates the signal → DOM binding.
-      document.querySelectorAll('[data-bound-to="' + sliderId + '"] therapy-island input[type="hidden"]').forEach(function(hidden) {
-        hidden.value = val;
-        hidden.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-    });
-  });
-})();
-</script>""")
-end
-
-# =============================================================================
-# Notebook Execution Pipeline
-# =============================================================================
-
-"""
-    execute_notebook_for_web(path; verbose=false) -> (Notebook, Dict{UUID, PrerenderedGallery})
-
-Execute a notebook for web publishing with pre-rendered slider galleries.
-
-Returns `(notebook, prerendered)` where `prerendered` maps plot cell UUIDs
-to `PrerenderedGallery` structs containing images for each slider value.
-"""
-function execute_notebook_for_web(path; verbose=false)
-    nb = load_notebook(path)
-    ws = Workspace()
-
-    # 1. Execute all cells in topological order
-    order = execution_order(nb)
-
-    for (cell, err) in order.errable
-        cell.state = cell_errored
-        mark_executed!(cell)
-        cell.output = CellOutput()
-        cell.output.error = CapturedException(
-            ErrorException("Reactivity error: $(typeof(err))"),
-            backtrace()
-        )
-        verbose && println("    ERROR [$(cell.id)]: reactivity error")
-    end
-
-    for (i, cell) in enumerate(order.runnable)
-        if verbose
-            code_preview = first(cell.code, 40)
-            code_preview = replace(code_preview, '\n' => "\\n")
-            println("    [$i/$(length(order.runnable))] $(code_preview)")
-        end
-        execute_cell!(ws, cell)
-    end
-
-    # 2. Reclassify images (headless mode lacks graphics protocol → images classified as :text)
-    for cell in ordered_cells(nb)
-        if cell.output.output_type == :text && cell.output.result !== nothing
-            if Base.invokelatest(showable, MIME"image/png"(), cell.output.result)
-                cell.output.output_type = :image_png
-                cell.output.image_data = _capture_png_bytes(cell.output.result)
-                verbose && println("    Reclassified cell $(cell.id) as :image_png")
-            end
-        end
-    end
-
-    # 2b. Classify Plotly JSON outputs (Dict with "data" + "layout" keys)
-    for cell in ordered_cells(nb)
-        if cell.output.output_type == :text && cell.output.result isa Dict
-            r = cell.output.result
-            if haskey(r, "data") && haskey(r, "layout")
-                cell.output.output_type = :plotly_json
-                verbose && println("    Classified cell $(cell.id) as :plotly_json")
-            end
-        end
-    end
-
-    # 3. Pre-render slider-dependent cell outputs for all values
-    #    This enables client-side switching of text, tables, images, and plots
-    #    without server roundtrips — the foundation for interactive notebooks.
-    prerendered = Dict{UUID, PrerenderedGallery}()
-    for cell in ordered_cells(nb)
-        cell.output.output_type == :bond || continue
-        bond = cell.output.result
-        bond isa Bond || continue
-        slider = bond.element
-        slider isa BoundSlider || continue
-
-        var_name = bond.defines
-        deps = downstream_dependents(nb, [cell])
-        # Include ALL dependent cells with visible output, not just plots
-        reactive_deps = filter(d -> d.output.output_type in (
-            :image_png, :plotly_json, :text, :table
-        ), deps)
-        isempty(reactive_deps) && continue
-
-        if verbose
-            println("    Pre-rendering :$(var_name) slider ($(length(slider.values)) values × $(length(reactive_deps)) deps)")
-        end
-
-        for dep in reactive_deps
-            # Dataframe deps use reactive table (SSR all rows + JS row toggling)
-            # instead of pre-rendering separate tables for each slider value.
-            # The cell was already executed at the default value, so result has all rows.
-            if dep.output.output_type == :table
-                prerendered[dep.id] = PrerenderedGallery(
-                    cell.id, var_name, slider,
-                    Dict{Any,Vector{UInt8}}(), Dict{Any,String}(), Dict{Any,String}()
-                )
-                verbose && println("      Dep $(dep.id): reactive table (no pre-rendering)")
-                continue
-            end
-
-            images = Dict{Any, Vector{UInt8}}()
-            plotly_data = Dict{Any, String}()
-            html_variants = Dict{Any, String}()
-
-            for val in slider.values
-                set_bond_value!(var_name, val)
-                Core.eval(ws.mod, :($var_name = $val))
-                execute_cell!(ws, dep)
-
-                # Reclassify if needed (headless mode lacks graphics protocol)
-                if dep.output.output_type == :text && dep.output.result !== nothing
-                    if Base.invokelatest(showable, MIME"image/png"(), dep.output.result)
-                        dep.output.output_type = :image_png
-                        dep.output.image_data = _capture_png_bytes(dep.output.result)
-                    end
-                end
-
-                # Capture Plotly JSON
-                if dep.output.result isa Dict && haskey(dep.output.result, "data") && haskey(dep.output.result, "layout")
-                    dep.output.output_type = :plotly_json
-                    plotly_data[val] = _to_json(dep.output.result)
-                end
-
-                # Capture PNG fallback
-                if dep.output.image_data !== nothing
-                    images[val] = copy(dep.output.image_data)
-                end
-
-                # Capture rendered HTML for text/dataframe outputs
-                if dep.output.output_type in (:text, :table)
-                    vnode = _render_output(dep)  # no prerendered arg → plain render
-                    if vnode !== nothing
-                        html_variants[val] = render_to_string(vnode)
-                    end
-                end
-            end
-
-            # Restore default value
-            set_bond_value!(var_name, slider.default)
-            Core.eval(ws.mod, :($var_name = $(slider.default)))
-            execute_cell!(ws, dep)
-
-            # Reclassify restored default too
-            if dep.output.output_type == :text && dep.output.result !== nothing
-                if Base.invokelatest(showable, MIME"image/png"(), dep.output.result)
-                    dep.output.output_type = :image_png
-                    dep.output.image_data = _capture_png_bytes(dep.output.result)
-                end
-            end
-            if dep.output.result isa Dict && haskey(dep.output.result, "data") && haskey(dep.output.result, "layout")
-                dep.output.output_type = :plotly_json
-            end
-
-            prerendered[dep.id] = PrerenderedGallery(
-                cell.id, var_name, slider, images, plotly_data, html_variants
-            )
-
-            if verbose
-                n_img = length(images)
-                n_plotly = length(plotly_data)
-                n_html = length(html_variants)
-                println("      Dep $(dep.id): $(n_img) images, $(n_plotly) plotly, $(n_html) html variants")
-            end
-        end
-    end
-
-    return nb, prerendered
-end
-
-# =============================================================================
-# NotebookPage — main entry point (self-contained: includes all CSS/fonts/JS)
-# =============================================================================
-
-"""Google Fonts needed by notebook rendering (DM Sans, Fraunces, JetBrains Mono)."""
-function _notebook_fonts()
-    RawHtml("""<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap" rel="stylesheet">""")
-end
-
-"""
-Shared CSS for notebook rendering — single source of truth.
-
-Used by both `_notebook_stylesheet()` (static export) and `Layout.jl` (live app).
-Includes: cell chrome, accent bar, eye toggle, runtime badge, markdown prose,
-Pluto-style tables (sst-*), CodeMirror overrides, slider widgets.
-"""
-const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
-.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
-.code-cell:hover{border-color:var(--cell-border-hov);}
-/* code-cell left accent bar removed — traffic light on cell-wrap */
-.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
-.code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
-.rt-badge{font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;color:#B5A898;background:transparent;border:none;padding:0;}
-.cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
-.cell-wrap:hover .cell-eye{opacity:1;}
-.cell-eye svg{color:#a0aec0;transition:color .15s;}
-.cell-eye:hover svg{color:#219669;}
-/* Cell chrome — dark overrides (accent bar only, bg/border use CSS vars) */
-/* dark code-cell ::before removed — traffic light on cell-wrap */
-.dark .rt-badge{color:#7A7A8E;background:transparent;border:none;}
-.dark .cell-eye svg{color:#3d5068;}
-.dark .cell-eye:hover svg{color:#56d4a0;}
-.cell-out{overflow-x:auto;}
-/* Notebook slider */
-.notebook-slider{display:flex;align-items:center;gap:12px;padding:8px 0;}
-.notebook-plotly{border-radius:8px;overflow:hidden;}
-/* Markdown prose — defined in theme.css (single source of truth) */
-/* Sessions Table (sst-*) — light defaults, dark overrides */
-.sst-wrap{font-family:'JetBrains Mono','Fira Code',monospace;font-size:14px;overflow-x:auto;max-width:100%;}
-.sst-table{border-collapse:collapse;width:auto;border-top:2px solid #219669;border-bottom:1px solid #e2e8f0;}
-.sst-th{padding:12px 20px;color:#219669;font-weight:700;font-size:14px;text-align:left;border-bottom:1px solid #e2e8f0;white-space:nowrap;}
-.sst-type-row .sst-type-th{padding:0 20px 8px;color:#a0aec0;font-weight:400;font-size:11px;font-style:italic;text-align:left;border-bottom:1px solid #e2e8f0;opacity:0;transition:opacity .15s;}
-.sst-table thead:hover .sst-type-row .sst-type-th{opacity:1;}
-.sst-row-label{color:#1a202c;font-weight:700;font-size:13px;text-align:right;padding:10px 16px 10px 12px;width:1%;white-space:nowrap;border-bottom:1px solid rgba(226,232,240,.6);}
-.sst-td{padding:10px 20px;color:#1a202c;border-bottom:1px solid rgba(226,232,240,.6);text-align:left;white-space:nowrap;max-width:300px;overflow:auto;}
-.sst-row:hover .sst-td,.sst-row:hover .sst-row-label{background:rgba(86,212,160,.04);}
-.sst-more{padding:10px 20px;color:#718096;font-size:13px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(226,232,240,.6);transition:color .15s;}
-.sst-more:hover{color:#219669;}
-/* Sessions Table — dark overrides */
-.dark .sst-table{border-top-color:#56d4a0;border-bottom-color:#2a3a4f;}
-.dark .sst-th{color:#56d4a0;border-bottom-color:#2a3a4f;}
-.dark .sst-type-row .sst-type-th{color:#3d5068;border-bottom-color:#2a3a4f;}
-.dark .sst-row-label{color:#d4dce8;border-bottom-color:rgba(42,58,79,.3);}
-.dark .sst-td{color:#d4dce8;border-bottom-color:rgba(42,58,79,.3);}
-.dark .sst-more{color:#6b7d93;border-bottom-color:rgba(42,58,79,.3);}
-.dark .sst-more:hover{color:#56d4a0;}
-/* CodeMirror overrides */
-.cm-cell .cm-editor{background:transparent!important;}
-.cm-cell .cm-scroller{overflow-x:auto;}
-.cm-cell .cm-focused{outline:none!important;}"""
-
-function _notebook_stylesheet()
-    RawHtml("""<style id="sessions-notebook-css">$(NOTEBOOK_CSS)</style>""")
-end
-
-"""CodeMirror 6 bundle (inlined) + read-only init script for static notebooks."""
-function _notebook_editor_bundle()
-    Fragment(
-        RawHtml(string("<script>", _EDITOR_BUNDLE_JS, "</script>")),
-        RawHtml("""<script>
-(function() {
-  if (typeof C === 'undefined' || !C.EditorView) return;
-
-  var hlTheme = C.HighlightStyle.define([
-    {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
-    {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
-    {tag:C.t.moduleKeyword,color:"#e06b65"},
-    {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
-    {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
-    {tag:C.t.lineComment,color:"#4a6178",fontStyle:"italic"},
-    {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
-    {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
-    {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
-    {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
-    {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
-    {tag:C.t.variableName,color:"#d4dce8"},
-    {tag:C.t.punctuation,color:"#6b7d93"},{tag:C.t.paren,color:"#6b7d93"},
-    {tag:C.t.squareBracket,color:"#6b7d93"},{tag:C.t.brace,color:"#6b7d93"},
-    {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.special(C.t.string),color:"#7bb8e8"},
-    {tag:C.t.macroName,color:"#d4a056"},
-  ]);
-
-  var edTheme = C.EditorView.theme({
-    "&":{backgroundColor:"transparent",color:"#d4dce8"},
-    ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
-    ".cm-activeLine":{backgroundColor:"transparent"},
-    ".cm-activeLineGutter":{backgroundColor:"transparent",color:"#3d5068"},
-    ".cm-content":{fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
-    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-    ".cm-line":{paddingLeft:"4px"},
-    ".cm-cursor":{display:"none"},
-  },{dark:true});
-
-  function initSessionsCM() {
-    document.querySelectorAll('.cm-cell').forEach(function(host) {
-      if (host.querySelector('.cm-editor')) return;
-      var src = host.dataset.src || '';
-      new C.EditorView({
-        state: C.EditorState.create({
-          doc: src,
-          extensions: [
-            C.lineNumbers(),
-            C.highlightSpecialChars(),
-            C.drawSelection(),
-            C.bracketMatching(),
-            C.julia(),
-            C.syntaxHighlighting(hlTheme),
-            edTheme,
-            C.EditorState.readOnly.of(true),
-            C.EditorView.editable.of(false),
-          ]
-        }),
-        parent: host
-      });
-    });
-  }
-
-  // Init on page load
-  initSessionsCM();
-
-  // Re-init after SPA navigation (Therapy.jl router swaps #page-content)
-  window.addEventListener('therapy:router:loaded', initSessionsCM);
-})();
-</script>"""))
-end
-
-"""
-    NotebookPage(nb::Notebook; prerendered=Dict()) -> VNode
-
-Render a notebook as Therapy.jl VNodes with self-contained CSS, fonts, and JS.
-
-Any Therapy.jl app that calls this gets the full Sessions.jl notebook experience —
-cell chrome, accent bars, CodeMirror syntax highlighting, Pluto-style tables,
-markdown prose, interactive sliders — without any additional setup.
-
-```julia
-using Sessions
-
-nb, pre = Sessions.execute_notebook_for_web("notebook.jl")
-MyLayout(Sessions.NotebookPage(nb; prerendered=pre))
-```
-"""
-function NotebookPage(nb::Notebook;
-        prerendered=Dict{UUID, PrerenderedGallery}())
-    cells = ordered_cells(nb)
-    rendered = Any[
-        _notebook_fonts(),
-        _notebook_stylesheet(),
-    ]
-    for cell in cells
-        node = render_cell(cell; mode=:static, prerendered=prerendered)
-        node !== nothing && push!(rendered, node)
-    end
-
-    # Add inline JS for slider/plotly interactivity
-    has_sliders = any(c -> c.output.output_type == :bond && c.output.result isa Bond && c.output.result.element isa BoundSlider, cells)
-    has_plotly = any(c -> c.output.output_type == :plotly_json, cells)
-
-    if has_sliders || has_plotly
-        push!(rendered, _slider_interaction_script())
-    end
-
-    # NOTE: CodeMirror bundle + init is NOT included here.
-    # The consuming Layout (docs Layout.jl, or any Therapy app layout) is
-    # responsible for loading the editor.js bundle and running initSessionsCM().
-    # This keeps NotebookPage purely structural (HTML + CSS).
-
-    Div(:class => "space-y-4 pl-8", rendered...)
-end
