@@ -753,7 +753,18 @@ function _notebook_ws_bridge_body()
         window._fileEditorView = null;
         if (data.nb_html) {
           var nbIsland=document.getElementById('nb-island');
-          if(nbIsland){nbIsland.outerHTML=data.nb_html;if(window._initAllCM)_initAllCM();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
+          if(nbIsland){
+            nbIsland.outerHTML=data.nb_html;
+            // Browsers do NOT execute <script> tags inserted via
+            // innerHTML/outerHTML. Clone-and-replace each one so the
+            // canvas-glue scripts WasmPlot/Plotly emit actually run —
+            // otherwise canvases come back blank after a tab switch.
+            var newNb=document.getElementById('nb-island');
+            if(newNb){newNb.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');for(var i=0;i<old.attributes.length;i++){s.setAttribute(old.attributes[i].name,old.attributes[i].value);}s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});}
+            if(window._initAllCM)_initAllCM();
+            if(window.__hydrateTherapyIslands){if(newNb)window.__hydrateTherapyIslands(newNb);}
+            if(window.MathJax&&MathJax.typesetPromise&&newNb){MathJax.typesetPromise([newNb]).catch(function(){});}
+          }
         }
         // Sync footer cell count to the active notebook
         var ccEl=document.getElementById('cell-count');
