@@ -97,7 +97,7 @@ end
 # ╔═╡ 20000000-0000-0000-0000-000000000009
 let
     fig = Figure(size=(750, 360))
-    ax  = Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares — n=$(n)")
+    ax  = Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
     xs  = Float64.(1:n)
     barplot!(ax, xs, xs.^2; color=:steelblue)
     fig

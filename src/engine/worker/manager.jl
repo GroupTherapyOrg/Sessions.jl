@@ -76,18 +76,25 @@ function _boot_worker!(nw::NotebookWorker)
 end
 
 # Inject @bind and Bound* widget types into the worker's workspace module.
+# Uses `using SessionsUI: …` (not direct binding) so a notebook that itself
+# imports the same symbols re-imports the same Bindings instead of triggering
+# the "import of … into SW_1 conflicts with an existing identifier; ignored"
+# warning that direct const bindings produce.
 function _inject_notebook_api!(nw::NotebookWorker)
     try
-        Malt.remote_eval_wait(nw.worker, :(try
-            import Sessions
-            _mod = _workspace.mod
-            # Inject all Bound* widget types from Sessions (re-exported from SessionsUI)
-            for name in [:BoundSlider, :BoundTextField, :BoundCheckBox, :BoundSelect,
-                         :BoundNumberField, :BoundButton, :BoundCounterButton]
-                Core.eval(_mod, Expr(:const, Expr(:(=), name, getfield(Sessions, name))))
+        Malt.remote_eval_wait(nw.worker, quote
+            try
+                import Sessions
+                Core.eval(_workspace.mod, :(using Sessions.SessionsUI:
+                    @bind,
+                    BoundSlider, BoundNumberField, BoundButton, BoundCounterButton,
+                    BoundCheckBox, BoundTextField, BoundPasswordField,
+                    BoundSelect, BoundMultiSelect, BoundRadio, BoundRangeSlider,
+                    BoundColorPicker, BoundDatePicker, BoundTimePicker,
+                    BoundFilePicker, BoundClock))
+            catch
             end
-            Core.eval(_mod, :(var"@bind" = $(Sessions.var"@bind")))
-        catch; end))
+        end)
     catch e
         @warn "[Worker] Failed to inject Sessions types" exception=e
     end
