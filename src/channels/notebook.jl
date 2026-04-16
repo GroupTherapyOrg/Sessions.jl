@@ -667,13 +667,25 @@ function _handle_save!(state::WebNotebookState, conn, data)
 
     save_notebook(nb)
     save_session!(nb)
+
+    # CRITICAL: refresh the watcher's last-disk snapshot immediately after
+    # saving. Without this, when the watcher fires ~0.5s later it sees
+    # disk=NEW vs last_disk_nb=OLD, computes a non-empty diff, and
+    # broadcasts `cell_code_updated` for every cell we just saved. The JS
+    # then dispatches those into the CodeMirror editors, which silently
+    # overwrites any typing the user has done since save (e.g. typing a
+    # `$` for interpolation). Updating the snapshot here makes the
+    # post-save diff empty, so the watcher only fires on TRUE external
+    # edits (agent file writes, git pulls, etc.).
+    if tab.watcher !== nothing
+        tab.last_disk_nb = _snapshot_notebook(nb)
+    end
+
     msg = Dict("event" => "saved", "notebook_path" => nb.path)
     mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
     _nb_broadcast!(msg)
     # Re-broadcast stale state so the toolbar pill and per-cell .stale class
-    # re-sync from the single server source of truth. Without this, the file
-    # watcher's post-save diff can re-render the panel without .stale while
-    # the client's pill count, driven only by update_code, stays stale.
+    # re-sync from the single server source of truth.
     _broadcast_stale!(state)
 end
 
