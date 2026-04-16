@@ -219,15 +219,38 @@ function _notebook_ws_bridge_body()
   // ══════════════════════════════════════════════════════════════
   window._setupWSBridge = function() {
     console.log('[Sessions WS] Bridge initialized');
+
+    // ── Page-level signal setters (Therapy nanostores pub/sub) ──
+    // Defined as a thin adapter: noop if __therapy isn't ready yet
+    // (e.g. very first WS event arrives before any island hydrates).
+    // Names MUST match the closure-field names in NotebookSignals.jl
+    // and any @island that destructures those consts.
+    function S(name, value) {
+      if (window.__therapy && window.__therapy.set) {
+        window.__therapy.set(name, value);
+      }
+    }
+
     // No-ops for removed signal setters; surrounding DOM updates handle state.
     var setCellOrder = function(){};
-    var setExecuting = function(){};
-    var setStaleCount = function(){};
+    function setExecuting(running) { S('is_executing', running ? 1 : 0); }
+    function setStaleCount(n) { S('stale_count', n|0); }
 
     // ── Save state ──
     window._sessionsUnsaved = false;
-    function markUnsaved() { if(window._sessionsUnsaved)return; window._sessionsUnsaved=true; var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='\\u25CF Save';btn.style.color='var(--status-running)';} }
-    function markSaved() { window._sessionsUnsaved=false; var btn=document.getElementById('save-indicator'); if(btn){btn.textContent='Saved';btn.style.color='';setTimeout(function(){if(!window._sessionsUnsaved)btn.textContent='Save';},2000);} }
+    function markUnsaved() {
+      if (window._sessionsUnsaved) return;
+      window._sessionsUnsaved = true;
+      S('is_unsaved', 1);
+      var btn = document.getElementById('save-indicator');
+      if (btn) { btn.textContent='\\u25CF Save'; btn.style.color='var(--status-running)'; }
+    }
+    function markSaved() {
+      window._sessionsUnsaved = false;
+      S('is_unsaved', 0);
+      var btn = document.getElementById('save-indicator');
+      if (btn) { btn.textContent='Saved'; btn.style.color=''; setTimeout(function(){if(!window._sessionsUnsaved)btn.textContent='Save';},2000); }
+    }
     window._sessionsMarkUnsaved = markUnsaved;
 
     // ── DOM helpers ──
@@ -255,6 +278,7 @@ function _notebook_ws_bridge_body()
       var n = m ? parseInt(m[1], 10) : 0;
       var next = Math.max(0, n + delta);
       el.textContent = next + ' cells';
+      S('total_cells', next);
     }
 
     // ── Find gap after a cell (or first gap if null) ──
@@ -612,6 +636,8 @@ function _notebook_ws_bridge_body()
         window._sessionsExecuting=isRunning;
         window._sessionsRunningCellId=isRunning&&data.cell_id?data.cell_id:null;
         setExecuting(isRunning ? 1 : 0);
+        S('run_progress_current', (data.running_index|0));
+        S('run_progress_total', (data.total|0));
 
         var execIdle=document.getElementById('pill-exec-idle');
         var execRunning=document.getElementById('pill-exec-running');
@@ -768,7 +794,7 @@ function _notebook_ws_bridge_body()
         }
         // Sync footer cell count to the active notebook
         var ccEl=document.getElementById('cell-count');
-        if(ccEl && typeof data.total_cells==='number'){ ccEl.textContent=data.total_cells+' cells'; }
+        if(ccEl && typeof data.total_cells==='number'){ ccEl.textContent=data.total_cells+' cells'; S('total_cells', data.total_cells|0); }
         var lo=document.getElementById('nb-loading');if(lo){lo.classList.add('loaded');setTimeout(function(){lo.remove();},400);}
         // Re-init ToC after tab switch (DOM was replaced)
         if(window._sessionsReinitToc) setTimeout(_sessionsReinitToc, 300);

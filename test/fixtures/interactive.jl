@@ -106,6 +106,9 @@ let
     fig
 end
 
+# ╔═╡ d4e88179-6c23-4713-abe8-5c18e8c94497
+@bind l BoundSlider(1:0.5:15; default=7.5)
+
 # ╔═╡ 20000000-0000-0000-0000-00000000000a
 md"""
 ### A reactive table
@@ -118,7 +121,7 @@ count mirrors the slider exactly.
 # String => column form (rather than kwargs) so we can use unicode column
 # names like √i — the parser would otherwise read `√i = …` as the unary
 # √ operator applied to `i`, not a keyword name.
-DataFrame("i²" => (1:n) .^ 2, "√i" => sqrt.(1:n))
+DataFrame("i²" => (1:l) .^ 2, "√i" => sqrt.(1:l))
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000c
 md"""
@@ -152,6 +155,7 @@ recompute locally. No server.
 # ╟─20000000-0000-0000-0000-000000000007
 # ╟─20000000-0000-0000-0000-000000000008
 # ╠═20000000-0000-0000-0000-000000000009
+# ╟─d4e88179-6c23-4713-abe8-5c18e8c94497
 # ╟─20000000-0000-0000-0000-00000000000a
 # ╠═20000000-0000-0000-0000-00000000000b
 # ╟─20000000-0000-0000-0000-00000000000c

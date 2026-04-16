@@ -196,7 +196,7 @@ md"### Strings"
 md"### Vectors and ranges"
 
 # ╔═╡ 10000000-0000-0000-0000-000000000016
-collect(1:25)
+xx = collect(1:25)
 
 # ╔═╡ 10000000-0000-0000-0000-000000000017
 md"### Dictionaries"
