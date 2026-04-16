@@ -31,6 +31,7 @@ function Layout(children...; title="Sessions.jl")
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>"""),
         RawHtml("""<script src="/static/editor.js"></script>"""),
         RawHtml("<script>" * _notebook_island_js() * "</script>"),
+        RawHtml("<script>" * Main.Sessions.SessionsUI.BOND_BRIDGE_JS * "</script>"),
         RawHtml("""<div id="app-root" class="font-sans">"""),
         children...,
         RawHtml("""</div>"""),

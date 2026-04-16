@@ -605,6 +605,92 @@ function _clear_bonds!()
     empty!(_CELL_BOND_NAMES)
 end
 
+# ── Channel-side coordinator API ─────────────────────────────────
+#
+# Sessions.jl receives `set_bond` WS messages and forwards them here.
+# This function owns the validate → transform → assign → registry
+# update sequence so channels/notebook.jl stays a thin coordinator that
+# only knows about cell-graph re-execution, not widget semantics.
+
+"""
+    apply_bond_update!(mod, name, raw_js_value) -> (cell_id::Union{UUID,Nothing}, ok::Bool)
+
+Validate `raw_js_value` against the registered widget for `name`,
+transform it into the Julia-side value, assign it to `mod.\$name`, and
+update the bond registry. Returns the cell_id that defined the bond
+(so the caller can re-run downstream cells) and a success flag. If
+`name` isn't a registered bond or the value fails validation, returns
+`(nothing, false)` and makes no changes.
+"""
+function apply_bond_update!(mod::Module, name::Symbol, raw_js_value)
+    haskey(_BOND_REGISTRY, name) || return (nothing, false)
+    widget, _, cell_id = _BOND_REGISTRY[name]
+    validate_value(widget, raw_js_value) || return (nothing, false)
+    new_val = transform_value(widget, raw_js_value)
+    Core.eval(mod, Expr(:(=), name, new_val))
+    _BOND_REGISTRY[name] = (widget, new_val, cell_id)
+    (cell_id, true)
+end
+
+# ── Page-level <bond> JS bridge ──────────────────────────────────
+#
+# Drop this string into the notebook page once at init. It walks every
+# `<bond def="…">` in the DOM, attaches a single `input` listener to
+# the bond's first child (the widget element), and dispatches
+# `{action:'set_bond', name, value}` over the Therapy WS channel.
+# A MutationObserver picks up bonds added by later cell renders.
+#
+# Value extraction handles the four shapes widgets produce:
+#   • <input type=range/number>   → parseFloat(.value)
+#   • <input type=checkbox>       → .checked (Bool)
+#   • <select multiple>           → Array of selected option values
+#   • container w/ exposed .value → use as-is (range slider, counter,
+#     clock, radio form — these set `.value` on the parent element)
+const BOND_BRIDGE_JS = raw"""
+(function(){
+  if (window._sessBondBridgeReady) return;
+  window._sessBondBridgeReady = true;
+  function readValue(el){
+    var t = el.tagName, ty = el.type;
+    if (ty === 'checkbox') return el.checked;
+    if (ty === 'range' || ty === 'number') return parseFloat(el.value);
+    if (t === 'SELECT' && el.multiple) {
+      return Array.prototype.slice.call(el.selectedOptions).map(function(o){return o.value});
+    }
+    // Containers (su-range, su-counter, su-clock, su-radio) expose a .value
+    // property even though they aren't form controls. Prefer it when the
+    // element isn't a real input/select/textarea.
+    if (t !== 'INPUT' && t !== 'SELECT' && t !== 'TEXTAREA' && el.value !== undefined) {
+      return el.value;
+    }
+    return el.value;
+  }
+  function attach(bond){
+    if (bond._sessBound) return;
+    var name = bond.getAttribute('def'); if (!name) return;
+    var widget = bond.firstElementChild; if (!widget) return;
+    bond._sessBound = true;
+    widget.addEventListener('input', function(){
+      if (!window.TherapyWS || !TherapyWS.sendMessage) return;
+      TherapyWS.sendMessage('notebook', {action:'set_bond', name:name, value:readValue(widget)});
+    });
+  }
+  function attachAll(root){
+    (root || document).querySelectorAll('bond[def]').forEach(attach);
+  }
+  attachAll();
+  new MutationObserver(function(muts){
+    for (var i=0;i<muts.length;i++){
+      muts[i].addedNodes.forEach(function(n){
+        if (n.nodeType !== 1) return;
+        if (n.tagName === 'BOND') attach(n);
+        else if (n.querySelectorAll) attachAll(n);
+      });
+    }
+  }).observe(document.body, {childList:true, subtree:true});
+})();
+"""
+
 # ── @bind Macro ──────────────────────────────────────────────────
 
 """

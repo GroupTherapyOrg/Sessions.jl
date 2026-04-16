@@ -27,5 +27,6 @@ export BoundSlider, BoundNumberField, BoundButton, BoundCounterButton,
 # Engine-facing exports — used by Sessions.jl, not by notebook users
 export AbstractWidget, initial_value, transform_value, possible_values, validate_value
 export Bond, set_bond_value!, get_bond_names
+export apply_bond_update!, BOND_BRIDGE_JS
 
 end # module

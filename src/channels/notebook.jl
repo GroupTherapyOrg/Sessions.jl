@@ -870,44 +870,35 @@ end
 function _handle_set_bond!(state::WebNotebookState, conn, data)
     bond_name = get(data, "name", "")
     isempty(bond_name) && return
-    new_value = get(data, "value", nothing)
-    new_value === nothing && return
+    raw_value = get(data, "value", nothing)
+    raw_value === nothing && return
 
     nb = active_nb(state)
     worker = active_worker(state)
+    worker === nothing && return
     name_sym = Symbol(bond_name)
-
-    val = if new_value isa Float64 && new_value == floor(new_value)
-        Int(new_value)
-    else
-        new_value
-    end
 
     @async begin
         state.executing = true
         try
-            assign_expr = Expr(:(=), name_sym, val)
-            Malt.remote_eval_wait(worker.worker, :(Core.eval(_workspace.mod, $(QuoteNode(assign_expr)))))
+            # SessionsUI owns widget semantics (validate → transform → assign).
+            # We just receive the cell_id and run downstream from there.
+            cell_id, ok = Malt.remote_eval_fetch(worker.worker,
+                :(Sessions.SessionsUI.apply_bond_update!(_workspace.mod,
+                    $(QuoteNode(name_sym)), $(QuoteNode(raw_value)))))
+            ok || return
+            cell_id === nothing && return
 
-            bond_cell = nothing
-            for cell in ordered_cells(nb)
-                if contains(cell.code, "@bind $(bond_name)")
-                    bond_cell = cell
-                    break
-                end
-            end
+            bond_cell = get(nb.cells, cell_id, nothing)
+            bond_cell === nothing && return
 
-            if bond_cell !== nothing
-                deps = try
-                    downstream_dependents(nb, [bond_cell])
-                catch e
-                    @warn "[notebook] downstream_dependents failed" exception=e
-                    Cell[]
-                end
-                if !isempty(deps)
-                    _execute_cells!(state, deps)
-                end
+            deps = try
+                downstream_dependents(nb, [bond_cell])
+            catch e
+                @warn "[notebook] downstream_dependents failed" exception=e
+                Cell[]
             end
+            isempty(deps) || _execute_cells!(state, deps)
         catch e
             @warn "[notebook] set_bond error" exception=(e, catch_backtrace())
         finally
