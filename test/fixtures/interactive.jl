@@ -102,7 +102,7 @@ let
     fig = Figure(size=(750, 360))
     ax  = Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
     xs  = Float64.(1:n)
-    barplot!(ax, xs, xs.^2; color=:steelblue)
+    barplot!(ax, xs, xs.^2; color=:red)
     fig
 end
 

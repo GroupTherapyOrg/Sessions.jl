@@ -409,32 +409,34 @@ end
 
 function _parse_json_string_array(s::String)
     results = String[]
+    last_i = ncodeunits(s)
     i = 1
-    while i <= length(s)
+    while i <= last_i
         if s[i] == '"'
-            j = i + 1
+            j = nextind(s, i)
             buf = IOBuffer()
-            while j <= length(s)
-                if s[j] == '\\' && j + 1 <= length(s)
-                    c = s[j+1]
+            while j <= last_i
+                if s[j] == '\\' && nextind(s, j) <= last_i
+                    j2 = nextind(s, j)
+                    c = s[j2]
                     if c == '"'; write(buf, '"')
                     elseif c == '\\'; write(buf, '\\')
                     elseif c == 'n'; write(buf, '\n')
                     elseif c == 'r'; write(buf, '\r')
                     else write(buf, c)
                     end
-                    j += 2
+                    j = nextind(s, j2)
                 elseif s[j] == '"'
                     break
                 else
                     write(buf, s[j])
-                    j += 1
+                    j = nextind(s, j)
                 end
             end
             push!(results, String(take!(buf)))
-            i = j + 1
+            i = j <= last_i ? nextind(s, j) : j + 1
         else
-            i += 1
+            i = nextind(s, i)
         end
     end
     results
@@ -445,15 +447,16 @@ function _extract_json_string_array(json::String, key::String)
     idx = findfirst(pat, json)
     idx === nothing && return String[]
     start = last(idx) + 1
+    last_i = ncodeunits(json)
     depth = 1
     i = start
-    while i <= length(json) && depth > 0
+    while i <= last_i && depth > 0
         c = json[i]
         c == '[' && (depth += 1)
         c == ']' && (depth -= 1)
-        i += 1
+        i = nextind(json, i)
     end
-    arr_str = json[start:i-2]
+    arr_str = json[start:prevind(json, i, 2)]
     _parse_json_string_array(arr_str)
 end
 
@@ -462,30 +465,32 @@ function _extract_json_nested_array(json::String, key::String)
     idx = findfirst(pat, json)
     idx === nothing && return String[]
     start = last(idx) + 1
+    last_i = ncodeunits(json)
     depth = 1
     i = start
-    while i <= length(json) && depth > 0
+    while i <= last_i && depth > 0
         c = json[i]
         c == '[' && (depth += 1)
         c == ']' && (depth -= 1)
-        i += 1
+        i = nextind(json, i)
     end
-    arr_content = json[start:i-2]
+    arr_content = json[start:prevind(json, i, 2)]
     results = String[]
+    arr_last = ncodeunits(arr_content)
     j = 1
-    while j <= length(arr_content)
+    while j <= arr_last
         if arr_content[j] == '['
             d = 1
-            k = j + 1
-            while k <= length(arr_content) && d > 0
+            k = nextind(arr_content, j)
+            while k <= arr_last && d > 0
                 arr_content[k] == '[' && (d += 1)
                 arr_content[k] == ']' && (d -= 1)
-                k += 1
+                k = nextind(arr_content, k)
             end
-            push!(results, arr_content[j+1:k-2])
+            push!(results, arr_content[nextind(arr_content, j):prevind(arr_content, k, 2)])
             j = k
         else
-            j += 1
+            j = nextind(arr_content, j)
         end
     end
     results
@@ -496,11 +501,12 @@ function _extract_json_int(json::String, key::String)
     idx = findfirst(pat, json)
     idx === nothing && return 0
     start = last(idx) + 1
+    last_i = ncodeunits(json)
     i = start
-    while i <= length(json) && (json[i] in ('0':'9'))
-        i += 1
+    while i <= last_i && (json[i] in ('0':'9'))
+        i = nextind(json, i)
     end
-    parse(Int, json[start:i-1])
+    parse(Int, json[start:prevind(json, i)])
 end
 
 """Simple JSON parser for table data. Returns Dict or nothing."""
@@ -524,16 +530,25 @@ function _parse_table_json(json::String)
     end
 end
 
-function _write_table_row(buf::IOBuffer, idx::Int, row::Vector{String}, ncol::Int)
-    print(buf, """<tr class="sst-row" data-row-idx="$(idx)">""")
-    print(buf, """<th class="sst-row-label">""", idx, "</th>")
+function _write_pluto_table_row(buf::IOBuffer, idx::Int, row::Vector{String})
+    print(buf, "<tr><th>", idx, "</th>")
     for cell in row
-        print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+        print(buf, "<td><div>", _html_esc(cell), "</div></td>")
     end
     print(buf, "</tr>")
 end
 
-"""Render a table from structured JSON into a Pluto-style HTML table."""
+"""Render a Tables.jl-serialized payload into Pluto-compatible
+`<table class="pluto-table">` DOM.
+
+Mirrors Pluto's frontend `TableView.js` output structure exactly:
+- `<thead>` carries two rows: `tr.schema-names` (always visible) and
+  `tr.schema-types` (revealed on `thead:hover` via CSS).
+- First column is the row index `<th>`; each cell is `<td><div>…</div></td>`
+  so Firefox's table layout still honours `td max-width:300px` (Pluto
+  workaround).
+- Truncation: show first N, a `<tr>` with a clickable "more" sentinel,
+  then the last row so the user always sees the endpoint."""
 function _render_table_html(table_json::String)
     isempty(table_json) && return ""
 
@@ -553,40 +568,46 @@ function _render_table_html(table_json::String)
 
     buf = IOBuffer()
 
-    print(buf, """<div class="sst-wrap"><div style="font-size:13px;color:#6b7d93;padding:2px 0 8px;font-family:'JetBrains Mono',monospace;">$(nrow)×$(ncol) DataFrame</div>""")
-    print(buf, """<table class="sst-table"><thead>""")
-    print(buf, """<tr><th class="sst-th sst-row-label"></th>""")
+    print(buf, """<div class="pluto-table-wrap"><div class="pluto-table-dim">""",
+          nrow, "×", ncol, " DataFrame</div>")
+    print(buf, """<table class="pluto-table"><thead>""")
+    # schema-names row (always visible)
+    print(buf, """<tr class="schema-names"><th></th>""")
     for name in cols
-        print(buf, """<th class="sst-th">""", _html_esc(name), "</th>")
+        print(buf, "<th>", _html_esc(name), "</th>")
     end
     print(buf, "</tr>")
-    print(buf, """<tr class="sst-type-row"><th class="sst-type-th"></th>""")
+    # schema-types row (hidden via CSS until thead:hover)
+    print(buf, """<tr class="schema-types"><th></th>""")
     for t in types
-        print(buf, """<th class="sst-type-th">""", _html_esc(t), "</th>")
+        print(buf, "<th>", _html_esc(t), "</th>")
     end
     print(buf, "</tr></thead><tbody>")
 
     if truncated
+        # First N rows
         for i in 1:initial_visible
-            _write_table_row(buf, i, rows[i], ncol)
+            _write_pluto_table_row(buf, i, rows[i])
         end
+        # Hidden middle rows (revealed when "more" is clicked)
         for i in (initial_visible + 1):(total_serialized - 1)
-            print(buf, """<tr class="sst-row sst-hidden" data-row-idx="$(i)" style="display:none">""")
-            print(buf, """<th class="sst-row-label">""", i, "</th>")
+            print(buf, """<tr class="pluto-table-hidden" style="display:none"><th>""",
+                  i, "</th>")
             for cell in rows[i]
-                print(buf, """<td class="sst-td">""", _html_esc(cell), "</td>")
+                print(buf, "<td><div>", _html_esc(cell), "</div></td>")
             end
             print(buf, "</tr>")
         end
         hidden_count = total_serialized - initial_visible - 1
-        more_label = nrow > total_serialized ? "⋮ more" : "⋮ $(hidden_count) more"
-        print(buf, """<tr class="sst-more-row"><td colspan="$(ncol + 1)" class="sst-more" """)
-        print(buf, """onclick="this.closest('table').querySelectorAll('.sst-hidden').forEach(function(r){r.style.display=''});this.closest('tr').style.display='none'">""")
-        print(buf, more_label, "</td></tr>")
-        _write_table_row(buf, total_serialized, rows[end], ncol)
+        more_label = nrow > total_serialized ? "more" : "$(hidden_count) more"
+        print(buf, """<tr><td colspan="$(ncol + 1)" class="pluto-tree-more-td">""")
+        print(buf, """<pluto-tree-more onclick="this.closest('table').querySelectorAll('.pluto-table-hidden').forEach(function(r){r.style.display=''});this.closest('tr').remove()">⋮ """,
+              more_label, "</pluto-tree-more></td></tr>")
+        # Anchor row: the very last row so the user sees both endpoints
+        _write_pluto_table_row(buf, total_serialized, rows[end])
     else
         for (i, row) in enumerate(rows)
-            _write_table_row(buf, i, row, ncol)
+            _write_pluto_table_row(buf, i, row)
         end
     end
 
@@ -948,7 +969,10 @@ function render_output_html(cell::Cell; prerendered=Dict{UUID, PrerenderedGaller
         # Post-process LaTeX: Julia's Markdown renders $formula$ as &#36;formula&#36;
         # Wrap in .tex spans so MathJax can typeset them (same approach as Pluto's LaTeX.jl)
         md_html = _wrap_latex_for_mathjax(md_html)
-        return isempty(md_html) ? "" : """<div class="md-prose">$(md_html)</div>"""
+        # Pluto parity: no wrapper class — markdown content lives directly in
+        # `.cell-out` and inherits typography from the output container's
+        # baseline rules (defined in input.css).
+        return md_html
     end
     # Bond — only reachable for cached old sessions; new bonds flow through
     # the :html branch below since SessionsUI's Bond.show emits text/html.

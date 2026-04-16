@@ -143,11 +143,21 @@ function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogReco
     # Markdown
     result isa Markdown.MD && return (output_type=:markdown, text_representation=sprint(io -> Markdown.html(io, result)), stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
 
-    # text/html — Pluto parity: anything that defines `show(io, MIME"text/html"(), x)`
-    # gets to render itself (DataFrames, HypertextLiteral, custom widgets, etc.).
-    # We do NOT intercept Tables.jl-compatible objects with a custom renderer —
-    # that diverges from Pluto and breaks any third-party widget that ships its
-    # own HTML representation.
+    # Tables.jl — Pluto parity. Pluto's MIME order has `pluto.table+object`
+    # BEFORE `text/html` so DataFrames don't fall back to DataFrames.jl's own
+    # HTML (which gives the squished "Int64Int64Float64" header rendering).
+    # We do the same: detect Tables.jl-compatible values, serialize to a
+    # structured JSON the server renders into Pluto-style <table.pluto-table>
+    # with sticky headers + hover-reveal type row.
+    if _is_table_like(result)
+        json = try _serialize_table(result) catch; "" end
+        if !isempty(json)
+            return (output_type=:table, text_representation=json, stdout_text=stdout_str, runtime_ns=runtime, error_text="", image_bytes=nothing, logs=logs_buffer)
+        end
+    end
+
+    # text/html — anything else that defines `show(io, MIME"text/html"(), x)`
+    # (HypertextLiteral, custom widgets, our own Bond, etc.).
     if _try_showable(MIME"text/html"(), result)
         html = try
             sprint(io -> Base.invokelatest(show, io, MIME"text/html"(), result))

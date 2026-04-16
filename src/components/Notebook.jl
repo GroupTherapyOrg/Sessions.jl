@@ -161,7 +161,7 @@ function _notebook_cm_script_body()
       function _typesetAll(){if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise().catch(function(){});}else{setTimeout(_typesetAll,500);}}
       setTimeout(_typesetAll,1000);
       // Highlight markdown code blocks (retry until hljs loads from CDN)
-      function _highlightAll(){if(window.hljs){document.querySelectorAll('.md-prose pre code:not(.hljs)').forEach(function(el){hljs.highlightElement(el);});}else{setTimeout(_highlightAll,500);}}
+      function _highlightAll(){if(window.hljs){document.querySelectorAll('.cell-out pre code:not(.hljs)').forEach(function(el){hljs.highlightElement(el);});}else{setTimeout(_highlightAll,500);}}
       setTimeout(_highlightAll,300);
     };
     window._sessionsInitNewCells = window._initAllCM;
@@ -465,7 +465,7 @@ function _notebook_ws_bridge_body()
             el.out.querySelectorAll('script').forEach(function(old){var s=document.createElement('script');s.textContent=old.textContent;old.parentNode.replaceChild(s,old);});
             if(window.__hydrateTherapyIslands)window.__hydrateTherapyIslands(el.out);
             if(window.MathJax&&MathJax.typesetPromise){MathJax.typesetPromise([el.out]).catch(function(){});}
-            if(window.hljs){el.out.querySelectorAll('.md-prose pre code').forEach(function(b){hljs.highlightElement(b);});}
+            if(window.hljs){el.out.querySelectorAll('.cell-out pre code, pre code').forEach(function(b){hljs.highlightElement(b);});}
             if(window._sessionsBuildToc)_sessionsBuildToc();
             if(el.wrap)el.wrap.classList.add('has-output');
           } else if (assigneeHtml) {
@@ -1429,7 +1429,7 @@ function _notebook_island_js()
     // Always start closed on fresh page load (user opens manually)
 
     function getHeaders() {
-      return Array.from(document.querySelectorAll('#nb .md-prose h1, #nb .md-prose h2, #nb .md-prose h3, #nb .md-prose h4'));
+      return Array.from(document.querySelectorAll('#nb .cell-out h1, #nb .cell-out h2, #nb .cell-out h3, #nb .cell-out h4'));
     }
 
     function buildToc() {

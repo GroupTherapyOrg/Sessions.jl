@@ -50,7 +50,7 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
       var toc=document.querySelector('#sessions-toc-widget .sessions-toc-content');
       if(!toc)return;
       function build(){
-        var hs=document.querySelectorAll('.md-prose $(selectors)');
+        var hs=document.querySelectorAll('.cell-out $(selectors)');
         if(!hs.length){toc.innerHTML='<div style="color:#999;font-size:11px;font-style:italic;padding:8px 14px;">No headings</div>';return;}
         var h='';
         hs.forEach(function(el){
