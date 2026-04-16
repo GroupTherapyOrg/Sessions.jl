@@ -16,7 +16,6 @@
 # (Button, Input, Select, etc.) that are also exported in notebook scope.
 
 using UUIDs
-using Dates
 
 # ── Widget protocol (mirrors AbstractPlutoDingetjes.Bonds) ────────
 
@@ -449,40 +448,44 @@ end
 # ─────────────────────────────────────────────────────────────────
 #                          BoundDatePicker
 # ─────────────────────────────────────────────────────────────────
+# Returns an ISO-8601 date string ("YYYY-MM-DD"). Users who want a
+# `Dates.Date` object can wrap with `Date(my_var)` themselves —
+# keeping SessionsUI free of the Dates stdlib dependency.
 
 struct BoundDatePicker <: AbstractWidget
-    default::Union{Missing, Date}
+    default::String                                               # "" = blank, otherwise YYYY-MM-DD
 end
-BoundDatePicker(; default=missing) = BoundDatePicker(default === missing ? missing : Date(default))
+BoundDatePicker(; default::AbstractString="") = BoundDatePicker(String(default))
 
 initial_value(d::BoundDatePicker) = d.default
 possible_values(::BoundDatePicker) = nothing
-transform_value(::BoundDatePicker, val) = val isa AbstractString ? Date(val) : val
-validate_value(::BoundDatePicker, val) = val isa AbstractString && occursin(r"^\d{4}-\d{2}-\d{2}$", val)
+validate_value(::BoundDatePicker, val) = val isa AbstractString &&
+    (isempty(val) || occursin(r"^\d{4}-\d{2}-\d{2}$", val))
 
 function Base.show(io::IO, ::MIME"text/html", d::BoundDatePicker)
-    val_attr = ismissing(d.default) ? "" : """ value="$(d.default)\""""
+    val_attr = isempty(d.default) ? "" : """ value="$(_h(d.default))\""""
     print(io, """<input type="date"$val_attr class="su-date">""")
 end
 
 # ─────────────────────────────────────────────────────────────────
 #                          BoundTimePicker
 # ─────────────────────────────────────────────────────────────────
+# Returns a "HH:MM" or "HH:MM:SS" string.
 
 struct BoundTimePicker <: AbstractWidget
-    default::Union{Missing, Time}
+    default::String                                               # "" = blank
     show_seconds::Bool
 end
-BoundTimePicker(; default=missing, show_seconds::Bool=false) =
-    BoundTimePicker(default === missing ? missing : Time(default), show_seconds)
+BoundTimePicker(; default::AbstractString="", show_seconds::Bool=false) =
+    BoundTimePicker(String(default), show_seconds)
 
 initial_value(t::BoundTimePicker) = t.default
 possible_values(::BoundTimePicker) = nothing
-transform_value(::BoundTimePicker, val) = val isa AbstractString ? Time(val) : val
-validate_value(::BoundTimePicker, val) = val isa AbstractString && occursin(r"^\d{2}:\d{2}", val)
+validate_value(::BoundTimePicker, val) = val isa AbstractString &&
+    (isempty(val) || occursin(r"^\d{2}:\d{2}", val))
 
 function Base.show(io::IO, ::MIME"text/html", t::BoundTimePicker)
-    val_attr = ismissing(t.default) ? "" : """ value="$(t.default)\""""
+    val_attr = isempty(t.default) ? "" : """ value="$(_h(t.default))\""""
     step_attr = t.show_seconds ? """ step="1\"""" : ""
     print(io, """<input type="time"$val_attr$step_attr class="su-time">""")
 end
@@ -561,27 +564,13 @@ const _BOND_REGISTRY = Dict{Symbol, Tuple{Any, Any, UUID}}()
 """Per-cell bond names — tracks which cell defined which bonds."""
 const _CELL_BOND_NAMES = Dict{UUID, Set{Symbol}}()
 
-"""Cell ID currently being executed.
-
-Sessions.jl's run engine writes to `task_local_storage(:sessions_executing_cell, id)`
-before evaluating cell code. The macro reads it from there. In script / REPL mode
-where no cell context exists, it falls back to UUID(0) (a sentinel) — bonds still
-register, they just have no associated cell to invalidate."""
-function _current_cell_id()::UUID
-    cid = get(task_local_storage(), :sessions_executing_cell, nothing)
-    cid isa UUID ? cid : UUID(0)
-end
-
-"""Set the executing cell id for the duration of `f`. Use in the run engine."""
-function with_executing_cell(f, cell_id::UUID)
-    task_local_storage(:sessions_executing_cell, cell_id) do
-        f()
-    end
-end
-
-"""Back-compat global Ref. Sessions.jl historically wrote here directly; setting
-this also seeds the task-local storage so existing call sites keep working."""
+"""Global Ref that Sessions.jl's kernel writes to before evaluating each cell:
+`SessionsUI._EXECUTING_CELL_ID[] = cell.id`. The `@bind` macro reads it via
+`_current_cell_id()` to associate each bond with its defining cell. UUID(0)
+is the sentinel for "no cell context" (plain script / REPL mode)."""
 const _EXECUTING_CELL_ID = Ref(UUID(0))
+
+_current_cell_id()::UUID = _EXECUTING_CELL_ID[]
 
 function _register_bond!(name::Symbol, widget, value, cell_id::UUID)
     _BOND_REGISTRY[name] = (widget, value, cell_id)
@@ -609,17 +598,6 @@ end
 """Get bond names defined by a given cell."""
 function get_bond_names(cell_id::UUID)
     get(_CELL_BOND_NAMES, cell_id, Set{Symbol}())
-end
-
-"""Drop a single bond (e.g. when its defining cell is deleted)."""
-function _drop_bond!(name::Symbol)
-    haskey(_BOND_REGISTRY, name) || return
-    _, _, cell_id = _BOND_REGISTRY[name]
-    delete!(_BOND_REGISTRY, name)
-    if haskey(_CELL_BOND_NAMES, cell_id)
-        delete!(_CELL_BOND_NAMES[cell_id], name)
-        isempty(_CELL_BOND_NAMES[cell_id]) && delete!(_CELL_BOND_NAMES, cell_id)
-    end
 end
 
 function _clear_bonds!()

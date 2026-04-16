@@ -17,11 +17,15 @@ include("widgets.jl")
 # Table of Contents widget
 include("toc.jl")
 
-# User-facing exports
-export @bind, BoundSlider, TableOfContents
+# User-facing exports — widgets that notebook users construct in cells
+export @bind, TableOfContents
+export BoundSlider, BoundNumberField, BoundButton, BoundCounterButton,
+       BoundCheckBox, BoundTextField, BoundPasswordField, BoundSelect,
+       BoundMultiSelect, BoundRadio, BoundRangeSlider, BoundColorPicker,
+       BoundDatePicker, BoundTimePicker, BoundFilePicker, BoundClock
 
-# Internal exports (used by Sessions.jl engine, not by notebook users)
-export AbstractWidget, initial_value, possible_values, validate_value
+# Engine-facing exports — used by Sessions.jl, not by notebook users
+export AbstractWidget, initial_value, transform_value, possible_values, validate_value
 export Bond, set_bond_value!, get_bond_names
 
 end # module
