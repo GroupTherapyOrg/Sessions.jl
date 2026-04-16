@@ -875,32 +875,40 @@ function _handle_set_bond!(state::WebNotebookState, conn, data)
 
     nb = active_nb(state)
     worker = active_worker(state)
-    worker === nothing && return
+    worker === nothing && (@info "[bond] no worker"; return)
     name_sym = Symbol(bond_name)
+
+    @info "[bond] received" name=bond_name raw_value=raw_value raw_type=typeof(raw_value)
 
     @async begin
         state.executing = true
         try
-            # SessionsUI owns widget semantics (validate → transform → assign).
-            # We just receive the cell_id and run downstream from there.
-            cell_id, ok = Malt.remote_eval_fetch(worker.worker,
-                :(Sessions.SessionsUI.apply_bond_update!(_workspace.mod,
-                    $(QuoteNode(name_sym)), $(QuoteNode(raw_value)))))
-            ok || return
-            cell_id === nothing && return
+            cell_id, ok = try
+                Malt.remote_eval_fetch(worker.worker,
+                    :(Sessions.SessionsUI.apply_bond_update!(_workspace.mod,
+                        $(QuoteNode(name_sym)), $(QuoteNode(raw_value)))))
+            catch e
+                @warn "[bond] remote_eval_fetch threw" exception=(e, catch_backtrace())
+                return
+            end
+            @info "[bond] apply_bond_update!" cell_id=cell_id ok=ok
+
+            ok || (@info "[bond] validation failed — no re-run"; return)
+            cell_id === nothing && (@info "[bond] no cell_id"; return)
 
             bond_cell = get(nb.cells, cell_id, nothing)
-            bond_cell === nothing && return
+            bond_cell === nothing && (@info "[bond] cell_id not in notebook" cell_id=cell_id; return)
 
             deps = try
                 downstream_dependents(nb, [bond_cell])
             catch e
-                @warn "[notebook] downstream_dependents failed" exception=e
+                @warn "[bond] downstream_dependents failed" exception=e
                 Cell[]
             end
+            @info "[bond] downstream cells" count=length(deps) ids=[string(c.id) for c in deps]
             isempty(deps) || _execute_cells!(state, deps)
         catch e
-            @warn "[notebook] set_bond error" exception=(e, catch_backtrace())
+            @warn "[bond] outer error" exception=(e, catch_backtrace())
         finally
             state.executing = false
         end
