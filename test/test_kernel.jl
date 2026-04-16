@@ -131,17 +131,17 @@ using UUIDs
         @test c2.state == cell_errored
     end
 
-    @testset "execute_notebook! — loaded fixture" begin
-        nb = load_notebook("test/fixtures/test_basic.jl")
+    @testset "execute_notebook! — inline 3-cell notebook" begin
+        # Built inline rather than loaded from a fixture so test/fixtures/
+        # can stay focused on user-facing demos.
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = add_cell!(nb, "z = x * y")
         Sessions.execute_notebook!(nb)
-
-        cells = ordered_cells(nb)
-        # x = 1
-        @test cells[1].output.result == 1
-        # y = x + 1
-        @test cells[2].output.result == 2
-        # z = x * y
-        @test cells[3].output.result == 2
+        @test c1.output.result == 1
+        @test c2.output.result == 2
+        @test c3.output.result == 2
     end
 
     @testset "execute_changed! — partial re-execution" begin

@@ -134,17 +134,17 @@ using UUIDs
         @test c2.id in ids
     end
 
-    @testset "execution_order from loaded notebook" begin
-        nb = load_notebook("test/fixtures/test_basic.jl")
+    @testset "execution_order — inline 3-cell notebook" begin
+        nb = Notebook()
+        c1 = add_cell!(nb, "x = 1")
+        c2 = add_cell!(nb, "y = x + 1")
+        c3 = add_cell!(nb, "z = x * y")
         result = Sessions.execution_order(nb)
         @test isempty(result.errable)
         @test length(result.runnable) == 3
-
-        cells = ordered_cells(nb)
         ids = [c.id for c in result.runnable]
-        # x=1 must run before y=x+1, and both before z=x*y
-        @test findfirst(==(cells[1].id), ids) < findfirst(==(cells[2].id), ids)
-        @test findfirst(==(cells[2].id), ids) < findfirst(==(cells[3].id), ids)
+        @test findfirst(==(c1.id), ids) < findfirst(==(c2.id), ids)
+        @test findfirst(==(c2.id), ids) < findfirst(==(c3.id), ids)
     end
 
     @testset "downstream_dependents" begin

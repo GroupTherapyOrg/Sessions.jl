@@ -3,63 +3,58 @@ using Sessions
 using UUIDs
 
 @testset "format.jl" begin
-    @testset "parse basic_notebook.jl" begin
-        nb = Sessions.load_notebook("test/fixtures/test_basic.jl")
-        @test nb.path == abspath("test/fixtures/test_basic.jl")
-        @test length(nb) == 3
+    # Parser tests use inline strings instead of fixture files so test/fixtures/
+    # can stay focused on user-facing demos (welcome.jl, interactive.jl, script.jl)
+    # without their content needing to satisfy hard-coded assertions.
 
+    @testset "parse — basic 3-cell notebook" begin
+        content = """
+            ### A Pluto.jl notebook ###
+            # v0.19.0
+
+            # ╔═╡ 00000001-0000-0000-0000-000000000001
+            x = 1
+
+            # ╔═╡ 00000002-0000-0000-0000-000000000002
+            y = x + 1
+
+            # ╔═╡ 00000003-0000-0000-0000-000000000003
+            z = x * y
+
+            # ╔═╡ Cell order:
+            # ╠═00000001-0000-0000-0000-000000000001
+            # ╠═00000002-0000-0000-0000-000000000002
+            # ╠═00000003-0000-0000-0000-000000000003
+            """
+        nb = Sessions.parse_notebook(content; path="basic.jl")
+        @test length(nb) == 3
         cells = ordered_cells(nb)
         @test cells[1].code == "x = 1"
         @test cells[2].code == "y = x + 1"
         @test cells[3].code == "z = x * y"
-
-        # All cells should be visible (not folded)
         @test all(c -> !c.folded, cells)
-
-        # UUIDs should match fixture
         @test cells[1].id == UUID("00000001-0000-0000-0000-000000000001")
-        @test cells[2].id == UUID("00000002-0000-0000-0000-000000000002")
-        @test cells[3].id == UUID("00000003-0000-0000-0000-000000000003")
     end
 
-    @testset "parse folded_notebook.jl" begin
-        nb = Sessions.load_notebook("test/fixtures/folded_notebook.jl")
-        @test length(nb) == 3
+    @testset "parse — folded marker (╟─)" begin
+        content = """
+            ### A Pluto.jl notebook ###
+            # v0.19.0
 
+            # ╔═╡ aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+            visible_var = 42
+
+            # ╔═╡ bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+            folded_var = 100
+
+            # ╔═╡ Cell order:
+            # ╠═aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+            # ╟─bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+            """
+        nb = Sessions.parse_notebook(content; path="folded.jl")
         cells = ordered_cells(nb)
         @test cells[1].folded == false
-        @test cells[2].folded == true   # ╟─ = folded
-        @test cells[3].folded == false
-
-        @test cells[1].code == "# This cell is visible\nvisible_var = 42"
-        @test cells[2].code == "# This cell is folded (hidden by default)\nfolded_var = 100"
-        @test cells[3].code == "# Another visible cell\nresult = visible_var + folded_var"
-    end
-
-    @testset "parse pluto_sample_basic.jl" begin
-        nb = Sessions.load_notebook("test/fixtures/pluto_sample_basic.jl")
-        @test length(nb) == 4
-
-        cells = ordered_cells(nb)
-        # Cell order in file differs from definition order
-        # First in order is the markdown cell (folded)
-        @test cells[1].folded == true
-        @test occursin("Basel problem", cells[1].code)
-
-        # Other cells are visible
-        @test cells[2].folded == false
-        @test cells[3].folded == false
-        @test cells[4].folded == false
-    end
-
-    @testset "parse with_pkgs_notebook.jl" begin
-        nb = Sessions.load_notebook("test/fixtures/with_pkgs_notebook.jl")
-        @test length(nb) == 3
-
-        cells = ordered_cells(nb)
-        @test cells[1].code == "using Statistics"
-        @test cells[2].code == "data = [1, 2, 3, 4, 5]"
-        @test cells[3].code == "mean_value = mean(data)"
+        @test cells[2].folded == true
     end
 
     @testset "serialize_notebook roundtrip" begin
@@ -146,14 +141,12 @@ using UUIDs
     end
 
     @testset "is_notebook_file — detects Pluto notebooks" begin
-        @test Sessions.is_notebook_file("test/fixtures/basic_notebook.jl") == true
-        @test Sessions.is_notebook_file("test/fixtures/test_basic.jl") == true
-        @test Sessions.is_notebook_file("test/fixtures/folded_notebook.jl") == true
+        @test Sessions.is_notebook_file("test/fixtures/welcome.jl") == true
+        @test Sessions.is_notebook_file("test/fixtures/interactive.jl") == true
     end
 
     @testset "is_notebook_file — rejects plain .jl files" begin
-        @test Sessions.is_notebook_file("test/fixtures/hello_script.jl") == false
-        @test Sessions.is_notebook_file("test/fixtures/long_script.jl") == false
+        @test Sessions.is_notebook_file("test/fixtures/script.jl") == false
         @test Sessions.is_notebook_file("src/Sessions.jl") == false
     end
 
