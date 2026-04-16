@@ -50,7 +50,7 @@
     # Inner content has 28px padding on BOTH sides so cells never slam against
     # the panel's right border — the original `padding-left:28px` only fix gave
     # ~25px right margin vs ~48px left, looking visibly squished on narrow panels.
-    return Div(:id => "nb", :class => "flex-1 overflow-y-auto px-5 pt-3 pb-8",
+    return Div(:id => "nb", :class => "flex-1 overflow-y-auto px-5 pt-10 pb-8",
         Div(:style => "max-width:900px;margin:0 auto;padding-left:28px;padding-right:28px;position:relative;",
             children...,
             RawHtml("""<div id="drop-ruler"></div><div id="select-area"></div>""")))

@@ -162,7 +162,8 @@ md"""
 
 Markdown cells can interpolate live Julia with `$(…)`:
 
-The current Julia version is **$(VERSION)**, the day of the week is helo
+The current Julia version is **$(VERSION)**, the day of the week is
+**$(Dates.dayname(Dates.today()))**, and `2 + 2 = $(2 + 2)`.
 """
 
 # ╔═╡ 10000000-0000-0000-0000-00000000000c
