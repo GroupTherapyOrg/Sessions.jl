@@ -49,7 +49,7 @@ function add_2(x)
 end
 
 # ╔═╡ c7d3ba36-6917-4b62-86ef-96badabb0e3c
-# This is stale and so is this 
+# This is stale and so is this
 
 # ╔═╡ 4eeecaeb-7813-4abc-8ed3-8a98d6a29e69
 add_2(20) #this stale

@@ -234,7 +234,7 @@ function _notebook_ws_bridge_body()
 
     // ── Cell execution timer ──
     var _cellTimers = {};
-    function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var t0=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;color:#7bb8e8;opacity:.9;background:rgba(123,184,232,.08);border:1px solid rgba(123,184,232,.15);'; badge.textContent='0.0s'; var iv=setInterval(function(){badge.textContent=fmtSeconds((performance.now()-t0)/1000);},100); _cellTimers[cellId]={interval:iv}; }
+    function startCellTimer(cellId, el) { stopCellTimer(cellId); if(!el||!el.ctrls)return; var t0=performance.now(); var badge=el.ctrls.querySelector('.rt-badge'); if(!badge){badge=document.createElement('span');badge.className='rt-badge';el.ctrls.insertBefore(badge,el.ctrls.firstChild);} badge.style.cssText=''; badge.textContent='0.0s'; var iv=setInterval(function(){badge.textContent=fmtSeconds((performance.now()-t0)/1000);},100); _cellTimers[cellId]={interval:iv}; }
     function stopCellTimer(cellId) { var t=_cellTimers[cellId]; if(t){clearInterval(t.interval);delete _cellTimers[cellId];} }
     function setCellState(el,state,cellId) {
       if(!el)return;
@@ -242,6 +242,15 @@ function _notebook_ws_bridge_body()
       if(el.code){el.code.classList.remove('idle','stale','executing');if(state==='cell_queued'||state==='cell_running'){el.code.classList.add('executing');if(state==='cell_running'&&cellId)startCellTimer(cellId,el);}else{if(cellId)stopCellTimer(cellId);}}
       // Apply state to cell-wrap (CSS targets .cell-wrap.wrap-* .code-cell)
       if(el.wrap){el.wrap.classList.remove('wrap-queued','wrap-running','wrap-done','wrap-errored','wrap-skipped');if(state==='cell_queued')el.wrap.classList.add('wrap-queued');else if(state==='cell_running')el.wrap.classList.add('wrap-running');else if(state==='cell_errored')el.wrap.classList.add('wrap-errored');else if(state==='cell_skipped')el.wrap.classList.add('wrap-skipped');}
+    }
+
+    // ── Footer cell-count helper (delta-based) ──
+    function _bumpCellCount(delta) {
+      var el = document.getElementById('cell-count'); if (!el) return;
+      var m = (el.textContent || '').match(/(\\d+)/);
+      var n = m ? parseInt(m[1], 10) : 0;
+      var next = Math.max(0, n + delta);
+      el.textContent = next + ' cells';
     }
 
     // ── Find gap after a cell (or first gap if null) ──
@@ -486,8 +495,7 @@ function _notebook_ws_bridge_body()
         if (el.ctrls && data.runtime_ns && data.runtime_ns > 0) {
           var old = el.ctrls.querySelector('.rt-badge'); if(old)old.remove();
           var badge=document.createElement('span'); badge.className='rt-badge';
-          var isErr=data.state==='cell_errored'; var c=isErr?'var(--status-error)':'var(--status-done)';
-          badge.style.cssText='font-size:10px;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:9999px;opacity:.8;color:'+c+';';
+          if (data.state==='cell_errored') badge.style.color='var(--status-error)';
           badge.textContent=fmtRuntime(data.runtime_ns); el.ctrls.insertBefore(badge,el.ctrls.firstChild);
         }
       }
@@ -504,6 +512,7 @@ function _notebook_ws_bridge_body()
           var gap = gapAfter(data.after_cell_id);
           if (gap) insertHtmlAfterGap(gap, data.cell_html);
         }
+        _bumpCellCount(1);
       }
 
       // ── Cell deleted (already removed optimistically, just confirm) ──
@@ -519,6 +528,7 @@ function _notebook_ws_bridge_body()
           var toast=document.getElementById('undo-toast');
           if(toast){toast.classList.add('show');if(window._undoToastTimer)clearTimeout(window._undoToastTimer);window._undoToastTimer=setTimeout(function(){toast.classList.remove('show');window._recentlyDeleted=null;},8000);}
         }
+        _bumpCellCount(-1);
       }
 
       // ── Cell moved (already moved optimistically, just confirm) ──
@@ -741,6 +751,9 @@ function _notebook_ws_bridge_body()
           var nbIsland=document.getElementById('nb-island');
           if(nbIsland){nbIsland.outerHTML=data.nb_html;if(window._initAllCM)_initAllCM();if(window.__hydrateTherapyIslands){var newNb=document.getElementById('nb-island');if(newNb)window.__hydrateTherapyIslands(newNb);}}
         }
+        // Sync footer cell count to the active notebook
+        var ccEl=document.getElementById('cell-count');
+        if(ccEl && typeof data.total_cells==='number'){ ccEl.textContent=data.total_cells+' cells'; }
         var lo=document.getElementById('nb-loading');if(lo){lo.classList.add('loaded');setTimeout(function(){lo.remove();},400);}
         // Re-init ToC after tab switch (DOM was replaced)
         if(window._sessionsReinitToc) setTimeout(_sessionsReinitToc, 300);
@@ -759,49 +772,80 @@ function _notebook_island_js()
   // (Code fold is handled by CellToggle @island + MutationObserver — no JS fallback needed)
 
   var _cellMenu = null;
+  var _cellMenuBtn = null;
+  function _closeCellMenu() {
+    if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; }
+    if (_cellMenuBtn) { _cellMenuBtn.removeAttribute('data-open'); _cellMenuBtn = null; }
+  }
+  // Monochrome-stroke icons (1.2px) — match the warm muted palette
+  var _icoUp     = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M4 7l4-4 4 4"/></svg>';
+  var _icoDown   = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg>';
+  var _icoLogs   = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M5 8h6"/></svg>';
+  var _icoPause  = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="2.5" height="10" rx="0.6"/><rect x="9.5" y="3" width="2.5" height="10" rx="0.6"/></svg>';
+  var _icoPlay   = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v10l8-5-8-5z"/></svg>';
+  var _icoFormat = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M5 8h8M3 12h10"/></svg>';
+  var _icoTrash  = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6 4.5V3a1 1 0 011-1h2a1 1 0 011 1v1.5M5 4.5v8a1 1 0 001 1h4a1 1 0 001-1v-8"/></svg>';
+
   window._sessionsShowCellMenu = function(btn, cellId) {
-    if (_cellMenu) { _cellMenu.remove(); _cellMenu = null; return; }
+    if (_cellMenu && _cellMenuBtn === btn) { _closeCellMenu(); return; }
+    _closeCellMenu();
+    _cellMenuBtn = btn;
+    btn.setAttribute('data-open','1');
     var rect = btn.getBoundingClientRect();
     _cellMenu = document.createElement('div');
-    _cellMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--cell-border-hov,var(--cell-border));border-radius:8px;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,.3);overflow:hidden;padding:4px 0;top:'+(rect.bottom+4)+'px;right:'+(window.innerWidth-rect.right)+'px;';
-    // Detect current cell state for toggle labels
+    _cellMenu.className = 'cell-menu';
+    // Place off-screen first so we can measure, then reposition with viewport
+    // bounds: prefer below; flip above when it'd overflow; clamp horizontally.
+    _cellMenu.style.top = '-9999px';
+    _cellMenu.style.left = '-9999px';
+    _cellMenu.style.right = 'auto';
+
     var wrap = document.querySelector('.cell-wrap[data-cell-id="'+cellId+'"]');
     var logsEl = wrap ? wrap.querySelector('.cell-logs') : null;
     var logsVisible = logsEl && logsEl.style.display !== 'none';
     var isDisabled = wrap ? wrap.classList.contains('cell-disabled') : false;
 
     var actions = [
-      {label:'Move Up', icon:'\\u2191', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'up'); }},
-      {label:'Move Down', icon:'\\u2193', action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
+      {label:'Move up',   icon:_icoUp,    action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'up'); }},
+      {label:'Move down', icon:_icoDown,  action:function(){ window._sessionsMoveCell && _sessionsMoveCell(cellId,'down'); }},
       {sep:true},
-      {label:logsVisible?'Hide Logs':'Show Logs', icon:'\\u{1F4CB}', action:function(){
+      {label:logsVisible?'Hide logs':'Show logs', icon:_icoLogs, action:function(){
         var newVisible = !logsVisible;
         if(logsEl){logsEl.style.display=newVisible?'':'none';logsEl.dataset.showLogs=newVisible?'1':'0';}
         TherapyWS.sendMessage('notebook',{action:'toggle_show_logs',cell_id:cellId,show_logs:newVisible});
       }},
-      {label:isDisabled?'Enable Cell':'Disable Cell', icon:isDisabled?'\\u25B6':'\\u23F8', action:function(){
+      {label:isDisabled?'Enable cell':'Disable cell', icon:isDisabled?_icoPlay:_icoPause, action:function(){
         TherapyWS.sendMessage('notebook',{action:'toggle_disable',cell_id:cellId,disabled:!isDisabled});
         if(wrap){wrap.classList.toggle('cell-disabled');}
       }},
       {sep:true},
-      {label:'Format', icon:'\\u2728', action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
+      {label:'Format', icon:_icoFormat, action:function(){TherapyWS.sendMessage('notebook',{action:'format_cell',cell_id:cellId})}},
       {sep:true},
-      {label:'Delete', icon:'\\u2715', danger:true, action:function(){ if(confirm('Delete this cell?')){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); } }}
+      {label:'Delete', icon:_icoTrash, danger:true, action:function(){ if(confirm('Delete this cell?')){ window._sessionsDeleteCell && _sessionsDeleteCell(cellId); } }}
     ];
     actions.forEach(function(a) {
-      if (a.sep) { var sep=document.createElement('div');sep.style.cssText='height:1px;background:var(--divider);margin:4px 8px;';_cellMenu.appendChild(sep);return; }
+      if (a.sep) { var sep=document.createElement('div'); sep.className='cell-menu-sep'; _cellMenu.appendChild(sep); return; }
       var item = document.createElement('div');
-      item.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;color:var(--text-2);font-family:ui-monospace,monospace;transition:background .1s,color .1s;';
-      item.innerHTML = '<span style="width:14px;text-align:center;">'+a.icon+'</span>'+a.label;
-      item.addEventListener('mouseenter', function(){item.style.background=a.danger?'rgba(220,53,69,.1)':'rgba(128,128,128,.08)';item.style.color=a.danger?'var(--status-error)':'var(--text-1)';});
-      item.addEventListener('mouseleave', function(){item.style.background='';item.style.color='var(--text-2)';});
-      item.onclick = function(){a.action();_cellMenu.remove();_cellMenu=null;};
+      item.className = 'cell-menu-item' + (a.danger ? ' danger' : '');
+      item.innerHTML = a.icon + '<span>' + a.label + '</span>';
+      item.onclick = function(){ a.action(); _closeCellMenu(); };
       _cellMenu.appendChild(item);
     });
     document.body.appendChild(_cellMenu);
+    // Position with viewport bounds: prefer below, flip above when overflow.
+    var menuRect = _cellMenu.getBoundingClientRect();
+    var pad = 6;
+    var spaceBelow = window.innerHeight - rect.bottom - pad;
+    var spaceAbove = rect.top - pad;
+    var openAbove = menuRect.height > spaceBelow && spaceAbove > spaceBelow;
+    var top = openAbove ? Math.max(pad, rect.top - menuRect.height - 4) : (rect.bottom + 4);
+    var left = Math.min(rect.right - menuRect.width, window.innerWidth - menuRect.width - pad);
+    left = Math.max(pad, left);
+    _cellMenu.style.top = top + 'px';
+    _cellMenu.style.left = left + 'px';
   };
   document.addEventListener('click', function(e) {
-    if (_cellMenu && !_cellMenu.contains(e.target) && !e.target.closest('.menu-btn')) { _cellMenu.remove(); _cellMenu = null; }
+    if (_cellMenu && !_cellMenu.contains(e.target) && !e.target.closest('.menu-btn')) _closeCellMenu();
   });
 
   // ── CellGap hover ──
@@ -1315,6 +1359,9 @@ function _notebook_island_js()
           }, 50);
         }
       }
+      // Sync footer cell count to the active notebook
+      var ccEl = document.getElementById('cell-count');
+      if (ccEl && typeof d.total_cells === 'number') { ccEl.textContent = d.total_cells + ' cells'; }
       // Remove loading overlay if present
       var lo = document.getElementById('nb-loading');
       if (lo) { lo.classList.add('loaded'); setTimeout(function(){ lo.remove(); }, 400); }

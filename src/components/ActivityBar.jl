@@ -40,8 +40,8 @@ const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
         """, v)
     end)
 
-    return Div(:class => "flex flex-col items-center gap-1 py-2 w-[42px] shrink-0 self-start rounded-xl",
-        :style => "background:var(--panel-bg);border:1px solid var(--cell-border);",
+    return Div(:class => "flex flex-col items-center w-[42px] shrink-0 self-start rounded-xl",
+        :style => "background:var(--panel-bg);border:1px solid var(--cell-border);padding:8px 0 12px;gap:6px;",
 
         Div(:class => "flex items-center justify-center w-8 h-8 mb-2",
             RawHtml(_SESSIONS_LOGO_SVG)),

@@ -114,28 +114,164 @@ function _wrap_latex_for_mathjax(html::AbstractString)
     html
 end
 
-"""Render a StructuredError as rich HTML with collapsible stack trace."""
+"""Wrap text between backticks (`...`) in <code>...</code> for inline code styling.
+Also recognises common identifier patterns Julia emits without backticks."""
+function _wrap_inline_code(text::AbstractString)::String
+    # Backtick-delimited spans become <code>...</code>.
+    parts = String[]
+    last_end = 0  # byte index of last consumed position (0 = nothing consumed yet)
+    for m in eachmatch(r"`([^`]+)`", text)
+        if m.offset > last_end + 1
+            push!(parts, _html_esc(text[(last_end+1):(m.offset-1)]))
+        end
+        push!(parts, """<code class="jl-inline">$(_html_esc(String(m.captures[1])))</code>""")
+        last_end = m.offset + ncodeunits(m.match) - 1
+    end
+    if last_end < ncodeunits(text)
+        push!(parts, _html_esc(text[(last_end+1):end]))
+    end
+    isempty(parts) && return _html_esc(text)
+    return join(parts)
+end
+
+"""Try to split a structured error into (wrap_type, specific_type, body, suggestion).
+Returns (wrap, inner, msg, suggestion) where wrap may be empty string."""
+function _split_error_parts(se::StructuredError)
+    type_name = se.type_name
+    message = se.message
+
+    wrap_types = ("LoadError", "InitError", "TaskFailedException", "CompositeException")
+
+    # Strip "in expression starting at ..." trailer Julia appends to LoadError.
+    body = strip(replace(message, r"\nin expression starting at .*$"s => ""))
+
+    # showerror output for wrappers usually duplicates the type as a leading
+    # "TypeName: " prefix on the message — strip that first.
+    pref = "$(type_name): "
+    startswith(body, pref) && (body = body[(length(pref)+1):end])
+
+    wrap_type = ""
+    specific_type = type_name
+
+    # If the outer type is a known wrapper, iteratively peel inner wrappers off
+    # the body until we land on the real cause. Without this, nested
+    # `LoadError: LoadError: UndefVarError: …` would yield wrap=LoadError and
+    # specific=LoadError (a visible duplicate).
+    if type_name in wrap_types
+        wrap_type = type_name
+        body = strip(body)
+        while true
+            m = match(r"^([A-Za-z_][A-Za-z0-9_\.]*(?:Error|Exception)):\s*(.*)"s, body)
+            m === nothing && break
+            captured = String(m.captures[1])
+            captured_short = replace(captured, r"^(?:Base\.Meta\.|Base\.|Core\.)" => "")
+            if captured_short in wrap_types
+                body = strip(String(m.captures[2]))
+                continue
+            end
+            specific_type = captured_short
+            body = strip(String(m.captures[2]))
+            break
+        end
+    end
+
+    # Strip a redundant leading "ErrorType: " prefix if it duplicates specific_type.
+    pref2 = "$(specific_type): "
+    startswith(body, pref2) && (body = body[(length(pref2)+1):end])
+
+    # Pull out an actionable suggestion if present. Julia commonly emits these as:
+    #   - Run `import Pkg; Pkg.add(...)` to install...
+    #   - Hint: ...
+    # We split on the first matching newline + bullet/hint and treat that line
+    # (and anything after it) as the suggestion.
+    suggestion = ""
+    lines = split(body, '\n')
+    sug_idx = 0
+    for (i, ln) in enumerate(lines)
+        s = strip(ln)
+        if startswith(s, "- ") || startswith(s, "Hint:") || startswith(s, "Suggestion:") ||
+           occursin(r"^Run\s+`"i, s)
+            sug_idx = i
+            break
+        end
+    end
+    if sug_idx > 0
+        sug_lines = lines[sug_idx:end]
+        # Strip leading bullet/marker on each suggestion line for cleaner display.
+        cleaned = String[]
+        for ln in sug_lines
+            s = String(strip(ln))
+            s = replace(s, r"^-\s+" => "")
+            s = replace(s, r"^(?:Hint|Suggestion)\s*:\s*"i => "")
+            isempty(s) && continue
+            push!(cleaned, s)
+        end
+        suggestion = join(cleaned, " ")
+        body = strip(join(lines[1:sug_idx-1], '\n'))
+    end
+
+    body = strip(body)
+    isempty(body) && (body = message)
+
+    return (wrap_type, specific_type, String(body), String(suggestion))
+end
+
+"""A frame is 'user-relevant' if it's clearly user code, top-level execution scope,
+or one of the Sessions.jl entry points the notebook reaches through."""
+function _is_user_relevant_frame(frame::StructuredFrame)::Bool
+    frame.from_user && return true
+    func_low = lowercase(frame.func)
+    occursin("top-level scope", func_low) && return true
+    occursin("_worker_execute", func_low) && return true
+    occursin(r"sessions[^/\\]*\.jl"i, frame.file) && return true
+    return false
+end
+
+"""Render a StructuredError as rich HTML with collapsible stack trace.
+Layout: header (wrap badge + specific type), message with inline code,
+optional amber suggestion card, then a collapsed-by-default stack trace."""
 function _render_structured_error_html(se::StructuredError)
+    wrap_type, specific_type, body, suggestion = _split_error_parts(se)
+
     buf = IOBuffer()
     print(buf, """<div class="jl-error">""")
-    print(buf, """<div class="jl-error-header">""", _html_esc(se.type_name), "</div>")
-    print(buf, """<div class="jl-error-message">""", _html_esc(se.message), "</div>")
+    print(buf, """<div class="jl-error-content">""")
 
+    # Header: [wrap badge] specific-type-text
+    print(buf, """<div class="jl-error-header">""")
+    if !isempty(wrap_type)
+        print(buf, """<span class="jl-error-badge">""", _html_esc(wrap_type), "</span>")
+        print(buf, """<span class="jl-error-type">""", _html_esc(specific_type), "</span>")
+    else
+        print(buf, """<span class="jl-error-badge">""", _html_esc(specific_type), "</span>")
+    end
+    print(buf, "</div>")
+
+    # Message with inline-code-wrapped backtick spans
+    print(buf, """<div class="jl-error-message">""", _wrap_inline_code(body), "</div>")
+
+    # Optional amber suggestion card
+    if !isempty(suggestion)
+        print(buf, """<div class="jl-error-suggestion">""")
+        print(buf, """<span class="jl-error-suggestion-icon" aria-hidden="true">!</span>""")
+        print(buf, """<span>""", _wrap_inline_code(suggestion), "</span>")
+        print(buf, "</div>")
+    end
+
+    print(buf, "</div>")  # /jl-error-content
+
+    # Collapsed-by-default stack trace
     if !isempty(se.frames)
         n_visible = length(se.frames)
-        n_important = count(f -> f.importance == :important, se.frames)
-        summary_text = "Stack trace ($(n_visible) frames"
+        summary_text = "Stack trace ($(n_visible) frame$(n_visible == 1 ? "" : "s"))"
         se.hidden_frame_count > 0 && (summary_text *= ", $(se.hidden_frame_count) hidden")
-        summary_text *= ")"
 
-        # Auto-open if few frames, closed if many
-        open_attr = n_visible <= 8 ? " open" : ""
-        print(buf, """<details class="jl-error-stacktrace"$(open_attr)>""")
-        print(buf, "<summary>", summary_text, "</summary>")
+        print(buf, """<details class="jl-error-stacktrace">""")
+        print(buf, """<summary><span class="jl-error-stack-arrow"></span>""", summary_text, "</summary>")
         print(buf, "<ol>")
         for (i, frame) in enumerate(se.frames)
             cls = string(frame.importance)
-            frame.from_user && (cls *= " user-frame")
+            _is_user_relevant_frame(frame) && (cls *= " user-frame")
             print(buf, """<li class="jl-frame $(cls)" title="$(_html_esc(frame.func))">""")
             print(buf, """<span class="jl-frame-idx">$(i)</span>""")
             print(buf, """<span class="jl-frame-func">""", _html_esc(frame.func_short), "</span>")
@@ -1000,30 +1136,21 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     # =======================================================================
     ctrl_children = Any[]
     if !isempty(runtime_str)
-        if mode == :static
-            push!(ctrl_children, Span(:class => "rt-badge", runtime_str))
-        else
-            push!(ctrl_children,
-                Span(:class => "rt-badge text-[10px] font-mono px-[7px] py-px rounded-full",
-                    :style => "color:#56d4a0;opacity:.8;background:rgba(86,212,160,.08);border:1px solid rgba(86,212,160,.12)",
-                    runtime_str))
-        end
+        push!(ctrl_children, Span(:class => "rt-badge", runtime_str))
     end
     if mode == :live
         push!(ctrl_children,
-            Therapy.Button(:class => "run-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-jg hover:brightness-125",
-                :style => "background:rgba(86,212,160,.1)",
+            Therapy.Button(:class => "ctrl-btn run-btn",
                 :title => "Run cell (Shift+Enter)",
                 :on_click => "window._sessionsRunCell('$(cell_id)')",
                 RawHtml(_SVG_RUN)))
         push!(ctrl_children,
-            Therapy.Button(:class => "menu-btn w-[22px] h-[22px] flex items-center justify-center rounded-full border-0 cursor-pointer text-t4 hover:text-t3",
-                :style => "background:rgba(255,255,255,.04)",
+            Therapy.Button(:class => "ctrl-btn menu-btn",
                 :title => "Cell actions",
                 :on_click => "window._sessionsShowCellMenu(this,'$(cell_id)')",
                 RawHtml(_SVG_MENU)))
     end
-    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center gap-1.5 z-10",
+    ctrls = Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
         ctrl_children...)
 
     # =======================================================================
@@ -1032,7 +1159,12 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     cls = "code-cell relative overflow-hidden"
     if mode == :live
         cell.state == cell_idle && (cls *= " idle")
-        is_stale(cell) && (cls *= " stale")
+        # Match stale_cells() semantics: never-run cells with code are visually
+        # equivalent to stale (both need a run). Without this, externally-added
+        # cells render without the amber depth treatment even though the
+        # run-stale counter includes them.
+        needs_run = is_stale(cell) || (is_never_run(cell) && !isempty(strip(cell.code)))
+        needs_run && (cls *= " stale")
     end
     code_cell_classes = cls
 
@@ -1074,6 +1206,9 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0,
     cell.folded && (wrap_cls *= " code-hidden")
     has_visible_output = output.output_type != :nothing && !isempty(output.text_representation)
     has_visible_output && (wrap_cls *= " has-output")
+    # Seed the depth-state class for SSR so errored cells render lifted on first
+    # paint (the WS bridge keeps it in sync afterwards).
+    cell.state == cell_errored && (wrap_cls *= " wrap-errored")
     # .cell-body wraps the visual contents so running/stale states can translate
     # the whole block as a unit while the shadow pseudo-element on .cell-wrap
     # stays fixed beneath.
@@ -1344,14 +1479,14 @@ const NOTEBOOK_CSS = """/* Cell chrome — light defaults, dark overrides */
 /* code-cell left accent bar removed — traffic light on cell-wrap */
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
-.rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#219669;opacity:.8;background:rgba(33,150,105,.08);border:1px solid rgba(33,150,105,.12);}
+.rt-badge{font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;color:#B5A898;background:transparent;border:none;padding:0;}
 .cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
 .cell-wrap:hover .cell-eye{opacity:1;}
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
 .cell-eye:hover svg{color:#219669;}
 /* Cell chrome — dark overrides (accent bar only, bg/border use CSS vars) */
 /* dark code-cell ::before removed — traffic light on cell-wrap */
-.dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
+.dark .rt-badge{color:#7A7A8E;background:transparent;border:none;}
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
 .cell-out{overflow-x:auto;}

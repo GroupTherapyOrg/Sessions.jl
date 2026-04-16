@@ -217,8 +217,17 @@ function _handle_list_dir!(state, conn, data)
     rel_path = get(data, "path", "")
     root_dir = _get_explorer_root(state)
     full_path = _safe_path(root_dir, rel_path)
-    full_path === nothing && return
-    isdir(full_path) || return
+
+    # Always send a response so the client's lazy-load spinner can be cleared.
+    # Empty children_html on invalid path tells JS to remove the lazy attr.
+    if full_path === nothing || !isdir(full_path)
+        _files_broadcast!(Dict(
+            "event" => "dir_contents",
+            "path" => rel_path,
+            "children_html" => ""
+        ))
+        return
+    end
 
     children = _build_tree_recursive(full_path, root_dir, 0, 1)
 
@@ -230,7 +239,9 @@ function _handle_list_dir!(state, conn, data)
         write(children_html, _render_tree_item_html(child, active_rel; root_dir=root_dir))
     end
 
-    _files_send!(conn, Dict(
+    # Broadcast (not send-to-conn) so the right tree element sees it even if
+    # the FileExplorer's WS handler holds a stale conn reference after reload.
+    _files_broadcast!(Dict(
         "event" => "dir_contents",
         "path" => rel_path,
         "children_html" => String(take!(children_html))

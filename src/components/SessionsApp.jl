@@ -30,12 +30,9 @@ function SessionsApp(children...)
                 Div(:id => "fpanel",
                     :class => "rounded-xl flex flex-col overflow-hidden shrink-0",
                     :style => "width:234px;max-height:100%;display:none;background:var(--panel-bg);border:1px solid var(--cell-border);",
-                    Div(:class => "flex items-center justify-between px-3 shrink-0",
-                        :style => "height:38px;border-bottom:1px solid var(--divider);",
-                        Span(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);", "Explorer"),
-                        Span(:style => "font-size:9px;color:var(--text-3);font-family:'JetBrains Mono',monospace;", "\u2318B")),
-                    Div(:class => "explorer-loading", :id => "explorer-loading",
-                        Span(:class => "dot-pulse"), Span(:class => "dot-pulse"), Span(:class => "dot-pulse")),
+                    Div(:class => "flex items-center shrink-0",
+                        :style => "height:42px;padding:0 14px;border-bottom:1px solid var(--divider);",
+                        Span(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3);", "Explorer")),
                     FileExplorer()),
 
                 # Editor Area (notebook/file + terminal)
@@ -76,11 +73,6 @@ function SessionsApp(children...)
         props.initial_terminal = rp === '1' ? 1 : 0;
         ab.dataset.props = JSON.stringify(props);
     }
-
-    customElements.whenDefined('sl-tree').then(function() {
-        var loader = document.getElementById('explorer-loading');
-        if (loader) loader.style.display = 'none';
-    });
 
     // ── Restore saved panel sizes ──
     var savedW = localStorage.getItem('sessions-explorer-w');

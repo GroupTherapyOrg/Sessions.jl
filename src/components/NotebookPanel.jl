@@ -10,6 +10,7 @@
 const _SVG_JL_WORDMARK = """<svg width="12" height="12" viewBox="0 0 20 20"><circle cx="10" cy="6" r="2.8" fill="#e06b65"/><circle cx="5.5" cy="14" r="2.8" fill="#56d4a0"/><circle cx="14.5" cy="14" r="2.8" fill="#b08fd8"/></svg>"""
 const _SVG_RUN_SMALL = """<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""
 const _SVG_FILE_ICON = """<svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M5 2h7l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2"/><path d="M12 2v4h4" stroke="currentColor" stroke-width="1.2"/></svg>"""
+const _SVG_TAB_CLOSE = """<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2.5 2.5L7.5 7.5M7.5 2.5L2.5 7.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>"""
 
 function NotebookPanel(state)
     _Sess = Main.Sessions
@@ -42,25 +43,24 @@ function NotebookPanel(state)
         is_jl = endswith(tab_name, ".jl")
         icon_svg = is_jl ? _SVG_JL_WORDMARK : _SVG_FILE_ICON
 
+        close_btn = Span(:class => "tab-close",
+            :on_click => "event.stopPropagation();if(confirm('Close?')){window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})}",
+            RawHtml(_SVG_TAB_CLOSE))
         if is_active
             push!(tab_views, Div(
-                :class => "tab active relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer",
-                :style => "color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);",
+                :class => "tab active relative flex items-center gap-2 font-mono text-xs cursor-pointer",
+                :style => "padding-left:16px;padding-right:16px;color:var(--text-1);background:var(--chrome-active);border-right:1px solid var(--divider);",
                 :on_click => "TherapyWS.sendMessage('notebook',{action:'switch_tab',tab_idx:$(i)})",
                 RawHtml(icon_svg), tab_name,
                 Span(:style => "width:5px;height:5px;border-radius:50%;background:var(--accent);"),
-                Span(:style => "font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;",
-                    :on_click => "event.stopPropagation();if(confirm('Close?')){window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})}",
-                    "\u00d7")))
+                close_btn))
         else
             push!(tab_views, Div(
-                :class => "tab relative flex items-center gap-1.5 px-3.5 font-mono text-xs cursor-pointer",
-                :style => "color:var(--text-3);border-right:1px solid var(--divider);",
+                :class => "tab relative flex items-center gap-2 font-mono text-xs cursor-pointer",
+                :style => "padding-left:16px;padding-right:16px;color:var(--text-3);border-right:1px solid var(--divider);",
                 :on_click => "window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'switch_tab',tab_idx:$(i)})",
                 RawHtml(icon_svg), tab_name,
-                Span(:style => "font-size:14px;color:var(--text-3);margin-left:2px;cursor:pointer;",
-                    :on_click => "event.stopPropagation();if(confirm('Close?')){window._sessionsShowLoading&&_sessionsShowLoading();TherapyWS.sendMessage('notebook',{action:'close_tab',tab_idx:$(i)})}",
-                    "\u00d7")))
+                close_btn))
         end
     end
     push!(tab_items, Div(:style => "display:flex;overflow-x:auto;max-width:55%;flex-shrink:1;min-width:0;",
@@ -120,7 +120,7 @@ function NotebookPanel(state)
         Div(:class => "nb-pill", pill_children...)))
 
     tab_bar = Div(:class => "h-[38px] flex items-stretch shrink-0",
-        :style => "background:var(--chrome-bg);border-bottom:1px solid var(--divider);border-radius:12px 12px 0 0;",
+        :style => "background:var(--chrome-bg);border-radius:12px 12px 0 0;",
         tab_items...)
 
     # ═══════════════════════════════════════════════════════════

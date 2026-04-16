@@ -136,7 +136,7 @@
 .code-cell:hover{border-color:var(--cell-border-hov);}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
-.rt-badge{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;padding:1px 7px;border-radius:9999px;color:#219669;opacity:.8;background:rgba(33,150,105,.08);border:1px solid rgba(33,150,105,.12);}
+.rt-badge{font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;padding:0;border-radius:0;color:#B5A898;background:transparent;border:none;opacity:1;}
 .cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
 .cell-wrap:hover .cell-eye{opacity:1;}
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
@@ -160,7 +160,7 @@
    box-shadow on .cell-body — drawn OUTSIDE the border-box, so it physically
    cannot bleed through transparent cell content. Completed cells have no
    transform and no box-shadow, so visually identical to a plain cell. */
-.cell-wrap{position:relative;padding-bottom:5px;padding-right:5px;}
+.cell-wrap{position:relative;padding-top:5px;padding-bottom:5px;padding-right:5px;}
 .cell-body{position:relative;border-radius:8px;transform:translate(0,0);transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .3s ease;}
 .cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:14px !important;padding-bottom:0 !important;margin-bottom:-1px;}
 
@@ -173,7 +173,38 @@
 .cell-wrap.selected .code-cell{border-color:var(--accent);}
 #select-area{position:absolute;background:rgba(212,117,154,.15);border:1px solid rgba(212,117,154,.3);border-radius:3px;z-index:100;pointer-events:none;display:none;}
 
-.dark .rt-badge{color:#56d4a0;background:rgba(86,212,160,.08);border-color:rgba(86,212,160,.12);}
+.dark .rt-badge{color:#7A7A8E;background:transparent;border:none;}
+
+/* ── Cell action bar (.cell-ctrls): minimal ghost — sits absolutely in the
+   top-right of the code cell. Uses an opaque background matching --cell-bg
+   plus a left-side blurred shadow so long code lines fade out behind the
+   controls instead of bleeding through them. */
+.cell-ctrls{padding:2px 4px;background:var(--cell-bg);border:none;gap:4px;border-radius:6px;box-shadow:-12px 0 14px 4px var(--cell-bg);}
+.cell-ctrls .ctrl-btn{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:6px;color:#9B8F82;cursor:pointer;padding:0;transition:background .12s,color .12s;}
+.cell-ctrls .ctrl-btn:hover{background:rgba(0,0,0,.05);color:#6B4C3B;}
+.cell-ctrls .ctrl-btn[data-open="1"]{background:rgba(0,0,0,.05);color:#6B4C3B;}
+.cell-ctrls .ctrl-btn svg{width:13px;height:13px;display:block;}
+.dark .cell-ctrls .ctrl-btn{color:#6B6A7A;}
+.dark .cell-ctrls .ctrl-btn:hover{background:rgba(255,255,255,.05);color:#C7BEAD;}
+.dark .cell-ctrls .ctrl-btn[data-open="1"]{background:rgba(255,255,255,.05);color:#C7BEAD;}
+
+/* ── Cell action menu dropdown ── */
+.cell-menu{position:fixed;z-index:9999;background:#FFFFFF;border:1px solid rgba(0,0,0,.08);border-radius:10px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;font-family:'DM Sans',system-ui,sans-serif;}
+.cell-menu-item{display:flex;align-items:center;gap:10px;padding:7px 10px;font-size:13px;cursor:pointer;color:#6B4C3B;border-radius:7px;transition:background .1s,color .1s;}
+.cell-menu-item:hover{background:#F0EBE4;}
+.cell-menu-item svg{width:14px;height:14px;color:#9B8F82;flex-shrink:0;}
+.cell-menu-item.danger{color:#993C1D;}
+.cell-menu-item.danger svg{color:#993C1D;}
+.cell-menu-item.danger:hover{background:#FAECE7;}
+.cell-menu-sep{height:1px;background:rgba(0,0,0,.06);margin:3px 8px;}
+.dark .cell-menu{background:#282A3A;border-color:rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.dark .cell-menu-item{color:#C7BEAD;}
+.dark .cell-menu-item svg{color:#6B6A7A;}
+.dark .cell-menu-item:hover{background:#353749;}
+.dark .cell-menu-item.danger{color:#F09595;}
+.dark .cell-menu-item.danger svg{color:#F09595;}
+.dark .cell-menu-item.danger:hover{background:rgba(240,149,149,.1);}
+.dark .cell-menu-sep{background:rgba(255,255,255,.06);}
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
 .dark .cell-wrap:hover .cell-shoulder{background:rgba(255,255,255,.04);}
@@ -273,27 +304,62 @@
 .dark .sst-more{color:#6b7d93;border-bottom-color:rgba(42,58,79,.3);}
 .dark .sst-more:hover{color:#56d4a0;}
 
-/* ── Structured Errors ── */
-.jl-error{font-family:'JetBrains Mono',monospace;font-size:13px;border:2px solid var(--status-error);border-radius:8px;overflow:hidden;background:rgba(220,53,69,.04);}
-.jl-error-header{padding:10px 14px 2px;font-weight:700;color:var(--status-error);font-size:14px;}
-.jl-error-message{padding:4px 14px 10px;color:var(--text-1);white-space:pre-wrap;word-break:break-word;line-height:1.5;}
-.jl-error-stacktrace{border-top:1px solid rgba(220,53,69,.15);}
-.jl-error-stacktrace summary{padding:8px 14px;font-size:11px;color:var(--text-3);cursor:pointer;user-select:none;}
-.jl-error-stacktrace summary:hover{color:var(--text-2);}
-.jl-error-stacktrace ol{list-style:none;padding:0 14px 10px;margin:0;}
-.jl-frame{display:flex;align-items:baseline;gap:8px;padding:3px 0;font-size:12px;transition:opacity .15s;}
-.jl-frame.dim{opacity:.35;}
-.jl-frame.dim:hover{opacity:.8;}
-.jl-frame.normal{opacity:.7;}
-.jl-frame.normal:hover{opacity:1;}
-.jl-frame.important{opacity:1;}
-.jl-frame.user-frame{background:rgba(86,212,160,.06);border-radius:4px;padding:3px 6px;margin:1px -6px;}
-.jl-frame-idx{color:var(--text-3);min-width:18px;text-align:right;font-size:10px;}
-.jl-frame-func{color:var(--text-1);font-weight:500;}
-.jl-frame-loc{color:var(--text-3);font-size:11px;}
-.jl-frame-tag{font-size:9px;color:var(--text-3);background:rgba(128,128,128,.1);padding:1px 5px;border-radius:3px;}
-.dark .jl-error{background:rgba(220,53,69,.06);}
-.dark .jl-frame.user-frame{background:rgba(86,212,160,.08);}
+/* ── Structured Errors ──
+   Layout: [header: badge + specific-type] [message] [optional amber suggestion]
+   then a thin separator and a collapsed-by-default stack trace. The 3D depth
+   (red shadow + offset) lives on .cell-wrap.wrap-errored, NOT here — this
+   block only styles the inner content. */
+.jl-error{font-family:'JetBrains Mono',monospace;font-size:13px;background:transparent;}
+/* Error provides its OWN horizontal padding (14px each side) so it lays out
+   consistently whether the code is visible (cell-out adds another 14px) or
+   hidden (cell-out adds 0). The override below removes the doubled padding
+   when both kick in. */
+.jl-error-content{padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px;}
+.jl-error-header{display:flex;align-items:center;gap:8px;}
+.jl-error-badge{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:2px 9px;border-radius:5px;background:#FCEBEB;color:#791F1F;line-height:1.5;}
+.jl-error-type{font-size:13px;font-weight:500;color:#993C1D;}
+.jl-error-message{color:#6B4C3B;font-size:13px;line-height:1.55;word-break:break-word;}
+.jl-inline{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:rgba(0,0,0,0.04);color:inherit;padding:1px 5px;border-radius:3px;white-space:nowrap;}
+.jl-error-suggestion{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;background:#FAEEDA;color:#633806;border-radius:6px;font-size:12.5px;line-height:1.55;margin-top:2px;}
+.jl-error-suggestion-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0;font-weight:700;color:#A86B12;font-family:'JetBrains Mono',monospace;}
+.jl-error-suggestion .jl-inline{background:rgba(0,0,0,0.05);color:inherit;}
+.jl-error-stacktrace{border-top:0.5px solid rgba(0,0,0,0.05);}
+.jl-error-stacktrace summary{padding:8px 14px;font-size:11px;color:#9B8F82;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;list-style:none;}
+.jl-error-stacktrace summary::-webkit-details-marker{display:none;}
+.jl-error-stacktrace summary:hover{color:#6B4C3B;}
+.jl-error-stack-arrow{display:inline-block;width:8px;height:8px;border-right:1.2px solid currentColor;border-bottom:1.2px solid currentColor;transform:rotate(-45deg);transition:transform .15s;}
+.jl-error-stacktrace[open] .jl-error-stack-arrow{transform:rotate(45deg);}
+.jl-error-stacktrace ol{list-style:none;padding:2px 14px 12px;margin:0;}
+
+/* When .cell-out is already supplying 14px padding-left (code-shown state),
+   strip the error's own left padding so the content doesn't end up at 28px. */
+.cell-wrap.has-output:not(.code-hidden) .cell-out > .jl-error .jl-error-content{padding-left:0;}
+.cell-wrap.has-output:not(.code-hidden) .cell-out > .jl-error .jl-error-stacktrace summary{padding-left:0;}
+.cell-wrap.has-output:not(.code-hidden) .cell-out > .jl-error .jl-error-stacktrace ol{padding-left:0;}
+.jl-frame{display:flex;align-items:baseline;gap:10px;padding:2px 6px;margin:0 -6px;font-size:12px;border-radius:4px;}
+.jl-frame.dim{opacity:.55;}
+.jl-frame.normal{opacity:.85;}
+.jl-frame.user-frame{background:rgba(226,75,74,0.06);}
+.jl-frame-idx{color:#CEC6BB;min-width:18px;text-align:right;font-size:11px;}
+.jl-frame-func{color:#6B4C3B;font-weight:500;}
+.jl-frame-loc{color:#B5A898;font-size:11.5px;}
+.jl-frame-tag{font-size:9px;color:#9B8F82;background:rgba(0,0,0,0.05);padding:1px 5px;border-radius:3px;}
+
+.dark .jl-error-badge{background:rgba(226,75,74,0.15);color:#F7C1C1;}
+.dark .jl-error-type{color:#F09595;}
+.dark .jl-error-message{color:#C7BEAD;}
+.dark .jl-inline{background:rgba(255,255,255,0.06);color:#E8DFD2;}
+.dark .jl-error-suggestion{background:rgba(250,199,117,0.08);color:#FAC775;}
+.dark .jl-error-suggestion-icon{color:#FAC775;}
+.dark .jl-error-suggestion .jl-inline{background:rgba(255,255,255,0.08);color:#FAC775;}
+.dark .jl-error-stacktrace{border-top-color:rgba(255,255,255,0.05);}
+.dark .jl-error-stacktrace summary{color:#6B6A7A;}
+.dark .jl-error-stacktrace summary:hover{color:#C7BEAD;}
+.dark .jl-frame.user-frame{background:rgba(226,75,74,0.08);}
+.dark .jl-frame-idx{color:#4A4A58;}
+.dark .jl-frame-func{color:#C7BEAD;}
+.dark .jl-frame-loc{color:#6B6A7A;}
+.dark .jl-frame-tag{color:#6B6A7A;background:rgba(255,255,255,0.04);}
 
 /* ── Stdout Display ── */
 .cell-stdout{position:relative;font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c0ffab;white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;padding:0.6em 0.9em;margin:0;background:radial-gradient(hsl(36deg 20% 37%),hsl(36deg 20% 37%) 20%,hsl(31deg 12% 28%));border:4px solid #b7b7b7;border-radius:0 0 8px 8px;line-height:1.5;text-shadow:1px 1px 2px rgba(0,0,0,.35);min-width:18em;}
@@ -425,23 +491,43 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 .cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .code-cell{border-color:rgba(186,117,23,.2) !important;}
 .cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-out{opacity:.5;}
 
+/* Errored — red, static (no pulse). Same depth offset as stale; the cell
+   stays lifted until the next successful re-run transitions it back to flat. */
+.cell-wrap.wrap-errored .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.18);}
+.cell-wrap.wrap-errored .code-cell{border-color:rgba(226,75,74,.15) !important;}
+
 /* Dark mode: bump block contrast against near-black surfaces. */
 .dark .cell-wrap.wrap-running .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.6);animation-name:shadow-pulse-dark;}
 .dark .cell-wrap.wrap-queued .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.38);}
 .dark .cell-wrap:has(.code-cell.stale):not(.wrap-running):not(.wrap-queued):not(.wrap-errored) .cell-body{box-shadow:4px 4px 0 rgba(239,159,39,.3);}
+.dark .cell-wrap.wrap-errored .cell-body{box-shadow:4px 4px 0 rgba(226,75,74,.22);}
+.dark .cell-wrap.wrap-errored .code-cell{border-color:rgba(226,75,74,.2) !important;}
 
 @keyframes shadow-pulse-light{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.45);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.7);}}
 @keyframes shadow-pulse-dark{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.6);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.85);}}
 
 /* ── Tab Bar + Cell Gaps ── */
-.cdiv{height:10px;display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;}
-.cdiv-inner{opacity:0;transition:opacity .15s;display:flex;align-items:center;justify-content:center;position:absolute;z-index:5;}
+/* Cdiv collapses to 0 height — adjacent .cell-wrap padding (5px top, 5px bottom)
+   provides the visual gap. The + button is absolutely centered on the boundary
+   line so it sits exactly halfway between the two cell-bodies. The ::before
+   pseudo-element extends the hover area above and below the line so the button
+   reveals reliably even though the cdiv itself has no height. */
+.cdiv{height:0;position:relative;}
+.cdiv::before{content:'';position:absolute;left:0;right:0;top:-12px;height:24px;cursor:pointer;}
+.cdiv-inner{position:absolute;top:0;left:50%;transform:translate(-50%,-50%);opacity:0;transition:opacity .15s;display:flex;align-items:center;justify-content:center;z-index:5;}
 .cdiv:hover .cdiv-inner{opacity:1;}
 .cdiv-btn{width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--cell-border);background:var(--panel-bg);color:var(--text-3);cursor:pointer;font-size:12px;padding:0;transition:all .12s;}
 .cdiv-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
 .chv{transition:transform .12s ease;}
 .chv.open{transform:rotate(90deg);}
 .tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
+.tab-close{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:#B5A898;transition:background .12s,color .12s;cursor:pointer;margin-left:6px;flex-shrink:0;}
+.tab:not(.active) .tab-close{color:#CEC6BB;}
+.tab-close:hover{background:rgba(0,0,0,.05);color:#6B4C3B;}
+.dark .tab-close{color:#7A7A8E;}
+.dark .tab:not(.active) .tab-close{color:#4A4A58;}
+.dark .tab-close:hover{background:rgba(255,255,255,.06);color:#E8DFD2;}
+.tab-close svg{width:10px;height:10px;display:block;}
 #fpanel.hide{width:0!important;opacity:0;padding:0;border:none;overflow:hidden;pointer-events:none;}
 
 /* ── Scrollbar ��─ */
@@ -464,10 +550,6 @@ body.resizing-y *{cursor:row-resize!important;user-select:none!important;}
 /* ── Shoelace loading ── */
 sl-tree:not(:defined),sl-tree-item:not(:defined){opacity:0;height:0;overflow:hidden;}
 sl-tree:defined,sl-tree-item:defined{opacity:1;height:auto;transition:opacity .2s;}
-.explorer-loading{display:flex;align-items:center;justify-content:center;flex:1;color:var(--text-3);font-size:11px;font-family:'JetBrains Mono',monospace;gap:6px;}
-.explorer-loading .dot-pulse{width:4px;height:4px;border-radius:50%;background:var(--text-3);animation:pulse 1.2s ease-in-out infinite;}
-.explorer-loading .dot-pulse:nth-child(2){animation-delay:.2s;}
-.explorer-loading .dot-pulse:nth-child(3){animation-delay:.4s;}
 
 /* ── Notebook loading overlay ── */
 .nb-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;z-index:10;background:var(--panel-bg);transition:opacity .3s;pointer-events:none;}

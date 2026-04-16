@@ -132,15 +132,31 @@ function _file_explorer_js(root_dir::String)
     esc_root = _html_escape(root_dir)
     """
 (function() {
-  if (window._fileExplorerInit) return;
-  window._fileExplorerInit = true;
+  // ── Tree resolver — re-resolves each call so we never hold a stale reference.
+  // FileExplorer DOM may be replaced when SessionsApp re-renders (e.g. opening
+  // a notebook). A cached `tree` closure variable would point to a detached
+  // node, and tree.querySelector would return null forever.
+  function _tree() { return document.getElementById('file-tree'); }
+  function _ctx() { return document.getElementById('file-context-menu'); }
 
-  var tree = document.getElementById('file-tree');
-  var ctxMenu = document.getElementById('file-context-menu');
+  // Track pending lazy-load requests so we can clear stuck spinners on timeout.
+  // Maps relative path -> { item: <sl-tree-item>, timer: setTimeout id }
+  window._fileExplorerPending = window._fileExplorerPending || {};
+
+  // ── Bind listeners to the current tree element. Idempotent via _bound flag.
+  function _bindTree() {
+    var tree = _tree();
+    if (!tree || tree._explorerBound) return;
+    tree._explorerBound = true;
+
+    tree.addEventListener('sl-selection-change', _onSelectionChange);
+    tree.addEventListener('sl-lazy-load', _onLazyLoad);
+    tree.addEventListener('contextmenu', _onContextMenu);
+    tree.addEventListener('dblclick', _onDblClick);
+  }
+
   var _ctxTarget = null;      // sl-tree-item that was right-clicked
   var _clickTimer = null;     // debounce single-click vs double-click
-
-  if (!tree) return;
 
   // ── File selection: single click opens text files ──
   var _openableTypes = {'jl':1, 'toml':1, 'md':1, 'yml':1, 'git':1, 'lic':1, 'generic':1};
@@ -159,21 +175,15 @@ function _file_explorer_js(root_dir::String)
       }, 250);
     }
   }
-  tree.addEventListener('sl-selection-change', _onSelectionChange);
-
-  // ── Sync explorer selection when active tab changes ──
-  window.addEventListener('therapy:channel:file_explorer', function(e) {
-    var d = e.detail;
-    if (d && d.event === 'active_file_changed' && d.path) {
-      var item = tree.querySelector('sl-tree-item[data-abs-path="' + CSS.escape(d.path) + '"]');
-      // Deselect all, then select the matching item
-      tree.querySelectorAll('sl-tree-item[selected]').forEach(function(el) { el.selected = false; });
-      if (item) { item.selected = true; item.scrollIntoView({block:'nearest'}); }
-    }
-  });
 
   // ── Lazy loading: fetch directory contents on expand ──
-  // sl-lazy-load fires on the sl-tree-item itself; use closest() for safety
+  function _clearLazy(item, dirPath) {
+    if (item) item.removeAttribute('lazy');
+    if (dirPath && window._fileExplorerPending[dirPath]) {
+      clearTimeout(window._fileExplorerPending[dirPath].timer);
+      delete window._fileExplorerPending[dirPath];
+    }
+  }
   function _onLazyLoad(e) {
     var item = e.target.closest ? e.target.closest('sl-tree-item[lazy]') : e.target;
     if (!item || !item.dataset || !item.dataset.path) {
@@ -181,13 +191,23 @@ function _file_explorer_js(root_dir::String)
       return;
     }
     var dirPath = item.dataset.path;
-    if (window.TherapyWS && TherapyWS.sendMessage) {
-      TherapyWS.sendMessage('file_explorer', {action: 'list_dir', path: dirPath});
-    } else {
+    if (!window.TherapyWS || !TherapyWS.sendMessage) {
       item.removeAttribute('lazy');
+      return;
     }
+    // Track pending so we can timeout stuck spinners
+    if (window._fileExplorerPending[dirPath]) {
+      clearTimeout(window._fileExplorerPending[dirPath].timer);
+    }
+    window._fileExplorerPending[dirPath] = {
+      item: item,
+      timer: setTimeout(function() {
+        console.warn('[FileExplorer] list_dir timeout for', dirPath);
+        _clearLazy(item, dirPath);
+      }, 5000)
+    };
+    TherapyWS.sendMessage('file_explorer', {action: 'list_dir', path: dirPath});
   }
-  tree.addEventListener('sl-lazy-load', _onLazyLoad);
 
   // ── Context menu: right-click ──
   function _onContextMenu(e) {
@@ -195,6 +215,7 @@ function _file_explorer_js(root_dir::String)
     var item = e.target.closest('sl-tree-item');
     if (!item) return;
     _ctxTarget = item;
+    var ctxMenu = _ctx(); if (!ctxMenu) return;
     var isDir = item.hasAttribute('data-is-dir');
     ctxMenu.querySelector('.fm-new-file').style.display = isDir ? '' : 'none';
     ctxMenu.querySelector('.fm-new-folder').style.display = isDir ? '' : 'none';
@@ -206,63 +227,70 @@ function _file_explorer_js(root_dir::String)
     ctxMenu.style.left = x + 'px';
     ctxMenu.style.top = y + 'px';
   }
-  tree.addEventListener('contextmenu', _onContextMenu);
 
-  // Close context menu on click outside
-  document.addEventListener('click', function(e) {
-    if (!e.target.closest('#file-context-menu')) {
+  // Close context menu on click outside (idempotent global listener)
+  if (!window._fileCtxGlobalBound) {
+    window._fileCtxGlobalBound = true;
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('#file-context-menu')) {
+        var ctxMenu = _ctx(); if (ctxMenu) ctxMenu.style.display = 'none';
+      }
+    });
+    document.addEventListener('contextmenu', function(e) {
+      if (!e.target.closest('#file-tree')) {
+        var ctxMenu = _ctx(); if (ctxMenu) ctxMenu.style.display = 'none';
+      }
+    });
+  }
+
+  // ── Context menu actions — bind to the current ctxMenu element each render
+  function _bindCtxMenu() {
+    var ctxMenu = _ctx();
+    if (!ctxMenu || ctxMenu._explorerBound) return;
+    ctxMenu._explorerBound = true;
+    ctxMenu.addEventListener('click', function(e) {
+      var item = e.target.closest('.file-ctx-item');
+      if (!item || !_ctxTarget) return;
+      var action = item.dataset.action;
       ctxMenu.style.display = 'none';
-    }
-  });
-  document.addEventListener('contextmenu', function(e) {
-    if (!e.target.closest('#file-tree')) {
-      ctxMenu.style.display = 'none';
-    }
-  });
 
-  // ── Context menu actions ──
-  ctxMenu.addEventListener('click', function(e) {
-    var item = e.target.closest('.file-ctx-item');
-    if (!item || !_ctxTarget) return;
-    var action = item.dataset.action;
-    ctxMenu.style.display = 'none';
-
-    if (action === 'rename') {
-      startInlineRename(_ctxTarget);
-    } else if (action === 'delete') {
-      var name = _ctxTarget.querySelector('.tree-label');
-      var displayName = name ? name.textContent : _ctxTarget.dataset.path;
-      var isDir = _ctxTarget.hasAttribute('data-is-dir');
-      if (confirm('Delete ' + (isDir ? 'folder' : 'file') + ' "' + displayName + '"?')) {
-        if (window.TherapyWS) {
-          TherapyWS.sendMessage('file_explorer', {
-            action: 'delete', path: _ctxTarget.dataset.path
-          });
+      if (action === 'rename') {
+        startInlineRename(_ctxTarget);
+      } else if (action === 'delete') {
+        var name = _ctxTarget.querySelector('.tree-label');
+        var displayName = name ? name.textContent : _ctxTarget.dataset.path;
+        var isDir = _ctxTarget.hasAttribute('data-is-dir');
+        if (confirm('Delete ' + (isDir ? 'folder' : 'file') + ' "' + displayName + '"?')) {
+          if (window.TherapyWS) {
+            TherapyWS.sendMessage('file_explorer', {
+              action: 'delete', path: _ctxTarget.dataset.path
+            });
+          }
+        }
+      } else if (action === 'new_file' || action === 'new_folder') {
+        var promptMsg = action === 'new_file' ? 'New file name:' : 'New folder name:';
+        var name = prompt(promptMsg);
+        if (name && name.trim()) {
+          if (window.TherapyWS) {
+            TherapyWS.sendMessage('file_explorer', {
+              action: action === 'new_file' ? 'create_file' : 'create_dir',
+              parent_path: _ctxTarget.dataset.path,
+              name: name.trim()
+            });
+          }
         }
       }
-    } else if (action === 'new_file' || action === 'new_folder') {
-      var promptMsg = action === 'new_file' ? 'New file name:' : 'New folder name:';
-      var name = prompt(promptMsg);
-      if (name && name.trim()) {
-        if (window.TherapyWS) {
-          TherapyWS.sendMessage('file_explorer', {
-            action: action === 'new_file' ? 'create_file' : 'create_dir',
-            parent_path: _ctxTarget.dataset.path,
-            name: name.trim()
-          });
-        }
-      }
-    }
-  });
+    });
+  }
 
   // ── Inline rename: double-click ──
-  tree.addEventListener('dblclick', function(e) {
+  function _onDblClick(e) {
     var item = e.target.closest('sl-tree-item');
     if (!item) return;
     e.preventDefault();
     clearTimeout(_clickTimer);  // cancel the single-click open
     startInlineRename(item);
-  });
+  }
 
   function startInlineRename(item) {
     var label = item.querySelector('.tree-label');
@@ -307,9 +335,11 @@ function _file_explorer_js(root_dir::String)
     });
   }
 
-  // ── Navigate to parent directory ──
-  var upBtn = document.getElementById('tree-nav-up');
-  if (upBtn) {
+  // ── Navigate to parent directory (re-bind each render) ──
+  function _bindUpBtn() {
+    var upBtn = document.getElementById('tree-nav-up');
+    if (!upBtn || upBtn._explorerBound) return;
+    upBtn._explorerBound = true;
     upBtn.addEventListener('click', function() {
       if (window.TherapyWS) {
         TherapyWS.sendMessage('file_explorer', {action: 'navigate_up'});
@@ -317,18 +347,24 @@ function _file_explorer_js(root_dir::String)
     });
   }
 
-  // ── WebSocket response handler for file_explorer channel ──
-  window.addEventListener('therapy:channel:file_explorer', function(e) {
+  // ── WebSocket response handler — install ONCE, resolve tree each call ──
+  if (!window._fileExplorerWSBound) {
+    window._fileExplorerWSBound = true;
+    window.addEventListener('therapy:channel:file_explorer', function(e) {
     var data = e.detail;
     if (!data || !data.event) return;
+    var tree = _tree(); if (!tree) return;
 
-    if (data.event === 'dir_contents') {
-      // Lazy-load response: find the tree item and inject children
+    if (data.event === 'active_file_changed' && data.path) {
+      var item = tree.querySelector('sl-tree-item[data-abs-path="' + CSS.escape(data.path) + '"]');
+      tree.querySelectorAll('sl-tree-item[selected]').forEach(function(el) { el.selected = false; });
+      if (item) { item.selected = true; item.scrollIntoView({block:'nearest'}); }
+    }
+
+    else if (data.event === 'dir_contents') {
       var item = tree.querySelector('sl-tree-item[data-path="' + CSS.escape(data.path) + '"]');
+      _clearLazy(item, data.path);
       if (item) {
-        // Remove the lazy attribute so it doesn't fire again
-        item.removeAttribute('lazy');
-        // Parse and append children
         var tmp = document.createElement('div');
         tmp.innerHTML = data.children_html;
         while (tmp.firstChild) {
@@ -353,7 +389,6 @@ function _file_explorer_js(root_dir::String)
     }
 
     else if (data.event === 'item_created') {
-      // Find parent and append the new item
       var parent = tree.querySelector('sl-tree-item[data-path="' + CSS.escape(data.parent_path) + '"]');
       if (parent) {
         var tmp = document.createElement('div');
@@ -361,23 +396,16 @@ function _file_explorer_js(root_dir::String)
         while (tmp.firstChild) {
           parent.appendChild(tmp.firstChild);
         }
-        // Expand parent if collapsed
         if (!parent.expanded) parent.expanded = true;
       }
     }
 
     else if (data.event === 'tree_replaced') {
-      // Full tree refresh (e.g., after navigating to parent dir)
       var wrapper = document.getElementById('file-tree-wrapper');
       if (wrapper) {
         wrapper.innerHTML = data.tree_html;
-        // Rebind tree variable + re-attach event listeners to new sl-tree
-        tree = document.getElementById('file-tree');
-        if (tree) {
-          tree.addEventListener('sl-selection-change', _onSelectionChange);
-          tree.addEventListener('sl-lazy-load', _onLazyLoad);
-          tree.addEventListener('contextmenu', _onContextMenu);
-        }
+        // The new tree is unbound — _bindTree will attach listeners
+        _bindTree();
       }
       // Update breadcrumb
       var crumb = document.querySelector('.tree-breadcrumb .crumb');
@@ -386,7 +414,15 @@ function _file_explorer_js(root_dir::String)
         crumb.title = data.root_dir || '';
       }
     }
-  });
+    });
+  }
+
+  // Bind to whatever DOM exists right now. _bindTree/_bindCtxMenu/_bindUpBtn
+  // are idempotent (gate on element._explorerBound) so they're safe to call
+  // every time this script re-runs after a SessionsApp re-render.
+  _bindTree();
+  _bindCtxMenu();
+  _bindUpBtn();
 })();
 """
 end

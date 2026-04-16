@@ -150,7 +150,7 @@ Sessions.setup_terminal_channel!(TERM_STATE, WEB_STATE[])
 on_ws_connect() do conn
     println("[WS] Client connected: $(conn.id)")
     Therapy.subscribe(conn, "notebook")
-    Therapy.subscribe(conn, "files")
+    Therapy.subscribe(conn, "file_explorer")
     Therapy.subscribe(conn, "terminal")
     @async try
         Sessions.send_full_state!(WEB_STATE[], conn)
