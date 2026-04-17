@@ -830,11 +830,16 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     run_handler = mode == :live ? "window._sessionsRunCell('$(cell_id)')" : ""
     menu_handler = mode == :live ? "window._sessionsShowCellMenu(this,'$(cell_id)')" : ""
 
-    # CellView lives in src/components/CellView.jl, loaded into Main by
-    # Therapy.load_app! at app startup (same path as every other
-    # Sessions @island). Look it up at SSR time rather than depending
-    # on it at package-load time.
-    cell_view = isdefined(Main, :CellView) ? getfield(Main, :CellView) : nothing
+    # CellView lives in src/components/CellView.jl, loaded into the
+    # `Main.TherapyApp` module by Therapy.load_app! at app startup (same
+    # path as every other Sessions @island). Look it up at SSR time
+    # rather than depending on it at package-load time.
+    cell_view = if isdefined(Main, :TherapyApp) &&
+                   isdefined(getfield(Main, :TherapyApp), :CellView)
+        getfield(getfield(Main, :TherapyApp), :CellView)
+    else
+        nothing
+    end
     if cell_view !== nothing
         push!(parts, cell_view(
                 cell_id = cell_id,
