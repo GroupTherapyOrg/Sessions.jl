@@ -217,7 +217,7 @@ md"### Tuples and named tuples"
 (1, "two", 3.0, :four, [5, 6])
 
 # ╔═╡ 10000000-0000-0000-0000-00000000001b
-(name="Alice", age=30, roles=[:admin, :editor], active=true)
+(name = "Alice", age = 30, roles = [:admin, :editor], active = true)
 
 # ╔═╡ 10000000-0000-0000-0000-00000000001c
 md"### Structs"

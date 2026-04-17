@@ -350,6 +350,12 @@ end
 
 function _run_order!(state::WebNotebookState, order)
     nb = active_nb(state)
+    # The cleanup broadcast at the end of this function MUST fire even
+    # if a cell raises during execution — otherwise the toolbar is left
+    # showing "Stop / N / 0" forever (is_executing=1, run_progress
+    # half-reset). Wrap the whole body in try/finally so the reset is
+    # the last thing the client sees regardless of how the loop exited.
+    try
 
     for (cell, err) in order.errable
         cell.state = cell_idle
@@ -420,11 +426,13 @@ function _run_order!(state::WebNotebookState, order)
         ))
     end
 
-    _nb_broadcast!(Dict(
-        "event" => "run_progress",
-        "running_index" => 0,
-        "total" => 0
-    ))
+    finally
+        _nb_broadcast!(Dict(
+            "event" => "run_progress",
+            "running_index" => 0,
+            "total" => 0
+        ))
+    end
 
     save_session!(nb)
     _broadcast_stale!(state)
@@ -986,6 +994,7 @@ function _handle_open_notebook!(state::WebNotebookState, conn, data)
                 create_cell_signals!(state)
             end
             _broadcast_nb_html!(state)
+            _broadcast_tab_active!(state)
             return
         end
     end
@@ -1017,6 +1026,31 @@ function _handle_open_notebook!(state::WebNotebookState, conn, data)
     end
 
     _broadcast_nb_html!(state)
+    _broadcast_tab_active!(state)
+end
+
+# Broadcast the active-tab type so NotebookToolbar's active_is_file /
+# active_can_format effects flip correctly. MUST be called whenever the
+# active tab changes (switch / open / close).
+function _broadcast_tab_active!(state::WebNotebookState)
+    tab = active_tab(state)
+    tab === nothing && return
+    is_file = tab.tab_type == :file
+    can_format = !is_file || endswith(lowercase(tab.path), ".jl")
+    try
+        _nb_broadcast!(Dict(
+            "event" => "tab_active_changed",
+            "active_is_file"    => is_file ? 1 : 0,
+            "active_can_format" => can_format ? 1 : 0
+        ))
+    catch; end
+    try
+        Therapy.broadcast_all(Dict{String,Any}(
+            "channel" => "file_explorer",
+            "event" => "active_file_changed",
+            "path" => tab.path
+        ))
+    catch; end
 end
 
 function _handle_switch_tab!(state::WebNotebookState, conn, data)
@@ -1029,28 +1063,7 @@ function _handle_switch_tab!(state::WebNotebookState, conn, data)
     state.active_tab_idx = tab_idx
     create_cell_signals!(state)
     _broadcast_nb_html!(state)
-
-    tab = active_tab(state)
-    if tab !== nothing
-        # Tell every client the active tab type so NotebookToolbar's
-        # active_is_file / active_can_format effects flip correctly.
-        is_file = tab.tab_type == :file
-        can_format = !is_file || endswith(lowercase(tab.path), ".jl")
-        try
-            _nb_broadcast!(Dict(
-                "event" => "tab_active_changed",
-                "active_is_file"    => is_file ? 1 : 0,
-                "active_can_format" => can_format ? 1 : 0
-            ))
-        catch; end
-        try
-            Therapy.broadcast_all(Dict{String,Any}(
-                "channel" => "file_explorer",
-                "event" => "active_file_changed",
-                "path" => tab.path
-            ))
-        catch; end
-    end
+    _broadcast_tab_active!(state)
 end
 
 function _broadcast_nb_html!(state::WebNotebookState)
@@ -1106,17 +1119,7 @@ function _handle_close_tab!(state::WebNotebookState, conn, data)
 
     create_cell_signals!(state)
     _broadcast_nb_html!(state)
-
-    tab = active_tab(state)
-    if tab !== nothing
-        try
-            Therapy.broadcast_all(Dict{String,Any}(
-                "channel" => "file_explorer",
-                "event" => "active_file_changed",
-                "path" => tab.path
-            ))
-        catch; end
-    end
+    _broadcast_tab_active!(state)
 end
 
 # ═══════════════════════════════════════════════════════════════

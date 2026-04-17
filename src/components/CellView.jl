@@ -52,9 +52,14 @@ const _CV_MENU_ONCLICK = "window._sessionsShowCellMenu(this,this.closest('.cell-
     runtime_ns, set_runtime  = create_signal(initial_runtime_ns)
     is_open, set_open        = create_signal(initial_open)
 
-    # ── Effect: state → .code-cell className ──
+    # ── Effect: (state, is_stale) → .code-cell className ──
+    # Merged from two effects so we don't have one writing className
+    # then the other reading classList to preserve stale across rebuilds.
+    # Subscribes to both signals; rebuilds className from scratch on
+    # either change.
     create_effect(() -> begin
         s = state()
+        st = is_stale()
         js("""
             var el=island.querySelector('.code-cell');
             if(!el)return;
@@ -63,20 +68,9 @@ const _CV_MENU_ONCLICK = "window._sessionsShowCellMenu(this,this.closest('.cell-
             else if(\$1===2)base+=' cv-running executing';
             else if(\$1===4)base+=' cv-errored';
             else if(\$1===5)base+=' cv-skipped';
-            if(el.classList.contains('stale'))base+=' stale';
+            if(\$2)base+=' stale';
             el.className=base;
-        """, s)
-    end)
-
-    # ── Effect: is_stale → toggle .stale on .code-cell ──
-    create_effect(() -> begin
-        v = is_stale()
-        js("""
-            var el=island.querySelector('.code-cell');
-            if(!el)return;
-            if(\$1)el.classList.add('stale');
-            else el.classList.remove('stale');
-        """, v)
+        """, s, st)
     end)
 
     # ── Effect: runtime_ns → .rt-badge text (formatted in JS) ──

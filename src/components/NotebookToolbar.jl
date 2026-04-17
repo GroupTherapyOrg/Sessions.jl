@@ -51,15 +51,17 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
         """, n)
     end)
 
-    # ── Effect: progress total → wrapper visibility ──
+    # ── Effect: progress total → wrapper + jump button visibility ──
     create_effect(() -> begin
         tot = run_progress_total()
         js("""
             var sep=island.querySelector('[data-pill-sep]');
             var zone=island.querySelector('[data-pill-status]');
+            var jump=island.querySelector('[data-pill-jump]');
             var show=\$1>0;
             if(sep)sep.style.display=show?'':'none';
             if(zone)zone.style.display=show?'':'none';
+            if(jump)jump.style.display=show?'':'none';
         """, tot)
     end)
 
@@ -144,7 +146,7 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
                 :on_click => "TherapyWS.sendMessage('notebook',{action:'interrupt'})",
                 :title => "Stop execution",
                 RawHtml(_SVG_STOP_TOOLBAR), " Stop")),
-        RawHtml("""<span class="pill-sep" data-pill-sep="1" style="display:none"></span><div class="pill-status" data-pill-status="1" style="display:none"></div>"""),
+        RawHtml("""<span class="pill-sep" data-pill-sep="1" style="display:none"></span><div class="pill-status" data-pill-status="1" style="display:none"></div><button class="pill-btn pill-ghost" data-pill-jump="1" onclick="window._sessionsJumpToRunning&&_sessionsJumpToRunning()" title="Jump to running cell" style="display:none"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M4 9l4 4 4-4"/></svg></button>"""),
         RawHtml("""<span class="pill-sep"></span>"""))
 
     save_format = Div(:class => "pill-group",
