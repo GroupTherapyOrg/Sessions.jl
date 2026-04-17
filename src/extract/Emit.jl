@@ -135,9 +135,12 @@ function emit_cell_const(cc::CellClass)::String
 end
 
 """
-Tiny @island per @bind — destructures the shared signal, returns the
-widget's frozen HTML. The enclosing `render_published_cell` owns the
-cell-out wrapping; this just emits the inner content.
+Tiny @island per @bind — destructures the shared signal AND reads it
+so Therapy's reactive runtime sees a subscription (without a read the
+analyzer records 0 signals and the island never re-renders on signal
+changes). Bond widgets are the thing the *user* drives, so their own
+display doesn't need to re-render — but subscribing makes the island's
+WASM module a first-class participant in the signal graph.
 """
 function emit_bond_island(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
@@ -146,16 +149,23 @@ function emit_bond_island(cc::CellClass)::String
     join([
         "    @island function $(fname)()",
         "        $(bond), set_$(bond) = $(bond)_signal",
+        "        _ = $(bond)()   # subscribe — without this the runtime records 0 signal deps",
         "        RawHtml(render_value(_cell_$(suffix)))",
         "    end",
     ], "\n") * "\n"
 end
 
 """
-Tiny @island per reactive cell — captures upstream bonds, returns the
-frozen cell value rendered through the shared render_value pipeline.
-As with the bond island, cell-out wrapping happens in the outer call
-to render_published_cell, not here.
+Tiny @island per reactive cell — subscribes to every upstream bond
+signal so the runtime re-runs this island whenever one changes.
+
+v1 still renders the frozen `render_value(_cell_<id>)` — the cell body
+isn't re-executed in WASM. That means the DOM swap on signal change
+puts back identical HTML (no visible change), but the subscription
+plumbing itself works end-to-end: bond slider → `window.__therapy.set`
+→ signal graph → this island's effect → DOM swap. When v2 lands with
+either pre-rendered-per-bond-value lookup tables or WasmTarget
+cell-body compilation, only the *body* of this function changes.
 """
 function emit_reactive_island(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
@@ -163,11 +173,13 @@ function emit_reactive_island(cc::CellClass)::String
     lines = [
         "    # TODO[extract-v2]: re-execute this cell body in WASM on bond change.",
         "    # v1 freezes the output at the bond defaults; the bond widget itself",
-        "    # remains interactive.",
+        "    # remains interactive and the signal subscription below is live — just",
+        "    # the render path hasn't been made reactive yet.",
         "    @island function $(fname)()",
     ]
     for b in sort(collect(cc.upstream_bonds))
         push!(lines, "        $(b), _ = $(b)_signal")
+        push!(lines, "        _ = $(b)()   # subscribe (without the read, analyzer records 0 deps)")
     end
     push!(lines, "        RawHtml(render_value(_cell_$(suffix)))")
     push!(lines, "    end")

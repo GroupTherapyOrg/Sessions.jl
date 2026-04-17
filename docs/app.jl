@@ -89,6 +89,20 @@ let extracted_dir = joinpath(@__DIR__, "src", "components", "notebooks")
     end
 end
 
+# Extracted notebooks register @island functions at `Base.include` time
+# (Bond widgets + reactive cell shells). That happens AFTER
+# `Therapy.load_app!` above snapshotted the island registry into
+# `app.interactive`, so without a re-discovery pass Therapy's build
+# step sees zero extracted islands and skips WASM compilation for
+# them. Re-merge now so slider widgets + reactive cells actually
+# hydrate in the browser (signal plumbing depends on it).
+let existing = Set(ic.name for ic in app.interactive)
+    for island in Therapy.discover_islands()
+        island.name ∉ existing && push!(app.interactive, island)
+    end
+    println("  Interactive components after notebook discovery: $(length(app.interactive))")
+end
+
 # =============================================================================
 # Run - dev or build based on args
 # =============================================================================

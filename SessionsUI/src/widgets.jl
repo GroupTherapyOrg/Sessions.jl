@@ -637,8 +637,25 @@ end
 # Drop this string into the notebook page once at init. It walks every
 # `<bond def="…">` in the DOM, attaches a single `input` listener to
 # the bond's first child (the widget element), and dispatches
-# `{action:'set_bond', name, value}` over the Therapy WS channel.
-# A MutationObserver picks up bonds added by later cell renders.
+# Dual-mode delivery — on every `input` event the bridge tries BOTH
+# destinations so `@bind` behaves identically without knowing which
+# context it's in:
+#
+#  1. `window.__therapy.set(name, value)` — Therapy's in-browser
+#     signal registry. Fires in any published / WASM-SSR context where
+#     the Therapy reactive runtime is loaded (that's exactly when
+#     `window.__therapy` exists). Reactive @islands subscribed to the
+#     same shared signal rerun immediately, no server round-trip.
+#  2. `TherapyWS.sendMessage('notebook', {action:'set_bond', …})` —
+#     Sessions IDE / kernel path. The server updates the Julia-side
+#     bond and re-runs any dependent cells.
+#
+# Both fire independently. In the live IDE, (1) may be a no-op if no
+# WASM islands are mounted yet, and (2) drives the kernel. In a
+# published notebook `TherapyWS` is absent, so only (1) fires. A
+# future @bind emitter that doesn't want this dual-post can opt out
+# by replacing the script body — this file defines the DEFAULT so
+# every extracted notebook inherits it with zero extra wiring.
 #
 # Value extraction handles the four shapes widgets produce:
 #   • <input type=range/number>   → parseFloat(.value)
@@ -647,6 +664,7 @@ end
 #   • container w/ exposed .value → use as-is (range slider, counter,
 #     clock, radio form — these set `.value` on the parent element)
 const BOND_BRIDGE_JS = raw"""
+/* __therapy */
 (function(){
   if (window._sessBondBridgeReady) return;
   window._sessBondBridgeReady = true;
@@ -665,15 +683,31 @@ const BOND_BRIDGE_JS = raw"""
     }
     return el.value;
   }
+  function dispatch(name, val){
+    // Published / WASM-SSR path: write into Therapy's signal registry
+    // so every subscribed @island re-evaluates locally. No-op when
+    // the Therapy runtime hasn't been loaded (eg plain static export
+    // with no islands on the page).
+    if (window.__therapy && typeof window.__therapy.set === 'function') {
+      try { window.__therapy.set(name, val); } catch (e) { console.warn('[bond] __therapy.set failed', e); }
+    }
+    // Live IDE path: route to the Sessions kernel so dependent cells
+    // re-execute. Harmless no-op in published notebooks (no WS).
+    if (window.TherapyWS && typeof TherapyWS.sendMessage === 'function') {
+      TherapyWS.sendMessage('notebook', {action:'set_bond', name:name, value:val});
+    }
+  }
   function attach(bond){
     if (bond._sessBound) return;
     var name = bond.getAttribute('def'); if (!name) return;
     var widget = bond.firstElementChild; if (!widget) return;
     bond._sessBound = true;
-    widget.addEventListener('input', function(){
-      if (!window.TherapyWS || !TherapyWS.sendMessage) return;
-      TherapyWS.sendMessage('notebook', {action:'set_bond', name:name, value:readValue(widget)});
-    });
+    // Seed the signal with the widget's initial value so reactive
+    // islands start from the right state even before the user moves
+    // the control (they were hydrated with the default; this
+    // confirms / overrides if the widget was pre-set server-side).
+    try { dispatch(name, readValue(widget)); } catch (e) {}
+    widget.addEventListener('input', function(){ dispatch(name, readValue(widget)); });
   }
   function attachAll(root){
     (root || document).querySelectorAll('bond[def]').forEach(attach);

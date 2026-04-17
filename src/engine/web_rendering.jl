@@ -939,6 +939,11 @@ Public API. Called from extracted notebook @islands and from
 `render_published_cell` for frozen output.
 """
 function render_value(x)::String
+    html = _render_value_raw(x)
+    _inject_therapy_script_markers(html)
+end
+
+function _render_value_raw(x)::String
     x isa Exception && return string(
         "<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>",
         sprint(showerror, x), "</pre>")
@@ -955,6 +960,27 @@ function render_value(x)::String
     catch
     end
     sprint(print, x)
+end
+
+"""
+Inject `/* __therapy */` into every `<script>` tag that lacks it.
+Therapy's ClientRouter (Therapy.jl/src/Router/ClientRouter.jl:162–170)
+only re-executes body `<script>` tags after a client-side page swap
+if their content contains a magic marker (`therapy-island`,
+`TherapyHydrate`, `__therapy`, or `__tw`). Cell outputs that embed
+scripts — WasmPlot canvas renderers, Plotly blocks, MathJax
+preambles, etc. — otherwise stay inert on SPA navigation and only
+come to life after a full page reload. The marker is a JS comment
+so it's a no-op at runtime.
+"""
+function _inject_therapy_script_markers(html::AbstractString)::String
+    # Only touch `<script>` opens that lack a src= (inline scripts)
+    # and aren't already marked. Case-insensitive on the tag name.
+    replace(
+        html,
+        r"<script(?![^>]*\bsrc\s*=)(?![^>]*__therapy)([^>]*)>"i =>
+            s"<script\1>/* __therapy */ ",
+    )
 end
 
 """
