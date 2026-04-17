@@ -15,7 +15,6 @@ using Therapy
 using Sessions
 using SessionsUI
 using UUIDs
-import HTTP
 
 const USER_CWD = pwd()
 cd(@__DIR__)
@@ -85,8 +84,11 @@ const _api_handler = create_api_router(_api_routes)
 
 function ApiMiddleware()
     return function(handler)
-        return function(req::HTTP.Request)
-            path = HTTP.URI(req.target).path
+        return function(req)
+            # req is an HTTP.Request supplied by Therapy's server. We only
+            # need the path prefix to fork API traffic from page traffic;
+            # parse `target` as a string so we don't have to import HTTP.
+            path = first(split(req.target, '?'; limit = 2))
             if startswith(path, "/api/")
                 return _api_handler(req)
             end
