@@ -184,12 +184,38 @@ end
 "Return the runtime_ns integer captured at extract time (or 0)."
 _cell_runtime_literal(cc::CellClass)::String = string(Int(cc.cell.output.runtime_ns))
 
+"`true` if the cell's last non-blank, non-comment line ends with `;` —
+Pluto's convention for suppressing output. Matches `rstrip` + regex
+against the final expression rather than inspecting the parsed AST,
+since we keep source verbatim and don't want to second-guess macros."
+function _suppresses_output(code::AbstractString)::Bool
+    body = strip(code)
+    isempty(body) && return false
+    # Walk lines bottom-up, skipping trailing blank / comment-only lines.
+    lines = split(body, '\n')
+    for i in length(lines):-1:1
+        line = rstrip(lines[i])
+        ln_trimmed = strip(line)
+        isempty(ln_trimmed) && continue
+        startswith(ln_trimmed, "#") && continue
+        # Drop a trailing `# …` comment on the last code line before
+        # checking for `;` — `x; # comment` should still suppress.
+        m = match(r"^(.*?)\s*#[^\"]*$", line)
+        last_code = m === nothing ? line : m.captures[1]
+        return endswith(rstrip(last_code), ";")
+    end
+    return false
+end
+
 """
 A static cell: render its frozen value via `render_value` inside the
-shared `render_published_cell` shell.
+shared `render_published_cell` shell. `cell.folded` drives `folded=`,
+a trailing `;` in the source drives `show_output=false`.
 """
 function emit_static_call(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
+    folded_lit     = cc.cell.folded ? "true" : "false"
+    show_out_lit   = _suppresses_output(cc.cell.code) ? "false" : "true"
     join([
         "            render_published_cell(",
         "                cell_id = $(repr(string(cc.cell.id))),",
@@ -197,18 +223,23 @@ function emit_static_call(cc::CellClass)::String
         "                output_content = RawHtml(render_value(_cell_$(suffix))),",
         "                runtime_ns = $(_cell_runtime_literal(cc)),",
         "                state = $(_cell_state_literal(cc)),",
+        "                folded = $(folded_lit),",
+        "                show_output = $(show_out_lit),",
         "            )",
     ], "\n")
 end
 
 """
 A bond or reactive cell: the cell-out slot becomes a call to the
-cell's tiny @island. The shared shell handles cell-wrap/cell-body
-chrome and the read-only CodeMirror source block.
+cell's tiny @island. Bonds always render their widget (forcing
+`show_output=true`) since that's the interactive control the user
+needs to drive the signal; reactive cells honour trailing `;`.
 """
 function emit_island_call(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
     fname  = cc.kind === :bond ? "_Bond_$(cc.bond_name)_$(suffix)" : "_Cell_$(suffix)"
+    folded_lit   = cc.cell.folded ? "true" : "false"
+    show_out_lit = (cc.kind === :bond || !_suppresses_output(cc.cell.code)) ? "true" : "false"
     join([
         "            render_published_cell(",
         "                cell_id = $(repr(string(cc.cell.id))),",
@@ -216,6 +247,8 @@ function emit_island_call(cc::CellClass)::String
         "                output_content = $(fname)(),",
         "                runtime_ns = $(_cell_runtime_literal(cc)),",
         "                state = $(_cell_state_literal(cc)),",
+        "                folded = $(folded_lit),",
+        "                show_output = $(show_out_lit),",
         "            )",
     ], "\n")
 end

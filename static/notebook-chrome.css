@@ -15,7 +15,7 @@
    needed on the host page.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Base custom properties (notebook subset) ─────────────────────── */
+/* ── Base custom properties (notebook subset, mirrored from IDE) ──── */
 :root{
   --md-text:#4a5568;--md-heading:#1a202c;--md-rule:rgba(0,0,0,.15);
   --md-blockquote-bg:#f2f2f2;--md-blockquote-color:#555;
@@ -29,7 +29,14 @@
   --adm-info-accent:rgb(148,182,226);--adm-info-bg:rgb(214,227,244);
   --adm-warn-accent:rgb(207,199,138);--adm-warn-bg:rgb(236,234,213);
   --adm-danger-accent:rgb(226,157,148);--adm-danger-bg:rgb(245,218,215);
-  --cell-stripe-done:#56d4a0;--cell-stripe-errored:#dc3545;
+  /* CodeMirror syntax palette (must match Sessions.jl/input.css --cm-* so
+     published notebooks look identical to the live IDE editor). */
+  --cm-editor-text:#2a2520;
+  --cm-keyword:#c03048;--cm-string:#1a7858;--cm-command:#3a5a28;
+  --cm-comment:#9a6878;--cm-literal:#8a2898;--cm-variable:#3a4a9a;
+  --cm-function:#a85878;--cm-symbol:#986820;--cm-macro:#2a7a3a;
+  --cm-bracket:#8a8680;--cm-matching-bracket-bg:rgba(212,117,154,.12);
+  --selection-bg:rgba(86,212,160,0.15);
 }
 .dark{
   --md-text:#9baabd;--md-heading:#d4dce8;--md-rule:rgba(255,255,255,.15);
@@ -43,6 +50,11 @@
   --adm-info-accent:rgb(92,140,205);--adm-info-bg:rgb(42,73,115);
   --adm-warn-accent:rgb(221,212,100);--adm-warn-bg:rgb(96,90,34);
   --adm-danger-accent:rgb(255,117,98);--adm-danger-bg:rgb(100,47,39);
+  --cm-editor-text:#d4dce8;
+  --cm-keyword:#e07068;--cm-string:#7cc0a8;--cm-command:#a0b890;
+  --cm-comment:#b88898;--cm-literal:#d0a0cc;--cm-variable:#b0bad0;
+  --cm-function:#d4a868;--cm-symbol:#d4a056;--cm-macro:#6cc898;
+  --cm-bracket:#8a8878;--cm-matching-bracket-bg:rgba(212,117,154,.2);
 }
 
 /* ── Cell shell ───────────────────────────────────────────────────── */
@@ -55,10 +67,7 @@
 .code-cell{position:relative;background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
 .cell-wrap.has-output:not(.code-hidden) .code-cell{border-top-left-radius:0 !important;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
-
-/* Traffic-light stripe — persistent green (cv-done) or red (cv-errored). */
-.code-cell::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;background:var(--cell-stripe-done);border-radius:0 2px 2px 0;opacity:.5;}
-.code-cell.cv-errored::before{background:var(--cell-stripe-errored);opacity:.7;}
+.cell-wrap.code-hidden .cell-code-wrap{display:none;}
 
 /* Errored cells lift with a red offset shadow — same :has() pattern as IDE. */
 .cell-wrap:has(.code-cell.cv-errored) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.18);}
@@ -80,12 +89,19 @@
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
 
-/* ── Read-only CodeMirror host (published editor) ────────────────── */
+/* ── Read-only CodeMirror host (published editor) ──────────────────
+   Visual parity with the live IDE editor: transparent background so
+   the code-cell card color shows through, JetBrains Mono 13px/1.65,
+   minimal gutters. Full theme is applied by notebook-init.js via
+   CodeMirror's theme() API — these rules are just the bits that need
+   to be live before CM attaches (avoid flash of unstyled host). */
 .cm-cell-published{position:relative;}
 .cm-cell-published .cm-editor{background:transparent;}
-.cm-cell-published .cm-editor .cm-scroller{font-family:'JuliaMono','Fira Code','JetBrains Mono',monospace;}
-.cm-cell-published .cm-editor .cm-content{padding:8px 0;font-family:'JuliaMono','Fira Code','JetBrains Mono',monospace;font-size:13px;line-height:1.65;}
-.cm-cell-published .cm-editor .cm-gutters{background:transparent;border:none;color:var(--text-3);}
+.cm-cell-published .cm-editor .cm-scroller{font-family:'JetBrains Mono',monospace;}
+.cm-cell-published .cm-editor .cm-content{padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65;}
+.cm-cell-published .cm-editor .cm-gutters{background:transparent;border:none;color:var(--text-3);min-width:38px;}
+.cm-cell-published .cm-editor .cm-line{padding-left:4px;}
+.cm-cell-published .cm-editor .cm-matchingBracket{font-weight:bold;background-color:var(--cm-matching-bracket-bg);}
 
 /* ── Cell output (markdown prose, tables, images) ────────────────── */
 .cell-out{font-family:'DM Sans',system-ui,sans-serif;color:var(--md-text);line-height:1.6em;font-size:14.5px;word-spacing:0.04em;overflow-x:auto;overflow-y:hidden;}

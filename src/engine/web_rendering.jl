@@ -962,16 +962,14 @@ end
 
 Return the full CellView-equivalent source chrome: cell-eye fold
 toggle, cell-code-wrap, code-cell card, cell-ctrls (runtime badge),
-and the read-only CodeMirror host.
-
-Identical DOM to what the live IDE's CellView @island renders at SSR
-— minus the run / menu buttons (no kernel to target in published
-mode) and the dynamic state transitions (static cells are frozen at
-extract time). The docs Layout's `initCM` picks up the inner
-`.cm-cell` on load and on SPA nav.
+and the read-only CodeMirror host. 1-to-1 DOM match with what the
+IDE's CellView @island renders at SSR — minus run / menu buttons
+(no kernel to target) and dynamic state transitions (static cells).
 
 Empty code yields `nothing` so bootstrap cells don't get a blank
-editor.
+editor. The outer wrap's `.code-hidden` class (applied by
+`render_published_cell` when the cell is folded) hides the code
+wrapper via CSS; the cell-eye toggle still reveals it.
 """
 function render_source_block(code::AbstractString;
                               cell_id::AbstractString="",
@@ -985,9 +983,10 @@ function render_source_block(code::AbstractString;
 
     runtime_str = _format_runtime(UInt64(max(runtime_ns, 0)))
 
-    # Inline JS for fold toggle. Flips display on the sibling
-    # .cell-code-wrap. No signal wiring — this is published mode.
-    eye_onclick = "var w=this.closest('.cell-island').querySelector('.cell-code-wrap');w.style.display=w.style.display==='none'?'':'none';"
+    # Inline JS for fold toggle. Flips `code-hidden` on the enclosing
+    # .cell-wrap so the CSS rule hides the cell-code-wrap — matches how
+    # the live IDE drives fold through CSS (sans the @island signal).
+    eye_onclick = "var w=this.closest('.cell-wrap');if(w)w.classList.toggle('code-hidden');"
 
     Div(:class => "cell-island",
         Div(:class => "cell-eye",
@@ -1007,12 +1006,19 @@ end
 
 """
     render_published_cell(; cell_id, source_code, output_content,
-                            show_source=true, runtime_ns=0,
+                            show_source=true, folded=false,
+                            show_output=true, runtime_ns=0,
                             state=:done) -> VNode
 
-Produce the canonical cell chrome for a published notebook. Matches
-the live IDE's `cell-wrap > cell-body > [cell-out, cell-island(eye +
-code-cell + cm-cell)]` structure so styling lands in both paths.
+Canonical cell chrome for published notebooks. 1-to-1 match with the
+live IDE's `cell-wrap > cell-body > [cell-out, cell-island]` structure.
+
+Fold + output-suppression:
+  - `folded=true`   (from `cell.folded` in the source notebook —
+                    `# ╟─` prefix in Pluto format) — source is
+                    collapsed on load; cell-eye toggle reveals it.
+  - `show_output=false` (trailing `;` suppresses output in Pluto) —
+                    the cell-out slot is omitted entirely.
 
 `output_content`:
   - `RawHtml(...)` for a frozen static cell,
@@ -1027,13 +1033,15 @@ function render_published_cell(; cell_id::AbstractString,
                                  source_code::AbstractString,
                                  output_content,
                                  show_source::Bool=true,
+                                 folded::Bool=false,
+                                 show_output::Bool=true,
                                  runtime_ns::Integer=0,
                                  state::Symbol=:done)
     parts = Any[]
     wrap_cls = "cell-wrap relative"
-    # has-output controls the cell-out left-border separator styling.
-    has_output = output_content !== nothing
+    has_output = show_output && output_content !== nothing
     has_output && (wrap_cls *= " has-output")
+    folded && (wrap_cls *= " code-hidden")
     state === :errored && (wrap_cls *= " wrap-errored")
     # Output above source — Pluto-style, matches live IDE `render_cell`.
     if has_output
