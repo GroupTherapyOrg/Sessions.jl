@@ -92,9 +92,11 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
   var tocNav = document.getElementById('toc-panel');
   if (!tocNav) return;
   var tocSection = tocNav.querySelector('#toc-content');
-  var headerMap = new Map();
-  var inViewSet = new Set();
-  var obs1, obs2;
+  // headers[i] ↔ rows[i] — index alignment is the entire active-row
+  // bookkeeping. Keep it that way; do not introduce parallel maps.
+  var headers = [];
+  var rows = [];
+  var activeIdx = -1;
 
   // Toggle (clicking the hamburger icon flips .hide).
   tocNav.addEventListener('click', function(e){
@@ -108,7 +110,7 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
     // can react. No-op in standalone (no #nb).
     var nb = document.getElementById('nb');
     if (nb) nb.classList.toggle('toc-open', isOpen);
-    if (isOpen) buildToc();
+    if (isOpen) { buildToc(); updateActive(); }
   });
 
   function getHeaders(){
@@ -120,18 +122,20 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
   }
 
   function buildToc(){
-    var headers = getHeaders();
-    if (!headers.length){ tocSection.innerHTML = '<div class="toc-empty">No headings</div>'; return; }
-    if (obs1) obs1.disconnect();
-    if (obs2) obs2.disconnect();
-    headerMap.clear();
-    inViewSet.clear();
+    headers = getHeaders();
+    if (!headers.length){
+      tocSection.innerHTML = '<div class="toc-empty">No headings</div>';
+      rows = [];
+      activeIdx = -1;
+      return;
+    }
 
     var frag = document.createDocumentFragment();
+    rows = [];
     headers.forEach(function(h){
       var cls = h.tagName;
       var text = h.textContent.trim();
-      if (!text) return;
+      if (!text) { rows.push(null); return; }
       if (!h.id) h.id = 'h-' + text.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+\$/g,'');
       var row = document.createElement('div');
       row.className = 'toc-row ' + cls;
@@ -140,36 +144,47 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
       a.href = '#' + h.id;
       a.title = text;
       a.textContent = text;
-      a.onclick = function(e){ e.preventDefault(); h.scrollIntoView({behavior:'smooth',block:'start'}); };
+      // Click → scroll the heading to the top of its scrollable
+      // ancestor. scrollIntoView handles the IDE's scrollable #nb
+      // case AND the standalone window-scroll case automatically.
+      a.onclick = function(e){ e.preventDefault(); h.scrollIntoView({behavior:'smooth', block:'start'}); };
       row.appendChild(a);
       frag.appendChild(row);
-      headerMap.set(h, row);
+      rows.push(row);
     });
     tocSection.innerHTML = '';
     tocSection.appendChild(frag);
+    activeIdx = -1;
+  }
 
-    // Twin IntersectionObserver — Pluto's pattern. Highlights the
-    // heading in the top half of the viewport.
-    var ixCallback = function(entries){
-      entries.forEach(function(ix){
-        if (ix.intersectionRatio > 0 && ix.intersectionRect.y < ix.rootBounds.height / 2) {
-          inViewSet.forEach(function(r){ r.classList.remove('in-view'); });
-          inViewSet.clear();
-          var row = headerMap.get(ix.target);
-          if (row) { row.classList.add('in-view'); inViewSet.add(row); }
-        }
-      });
-    };
-    obs1 = new IntersectionObserver(ixCallback, {root:null, threshold:1, rootMargin:'-15px'});
-    obs2 = new IntersectionObserver(ixCallback, {root:null, threshold:1, rootMargin:'15px'});
-    headers.forEach(function(h){ obs1.observe(h); obs2.observe(h); });
+  // Highlight the LAST heading whose top is at or above the viewport
+  // top (with a small offset for the toolbar). That's the heading
+  // currently "owning" the visible scroll position. Dead simple, no
+  // observers — just a scroll-listener readout of getBoundingClientRect.
+  function updateActive(){
+    if (!headers.length) return;
+    var threshold = 80; // px below viewport top — clears the IDE toolbar
+    var idx = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i].getBoundingClientRect().top <= threshold) idx = i;
+      else break;
+    }
+    if (idx === -1) idx = 0;  // before the first heading → highlight it
+    if (idx === activeIdx) return;
+    if (activeIdx >= 0 && rows[activeIdx]) rows[activeIdx].classList.remove('in-view');
+    if (rows[idx]) rows[idx].classList.add('in-view');
+    activeIdx = idx;
   }
 
   // Auto-rebuild on DOM mutation (cells added / output changed).
   var _t = null;
   function debouncedBuild(){
     if (_t) clearTimeout(_t);
-    _t = setTimeout(function(){ if (!tocNav.classList.contains('hide')) buildToc(); }, 300);
+    _t = setTimeout(function(){
+      if (tocNav.classList.contains('hide')) return;
+      buildToc();
+      updateActive();
+    }, 300);
   }
   // Expose a global rebuild hook so external code (e.g. tab-switch handlers
   // in the Sessions IDE) can request a rebuild without inventing its own.
@@ -192,8 +207,14 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
     debouncedBuild();
   }).observe(observerTarget, {childList:true, subtree:true});
 
+  // Active-heading scroll tracking. The IDE notebook scrolls inside
+  // `#nb`; standalone HTML scrolls the window. Listen on whichever
+  // exists — `passive: true` so we never block the scroll thread.
+  var scrollSrc = document.getElementById('nb') || window;
+  scrollSrc.addEventListener('scroll', updateActive, {passive: true});
+
   // First build (in case it boots already-open).
-  if (!tocNav.classList.contains('hide')) buildToc();
+  if (!tocNav.classList.contains('hide')) { buildToc(); updateActive(); }
 })();
 </script>
 """)
