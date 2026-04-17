@@ -248,28 +248,51 @@ struct ReactiveEmit
     output_expr::String          # goes into CellDiv(output = …)
 end
 
-"True if `code` contains a pattern WasmTarget definitely can't
-handle. Conservative — better to WALL a translatable cell than to
-break the whole @island compile."
-function _is_wall_body(code::AbstractString)::Bool
-    occursin(r"\bDataFrame\s*[\(\{]", code)      && return true
-    occursin(r"\bmd\"", code)                    && return true
-    # Arbitrary `show` redefinitions, @show / @info usage at cell
-    # level — all too risky for the compiler.
-    occursin(r"\b@show\b",  code) && return true
-    occursin(r"\b@info\b",  code) && return true
-    occursin(r"\b@warn\b",  code) && return true
-    occursin(r"\b@error\b", code) && return true
-    occursin(r"\bdisplay\s*\(", code) && return true
-    return false
-end
+"""
+True if `code` contains a pattern WasmTarget definitely can't
+handle today. Conservative — a WALL'd but translatable cell is just
+a visible degradation; a broken @island compile skips the whole
+notebook's reactivity.
 
-"True if `code` looks like a WasmPlot figure cell. WasmPlot is WASM-
-compatible (Therapy's NotebookDemo uses it), so these cells translate
-to `create_effect + render!(fig)` over a Canvas output."
-function _is_wasmplot_body(code::AbstractString)::Bool
-    occursin(r"\b(WP\.|WasmPlot\.)?Figure\s*\(", code)              && return true
-    occursin(r"\b(barplot|lines|scatter|heatmap|hist)\s*!", code)   && return true
+Rejected: DataFrame / md"…" / @show,@info,@warn,@error / display() /
+string-interpolation touching a bond / broadcast operators touching
+a bond. Reason each: DataFrames/Markdown have non-compilable
+method tables; logging macros lower to non-WASM-friendly calls;
+`\$(n)` lowers to `string(::Any, …)` whose general-path WasmGC
+support isn't there yet (Therapy's NotebookDemo only uses STATIC
+strings inside reactive closures); broadcast machinery relies on
+`Broadcast.materialize` + iterator protocols WasmTarget can't unroll.
+
+NotebookStep4 (the WasmPlot reference) works because it uses
+explicit `while` loops (no broadcasts), static title/xlabel/ylabel
+strings (no `\$` interp), and primitive typed numerics
+(`Int64` / `Float64`). Cells off that path hit WALL so the
+translator doesn't poison the whole @island compile.
+"""
+function _is_wall_body(code::AbstractString, bonds::Set{Symbol})::Bool
+    occursin(r"\bDataFrame\s*[\(\{]", code)  && return true
+    occursin(r"\bmd\"", code)                && return true
+    occursin(r"\b@show\b",  code)            && return true
+    occursin(r"\b@info\b",  code)            && return true
+    occursin(r"\b@warn\b",  code)            && return true
+    occursin(r"\b@error\b", code)            && return true
+    occursin(r"\bdisplay\s*\(", code)        && return true
+
+    # String interpolation with a bond reference: `"… $(n) …"` /
+    # `"… $n …"`. Only bonds matter — purely static strings are fine.
+    for b in bonds
+        occursin(Regex("\\\$\\{?$(b)\\b"), code)               && return true
+        occursin(Regex("\\\$\\(\\s*$(b)\\s*[\\)\\.]"), code)  && return true
+        occursin(Regex("\\\$\\(.*\\b$(b)\\b.*\\)"), code)     && return true
+    end
+
+    # Broadcast operators (either dotted ops or dotted calls) anywhere
+    # in the body. Precise bond-touching detection would need the AST;
+    # broadcasts in non-reactive paths are harmless so we only apply
+    # this to cells we've already classified reactive by the caller.
+    occursin(r"[A-Za-z_0-9\)\]]\.[\^\*\+\-\/]", code) && return true  # xs.^2, a.*b, ...
+    occursin(r"\b[A-Za-z_][A-Za-z_0-9]*\.\(", code)   && return true  # f.(…)
+    occursin(r"\.\|\|", code)                         && return true
     return false
 end
 
@@ -401,7 +424,7 @@ function translate_reactive(cc::CellClass, bonds::Set{Symbol})::ReactiveEmit
     suffix  = _id_suffix(cc.cell.id)
     memo_id = "_reactive_$(suffix)"
 
-    _is_wall_body(code) && return ReactiveEmit(:wall, "",
+    _is_wall_body(code, bonds) && return ReactiveEmit(:wall, "",
         "RawHtml(render_value(_cell_$(suffix)))")
 
     body_expr = try

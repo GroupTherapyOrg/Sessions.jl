@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/interactive.jl
-# Date   : 2026-04-17T15:33:39.700
+# Date   : 2026-04-17T15:51:20.528
 #
 # Self-contained Therapy component. Cell SOURCE is preserved
 # verbatim; cell VALUES are computed once at module load and
@@ -222,27 +222,12 @@ module InteractiveMod
         n, set_n = create_signal(_default_n)
 
         # ── Reactive memos + effects ──
-        _reactive__1b95c056_9b5a_456f_8007_177b202a1581 = create_memo(() -> begin
-            "This is n: $(n())"
-        end)
-        create_effect(() -> begin
-            _fig__20000000_0000_0000_0000_000000000009 = begin
-                let
-                    fig = WP.Figure(size = (750, 360))
-                    ax = WP.Axis(fig[1, 1]; xlabel = "i", ylabel = "i²", title = "Squares", subtitle = "n = $(n())")
-                    xs = Float64.(1:n())
-                    WP.barplot!(ax, xs, xs .^ 2; color = :red)
-                    fig
-                end
-            end
-            render!(_fig__20000000_0000_0000_0000_000000000009)
-        end)
 
         render_published_notebook(
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Interactive Sessions\n\nA live demo of `@bind` + `BoundSlider` driving a **WasmPlot** figure and a\n**DataFrame** that recompute together. Move the slider — both update.\n\nIn Sessions IDE this happens via the live Julia kernel; once published to\nWASM the same controls drive Therapy signals in the browser, no server\nround-trip required.\n\"\"\"",
-                runtime_ns  = 28852375,
+                runtime_ns  = 30444084,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -252,7 +237,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000005",
                 source_code = "md\"\"\"\n### A bond\n\n`BoundSlider(2:30; default=8)` produces a slider over the integer range\n`2:30`. The macro `@bind n …` makes `n` reactive — every cell that reads\n`n` re-runs when the user moves the slider.\n\"\"\"",
-                runtime_ns  = 294750,
+                runtime_ns  = 308875,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -262,7 +247,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000006",
                 source_code = "@bind n BoundSlider(2:30; default=8)",
-                runtime_ns  = 118229375,
+                runtime_ns  = 121311333,
                 state       = :done,
                 folded      = true,
                 show_output = true,
@@ -279,17 +264,17 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "1b95c056-9b5a-456f-8007-177b202a1581",
                 source_code = "\"This is n: \$(n)\"",
-                runtime_ns  = 168542,
-                state       = :done,
+                runtime_ns  = 186833,
+                state       = :wasm_failed,
                 cell_type   = :code,
                 folded      = false,
                 show_output = true,
-                output      = Span(_reactive__1b95c056_9b5a_456f_8007_177b202a1581),
+                output      = RawHtml(render_value(_cell__1b95c056_9b5a_456f_8007_177b202a1581)),
             ),
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000007",
                 source_code = "md\"\"\"\n### A reactive plot\n\nA bar chart of `i²` for `i ∈ 1:n`. Move the slider above and the plot\nredraws.\n\"\"\"",
-                runtime_ns  = 269125,
+                runtime_ns  = 272791,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -299,7 +284,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000008",
                 source_code = "# WasmPlot Figures need a Base.show MIME\"text/html\" method to render in the\n# notebook output area. Defining it here keeps the fixture self-contained;\n# this hook lives in WasmPlot itself once Phase 3 of the SessionsUI build\n# wires per-cell @island compilation.\nfunction Base.show(io::IO, ::MIME\"text/html\", fig::WP.Figure)\n    glue = WP.canvas2d_js_glue()\n    js   = WP.generate_js_render(fig)\n    id   = \"wp_\" * string(hash(fig); base=16)\n    print(io, \"\"\"\n    <canvas id=\"\$(id)\" width=\"\$(fig.width)\" height=\"\$(fig.height)\"\n            style=\"border:1px solid var(--cell-border);border-radius:8px;background:#fff\"></canvas>\n    <script>(function(){\n      \$(glue)\n      var c = document.getElementById('\$(id)');\n      var dpr = window.devicePixelRatio||1;\n      c.width = \$(fig.width)*dpr; c.height = \$(fig.height)*dpr;\n      c.style.width='\$(fig.width)px'; c.style.height='\$(fig.height)px';\n      var ctx = c.getContext('2d'); ctx.scale(dpr,dpr);\n      var c2d = canvas2d_imports(ctx);\n      \$(js)\n    })();</script>\n    \"\"\")\nend",
-                runtime_ns  = 722834,
+                runtime_ns  = 703500,
                 state       = :done,
                 cell_type   = :code,
                 folded      = true,
@@ -309,17 +294,17 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000009",
                 source_code = "let\n    fig = WP.Figure(size=(750, 360))\n    ax  = WP.Axis(fig[1, 1]; xlabel=\"i\", ylabel=\"i²\", title=\"Squares\", subtitle = \"n = \$(n)\")\n    xs  = Float64.(1:n)\n    WP.barplot!(ax, xs, xs.^2; color=:red)\n    fig\nend",
-                runtime_ns  = 84679209,
-                state       = :done,
+                runtime_ns  = 87344708,
+                state       = :wasm_failed,
                 cell_type   = :code,
                 folded      = false,
                 show_output = true,
-                output      = Canvas(:width => 750, :height => 360),
+                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_000000000009)),
             ),
             CellDiv(
                 cell_id     = "d4e88179-6c23-4713-abe8-5c18e8c94497",
                 source_code = "@bind l BoundSlider(1:0.5:15; default=7.5)",
-                runtime_ns  = 35360792,
+                runtime_ns  = 36586833,
                 state       = :done,
                 folded      = true,
                 show_output = true,
@@ -336,7 +321,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-00000000000a",
                 source_code = "md\"\"\"\n### A reactive table\n\nThe same `n` driving the plot also drives this DataFrame. Notice the row\ncount mirrors the slider exactly.\n\"\"\"",
-                runtime_ns  = 255709,
+                runtime_ns  = 259708,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -346,7 +331,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-00000000000b",
                 source_code = "# String => column form (rather than kwargs) so we can use unicode column\n# names like √i — the parser would otherwise read `√i = …` as the unary\n# √ operator applied to `i`, not a keyword name.\nDataFrame(\"i²\" => (1:l) .^ 2, \"√i\" => sqrt.(1:l))",
-                runtime_ns  = 55637541,
+                runtime_ns  = 60699792,
                 state       = :wasm_failed,
                 cell_type   = :code,
                 folded      = false,
@@ -356,7 +341,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-00000000000c",
                 source_code = "md\"\"\"\n---\n\n### What's happening under the hood\n\nIn **dev mode** (this view), the slider sends a value to the live Julia\nkernel, which re-runs every cell that reads `n`.\n\nIn **script mode** (`julia interactive.jl` with `using SessionsUI` in your\nenv), `@bind` falls back to the slider's default value (`8`) and the\nnotebook runs straight through as a normal program.\n\nIn **WASM publish mode**, this whole notebook becomes static HTML with\neach `<bond>` widget and each cell that reads `n` wrapped in a Therapy\n`@island`. The slider drives a signal in the browser; dependent islands\nrecompute locally. No server.\n\"\"\"",
-                runtime_ns  = 1482916,
+                runtime_ns  = 1403083,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
