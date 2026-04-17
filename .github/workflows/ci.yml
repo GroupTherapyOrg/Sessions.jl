@@ -18,7 +18,18 @@ jobs:
           - ubuntu-latest
           - macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Sessions.jl
+        uses: actions/checkout@v4
+        with:
+          path: Sessions.jl
+
+      # Sessions/Project.toml references Therapy via `path = "../Therapy.jl"`
+      # so CI needs a sibling checkout to resolve that source.
+      - name: Checkout Therapy.jl
+        uses: actions/checkout@v4
+        with:
+          repository: GroupTherapyOrg/Therapy.jl
+          path: Therapy.jl
 
       - uses: julia-actions/setup-julia@v2
         with:
@@ -28,6 +39,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          cd Sessions.jl
           julia --project=. -e '
             using Pkg
             Pkg.instantiate()
@@ -35,4 +47,5 @@ jobs:
 
       - name: Run tests
         run: |
+          cd Sessions.jl
           julia --project=. test/runtests.jl
