@@ -1020,12 +1020,19 @@ end
 Canonical cell chrome for published notebooks. 1-to-1 match with the
 live IDE's `cell-wrap > cell-body > [cell-out, cell-island]` structure.
 
-Fold + output-suppression:
-  - `folded=true`   (from `cell.folded` in the source notebook —
-                    `# ╟─` prefix in Pluto format) — source is
-                    collapsed on load; cell-eye toggle reveals it.
-  - `show_output=false` (trailing `;` suppresses output in Pluto) —
-                    the cell-out slot is omitted entirely.
+**Visibility semantics** (author-controlled, not reader-controlled):
+
+  - `folded=true` (from `cell.folded` — Pluto's `# ╟─` prefix): the
+    author hid this cell's source in the notebook. Publish it with
+    NO source block at all and NO toggle — the reader cannot reveal
+    it. Typical use: markdown cells, boilerplate imports, helper
+    functions the author doesn't want to surface.
+  - `folded=false` (Pluto's `# ╠═` prefix): source is visible on
+    load. Reader can toggle via the cell-eye gutter icon, but the
+    state is ephemeral — a reload always returns to shown.
+
+  - `show_output=false` (trailing `;` — Pluto's output-suppression
+    convention): the cell-out slot is omitted entirely.
 
 `output_content`:
   - `RawHtml(...)` for a frozen static cell,
@@ -1045,11 +1052,12 @@ function render_published_cell(; cell_id::AbstractString,
                                  runtime_ns::Integer=0,
                                  state::Symbol=:done)
     parts = Any[]
-    # `.cell-wrap` already has `position:relative` in notebook-chrome.css;
-    # no Tailwind utility dependency needed.
     wrap_cls = "cell-wrap"
     has_output = show_output && output_content !== nothing
     has_output && (wrap_cls *= " has-output")
+    # Folded cells have no code-cell in the DOM at all — add the
+    # `code-hidden` class anyway so the cell-out styling that depends
+    # on `:not(.code-hidden)` (left border, padding) correctly skips.
     folded && (wrap_cls *= " code-hidden")
     state === :errored && (wrap_cls *= " wrap-errored")
     # Output above source — Pluto-style, matches live IDE `render_cell`.
@@ -1059,9 +1067,20 @@ function render_published_cell(; cell_id::AbstractString,
             :style => "padding:4px 0 2px;overflow-x:auto;",
             output_content))
     end
+    # Author-controlled fold semantics via Therapy's DOM-absent `Show`
+    # form (VNode.jl line 108: `Show(condition::Bool, render::Function)`
+    # — condition first, render second). That method returns either
+    # `render()` or literal `nothing`, so folded source never lands in
+    # the SSR output at all. Writing it as an explicit positional call
+    # rather than `Show(...) do ... end` — the `do`-block sugar puts
+    # the body as arg #1 and would route to the ShowNode-emitting form
+    # (VNode.jl line 94) that leaves a `display:none` tombstone in the
+    # HTML. Non-folded cells get the full source + cell-eye toggle;
+    # the inline onclick flips a CSS class, so state is ephemeral and
+    # reloads always return to shown.
     if show_source
-        src = render_source_block(source_code;
-            cell_id=cell_id, runtime_ns=runtime_ns, state=state)
+        src = Therapy.Show(!folded, () -> render_source_block(source_code;
+            cell_id=cell_id, runtime_ns=runtime_ns, state=state))
         src !== nothing && push!(parts, src)
     end
     Div(:data_cell_id => cell_id, :class => wrap_cls,
