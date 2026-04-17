@@ -190,7 +190,14 @@ function _classify_and_capture(result, stdout_str, runtime, logs_buffer=_LogReco
     # Delegate both the predicate and the renderer to the canonical
     # implementations in Sessions.web_rendering so worker + server stay
     # in sync (same DOM, same depth, no parameter drift).
-    if Base.invokelatest(getfield(Sessions, :_is_tree_value), result)
+    #
+    # Guard the Sessions binding: a freshly-rebooted worker (after Stop
+    # killed the previous process) hasn't necessarily reached the
+    # `_inject_notebook_api!` import yet, and `getfield(Sessions, …)`
+    # would otherwise blow up the entire output classifier with
+    # `UndefVarError: Sessions not defined in Main`. Falling through to
+    # the text/plain branch below is fine for tree values.
+    if isdefined(Main, :Sessions) && Base.invokelatest(getfield(Sessions, :_is_tree_value), result)
         tree_html = try
             Base.invokelatest(getfield(Sessions, :_render_tree_html), result)
         catch; ""; end

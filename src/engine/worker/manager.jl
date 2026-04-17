@@ -208,10 +208,17 @@ function stop_worker!(nw::NotebookWorker)
     end
 end
 
-"""Restart the worker (kill + reboot)."""
+"""Restart the worker (kill + reboot).
+
+Re-uses the same `exeflags` (notebook project) + `env` overrides as
+`NotebookWorker()`, otherwise the rebooted worker can't find Sessions
+or any of the notebook's packages and every cell errors with
+`UndefVarError: Sessions not defined in Main`."""
 function restart_worker!(nw::NotebookWorker)
     stop_worker!(nw)
-    nw.worker = Malt.Worker()
+    proj_dir = _find_notebook_project(nw.notebook_path)
+    exeflags = proj_dir !== nothing ? ["--project=$(proj_dir)"] : String[]
+    nw.worker = Malt.Worker(; exeflags, env=["JULIA_LOAD_PATH=@:@v#.#:@stdlib"])
     _boot_worker!(nw)
 end
 
