@@ -220,7 +220,7 @@
 .dark .cell-out table:not(.pluto-table) tbody tr:hover{background:rgba(193,192,235,.12);}
 
 /* ── Notebook Widgets ── */
-.notebook-plotly{border-radius:8px;overflow:hidden;}
+/* (plotly removed — WasmPlot owns docs plots now) */
 
 /* ── DataFrame / Tables.jl renderer — Pluto-table parity ──
    Pluto emits a bare <table.pluto-table> directly into pluto-output
@@ -369,3 +369,9 @@
 
 /* ── highlight.js overrides ── */
 .cell-out pre code.hljs{background:transparent;padding:0;}
+
+/* NOTE: cell CHROME rules (.code-cell, .cell-wrap, .cell-eye, .cell-ctrls,
+   .rt-badge, .cm-cell-published, .cv-errored lift, traffic-light stripe)
+   are now bundled into `Sessions.render_published_notebook` itself — see
+   Sessions.jl/static/notebook-chrome.css. Any docs page that renders a
+   published notebook gets the chrome for free; no wiring needed here. */

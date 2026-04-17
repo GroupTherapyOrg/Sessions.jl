@@ -958,57 +958,146 @@ function render_value(x)::String
 end
 
 """
-    render_source_block(code; cell_id="") -> Union{VNode, Nothing}
+    render_source_block(code; cell_id="", runtime_ns=0, state=:done) -> Union{VNode, Nothing}
 
-Return a read-only CodeMirror host div. Docs Layout picks up every
-`.cm-cell` on page load (and on `therapy:router:loaded` SPA
-navigation) and renders it as a read-only editor via the `data-src`
-attribute.
+Return the full CellView-equivalent source chrome: cell-eye fold
+toggle, cell-code-wrap, code-cell card, cell-ctrls (runtime badge),
+and the read-only CodeMirror host.
+
+Identical DOM to what the live IDE's CellView @island renders at SSR
+— minus the run / menu buttons (no kernel to target in published
+mode) and the dynamic state transitions (static cells are frozen at
+extract time). The docs Layout's `initCM` picks up the inner
+`.cm-cell` on load and on SPA nav.
 
 Empty code yields `nothing` so bootstrap cells don't get a blank
-editor. The `cm-cell-published` class lets CSS distinguish published
-editors from live IDE editors if fine-tuning is ever needed.
+editor.
 """
-function render_source_block(code::AbstractString; cell_id::AbstractString="")
+function render_source_block(code::AbstractString;
+                              cell_id::AbstractString="",
+                              runtime_ns::Integer=0,
+                              state::Symbol=:done)
     code = rstrip(code)
     isempty(code) && return nothing
-    Div(:class => "cm-cell cm-cell-published",
-        :data_cell_id => cell_id,
-        :data_src => String(code),
-        :data_readonly => "1")
+
+    code_cell_cls = "code-cell relative overflow-hidden"
+    state === :errored && (code_cell_cls *= " cv-errored")
+
+    runtime_str = _format_runtime(UInt64(max(runtime_ns, 0)))
+
+    # Inline JS for fold toggle. Flips display on the sibling
+    # .cell-code-wrap. No signal wiring — this is published mode.
+    eye_onclick = "var w=this.closest('.cell-island').querySelector('.cell-code-wrap');w.style.display=w.style.display==='none'?'':'none';"
+
+    Div(:class => "cell-island",
+        Div(:class => "cell-eye",
+            :on_click => eye_onclick,
+            :title => "Toggle source",
+            Div(:style => "position:relative;width:14px;height:14px;",
+                RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""))),
+        Div(:class => "cell-code-wrap",
+            Div(:class => code_cell_cls,
+                Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
+                    Span(:class => "rt-badge", runtime_str)),
+                Div(:class => "cm-cell cm-cell-published",
+                    :data_cell_id => cell_id,
+                    :data_src => String(code),
+                    :data_readonly => "1"))))
 end
 
 """
     render_published_cell(; cell_id, source_code, output_content,
-                            show_source=true) -> VNode
+                            show_source=true, runtime_ns=0,
+                            state=:done) -> VNode
 
 Produce the canonical cell chrome for a published notebook. Matches
-the live IDE's `cell-wrap > cell-body > [source, cell-out]` structure
-so a styling tweak lands in both paths simultaneously.
+the live IDE's `cell-wrap > cell-body > [cell-out, cell-island(eye +
+code-cell + cm-cell)]` structure so styling lands in both paths.
 
-`output_content` can be:
+`output_content`:
   - `RawHtml(...)` for a frozen static cell,
   - an `@island` call (e.g. `_Bond_n_abc()`) for bond / reactive cells,
-  - `nothing` to render source-only.
+  - `nothing` for a source-only cell.
+
+`runtime_ns` is baked into the `.rt-badge` (human-formatted via
+`_format_runtime`). `state=:errored` adds `cv-errored` to the
+code-cell so the red-shadow lift kicks in.
 """
 function render_published_cell(; cell_id::AbstractString,
                                  source_code::AbstractString,
                                  output_content,
-                                 show_source::Bool=true)
+                                 show_source::Bool=true,
+                                 runtime_ns::Integer=0,
+                                 state::Symbol=:done)
     parts = Any[]
+    wrap_cls = "cell-wrap relative"
+    # has-output controls the cell-out left-border separator styling.
+    has_output = output_content !== nothing
+    has_output && (wrap_cls *= " has-output")
+    state === :errored && (wrap_cls *= " wrap-errored")
     # Output above source — Pluto-style, matches live IDE `render_cell`.
-    if output_content !== nothing
+    if has_output
         push!(parts, Div(:class => "cell-out",
             :data_cell_id => cell_id,
             :style => "padding:4px 0 2px;overflow-x:auto;",
             output_content))
     end
     if show_source
-        src = render_source_block(source_code; cell_id=cell_id)
+        src = render_source_block(source_code;
+            cell_id=cell_id, runtime_ns=runtime_ns, state=state)
         src !== nothing && push!(parts, src)
     end
-    Div(:data_cell_id => cell_id, :class => "cell-wrap relative",
+    Div(:data_cell_id => cell_id, :class => wrap_cls,
         Div(:class => "cell-body", parts...))
+end
+
+# ── Self-contained asset bundle ──────────────────────────────────────
+# Load at module init so `using Sessions` picks them up once; every
+# `render_published_notebook` call then emits them inline.
+#
+# Shadcn-style: the notebook carries its own chrome (CSS + CodeMirror
+# + init JS) so dropping an extracted .jl into ANY Therapy app just
+# works. Docs sites no longer need to wire editor.js or notebook CSS
+# at the Layout level.
+#
+# Singleton guards make re-rendering (SPA nav, gallery pages with
+# multiple notebooks) idempotent: the CSS uses an `id="…"` sentinel
+# that the inline script removes from later copies, and the JS sets
+# `window.__SESSIONS_NB_BOOT = true` on first run.
+const _STATIC_DIR = normpath(joinpath(@__DIR__, "..", "..", "static"))
+const NOTEBOOK_CHROME_CSS = let p = joinpath(_STATIC_DIR, "notebook-chrome.css")
+    isfile(p) ? read(p, String) : ""
+end
+const NOTEBOOK_EDITOR_JS = let p = joinpath(_STATIC_DIR, "editor.js")
+    isfile(p) ? read(p, String) : ""
+end
+const NOTEBOOK_INIT_JS = let p = joinpath(_STATIC_DIR, "notebook-init.js")
+    isfile(p) ? read(p, String) : ""
+end
+
+"""
+Return the inline `<style>` + `<script>` bundle every published
+notebook brings along. Three tags, each with a singleton-guard data
+attribute so multiple notebooks on one page dedupe.
+
+1. `<style data-sessions-nb-chrome>` — notebook-chrome.css.
+2. `<script data-sessions-nb-editor>` — editor.js (sets window.C),
+   guarded by `window.__SESSIONS_NB_CM_LOADED` so the ~600KB bundle
+   only evaluates once.
+3. `<script data-sessions-nb-init>` — notebook-init.js (read-only
+   CodeMirror init + theme reactivity), guarded by
+   `window.__SESSIONS_NB_BOOT`.
+"""
+function _published_notebook_assets_html()::String
+    string(
+        "<style data-sessions-nb-chrome=\"1\">", NOTEBOOK_CHROME_CSS, "</style>",
+        "<script data-sessions-nb-editor=\"1\">",
+            "if(!window.__SESSIONS_NB_CM_LOADED){window.__SESSIONS_NB_CM_LOADED=true;",
+            NOTEBOOK_EDITOR_JS,
+            "}",
+        "</script>",
+        "<script data-sessions-nb-init=\"1\">", NOTEBOOK_INIT_JS, "</script>",
+    )
 end
 
 """
@@ -1017,9 +1106,17 @@ end
 Outer container for a published notebook. Matches the live IDE's
 `.nb-cell-list` inner container (max-width, horizontal padding) so
 published pages feel identical to the IDE's notebook body.
+
+Prepends a **self-contained asset bundle** (CSS + CodeMirror bundle
++ init script) so extracted notebooks render correctly in any
+Therapy app without requiring the host page to pre-wire any
+styling or JavaScript. Singleton guards make it safe to include
+multiple notebooks on one page — each bundle is a no-op after the
+first.
 """
 function render_published_notebook(cells...)
     Div(:class => "notebook-extracted",
+        RawHtml(_published_notebook_assets_html()),
         Div(:class => "nb-cell-list",
             :style => "max-width:900px;margin:0 auto;padding-left:28px;padding-right:28px;position:relative;",
             cells...))

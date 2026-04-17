@@ -176,6 +176,14 @@ end
 
 # ─── Outer-function cell call sites ───────────────────────────────────
 
+"Return the `state = :done` / `:errored` Symbol the published shell wants."
+function _cell_state_literal(cc::CellClass)::String
+    cc.cell.output.output_type === :error ? ":errored" : ":done"
+end
+
+"Return the runtime_ns integer captured at extract time (or 0)."
+_cell_runtime_literal(cc::CellClass)::String = string(Int(cc.cell.output.runtime_ns))
+
 """
 A static cell: render its frozen value via `render_value` inside the
 shared `render_published_cell` shell.
@@ -187,6 +195,8 @@ function emit_static_call(cc::CellClass)::String
         "                cell_id = $(repr(string(cc.cell.id))),",
         "                source_code = $(_code_literal(cc.cell.code)),",
         "                output_content = RawHtml(render_value(_cell_$(suffix))),",
+        "                runtime_ns = $(_cell_runtime_literal(cc)),",
+        "                state = $(_cell_state_literal(cc)),",
         "            )",
     ], "\n")
 end
@@ -204,6 +214,8 @@ function emit_island_call(cc::CellClass)::String
         "                cell_id = $(repr(string(cc.cell.id))),",
         "                source_code = $(_code_literal(cc.cell.code)),",
         "                output_content = $(fname)(),",
+        "                runtime_ns = $(_cell_runtime_literal(cc)),",
+        "                state = $(_cell_state_literal(cc)),",
         "            )",
     ], "\n")
 end

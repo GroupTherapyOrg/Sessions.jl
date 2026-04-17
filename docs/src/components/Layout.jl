@@ -12,24 +12,16 @@ function SessionsWordmark()
     )
 end
 
-# CodeMirror bundle for notebook rendering.
-# Path walks up from docs/src/components/ → docs/src/ → docs/ → Sessions.jl/
-# and then into static/. Fixed from a stale src/web/static/ path that
-# pre-dates the rebuild PRD's directory restructure.
-const _SESSIONS_EDITOR_JS = let
-    p = joinpath(dirname(dirname(dirname(@__DIR__))), "static", "editor.js")
-    isfile(p) ? read(p, String) : "/* editor.js not found */"
-end
-
 function Layout(content)
     Div(:class => "min-h-screen flex flex-col bg-warm-100 dark:bg-warm-950 text-warm-800 dark:text-warm-200 transition-colors",
         # Theme init (prevent FOUC)
         RawHtml("""<script>(function(){try{var bp=document.documentElement.getAttribute('data-base-path')||'';var sk=bp?'therapy-theme:'+bp:'therapy-theme';var t=localStorage.getItem(sk);if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();</script>"""),
-        # Plotly CDN
-        RawHtml("""<script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js"></script>"""),
-        # CodeMirror bundle + init
-        RawHtml(string("<script>", _SESSIONS_EDITOR_JS, "</script>")),
-        _cm_init_script(),
+        # NOTE: CodeMirror bundle + notebook CSS + read-only init are
+        # now bundled into `Sessions.render_published_notebook` itself
+        # (see Sessions.jl/static/notebook-*.{css,js}). Any extracted
+        # notebook component carries its own styling + CM renderer, so
+        # the Layout doesn't need to pre-wire them. Pages that don't
+        # render a notebook incur zero cost.
         # Nav
         Nav(:class => "border-b border-warm-200 dark:border-warm-800 px-6 py-4",
             Div(:class => "max-w-5xl mx-auto flex items-center justify-between",
@@ -83,102 +75,6 @@ function Layout(content)
     )
 end
 
-# CodeMirror initialization for notebook cells in docs
-function _cm_init_script()
-    RawHtml("""<script>
-(function() {
-  if (typeof C === 'undefined' || !C.EditorView) return;
-  function isDark() { return document.documentElement.classList.contains('dark'); }
-
-  var darkHL = C.HighlightStyle.define([
-    {tag:C.t.keyword,color:"#e06b65"},{tag:C.t.controlKeyword,color:"#e06b65"},
-    {tag:C.t.operatorKeyword,color:"#e06b65"},{tag:C.t.definitionKeyword,color:"#e06b65"},
-    {tag:C.t.moduleKeyword,color:"#e06b65"},
-    {tag:C.t.string,color:"#56d4a0"},{tag:C.t.character,color:"#56d4a0"},
-    {tag:C.t.comment,color:"#4a6178",fontStyle:"italic"},
-    {tag:C.t.number,color:"#d4a056"},{tag:C.t.integer,color:"#d4a056"},
-    {tag:C.t.float,color:"#d4a056"},{tag:C.t.bool,color:"#d4a056"},
-    {tag:C.t.function(C.t.variableName),color:"#7bb8e8"},
-    {tag:C.t.definition(C.t.variableName),color:"#7bb8e8"},
-    {tag:C.t.typeName,color:"#b08fd8"},{tag:C.t.className,color:"#b08fd8"},
-    {tag:C.t.variableName,color:"#d4dce8"},
-    {tag:C.t.punctuation,color:"#6b7d93"},
-    {tag:C.t.operator,color:"#d4dce8"},{tag:C.t.macroName,color:"#d4a056"},
-  ]);
-
-  var lightHL = C.HighlightStyle.define([
-    {tag:C.t.keyword,color:"#c4352b"},{tag:C.t.controlKeyword,color:"#c4352b"},
-    {tag:C.t.operatorKeyword,color:"#c4352b"},{tag:C.t.definitionKeyword,color:"#c4352b"},
-    {tag:C.t.moduleKeyword,color:"#c4352b"},
-    {tag:C.t.string,color:"#1e7855"},{tag:C.t.character,color:"#1e7855"},
-    {tag:C.t.comment,color:"#7b8a9e",fontStyle:"italic"},
-    {tag:C.t.number,color:"#b5831b"},{tag:C.t.integer,color:"#b5831b"},
-    {tag:C.t.float,color:"#b5831b"},{tag:C.t.bool,color:"#b5831b"},
-    {tag:C.t.function(C.t.variableName),color:"#2b6cb0"},
-    {tag:C.t.definition(C.t.variableName),color:"#2b6cb0"},
-    {tag:C.t.typeName,color:"#7c3aed"},{tag:C.t.className,color:"#7c3aed"},
-    {tag:C.t.variableName,color:"#1a2332"},
-    {tag:C.t.punctuation,color:"#7b8a9e"},
-    {tag:C.t.operator,color:"#1a2332"},{tag:C.t.macroName,color:"#b5831b"},
-  ]);
-
-  var darkTheme = C.EditorView.theme({
-    "&":{backgroundColor:"transparent",color:"#d4dce8"},
-    ".cm-gutters":{backgroundColor:"transparent",color:"#3d5068",border:"none",minWidth:"38px"},
-    ".cm-activeLine":{backgroundColor:"transparent"},
-    ".cm-content":{fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
-    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-    ".cm-cursor":{display:"none"},
-  },{dark:true});
-
-  var lightTheme = C.EditorView.theme({
-    "&":{backgroundColor:"transparent",color:"#1a2332"},
-    ".cm-gutters":{backgroundColor:"transparent",color:"#b0bac8",border:"none",minWidth:"38px"},
-    ".cm-activeLine":{backgroundColor:"transparent"},
-    ".cm-content":{fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
-    ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-    ".cm-cursor":{display:"none"},
-  },{dark:false});
-
-  function initCM() {
-    var dark = isDark();
-    document.querySelectorAll('.cm-cell').forEach(function(host) {
-      if (host.querySelector('.cm-editor')) return;
-      new C.EditorView({
-        state: C.EditorState.create({
-          doc: host.dataset.src || '',
-          extensions: [
-            C.lineNumbers(), C.highlightSpecialChars(), C.drawSelection(),
-            C.bracketMatching(), C.julia(),
-            C.syntaxHighlighting(dark ? darkHL : lightHL),
-            dark ? darkTheme : lightTheme,
-            C.EditorState.readOnly.of(true), C.EditorView.editable.of(false),
-          ]
-        }),
-        parent: host
-      });
-    });
-  }
-
-  function reinitCM() {
-    document.querySelectorAll('.cm-cell .cm-editor').forEach(function(ed) { ed.remove(); });
-    initCM();
-  }
-
-  // This <script> is inlined in <body> BEFORE the cell DOM, so `.cm-cell`
-  // hosts don't exist yet when we fire. Defer until the parser has walked
-  // past them. `therapy:router:loaded` covers SPA navigation afterward.
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initCM);
-  } else {
-    initCM();
-  }
-  window.addEventListener('therapy:router:loaded', initCM);
-  var _lastDark = isDark();
-  new MutationObserver(function() {
-    var now = isDark();
-    if (now !== _lastDark) { _lastDark = now; reinitCM(); }
-  }).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
-})();
-</script>""")
-end
+# Notebook CodeMirror init used to live here, but it now travels with
+# each published notebook (bundled into `Sessions.render_published_notebook`),
+# so the docs layout no longer needs to pre-wire it.
