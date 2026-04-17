@@ -95,38 +95,6 @@ function ApiMiddleware()
     end
 end
 
-# --- Static files middleware ---
-# Serve files from static/ at /static/<path>. Runs before route resolution so
-# /static/editor.js, /static/favicon.svg, etc. get proper Content-Type responses
-# instead of falling through to Therapy's 404.
-
-function StaticFilesMiddleware(; dir::String = "static", url_prefix::String = "/static")
-    abs_dir = abspath(dir)
-    return function(handler)
-        return function(req::HTTP.Request)
-            path = HTTP.URI(req.target).path
-            if startswith(path, url_prefix * "/")
-                rel = lstrip(path[length(url_prefix)+1:end], '/')
-                file_path = abspath(joinpath(abs_dir, rel))
-                if startswith(file_path, abs_dir) && isfile(file_path)
-                    ct = if endswith(file_path, ".js"); "application/javascript"
-                    elseif endswith(file_path, ".css"); "text/css"
-                    elseif endswith(file_path, ".svg"); "image/svg+xml"
-                    elseif endswith(file_path, ".ico"); "image/x-icon"
-                    elseif endswith(file_path, ".png"); "image/png"
-                    else; "application/octet-stream"
-                    end
-                    return HTTP.Response(200,
-                        ["Content-Type" => ct, "Cache-Control" => "public, max-age=3600"],
-                        body=read(file_path))
-                end
-                return HTTP.Response(404, body="Not Found: $path")
-            end
-            return handler(req)
-        end
-    end
-end
-
 # --- App ---
 
 app = App(
@@ -135,8 +103,15 @@ app = App(
     title = "Sessions.jl",
     output_dir = "dist",
     layout = :Layout,
-    middleware = [ApiMiddleware(), StaticFilesMiddleware(dir = joinpath(@__DIR__, "static"))]
+    middleware = [ApiMiddleware()]
 )
+
+# Mount /static/* via Therapy's Oxygen-style staticfiles. Replaces the
+# hand-rolled StaticFilesMiddleware that lived here previously — same
+# behaviour (MIME-typed responses + Cache-Control), just delegated to
+# the framework so SSG `build(app)` picks it up too.
+Therapy.staticfiles(app, joinpath(@__DIR__, "static"), "static";
+    headers = ["Cache-Control" => "public, max-age=3600"])
 
 # --- WebSocket channel handlers ---
 
