@@ -249,27 +249,65 @@ struct ReactiveEmit
 end
 
 """
-True if `code` contains a pattern WasmTarget definitely can't
-handle today. Conservative — a WALL'd but translatable cell is just
-a visible degradation; a broken @island compile skips the whole
-notebook's reactivity.
+Strip `#`-prefixed single-line comments from `code` so downstream
+pattern-based WALL heuristics don't false-match content inside
+comments (e.g. an explanatory comment mentioning `"n = \$(n)"`
+shouldn't force the whole cell into WALL). String literals are
+preserved — a simple state machine flips between in-string and
+out-of-string as it scans each line.
+"""
+function _strip_comments_linewise(code::AbstractString)::String
+    out = IOBuffer()
+    for raw_line in split(code, '\n'; keepempty = true)
+        in_str = false; str_q = '"'; prev = '\0'
+        cut = nothing
+        chars = collect(raw_line)
+        for (i, c) in enumerate(chars)
+            if in_str
+                (c == str_q && prev != '\\') && (in_str = false)
+            else
+                if c == '"' && prev != '\\'
+                    in_str = true; str_q = c
+                elseif c == '#'
+                    cut = i
+                    break
+                end
+            end
+            prev = c
+        end
+        if cut === nothing
+            print(out, raw_line)
+        else
+            print(out, raw_line[1:prevind(raw_line, cut)])
+        end
+        print(out, '\n')
+    end
+    return String(take!(out))
+end
 
-Rejected: DataFrame / md"…" / @show,@info,@warn,@error / display() /
-string-interpolation touching a bond / broadcast operators touching
-a bond. Reason each: DataFrames/Markdown have non-compilable
-method tables; logging macros lower to non-WASM-friendly calls;
-`\$(n)` lowers to `string(::Any, …)` whose general-path WasmGC
-support isn't there yet (Therapy's NotebookDemo only uses STATIC
-strings inside reactive closures); broadcast machinery relies on
-`Broadcast.materialize` + iterator protocols WasmTarget can't unroll.
+"""
+True if `code` contains a pattern WasmTarget definitely can't
+handle today. Conservative — a WALL'd but translatable cell is
+just a visible degradation; a broken @island compile skips the
+whole notebook's reactivity.
+
+Rejected: DataFrame / md"…" / @show,@info,@warn,@error /
+display() / string-interpolation touching a bond / broadcast
+operators touching a bond. Reason each: DataFrames/Markdown have
+non-compilable method tables; logging macros lower to non-WASM-
+friendly calls; `\$(n)` lowers to `string(::Any, …)` whose
+general-path WasmGC support isn't there yet (Therapy's
+NotebookDemo only uses STATIC strings inside reactive closures);
+broadcast machinery relies on `Broadcast.materialize` + iterator
+protocols WasmTarget can't unroll.
 
 NotebookStep4 (the WasmPlot reference) works because it uses
 explicit `while` loops (no broadcasts), static title/xlabel/ylabel
 strings (no `\$` interp), and primitive typed numerics
-(`Int64` / `Float64`). Cells off that path hit WALL so the
-translator doesn't poison the whole @island compile.
+(`Int64` / `Float64`).
 """
 function _is_wall_body(code::AbstractString, bonds::Set{Symbol})::Bool
+    code = _strip_comments_linewise(code)
     occursin(r"\bDataFrame\s*[\(\{]", code)  && return true
     occursin(r"\bmd\"", code)                && return true
     occursin(r"\b@show\b",  code)            && return true
@@ -293,6 +331,18 @@ function _is_wall_body(code::AbstractString, bonds::Set{Symbol})::Bool
     occursin(r"[A-Za-z_0-9\)\]]\.[\^\*\+\-\/]", code) && return true  # xs.^2, a.*b, ...
     occursin(r"\b[A-Za-z_][A-Za-z_0-9]*\.\(", code)   && return true  # f.(…)
     occursin(r"\.\|\|", code)                         && return true
+    return false
+end
+
+"True if `code` looks like a WasmPlot figure cell. WasmPlot IS WASM-
+compatible (Therapy's NotebookDemo uses it), so these cells translate
+to `create_effect + render!(fig)` over a Canvas output. Caller has
+already cleared `_is_wall_body`, so by the time this runs we know
+the cell uses static strings + explicit loops."
+function _is_wasmplot_body(code::AbstractString)::Bool
+    code = _strip_comments_linewise(code)
+    occursin(r"\b(WP\.|WasmPlot\.)?Figure\s*\(", code)            && return true
+    occursin(r"\b(barplot|lines|scatter|heatmap|hist)\s*!", code) && return true
     return false
 end
 

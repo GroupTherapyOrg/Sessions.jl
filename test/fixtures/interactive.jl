@@ -65,7 +65,11 @@ md"""
 @bind n BoundSlider(2:30; default=8)
 
 # ╔═╡ 1b95c056-9b5a-456f-8007-177b202a1581
-"This is n: $(n)"
+# Square of the slider value. Pure integer arithmetic — compiles to WASM
+# and stays reactive in the published notebook. (String interpolation
+# like `"n = $(n)"` would need `string(::Integer)` which WasmTarget
+# doesn't lower yet, so we keep it to a raw numeric memo.)
+n * n
 
 # ╔═╡ 20000000-0000-0000-0000-000000000007
 md"""
@@ -101,11 +105,26 @@ function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
 end
 
 # ╔═╡ 20000000-0000-0000-0000-000000000009
+# Reactive bar chart. Built with the Therapy NotebookStep4 discipline:
+# explicit `while` loop in place of `Float64.(1:n)` / `xs.^2` broadcasts
+# (broadcast machinery isn't in WasmTarget yet), static title/xlabel/
+# ylabel strings (dynamic `subtitle = "n = $(n)"` would need
+# `string(::Integer)`), and primitive typed numerics so the extractor's
+# reactive-cell translator emits a WASM-safe `create_effect`.
 let
     fig = WP.Figure(size=(750, 360))
-    ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
-    xs  = Float64.(1:n)
-    WP.barplot!(ax, xs, xs.^2; color=:red)
+    ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares")
+    xs = Float64[]
+    ys = Float64[]
+    i = Int64(1)
+    count = Int64(n)
+    while i <= count
+        xi = Float64(i)
+        push!(xs, xi)
+        push!(ys, xi * xi)
+        i = i + Int64(1)
+    end
+    WP.barplot!(ax, xs, ys; color=:red)
     fig
 end
 
