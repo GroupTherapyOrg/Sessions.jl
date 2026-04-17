@@ -175,6 +175,22 @@
    notebooks toggle the class via inline onclick on .cell-eye. */
 .cell-wrap.code-hidden .cell-code-wrap{display:none;}
 
+/* WASM-compile-failed band — reactive cell whose body can't compile to
+   WebAssembly falls back to a frozen render at the bond default. Band
+   sits above .cell-out, mirrors the structured-error card styling but
+   without a stack trace — the failure IS the extraction heuristic, not
+   a runtime exception. Layout parallels `.cell-wrap.wrap-errored`: a
+   red-shadow lift on the cell-body so the reader sees the "this cell
+   is degraded" signal at a glance. */
+.cell-wrap.wrap-wasm-failed .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.14);}
+.wasm-failed-band{margin-bottom:6px;border:1px solid rgba(226,75,74,.25);border-radius:8px;background:rgba(226,75,74,.04);}
+.wasm-failed-band .jl-error-content{padding:8px 12px 10px;gap:6px;}
+.wasm-failed-band .jl-error-badge{background:#FCEBEB;color:#791F1F;}
+.wasm-failed-band .jl-error-message{color:#6B4C3B;font-size:12.5px;}
+.dark .wasm-failed-band{border-color:rgba(226,75,74,.3);background:rgba(226,75,74,.06);}
+.dark .wasm-failed-band .jl-error-badge{background:rgba(226,75,74,.18);color:#F7C1C1;}
+.dark .wasm-failed-band .jl-error-message{color:#C7BEAD;}
+
 /* ═══ Cell output / Markdown prose — Sessions/input.css 217–298 ═══ */
 .cell-out{font-family:'DM Sans',system-ui,sans-serif;color:var(--md-text);line-height:1.6em;font-size:14.5px;word-spacing:0.04em;overflow-x:auto;overflow-y:hidden;}
 .cell-out h1,.cell-out h2,.cell-out h3,.cell-out h4,.cell-out h5,.cell-out h6{font-family:'Fraunces',Georgia,serif;font-feature-settings:'lnum','pnum';font-weight:600;color:var(--md-heading);margin-block-start:1rem;margin-block-end:0;line-height:1.25em;}

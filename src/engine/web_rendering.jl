@@ -1038,37 +1038,91 @@ function render_source_block(code::AbstractString;
 end
 
 """
-    render_published_cell(; cell_id, source_code, output_content,
-                            show_source=true, folded=false,
-                            show_output=true, runtime_ns=0,
-                            state=:done) -> VNode
+    CellDiv(; cell_id, source_code, output=nothing, cell_type=:code,
+              folded=false, show_output=true, runtime_ns=0,
+              state=:done) -> VNode
 
 Canonical cell chrome for published notebooks. 1-to-1 match with the
 live IDE's `cell-wrap > cell-body > [cell-out, cell-island]` structure.
 
+Accepts any Therapy value as `output`:
+  - `RawHtml(...)`  for a frozen static cell (SSR-evaluated body).
+  - `Input(...)` / `Span(memo)` / `Canvas(...)` / etc. for bond +
+    reactive cells living inside an `@island` — reactivity flows
+    through Therapy's native signal subscription, no innerHTML swap.
+  - `nothing` for a source-only cell (rare).
+
 **Visibility semantics** (author-controlled, not reader-controlled):
+  - `folded=true` (Pluto's `# ╟─` prefix): source is NOT in the DOM at
+    all, reader cannot reveal. Typical: markdown, boilerplate imports.
+  - `folded=false` (Pluto's `# ╠═`): source shown on load, reader can
+    toggle via cell-eye gutter icon — ephemeral, reload returns shown.
+  - `show_output=false` (trailing `;`): cell-out slot is omitted.
 
-  - `folded=true` (from `cell.folded` — Pluto's `# ╟─` prefix): the
-    author hid this cell's source in the notebook. Publish it with
-    NO source block at all and NO toggle — the reader cannot reveal
-    it. Typical use: markdown cells, boilerplate imports, helper
-    functions the author doesn't want to surface.
-  - `folded=false` (Pluto's `# ╠═` prefix): source is visible on
-    load. Reader can toggle via the cell-eye gutter icon, but the
-    state is ephemeral — a reload always returns to shown.
+`cell_type=:markdown` adds the purple left stripe
+(`.md-cell::before`) that distinguishes markdown cells in the IDE.
 
-  - `show_output=false` (trailing `;` — Pluto's output-suppression
-    convention): the cell-out slot is omitted entirely.
+**State:**
+  - `:done`        normal cell.
+  - `:errored`     add `cv-errored` → red-shadow lift.
+  - `:wasm_failed` WALL-cell mode — reactive cell whose body can't
+    compile to WebAssembly. Renders a red error band above the frozen
+    output so the reader understands why the cell isn't reactive.
 
-`output_content`:
-  - `RawHtml(...)` for a frozen static cell,
-  - an `@island` call (e.g. `_Bond_n_abc()`) for bond / reactive cells,
-  - `nothing` for a source-only cell.
-
-`runtime_ns` is baked into the `.rt-badge` (human-formatted via
-`_format_runtime`). `state=:errored` adds `cv-errored` to the
-code-cell so the red-shadow lift kicks in.
+`runtime_ns` is baked into the `.rt-badge` (human-formatted).
 """
+function CellDiv(; cell_id::AbstractString,
+                   source_code::AbstractString = "",
+                   output = nothing,
+                   cell_type::Symbol = :code,
+                   folded::Bool = false,
+                   show_output::Bool = true,
+                   runtime_ns::Integer = 0,
+                   state::Symbol = :done)
+    parts = Any[]
+    wrap_cls = "cell-wrap"
+    cell_type === :markdown && (wrap_cls *= " md-cell")
+    has_output = show_output && output !== nothing
+    has_output && (wrap_cls *= " has-output")
+    folded && (wrap_cls *= " code-hidden")
+    state === :errored && (wrap_cls *= " wrap-errored")
+    state === :wasm_failed && (wrap_cls *= " wrap-wasm-failed")
+
+    # WALL-cell band — reader-facing explanation. Sits ABOVE the frozen
+    # output so it's the first thing seen. Same markup shape as the
+    # structured-error renderer so notebook-chrome.css styling applies
+    # automatically (`.jl-error` + `.jl-error-badge`).
+    state === :wasm_failed && push!(parts,
+        Div(:class => "jl-error wasm-failed-band",
+            Div(:class => "jl-error-content",
+                Div(:class => "jl-error-header",
+                    Span(:class => "jl-error-badge", "WASM compile failed"),
+                    Span(:class => "jl-error-type", "Cell frozen at initial value")),
+                Div(:class => "jl-error-message",
+                    "This reactive cell's body can't compile to WebAssembly, so it no longer re-runs when its upstream bond changes. The output below is frozen at the bond's default value."))))
+
+    # Output goes above source (Pluto convention).
+    has_output && push!(parts, Div(:class => "cell-out",
+        :data_cell_id => cell_id,
+        :style => "padding:4px 0 2px;overflow-x:auto;",
+        output))
+
+    # Source block: positional `Show` → returns `nothing` or `render()`.
+    # Do-block sugar would route to the ShowNode-emitting form which
+    # leaves a `display:none` tombstone in HTML.
+    if !isempty(source_code)
+        src = Therapy.Show(!folded, () -> render_source_block(source_code;
+            cell_id=cell_id, runtime_ns=runtime_ns, state=state))
+        src !== nothing && push!(parts, src)
+    end
+
+    Div(:data_cell_id => cell_id, :class => wrap_cls,
+        Div(:class => "cell-body", parts...))
+end
+
+"""Legacy alias — `render_published_cell` is the pre-`CellDiv` name
+held for any external caller. Delete once no extracted notebooks
+reference it. `output_content` → `output`."""
 function render_published_cell(; cell_id::AbstractString,
                                  source_code::AbstractString,
                                  output_content,
@@ -1077,40 +1131,8 @@ function render_published_cell(; cell_id::AbstractString,
                                  show_output::Bool=true,
                                  runtime_ns::Integer=0,
                                  state::Symbol=:done)
-    parts = Any[]
-    wrap_cls = "cell-wrap"
-    has_output = show_output && output_content !== nothing
-    has_output && (wrap_cls *= " has-output")
-    # Folded cells have no code-cell in the DOM at all — add the
-    # `code-hidden` class anyway so the cell-out styling that depends
-    # on `:not(.code-hidden)` (left border, padding) correctly skips.
-    folded && (wrap_cls *= " code-hidden")
-    state === :errored && (wrap_cls *= " wrap-errored")
-    # Output above source — Pluto-style, matches live IDE `render_cell`.
-    if has_output
-        push!(parts, Div(:class => "cell-out",
-            :data_cell_id => cell_id,
-            :style => "padding:4px 0 2px;overflow-x:auto;",
-            output_content))
-    end
-    # Author-controlled fold semantics via Therapy's DOM-absent `Show`
-    # form (VNode.jl line 108: `Show(condition::Bool, render::Function)`
-    # — condition first, render second). That method returns either
-    # `render()` or literal `nothing`, so folded source never lands in
-    # the SSR output at all. Writing it as an explicit positional call
-    # rather than `Show(...) do ... end` — the `do`-block sugar puts
-    # the body as arg #1 and would route to the ShowNode-emitting form
-    # (VNode.jl line 94) that leaves a `display:none` tombstone in the
-    # HTML. Non-folded cells get the full source + cell-eye toggle;
-    # the inline onclick flips a CSS class, so state is ephemeral and
-    # reloads always return to shown.
-    if show_source
-        src = Therapy.Show(!folded, () -> render_source_block(source_code;
-            cell_id=cell_id, runtime_ns=runtime_ns, state=state))
-        src !== nothing && push!(parts, src)
-    end
-    Div(:data_cell_id => cell_id, :class => wrap_cls,
-        Div(:class => "cell-body", parts...))
+    CellDiv(; cell_id, source_code, output=output_content,
+              folded, show_output, runtime_ns, state)
 end
 
 # ── Self-contained asset bundle ──────────────────────────────────────

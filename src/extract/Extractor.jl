@@ -87,14 +87,14 @@ function extract_notebook(
     # Target only the specific names the scaffolding uses. `using Therapy`
     # (all exports) clashes with notebook imports that export the same
     # HTML5 element names — e.g. WasmPlot.Figure vs Therapy.Figure
-    # (<figure>), or a user-defined Header / Section / Details. The
-    # extracted module needs @island / create_signal / RawHtml for the
-    # scaffolding and `render_value` / `render_published_cell` /
-    # `render_published_notebook` from Sessions for cell chrome — those
-    # are the single source of truth, shared with the live IDE.
+    # (<figure>), or a user-defined Header / Section / Details. We pull
+    # in: @island (reactive boundary), create_signal (bond state),
+    # RawHtml (frozen cell output), Div / Input / Span (bond-widget
+    # tree built natively from the signal), plus the Sessions-side cell
+    # chrome (CellDiv + render_value + render_published_notebook).
     runtime_imports = [
-        "using Therapy: @island, create_signal, RawHtml",
-        "using Sessions: render_value, render_published_cell, render_published_notebook",
+        "using Therapy: @island, create_signal, RawHtml, Div, Input, Span",
+        "using Sessions: render_value, CellDiv, render_published_notebook",
     ]
 
     plan = ExtractionPlan(

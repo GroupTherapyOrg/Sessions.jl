@@ -78,7 +78,15 @@ let extracted_dir = joinpath(@__DIR__, "src", "components", "notebooks")
                 # is in a later world than this loop, so a bare
                 # `getfield` triggers Julia 1.12's strict-binding
                 # warning. invokelatest does the right thing.
-                fn = Base.invokelatest(getfield, host, name_sym)
+                raw = Base.invokelatest(getfield, host, name_sym)
+                # Extracted notebooks now export an `@island` (an
+                # IslandDef). Therapy routes + EXTRACTED_NOTEBOOKS both
+                # expect a plain Function. Wrap the island in a closure
+                # that calls it (IslandDef is callable but fails the
+                # ::Function conversion on `push!`). Plain functions
+                # (Welcome-style, if a notebook has zero bonds and we
+                # ever emit one without @island) pass straight through.
+                fn = raw isa Function ? raw : (() -> Base.invokelatest(raw))
                 EXTRACTED_NOTEBOOKS[slug] = fn
                 push!(app.routes, "/notebooks/$(slug)/" => fn)
                 println("  Registered extracted notebook: /notebooks/$(slug)/  ← $(file)")
