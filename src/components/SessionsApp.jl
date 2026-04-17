@@ -5,16 +5,8 @@
 # All interactivity lives in the island components.
 
 function SessionsApp(children...)
-    cell_count_init = if isdefined(Main, :WEB_STATE) && Main.WEB_STATE[] !== nothing
-        try
-            length(Main.Sessions.ordered_cells(Main.Sessions.active_nb(Main.WEB_STATE[])))
-        catch
-            0
-        end
-    else
-        0
-    end
-
+    # Initial cell count is set on the shared cellcount_signal at module
+    # load (see SharedSignals.jl) and updated by the WS bridge.
     Fragment(
         # Main layout
         Div(:id => "sessions-root",
@@ -45,7 +37,7 @@ function SessionsApp(children...)
                         ReplPanel()))),
 
             # Status Bar (@island — theme toggle, connection, cell count)
-            StatusBar(initial_cells=cell_count_init)),
+            StatusBar()),
 
         # Panel visibility restore script (bridges shared signals to existing panels)
         # This will be replaced when FileExplorer and Terminal become proper Show()-based islands

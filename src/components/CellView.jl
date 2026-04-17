@@ -5,19 +5,19 @@
 # CodeMirror is passed as the `children` slot and lives as a child DOM
 # node that CM manages itself.
 #
-# THERAPY COMPILER LIMITATION (audit-confirmed in
-# Therapy.jl/src/Compiler/Compile.jl:_extract_js_calls):
+# THERAPY COMPILER LIMITATIONS (audit-confirmed):
 #
-#   js() args MUST be DIRECT signal getter results. Anything computed
-#   from a Julia helper (`_cls_str(state(), stale())`, `string(...)`,
-#   ternaries) resolves to literal `undefined` in the generated JS.
+# 1. js() args MUST be DIRECT signal-getter results — anything computed
+#    by a Julia helper resolves to literal `undefined`. So every effect
+#    is `v = sig(); js("…use \$1…", v)` and all branching lives INSIDE
+#    the JS string.
 #
-#   So every effect's body looks like:
-#       v = some_signal()         # bind getter result
-#       js("…use \$1…", v)        # all branching INSIDE the JS string
-#
-#   Don't try to compute a String in Julia and pass it through `$N` —
-#   the compiler can't see it. Inline the conditional in JS instead.
+# 2. Prop→signal init only fires when ALL kwargs are Integer-typed
+#    (Compile.jl line 898: `all_props_are_int`). One String kwarg →
+#    every signal silently stays at 0 on hydration. So this island
+#    keeps every kwarg as Int. cell_id is discovered from the DOM at
+#    click time inside the inline onclick handlers; run/menu actions
+#    call global IDE helpers (window._sessionsRunCell etc.).
 #
 # Per-cell signals are PRIVATE (not shared) — the WS bridge writes
 # them by selecting `therapy-island[data-cell-id=...]` and poking
@@ -36,14 +36,16 @@ const CV_STATE_DONE     = 3
 const CV_STATE_ERRORED  = 4
 const CV_STATE_SKIPPED  = 5
 
+# Inline onclick: discover cell_id from the DOM at click time so we
+# don't need a String kwarg (which would break Therapy's prop-init).
+const _CV_RUN_ONCLICK  = "window._sessionsRunCell(this.closest('.cell-wrap').dataset.cellId)"
+const _CV_MENU_ONCLICK = "window._sessionsShowCellMenu(this,this.closest('.cell-wrap').dataset.cellId)"
+
 @island function CellView(children...;
-                          cell_id::String="",
                           initial_state::Int=CV_STATE_IDLE,
                           initial_stale::Int=0,
                           initial_runtime_ns::Int=0,
-                          initial_open::Int=1,
-                          run_handler::String="",
-                          menu_handler::String="")
+                          initial_open::Int=1)
     # ── Signal layout (KEEP THIS ORDER — JS WS bridge indexes by it) ──
     state, set_state         = create_signal(initial_state)
     is_stale, set_stale      = create_signal(initial_stale)
@@ -51,9 +53,6 @@ const CV_STATE_SKIPPED  = 5
     is_open, set_open        = create_signal(initial_open)
 
     # ── Effect: state → .code-cell className ──
-    # Branching is inline in the JS string. Stale is mixed in by the
-    # next effect via classList toggle (so this one only owns state-
-    # derived classes).
     create_effect(() -> begin
         s = state()
         js("""
@@ -138,15 +137,13 @@ const CV_STATE_SKIPPED  = 5
             Div(:class => initial_class,
                 Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
                     Span(:class => "rt-badge", ""),
-                    isempty(run_handler) ? nothing :
-                        Therapy.Button(:class => "ctrl-btn run-btn",
-                            :title => "Run cell (Shift+Enter)",
-                            :on_click => run_handler,
-                            RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>""")),
-                    isempty(menu_handler) ? nothing :
-                        Therapy.Button(:class => "ctrl-btn menu-btn",
-                            :title => "Cell actions",
-                            :on_click => menu_handler,
-                            RawHtml("""<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""))),
+                    Therapy.Button(:class => "ctrl-btn run-btn",
+                        :title => "Run cell (Shift+Enter)",
+                        :on_click => _CV_RUN_ONCLICK,
+                        RawHtml("""<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>""")),
+                    Therapy.Button(:class => "ctrl-btn menu-btn",
+                        :title => "Cell actions",
+                        :on_click => _CV_MENU_ONCLICK,
+                        RawHtml("""<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/></svg>"""))),
                 children...)))
 end

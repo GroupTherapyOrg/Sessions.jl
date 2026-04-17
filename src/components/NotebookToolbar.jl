@@ -1,22 +1,33 @@
 # NotebookToolbar.jl — top-of-tab pill (Run all / Run stale / progress / Save / Format)
 #
-# THERAPY COMPILER LIMITATION: js() args MUST be DIRECT signal-getter
-# results. Conditional branches go INSIDE the JS string. (See header
-# of CellView.jl for the longer write-up.)
+# THERAPY PATTERN (from Therapy.jl/docs/.../DarkModeToggle.jl):
+#   Shared-signal islands have NO kwargs. Every kwarg becomes a signal
+#   slot that collides with shared-signal slots by index. So for islands
+#   that read shared signals, drop kwargs and route every dynamic value
+#   through a shared signal updated by the WS bridge.
+#
+# THERAPY COMPILER LIMITATION:
+#   js() args MUST be DIRECT signal-getter results — anything computed
+#   by a Julia helper resolves to literal `undefined`. So every effect
+#   binds the getter into a local and inlines all branching INSIDE the
+#   JS string. (See header of CellView.jl for the longer write-up.)
 
 using Therapy
 
 const _SVG_RUN_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l10-5.5z"/></svg>"""
 const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>"""
 
-@island function NotebookToolbar(; is_file_tab::Int=0, can_format::Int=1)
-    # Shared signals (closure field name = WS bridge key for __therapy.set)
+@island function NotebookToolbar()
+    # Shared signals — closure field name = WS bridge key for window.__therapy.set.
+    # All 8 read-only here; the WS bridge owns the writes.
     is_executing, _            = is_executing_signal
     is_unsaved, _              = is_unsaved_signal
     run_progress_current, _    = run_progress_current_signal
     run_progress_total, _      = run_progress_total_signal
     stale_count, _             = stale_count_signal
     is_formatting, _           = is_formatting_signal
+    active_is_file, _          = active_is_file_signal
+    active_can_format, _       = active_can_format_signal
 
     # ── Effect: pill-mode flip (idle group vs running group) ──
     create_effect(() -> begin
@@ -40,9 +51,7 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
         """, n)
     end)
 
-    # ── Effect: progress pill (cur / tot) ──
-    # Two signals → two effects sharing one wrapper. The wrapper toggles
-    # via the total signal; the body re-renders when current changes too.
+    # ── Effect: progress total → wrapper visibility ──
     create_effect(() -> begin
         tot = run_progress_total()
         js("""
@@ -54,6 +63,7 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
         """, tot)
     end)
 
+    # ── Effect: progress current → "N / M" label + bar fill ──
     create_effect(() -> begin
         cur = run_progress_current()
         js("""
@@ -79,10 +89,7 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
         """, u)
     end)
 
-    # ── Effect: format button text + class ──
-    # `can_format` is a static prop (not a signal) so we bake its
-    # disabled-state into the SSR class and only flip the text + active
-    # classes from the formatting signal.
+    # ── Effect: format button text from formatting flag ──
     create_effect(() -> begin
         formatting = is_formatting()
         js("""
@@ -92,8 +99,31 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
         """, formatting)
     end)
 
+    # ── Effect: notebook-controls visibility from active-tab type ──
+    create_effect(() -> begin
+        is_file = active_is_file()
+        js("""
+            var nc=island.querySelector('[data-notebook-controls]');
+            if(nc)nc.style.display=\$1?'none':'';
+        """, is_file)
+    end)
+
+    # ── Effect: format button enabled state from can_format ──
+    create_effect(() -> begin
+        cf = active_can_format()
+        js("""
+            var btn=island.querySelector('[data-format-btn]');
+            if(!btn)return;
+            if(\$1)btn.classList.remove('tb-disabled');
+            else btn.classList.add('tb-disabled');
+        """, cf)
+    end)
+
     # ── DOM (initial state — effects update on signal changes) ──
-    notebook_controls = is_file_tab == 1 ? nothing : Fragment(
+    # Always render every control; effects gate visibility/enabled-state.
+    notebook_controls = Div(:class => "nb-toolbar-group",
+        Symbol("data-notebook-controls") => "1",
+        :style => "display:flex;gap:6px;align-items:center;",
         Div(:class => "pill-group", Symbol("data-pill-mode") => "idle",
             Therapy.Button(:id => "run-all-btn", :class => "pill-btn pill-primary",
                 :on_click => "window._sessionsRunAll()",
@@ -124,11 +154,9 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
             :title => "Save (Ctrl+S)",
             "Save"),
         Therapy.Button(Symbol("data-format-btn") => "1",
-            :class => can_format == 1 ? "pill-btn pill-ghost" : "pill-btn pill-ghost tb-disabled",
-            :on_click => is_file_tab == 1 ?
-                "TherapyWS.sendMessage('notebook',{action:'format_file'})" :
-                "TherapyWS.sendMessage('notebook',{action:'format_all'})",
-            :title => is_file_tab == 1 ? "Format file" : "Format all cells",
+            :class => "pill-btn pill-ghost",
+            :on_click => "TherapyWS.sendMessage('notebook',{action:'format_active'})",
+            :title => "Format",
             "Format"))
 
     Div(:class => "nb-pill", notebook_controls, save_format)

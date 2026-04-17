@@ -827,13 +827,16 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     initial_stale = (mode == :live && needs_run) ? 1 : 0
     initial_open = cell.folded ? 0 : 1
     initial_runtime = mode == :live ? Int(output.runtime_ns) : 0
-    run_handler = mode == :live ? "window._sessionsRunCell('$(cell_id)')" : ""
-    menu_handler = mode == :live ? "window._sessionsShowCellMenu(this,'$(cell_id)')" : ""
 
     # CellView lives in src/components/CellView.jl, loaded into the
     # `Main.TherapyApp` module by Therapy.load_app! at app startup (same
     # path as every other Sessions @island). Look it up at SSR time
     # rather than depending on it at package-load time.
+    #
+    # All kwargs MUST be Int AND match the count + order of create_signal
+    # calls in CellView — Therapy's compiler maps prop_names[i] →
+    # signal_(i-1) by index. cell_id is read from the DOM at click time
+    # inside CellView's button onclicks, so we don't pass it through.
     cell_view = if isdefined(Main, :TherapyApp) &&
                    isdefined(getfield(Main, :TherapyApp), :CellView)
         getfield(getfield(Main, :TherapyApp), :CellView)
@@ -842,13 +845,10 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
     end
     if cell_view !== nothing
         push!(parts, cell_view(
-                cell_id = cell_id,
                 initial_state = state_int,
                 initial_stale = initial_stale,
                 initial_runtime_ns = initial_runtime,
-                initial_open = initial_open,
-                run_handler = run_handler,
-                menu_handler = menu_handler) do
+                initial_open = initial_open) do
             Div(:class => "cm-cell",
                 :data_cell_id => cell_id,
                 :data_src => String(code))

@@ -71,17 +71,13 @@ function NotebookPanel(state)
     # The exec group swaps between an "idle" pair (Run all + Run stale) and a
     # "running" slot (Stop). The status zone is hidden when idle and fills with
     # dot/count/bar/jump-to-cell during run + a transient green-check on finish.
-    is_jl_file = is_file_tab && endswith(tab.path, ".jl")
-    can_format = !is_file_tab || is_jl_file
-
-    # Toolbar pill is now a Therapy @island (NotebookToolbar) — visibility,
-    # progress bar, stale-count badge, and save-indicator state are all
-    # driven by the page-level signals defined in NotebookSignals.jl.
-    # The WS bridge writes those signals via window.__therapy.set(...).
+    # Toolbar pill is a kwarg-less Therapy @island (NotebookToolbar) —
+    # every dynamic value comes through a shared signal updated by the
+    # WS bridge (active_is_file_signal, active_can_format_signal, plus
+    # is_executing/is_unsaved/run_progress_*/stale_count/is_formatting).
+    # Initial tab-type values are seeded by send_full_state on connect.
     push!(tab_items, Div(:style => "margin-left:auto;padding:0 8px;flex-shrink:0;display:flex;align-items:center;",
-        NotebookToolbar(
-            is_file_tab = is_file_tab ? 1 : 0,
-            can_format = can_format ? 1 : 0)))
+        NotebookToolbar()))
 
     tab_bar = Div(:class => "h-[38px] flex items-stretch shrink-0",
         :style => "background:var(--chrome-bg);border-radius:12px 12px 0 0;",

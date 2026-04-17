@@ -701,8 +701,11 @@ function _notebook_ws_bridge_body()
         window._sessionsExecuting = isRunning;
         window._sessionsRunningCellId = isRunning && data.cell_id ? data.cell_id : null;
         setExecuting(isRunning ? 1 : 0);
-        S('run_progress_current', (data.running_index|0));
-        S('run_progress_total', isRunning ? (data.total|0) : 0);
+        // Both progress signals must reset together — leaving `current`
+        // at its last running value while `total` goes to 0 leaves the
+        // toolbar showing "N / 0" forever.
+        S('run_progress_current', isRunning ? (data.running_index|0) : 0);
+        S('run_progress_total',   isRunning ? (data.total|0)         : 0);
       }
 
       // ── Format progress ──
@@ -727,6 +730,13 @@ function _notebook_ws_bridge_body()
 
       // ── Full state (SSR already rendered, skip) ──
       else if (data.event === 'full_state') {
+        // Active-tab type → NotebookToolbar's active_is_file /
+        // active_can_format effects (toggle notebook controls + format
+        // button enable). Default when missing: notebook tab.
+        S('active_is_file',    data.active_is_file    || 0);
+        S('active_can_format', data.active_can_format !== undefined ? data.active_can_format : 1);
+        // Cell count → StatusBar's cellcount effect → "<N> cells".
+        if (data.cells) S('cellcount', data.cells.length);
         // Restore cell execution states from server (important after reconnect/reload)
         if (data.cells) {
           data.cells.forEach(function(cell) {
@@ -754,6 +764,12 @@ function _notebook_ws_bridge_body()
           S('run_progress_current', runningIdx);
           S('run_progress_total', total);
         }
+      }
+
+      // ── Active tab changed (file ↔ notebook) ──
+      else if (data.event === 'tab_active_changed') {
+        S('active_is_file',    data.active_is_file    || 0);
+        S('active_can_format', data.active_can_format !== undefined ? data.active_can_format : 1);
       }
 
       // ── Notebook replaced (tab switch, etc.) ──

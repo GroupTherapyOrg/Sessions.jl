@@ -68,3 +68,13 @@ const connection_signal = create_signal(1)
 # Format-in-progress flag (Format button text + disabled state).
 # Read by: NotebookToolbar.
 const is_formatting_signal = create_signal(0)
+
+# Whether the active tab is a file (1) or a notebook (0). Drives the
+# notebook-controls visibility in NotebookToolbar (file tabs hide the
+# Run all / Run stale / Stop pill; only Save + Format apply).
+const active_is_file_signal = create_signal(0)
+
+# Whether the active tab can be formatted (1 = yes, 0 = disabled).
+# Notebooks: always 1. File tabs: only when JuliaFormatter recognises
+# the extension. NotebookToolbar reflects this on the Format button.
+const active_can_format_signal = create_signal(1)

@@ -1,10 +1,14 @@
 # StatusBar.jl — footer strip: WS connection dot, cell count, theme toggle
 #
+# THERAPY PATTERN: shared-signal islands have NO kwargs (kwargs collide
+# with shared signal slots in the prop-init loop). Cell count comes from
+# the cellcount_signal which the WS bridge updates on full_state +
+# cell_added / cell_deleted events.
+#
 # THERAPY COMPILER LIMITATION: js() args MUST be DIRECT signal-getter
-# results. Conditional branches go INSIDE the JS string. (See header
-# of CellView.jl for the longer write-up.)
+# results — branching goes INSIDE the JS string.
 
-@island function StatusBar(; initial_cells::Int = 0)
+@island function StatusBar()
     cellcount, _  = cellcount_signal
     connection, _ = connection_signal
     is_dark, set_dark = create_signal(0)
@@ -37,7 +41,7 @@
         Span(:id => "cell-count",
             Symbol("data-cell-count") => "1",
             :style => "color:var(--text-3);",
-            string(initial_cells, " cells")),
+            "0 cells"),
         Span(:style => "flex:1;"),
         Span(:id => "ws-dot",
             Symbol("data-ws-dot") => "1",

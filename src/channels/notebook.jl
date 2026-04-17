@@ -206,7 +206,9 @@ function send_full_state!(state::WebNotebookState, conn)
             "event" => "full_state",
             "tab_type" => "file",
             "file_path" => tab.path,
-            "file_content" => tab.file_content
+            "file_content" => tab.file_content,
+            "active_is_file" => 1,
+            "active_can_format" => endswith(lowercase(tab.path), ".jl") ? 1 : 0
         ))
         return
     end
@@ -218,7 +220,9 @@ function send_full_state!(state::WebNotebookState, conn)
         "notebook_path" => nb.path,
         "cells" => cells_data,
         "cell_order" => [string(id) for id in nb.cell_order],
-        "executing" => state.executing
+        "executing" => state.executing,
+        "active_is_file" => 0,
+        "active_can_format" => 1
     ))
 end
 
@@ -275,6 +279,14 @@ function setup_notebook_channel!(state::WebNotebookState)
                 _handle_format_all!(state, conn, msg)
             elseif action == "format_file"
                 _handle_format_file!(state, conn, msg)
+            elseif action == "format_active"
+                # Format whatever the active tab is — file or notebook.
+                tab = active_tab(state)
+                if tab !== nothing && tab.tab_type == :file
+                    _handle_format_file!(state, conn, msg)
+                else
+                    _handle_format_all!(state, conn, msg)
+                end
             else
                 @warn "[notebook] Unknown action" action=action
             end
@@ -1020,6 +1032,17 @@ function _handle_switch_tab!(state::WebNotebookState, conn, data)
 
     tab = active_tab(state)
     if tab !== nothing
+        # Tell every client the active tab type so NotebookToolbar's
+        # active_is_file / active_can_format effects flip correctly.
+        is_file = tab.tab_type == :file
+        can_format = !is_file || endswith(lowercase(tab.path), ".jl")
+        try
+            _nb_broadcast!(Dict(
+                "event" => "tab_active_changed",
+                "active_is_file"    => is_file ? 1 : 0,
+                "active_can_format" => can_format ? 1 : 0
+            ))
+        catch; end
         try
             Therapy.broadcast_all(Dict{String,Any}(
                 "channel" => "file_explorer",
