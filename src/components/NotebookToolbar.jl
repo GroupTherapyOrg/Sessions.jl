@@ -51,33 +51,29 @@ const _SVG_STOP_TOOLBAR = """<svg width="9" height="9" viewBox="0 0 16 16" fill=
         """, n)
     end)
 
-    # ── Effect: progress total → wrapper + jump button visibility ──
+    # ── Effect: (current, total) → visibility + "N / M" label + bar fill ──
+    # Merged: previously two effects. The label effect parsed `total` from
+    # the DOM, which raced with the visibility effect — current changed first
+    # and wrote "N / 0" before total propagated. One effect reading both
+    # signals fixes the race and removes the DOM-parse hack.
     create_effect(() -> begin
+        cur = run_progress_current()
         tot = run_progress_total()
         js("""
             var sep=island.querySelector('[data-pill-sep]');
             var zone=island.querySelector('[data-pill-status]');
             var jump=island.querySelector('[data-pill-jump]');
-            var show=\$1>0;
+            var show=\$2>0;
             if(sep)sep.style.display=show?'':'none';
-            if(zone)zone.style.display=show?'':'none';
             if(jump)jump.style.display=show?'':'none';
-        """, tot)
-    end)
-
-    # ── Effect: progress current → "N / M" label + bar fill ──
-    create_effect(() -> begin
-        cur = run_progress_current()
-        js("""
-            var zone=island.querySelector('[data-pill-status]');
-            if(!zone||zone.style.display==='none')return;
-            var totEl=zone.querySelector('.pill-count');
-            var totMatch=totEl?(totEl.textContent.split('/')[1]||'0').trim():'0';
-            var tot=parseInt(totMatch,10)||0;
-            var cur=\$1;
-            var pct=tot>0?Math.max(0,Math.min(100,Math.round(cur*100/tot))):0;
-            zone.innerHTML='<span class="pill-dot"></span><span class="pill-count">'+cur+' / '+tot+'</span><div class="pill-bar"><div class="pill-bar-fill" style="width:'+pct+'%"></div></div>';
-        """, cur)
+            if(zone){
+                zone.style.display=show?'':'none';
+                if(show){
+                    var pct=Math.max(0,Math.min(100,Math.round(\$1*100/\$2)));
+                    zone.innerHTML='<span class="pill-dot"></span><span class="pill-count">'+\$1+' / '+\$2+'</span><div class="pill-bar"><div class="pill-bar-fill" style="width:'+pct+'%"></div></div>';
+                }
+            }
+        """, cur, tot)
     end)
 
     # ── Effect: save indicator text + class ──
