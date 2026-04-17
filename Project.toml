@@ -8,6 +8,7 @@ projects = ["SessionsUI"]
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 ExpressionExplorer = "21656369-7473-754a-2065-74616d696c43"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
@@ -21,18 +22,21 @@ SessionsUI = "d4e5f6a7-b8c9-0123-defa-234567890123"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+WasmPlot = "c1c0b9ed-8be2-478a-b5eb-22e4f5885b7b"
 
 [sources]
 SessionsUI = {subdir = "SessionsUI", url = "https://github.com/GroupTherapyOrg/Sessions.jl.git"}
 Therapy = {path = "../Therapy.jl"}
 
 [compat]
+DataFrames = "1.8.2"
 ExpressionExplorer = "1"
 Malt = "1"
 OrderedCollections = "1"
 PlutoDependencyExplorer = "1"
 PrecompileTools = "1"
 Therapy = "0.1"
+WasmPlot = "0.1.0"
 julia = "~1.12"
 
 [apps.sessions]

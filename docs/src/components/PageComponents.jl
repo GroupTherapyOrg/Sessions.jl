@@ -145,13 +145,22 @@ end
 # Notebooks Layout
 # =============================================================================
 
-const _INTERACTIVE_SLUGS = Set(["cairomakie-plots", "data-exploration", "interactive-plots"])
-const _NOTEBOOK_ORDER = ["hello-sessions", "data-exploration", "interactive-plots", "cairomakie-plots"]
+# ── Extracted-notebook discovery ────────────────────────────────────
+# The docs site auto-discovers Sessions-extracted notebooks living in
+# docs/notebooks/extracted/<Name>.jl. Each file exposes a top-level
+# Therapy component named after the file (PascalCase). docs/app.jl
+# loads them into Main.TherapyApp at boot and registers a route per
+# file at /notebooks/<slug>/. The sidebar + index gallery iterate
+# `EXTRACTED_NOTEBOOKS` (set up in app.jl) — no more reaching at the
+# old EXECUTED_NOTEBOOKS pipeline (which was removed when we shifted
+# to the WASM-island publish target).
 
-"""Order notebook slugs: preferred order first, then alphabetical remainder."""
+const _NOTEBOOK_PRIORITY_ORDER = ["welcome", "interactive"]
+
+"""Order extracted notebook slugs: preferred order first, then alphabetical remainder."""
 function _ordered_notebook_slugs(slugs)
     ordered = String[]
-    for s in _NOTEBOOK_ORDER
+    for s in _NOTEBOOK_PRIORITY_ORDER
         s in slugs && push!(ordered, s)
     end
     for s in sort(collect(slugs))
@@ -160,13 +169,19 @@ function _ordered_notebook_slugs(slugs)
     ordered
 end
 
+"""Title-case a slug for the sidebar / cards (`welcome` → `Welcome`)."""
+function _notebook_display_title(slug::AbstractString)
+    titlecase(replace(String(slug), '-' => ' ', '_' => ' '))
+end
+
+"""Discovered extracted notebooks (slug → component fn). Set by docs/app.jl."""
+function _extracted_notebooks()
+    isdefined(Main, :EXTRACTED_NOTEBOOKS) ? Main.EXTRACTED_NOTEBOOKS : Dict{String, Any}()
+end
+
 """Sidebar for notebooks section."""
 function NotebooksSidebar()
-    items = if isdefined(Main, :EXECUTED_NOTEBOOKS) && !isempty(Main.EXECUTED_NOTEBOOKS)
-        _ordered_notebook_slugs(keys(Main.EXECUTED_NOTEBOOKS))
-    else
-        String[]
-    end
+    items = _ordered_notebook_slugs(keys(_extracted_notebooks()))
 
     Nav(:class => "py-4 px-2",
         H4(:class => "px-3 mb-2 text-xs font-semibold tracking-wider uppercase text-warm-600 dark:text-warm-400",
@@ -178,18 +193,11 @@ function NotebooksSidebar()
                 inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
                 exact = true),
             map(items) do slug
-                nb = Main.EXECUTED_NOTEBOOKS[slug]
-                title = Main.Sessions.notebook_title(nb)
-                is_interactive = slug in _INTERACTIVE_SLUGS
-                if is_interactive
-                    Span(:class => "block px-3 py-1.5 text-sm rounded text-warm-400 dark:text-warm-600 cursor-default", title)
-                else
-                    NavLink("./notebooks/$(slug)/", title;
-                        class = "block px-3 py-1.5 text-sm rounded transition-colors",
-                        active_class = "text-accent-700 dark:text-accent-400 bg-warm-100 dark:bg-warm-900 border-l-2 border-accent-600 -ml-0.5 pl-[calc(0.75rem+2px)]",
-                        inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
-                        exact = true)
-                end
+                NavLink("./notebooks/$(slug)/", _notebook_display_title(slug);
+                    class = "block px-3 py-1.5 text-sm rounded transition-colors",
+                    active_class = "text-accent-700 dark:text-accent-400 bg-warm-100 dark:bg-warm-900 border-l-2 border-accent-600 -ml-0.5 pl-[calc(0.75rem+2px)]",
+                    inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
+                    exact = true)
             end...))
 end
 

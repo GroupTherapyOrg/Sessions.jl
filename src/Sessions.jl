@@ -87,6 +87,15 @@ export LspTextEdit, parse_workspace_edit, lsp_rename!, lsp_rename_with_timeout!
 include("services/formatter.jl")
 export format_code, format_code_available
 
+# Notebook → Therapy component extraction (the "shadcn-style" publish).
+# Types.jl first so all stage modules can share CellClass + ExtractionPlan.
+include("extract/Types.jl")
+include("extract/CellGraph.jl")
+include("extract/StaticRender.jl")
+include("extract/Emit.jl")
+include("extract/Extractor.jl")
+export CellClass, ExtractionPlan, extract_notebook, validate_component_name, classify_cells
+
 # CLI entry point (sessions command — uses @main for Pkg.Apps)
 include("cli.jl")
 

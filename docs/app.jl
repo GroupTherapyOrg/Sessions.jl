@@ -41,14 +41,48 @@ app = App(
 Therapy.load_app!(app)
 
 # =============================================================================
-# Notebook publishing — DISABLED until the new build pipeline lands
+# Auto-discover Sessions-extracted notebooks
 # =============================================================================
-# The previous notebook-as-route flow used `execute_notebook_for_web` +
-# `NotebookPage` + `PrerenderedGallery`, a slider-prerendering scheme
-# (PlutoSliderServer-style). That whole pipeline was removed because
-# the project's publish target is Therapy + WASM @islands instead.
-# When the new `app.jl build` pipeline lands (Phase 3), this section
-# will become a thin call into it.
+# Each .jl file under docs/src/components/notebooks/ is a self-contained
+# Therapy component (output of `Sessions.extract_notebook(...)`). They
+# live in components/ — not their own tree — because that's exactly
+# what they are: regular Therapy components. Shadcn-style.
+#
+# For every file `Foo.jl` we:
+#   1. Include it into Main.TherapyApp so its `function Foo()` is in scope.
+#   2. Register a route at /notebooks/<slug>/ pointing at that function.
+#   3. Add the slug → function entry to the global `EXTRACTED_NOTEBOOKS`
+#      dict the gallery + sidebar iterate (PageComponents.jl).
+#
+# Slug = lowercased filename without .jl. Dropping a freshly-extracted
+# notebook in the dir + restarting picks it up automatically.
+
+const EXTRACTED_NOTEBOOKS = Dict{String, Function}()
+
+let extracted_dir = joinpath(@__DIR__, "src", "components", "notebooks")
+    if isdir(extracted_dir)
+        host = isdefined(Main, :TherapyApp) ? getfield(Main, :TherapyApp) : Main
+        for file in sort(readdir(extracted_dir))
+            endswith(file, ".jl") || continue
+            path = joinpath(extracted_dir, file)
+            name_sym = Symbol(splitext(file)[1])      # "Welcome.jl" → :Welcome
+            slug = lowercase(String(name_sym))         # :Welcome → "welcome"
+            try
+                Base.include(host, path)
+                # World-age dance: the function we just `include`d
+                # is in a later world than this loop, so a bare
+                # `getfield` triggers Julia 1.12's strict-binding
+                # warning. invokelatest does the right thing.
+                fn = Base.invokelatest(getfield, host, name_sym)
+                EXTRACTED_NOTEBOOKS[slug] = fn
+                push!(app.routes, "/notebooks/$(slug)/" => fn)
+                println("  Registered extracted notebook: /notebooks/$(slug)/  ← $(file)")
+            catch e
+                @warn "[docs] Failed to load extracted notebook" file=path exception=e
+            end
+        end
+    end
+end
 
 # =============================================================================
 # Run - dev or build based on args
