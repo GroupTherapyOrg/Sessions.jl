@@ -138,6 +138,22 @@ on_ws_disconnect() do conn
     println("[WS] Client disconnected: $(conn.id)")
 end
 
+# --- Cleanup on process exit ---
+# Without this, a Ctrl+C / kill / OOM leaves Malt worker subprocesses
+# AND PTY child processes orphaned as zombies. Tab-close already cleans
+# them up via the WS handler, but that path doesn't run on a hard
+# server exit.
+atexit() do
+    state = WEB_STATE[]
+    if state !== nothing
+        for tab in state.tabs
+            tab.worker  !== nothing && (try Sessions.stop_worker!(tab.worker)   catch; end)
+            tab.watcher !== nothing && (try Sessions.stop_watching!(tab.watcher) catch; end)
+        end
+    end
+    try Sessions.stop_all_terminals!(TERM_STATE) catch; end
+end
+
 # --- Run ---
 
 Therapy.run(app)
