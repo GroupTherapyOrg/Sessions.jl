@@ -17,27 +17,30 @@ const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
     sidebar_open, set_sidebar_open = create_signal(initial_sidebar)
     terminal_open, set_terminal_open = create_signal(initial_terminal)
 
-    # Cross-island panel visibility + localStorage persistence are
-    # genuine browser-API plumbing — js() is the right tool here. The
-    # button's own data-state attribute is now a reactive prop instead
-    # of being manually flipped via querySelectorAll inside this js().
+    # Sidebar effect: panel show/hide + button data-state + localStorage.
     create_effect(() -> begin
         v = sidebar_open()
+        state_attr = v == 1 ? "on" : "off"
         js("""
             var fp=document.getElementById('fpanel');
             if(fp)fp.style.display=\$1?'':'none';
+            var b=island.querySelector('[data-ab-btn="explorer"]');
+            if(b)b.setAttribute('data-state',\$2);
             localStorage.setItem('sessions-sidebar',\$1?'1':'0');
-        """, v)
+        """, v, state_attr)
     end)
 
     create_effect(() -> begin
         v = terminal_open()
+        state_attr = v == 1 ? "on" : "off"
         js("""
             var rp=document.getElementById('repl-panel');
             if(rp)rp.style.display=\$1?'':'none';
+            var b=island.querySelector('[data-ab-btn="terminal"]');
+            if(b)b.setAttribute('data-state',\$2);
             localStorage.setItem('sessions-repl',\$1?'1':'0');
             if(\$1)setTimeout(function(){window.dispatchEvent(new Event('resize'));},50);
-        """, v)
+        """, v, state_attr)
     end)
 
     return Div(:class => "flex flex-col items-center w-[42px] shrink-0 self-start rounded-xl",
@@ -47,7 +50,8 @@ const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
             RawHtml(_SESSIONS_LOGO_SVG)),
 
         Button(:class => "ab-btn",
-            Symbol("data-state") => () -> sidebar_open() == 1 ? "on" : "off",
+            Symbol("data-ab-btn") => "explorer",
+            Symbol("data-state") => initial_sidebar == 1 ? "on" : "off",
             :style => "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:var(--text-3);transition:all .15s;",
             :title => "Toggle Explorer (Ctrl+B)",
             :on_click => () -> set_sidebar_open(1 - sidebar_open()),
@@ -60,7 +64,8 @@ const _JET_SVG = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" 
             RawHtml(_JET_SVG)),
 
         Button(:class => "ab-btn",
-            Symbol("data-state") => () -> terminal_open() == 1 ? "on" : "off",
+            Symbol("data-ab-btn") => "terminal",
+            Symbol("data-state") => initial_terminal == 1 ? "on" : "off",
             :style => "width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;border:none;background:none;cursor:pointer;color:var(--text-3);transition:all .15s;",
             :title => "Toggle Terminal (Ctrl+`)",
             :on_click => () -> set_terminal_open(1 - terminal_open()),

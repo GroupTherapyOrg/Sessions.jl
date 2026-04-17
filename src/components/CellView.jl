@@ -2,47 +2,29 @@
 #
 # Owns ALL reactive chrome state for one cell — eye toggle
 # (fold/unfold), state classes (queued/running/etc.), .stale class,
-# runtime badge text, run + menu buttons. CodeMirror is passed as the
-# `children` slot and lives as a child DOM node that CM manages itself.
+# runtime badge text. CodeMirror is passed as the `children` slot and
+# lives as a child DOM node that CM manages itself.
 #
-# Loaded like every other @island by Therapy.load_app! at app startup.
-# render_cell() (src/engine/web_rendering.jl) looks this up at SSR time
-# via `Main.CellView` since the package layer doesn't depend on the
-# component layer (one-way arrow: components → package, not the
-# reverse).
+# Therapy compiler limitation: `:class => () -> "..."` and reactive
+# text-node bare callables ARE NOT WASM-managed for arbitrary string
+# expressions — they render once at SSR and never update. The
+# canonical Therapy reactive-DOM pattern (used by DarkModeToggle, etc.)
+# is `create_effect(() -> ... js("...", value))`. The if/else logic
+# lives in JULIA inside the effect; the js() block is a single line
+# that just writes the result to the DOM. Logic is reactive (effect
+# re-runs on signal change). NOT JS soup — one effect per visual
+# concern, all derivation in Julia.
 #
-# Per-cell state signals are PRIVATE to each CellView instance (no
-# cross-island sharing — each cell owns its own). The WS bridge
-# (Notebook.jl) writes to a CellView by:
+# Per-cell signals are PRIVATE (not shared) — the WS bridge writes
+# them by selecting `therapy-island[data-cell-id=...]` and poking
+# `signal_N.value` directly (the documented HMR pattern).
 #
-#     var island = document.querySelector(
-#         'therapy-island[data-cell-id="<uuid>"]');
-#     // Signal layout (DOCUMENTED + DETERMINISTIC — keep the order
-#     // of create_signal() calls below stable!):
-#     //   signal_0 = state       (Int: 0=idle 1=queued 2=running
-#     //                                3=done  4=errored  5=skipped)
-#     //   signal_1 = is_stale    (0/1)
-#     //   signal_2 = runtime_ns  (Int)
-#     //   signal_3 = is_open     (0/1 — eye toggle)
-#     island._wasmExports.signal_0.value = BigInt(2);
-#     island._wasmExports._rt_flush(island._wasmExports._rt_subs_0.value);
-#
-# This is exactly the pattern Therapy's HMR uses (Therapy.jl/src/
-# Server/WebSocketClient.jl ~line 208) — the supported public way to
-# poke an island's signal from outside its own runtime. NOT going
-# through window.__therapy because per-cell state belongs to one
-# island instance, not shared across islands.
-#
-# WebSlider + BoundValue (predecessors of SessionsUI's BoundSlider)
-# were removed when bonds switched to the SessionsUI MIME"text/html"
-# pipeline. The canonical interactive widget is now
-# `<bond def="x">…SessionsUI widget HTML…</bond>` plus BOND_BRIDGE_JS
-# (in dev mode) or a per-widget Therapy @island (in publish mode,
-# Phase 3).
+# Loaded by Therapy.load_app! from src/components/. render_cell()
+# looks this up at SSR via Main.CellView.
 
 using Therapy
 
-# Cell state codes — must match the order assumed by the JS WS bridge.
+# Cell state codes — must match the JS WS bridge encoding.
 const CV_STATE_IDLE     = 0
 const CV_STATE_QUEUED   = 1
 const CV_STATE_RUNNING  = 2
@@ -50,9 +32,20 @@ const CV_STATE_DONE     = 3
 const CV_STATE_ERRORED  = 4
 const CV_STATE_SKIPPED  = 5
 
-# Format an Int nanosecond duration into a compact human string for
-# the runtime badge. Pure Julia (runs in WASM via Therapy reactive
-# text-node binding — no js() needed).
+# Compute the .code-cell class string from state + stale (pure Julia,
+# runs in WASM). Used both for SSR initial render and inside the
+# reactive effect.
+function _cv_class_str(s::Int, stale::Int)::String
+    cls = "code-cell relative overflow-hidden"
+    s == CV_STATE_QUEUED   && (cls *= " cv-queued executing")
+    s == CV_STATE_RUNNING  && (cls *= " cv-running executing")
+    s == CV_STATE_ERRORED  && (cls *= " cv-errored")
+    s == CV_STATE_SKIPPED  && (cls *= " cv-skipped")
+    stale == 1             && (cls *= " stale")
+    cls
+end
+
+# Format an Int nanosecond duration → human runtime badge string.
 function _cv_fmt_runtime(ns::Int)::String
     ns <= 0 && return ""
     ms = ns / 1e6
@@ -65,15 +58,6 @@ function _cv_fmt_runtime(ns::Int)::String
     return string(round(m / 60; digits=1), "hr")
 end
 
-# Map a state code to the `cv-X` modifier class CSS keys off via :has().
-function _cv_state_class(s::Int)::String
-    s == CV_STATE_QUEUED  && return " cv-queued"
-    s == CV_STATE_RUNNING && return " cv-running"
-    s == CV_STATE_ERRORED && return " cv-errored"
-    s == CV_STATE_SKIPPED && return " cv-skipped"
-    ""
-end
-
 @island function CellView(children...;
                           cell_id::String="",
                           initial_state::Int=CV_STATE_IDLE,
@@ -82,29 +66,44 @@ end
                           initial_open::Int=1,
                           run_handler::String="",
                           menu_handler::String="")
-    # ── Signal layout (KEEP THIS ORDER — see header docstring) ──
+    # ── Signal layout (KEEP THIS ORDER — JS WS bridge indexes by it) ──
     state, set_state         = create_signal(initial_state)
     is_stale, set_stale      = create_signal(initial_stale)
     runtime_ns, set_runtime  = create_signal(initial_runtime_ns)
     is_open, set_open        = create_signal(initial_open)
 
-    # ── Render — pure declarative Therapy. No js() except in the eye
-    #            click handler (WS dispatch — browser API, unavoidable).
-    #            All visual state comes from reactive bindings:
-    #              :class => () -> ...   reactive class string
-    #              :style => () -> ...   reactive style
-    #              () -> "text"          reactive text node
-    #            Parent .cell-wrap styling is driven by CSS :has(...)
-    #            against the .code-cell modifiers — see input.css.
+    # ── Effect: state + stale → .code-cell className ──
+    # Subscribes to BOTH signals. Builds class string in Julia, writes
+    # via single js() call. Re-runs whenever state or is_stale changes.
+    create_effect(() -> begin
+        cls = _cv_class_str(state(), is_stale())
+        js("var el=island.querySelector('.code-cell');if(el)el.className=\$1;", cls)
+    end)
+
+    # ── Effect: runtime_ns → .rt-badge text ──
+    create_effect(() -> begin
+        txt = _cv_fmt_runtime(runtime_ns())
+        js("var b=island.querySelector('.rt-badge');if(b)b.textContent=\$1;", txt)
+    end)
+
+    # ── Effect: is_open → .cell-code-wrap visibility ──
+    create_effect(() -> begin
+        v = is_open()
+        js("var c=island.querySelector('.cell-code-wrap');if(c)c.style.display=\$1?'':'none';", v)
+    end)
+
+    # SSR initial values so first paint matches state before effects run.
+    initial_class = _cv_class_str(initial_state, initial_stale)
+    initial_badge = _cv_fmt_runtime(initial_runtime_ns)
+    initial_wrap_style = initial_open == 1 ? "" : "display:none"
+
     Div(:class => "cell-island",
         # Eye toggle — clicks flip is_open AND dispatch WS toggle_fold.
         Div(:class => "cell-eye",
             :on_click => () -> begin
                 new_open = 1 - is_open()
                 set_open(new_open)
-                # The single js() in this @island: WS send is a browser
-                # API call (TherapyWS), not state mutation. Cell id is
-                # interpolated at SSR time via the kwarg.
+                # Browser API: WebSocket dispatch — must be js().
                 js("""if(window.TherapyWS&&TherapyWS.sendMessage){
                           TherapyWS.sendMessage('notebook',{action:'toggle_fold',cell_id:'""" * cell_id * """',folded:!\$1});
                       }""", new_open)
@@ -115,21 +114,10 @@ end
                     Div(:style => "position:absolute;inset:0;background:var(--panel-bg);",
                         RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""))
                 end)),
-        # cell-code-wrap — visibility driven by reactive style binding
-        # (NOT Show() — Show() unmounts/remounts and CodeMirror would
-        # lose its DOM state every fold/unfold).
-        Div(:class => "cell-code-wrap",
-            :style => () -> is_open() == 1 ? "" : "display:none",
-            # code-cell — class is reactive: state modifier (cv-running
-            # etc.) + stale modifier. CSS :has() picks these up to
-            # style the parent .cell-wrap (input.css).
-            Div(:class => () -> string("code-cell relative overflow-hidden",
-                                       _cv_state_class(state()),
-                                       is_stale() == 1 ? " stale" : ""),
-                # Hover controls — runtime badge + run + menu buttons.
+        Div(:class => "cell-code-wrap", :style => initial_wrap_style,
+            Div(:class => initial_class,
                 Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
-                    # Reactive text-node — formatted on every runtime_ns change.
-                    Span(:class => "rt-badge", () -> _cv_fmt_runtime(runtime_ns())),
+                    Span(:class => "rt-badge", initial_badge),
                     isempty(run_handler) ? nothing :
                         Therapy.Button(:class => "ctrl-btn run-btn",
                             :title => "Run cell (Shift+Enter)",
