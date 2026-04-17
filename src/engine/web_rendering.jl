@@ -978,7 +978,11 @@ function render_source_block(code::AbstractString;
     code = rstrip(code)
     isempty(code) && return nothing
 
-    code_cell_cls = "code-cell relative overflow-hidden"
+    # notebook-chrome.css applies `position:relative;overflow:hidden;`
+    # explicitly, so no Tailwind utilities are needed here. Published
+    # .jl files must not rely on whatever utilities happen to be in
+    # the host site's compiled Tailwind output.
+    code_cell_cls = "code-cell"
     state === :errored && (code_cell_cls *= " cv-errored")
 
     runtime_str = _format_runtime(UInt64(max(runtime_ns, 0)))
@@ -996,7 +1000,10 @@ function render_source_block(code::AbstractString;
                 RawHtml("""<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>"""))),
         Div(:class => "cell-code-wrap",
             Div(:class => code_cell_cls,
-                Div(:class => "cell-ctrls absolute top-1 right-1.5 flex items-center z-10",
+                # cell-ctrls positioning lives in notebook-chrome.css so
+                # the bundle self-contains — Tailwind utility classes
+                # on the .jl side wouldn't survive docs's scan path.
+                Div(:class => "cell-ctrls",
                     Span(:class => "rt-badge", runtime_str)),
                 Div(:class => "cm-cell cm-cell-published",
                     :data_cell_id => cell_id,
@@ -1038,7 +1045,9 @@ function render_published_cell(; cell_id::AbstractString,
                                  runtime_ns::Integer=0,
                                  state::Symbol=:done)
     parts = Any[]
-    wrap_cls = "cell-wrap relative"
+    # `.cell-wrap` already has `position:relative` in notebook-chrome.css;
+    # no Tailwind utility dependency needed.
+    wrap_cls = "cell-wrap"
     has_output = show_output && output_content !== nothing
     has_output && (wrap_cls *= " has-output")
     folded && (wrap_cls *= " code-hidden")
@@ -1095,8 +1104,14 @@ attribute so multiple notebooks on one page dedupe.
 3. `<script data-sessions-nb-init>` — notebook-init.js (read-only
    CodeMirror init + theme reactivity), guarded by
    `window.__SESSIONS_NB_BOOT`.
+
+Public so extraction can call it at extract time and bake the exact
+string into the generated .jl file (`const _NOTEBOOK_ASSETS_HTML =
+…`). At runtime the extracted notebook then passes that literal
+back via `render_published_notebook(…; assets_html = …)` — the
+host never has to reach into Sessions at all.
 """
-function _published_notebook_assets_html()::String
+function published_notebook_assets_html()::String
     string(
         "<style data-sessions-nb-chrome=\"1\">", NOTEBOOK_CHROME_CSS, "</style>",
         "<script data-sessions-nb-editor=\"1\">",
@@ -1109,22 +1124,30 @@ function _published_notebook_assets_html()::String
 end
 
 """
-    render_published_notebook(cells...) -> VNode
+    render_published_notebook(cells...; assets_html=nothing) -> VNode
 
 Outer container for a published notebook. Matches the live IDE's
 `.nb-cell-list` inner container (max-width, horizontal padding) so
 published pages feel identical to the IDE's notebook body.
 
-Prepends a **self-contained asset bundle** (CSS + CodeMirror bundle
-+ init script) so extracted notebooks render correctly in any
-Therapy app without requiring the host page to pre-wire any
-styling or JavaScript. Singleton guards make it safe to include
-multiple notebooks on one page — each bundle is a no-op after the
-first.
+Prepends a self-contained asset bundle (CSS + CodeMirror bundle +
+init script). `assets_html` is the Tailwind-style shadcn override:
+
+  - Extracted notebooks bake the bundle into their own `.jl` at
+    extract time (see Emit.jl) and pass it back here, so the file
+    is fully self-contained — drop it in any Therapy app and it
+    renders without touching Sessions internals at runtime.
+  - Calling `render_published_notebook(…)` without `assets_html` (eg
+    at the REPL, in tests, or in ad-hoc Therapy apps that `using
+    Sessions`) falls back to the Sessions-bundled copy.
+
+Singleton JS guards make it safe to include multiple notebooks on
+one page — each bundle is a no-op after the first evaluation.
 """
-function render_published_notebook(cells...)
+function render_published_notebook(cells...; assets_html::Union{Nothing, AbstractString}=nothing)
+    html = assets_html === nothing ? published_notebook_assets_html() : String(assets_html)
     Div(:class => "notebook-extracted",
-        RawHtml(_published_notebook_assets_html()),
+        RawHtml(html),
         Div(:class => "nb-cell-list",
             :style => "max-width:900px;margin:0 auto;padding-left:28px;padding-right:28px;position:relative;",
             cells...))

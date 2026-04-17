@@ -1,109 +1,181 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Sessions.jl Notebook Chrome — self-contained styling for published
-   notebooks. Bundled into `render_published_notebook` output so any
-   Therapy app that `using Sessions` can drop in an extracted .jl
-   notebook and get identical visual chrome to the live IDE.
+   Sessions.jl Notebook Chrome — SINGLE SOURCE OF TRUTH for everything
+   that styles a notebook cell and its output.
 
-   Mirror of the notebook-facing rules in Sessions.jl/input.css —
-   lines 133–216 (cell shell), 223–293 (cell-out prose), 300–343
-   (pluto-table), 345–368 (jl-error), 353–371 (jl-tree), plus the
-   required custom-property bases.
+   Consumed by two paths:
+     1. Sessions.jl/input.css — `@import "./static/notebook-chrome.css"`
+        so the live IDE's Tailwind build inlines these rules. Any IDE-
+        specific chrome (ActivityBar, NotebookToolbar pill, file tree,
+        terminal, workspace layout) stays in input.css.
+     2. `Sessions.render_published_notebook(...)` — at module init
+        `web_rendering.jl` reads this file verbatim and emits it as an
+        inline `<style>` tag alongside every published notebook, so
+        extracted .jl notebooks render identically in ANY Therapy app
+        without touching the host's stylesheet.
 
-   Single source of truth: if you tweak a rule here, the live IDE's
-   input.css mirrors it for dev-mode styling; in production every
-   notebook brings these rules with it so no separate CSS wiring is
-   needed on the host page.
+   RULE: if you tweak cell styling, tweak it HERE — both the IDE and
+   every published notebook pick up the change on rebuild.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Base custom properties (notebook subset, mirrored from IDE) ──── */
-:root{
+/* ── Design tokens (notebook subset) ─────────────────────────────── */
+:root {
+  /* Warm neutral palette */
+  --warm-50:#f8f7f4;--warm-100:#f0ece4;--warm-200:#e8e3d9;
+  --warm-300:#d4d0c8;--warm-400:#9a9590;--warm-500:#8a8680;
+  --warm-600:#6b6560;--warm-700:#5a5855;--warm-800:#2a2520;
+  --warm-900:#1a1918;--warm-950:#111110;
+
+  /* Accent (Sessions rose) + status colors */
+  --accent:#d4759a;--accent-dim:rgba(212,117,154,0.08);--accent-hov:rgba(212,117,154,0.18);
+  --status-done:#56d4a0;--status-running:#d4a056;--status-stale:#d4a056;--status-error:#dc3545;
+
+  /* Cell / panel surfaces */
+  --cell-bg:var(--warm-50);--cell-border:var(--warm-200);--cell-border-hov:var(--warm-300);
+  --panel-bg:#ffffff;--panel-shadow:none;
+  --text-1:var(--warm-800);--text-2:var(--warm-600);--text-3:var(--warm-400);
+  --output-text:var(--warm-600);
+  --selection-bg:rgba(86,212,160,0.15);
+  --scrollbar-thumb:var(--warm-300);
+
+  /* Markdown prose */
   --md-text:#4a5568;--md-heading:#1a202c;--md-rule:rgba(0,0,0,.15);
   --md-blockquote-bg:#f2f2f2;--md-blockquote-color:#555;
   --md-code-bg:#eaecf0;--md-code-color:#2b6cb0;
   --md-link:#1e7855;--md-link-underline:rgba(30,120,85,.3);
   --md-table-border:rgba(0,0,0,.2);
-  --text-1:#2a2520;--text-2:#6b6560;--text-3:#9a9590;
-  --cell-bg:#f8f7f4;--cell-border:#e8e3d9;--cell-border-hov:#d4d0c8;
-  --panel-bg:#ffffff;
-  --status-done:#56d4a0;--status-error:#dc3545;
-  --adm-info-accent:rgb(148,182,226);--adm-info-bg:rgb(214,227,244);
-  --adm-warn-accent:rgb(207,199,138);--adm-warn-bg:rgb(236,234,213);
-  --adm-danger-accent:rgb(226,157,148);--adm-danger-bg:rgb(245,218,215);
-  /* CodeMirror syntax palette (must match Sessions.jl/input.css --cm-* so
-     published notebooks look identical to the live IDE editor). */
-  --cm-editor-text:#2a2520;
+
+  /* CodeMirror syntax palette */
+  --cm-editor-text:var(--warm-800);
   --cm-keyword:#c03048;--cm-string:#1a7858;--cm-command:#3a5a28;
   --cm-comment:#9a6878;--cm-literal:#8a2898;--cm-variable:#3a4a9a;
   --cm-function:#a85878;--cm-symbol:#986820;--cm-macro:#2a7a3a;
-  --cm-bracket:#8a8680;--cm-matching-bracket-bg:rgba(212,117,154,.12);
-  --selection-bg:rgba(86,212,160,0.15);
+  --cm-bracket:var(--warm-500);--cm-matching-bracket-bg:rgba(212,117,154,.12);
+
+  /* Admonitions */
+  --adm-info-accent:rgb(148,182,226);--adm-info-bg:rgb(214,227,244);
+  --adm-warn-accent:rgb(207,199,138);--adm-warn-bg:rgb(236,234,213);
+  --adm-danger-accent:rgb(226,157,148);--adm-danger-bg:rgb(245,218,215);
+
+  /* Cell logs */
+  --logs-bg:hsl(0deg 0% 98%);--logs-key:rgb(0 0 0 / 51%);
+  --logs-info:white;--logs-warn:rgb(236 234 213);--logs-warn-accent:#665f26;
+  --logs-error:rgb(245 218 215);--logs-error-accent:rgb(172 66 52);
+  --logs-debug:rgb(236 223 247);--logs-debug-accent:rgb(100 50 179);
+
+  /* Disabled cell background */
+  --disabled-cell-bg:var(--warm-100);
 }
-.dark{
+
+.dark {
+  --cell-bg:#1a2332;--cell-border:#2a3a52;--cell-border-hov:#3b4f6e;
+  --panel-bg:#0f1419;
+  --text-1:#d4dce8;--text-2:#9baabd;--text-3:#6b7d93;
+  --output-text:#7ca0bf;
+  --scrollbar-thumb:#2a3a4f;
+
   --md-text:#9baabd;--md-heading:#d4dce8;--md-rule:rgba(255,255,255,.15);
   --md-blockquote-bg:#1e2a3a;--md-blockquote-color:inherit;
   --md-code-bg:#0a0e14;--md-code-color:#7bb8e8;
   --md-link:#56d4a0;--md-link-underline:rgba(86,212,160,.3);
   --md-table-border:rgba(255,255,255,.2);
-  --text-1:#d4dce8;--text-2:#9baabd;--text-3:#6b7d93;
-  --cell-bg:#1a2332;--cell-border:#2a3a52;--cell-border-hov:#3b4f6e;
-  --panel-bg:#0f1419;
-  --adm-info-accent:rgb(92,140,205);--adm-info-bg:rgb(42,73,115);
-  --adm-warn-accent:rgb(221,212,100);--adm-warn-bg:rgb(96,90,34);
-  --adm-danger-accent:rgb(255,117,98);--adm-danger-bg:rgb(100,47,39);
+
   --cm-editor-text:#d4dce8;
   --cm-keyword:#e07068;--cm-string:#7cc0a8;--cm-command:#a0b890;
   --cm-comment:#b88898;--cm-literal:#d0a0cc;--cm-variable:#b0bad0;
   --cm-function:#d4a868;--cm-symbol:#d4a056;--cm-macro:#6cc898;
   --cm-bracket:#8a8878;--cm-matching-bracket-bg:rgba(212,117,154,.2);
+
+  --adm-info-accent:rgb(92,140,205);--adm-info-bg:rgb(42,73,115);
+  --adm-warn-accent:rgb(221,212,100);--adm-warn-bg:rgb(96,90,34);
+  --adm-danger-accent:rgb(255,117,98);--adm-danger-bg:rgb(100,47,39);
+
+  --logs-bg:hsl(0deg 0% 17%);--logs-key:rgba(255,255,255,0.6);
+  --logs-info:#484848;--logs-warn:rgb(80 76 38);--logs-warn-accent:rgb(239 231 135);
+  --logs-error:rgb(100 47 39);--logs-error-accent:rgb(255 147 132);
+  --logs-debug:hsl(288deg 19% 25%);--logs-debug-accent:hsl(283deg 56% 79%);
+
+  --disabled-cell-bg:#151a22;
 }
 
-/* ── Cell shell ───────────────────────────────────────────────────── */
-.nb-cell-list{padding-top:20px;}
-.cell-wrap{position:relative;padding-top:5px;padding-bottom:5px;padding-right:5px;}
-.cell-body{position:relative;border-radius:8px;transform:translate(0,0);transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .3s ease;}
-.cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:14px !important;padding-bottom:0 !important;margin-bottom:-1px;}
-
-/* ── Code cell card ──────────────────────────────────────────────── */
-.code-cell{position:relative;background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
+/* ═══ Cell shell — verbatim port of Sessions/input.css 137–216 ════ */
+.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
 .cell-wrap.has-output:not(.code-hidden) .code-cell{border-top-left-radius:0 !important;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
-.cell-wrap.code-hidden .cell-code-wrap{display:none;}
-
-/* Errored cells lift with a red offset shadow — same :has() pattern as IDE. */
-.cell-wrap:has(.code-cell.cv-errored) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.18);}
-.cell-wrap:has(.code-cell.cv-errored) .code-cell{border-color:rgba(226,75,74,.15) !important;}
-.dark .cell-wrap:has(.code-cell.cv-errored) .cell-body{box-shadow:4px 4px 0 rgba(226,75,74,.22);}
-.dark .cell-wrap:has(.code-cell.cv-errored) .code-cell{border-color:rgba(226,75,74,.2) !important;}
-
-/* ── Per-cell controls (hover to reveal) ─────────────────────────── */
-.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;padding:2px 4px;background:var(--cell-bg);border:none;gap:4px;border-radius:6px;box-shadow:-12px 0 14px 4px var(--cell-bg);}
+.cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
 .code-cell:hover .cell-ctrls{opacity:1;transform:translateY(0);pointer-events:auto;}
-.rt-badge{font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;padding:0;border-radius:0;color:#B5A898;background:transparent;border:none;}
-.dark .rt-badge{color:#7A7A8E;}
-
-/* ── Cell-eye fold toggle (in the left gutter) ───────────────────── */
+.rt-badge{font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;padding:0;border-radius:0;color:#B5A898;background:transparent;border:none;opacity:1;}
 .cell-eye{position:absolute;left:-28px;top:0;bottom:0;width:24px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;cursor:pointer;z-index:5;}
 .cell-wrap:hover .cell-eye{opacity:1;}
 .cell-eye svg{color:#a0aec0;transition:color .15s;}
 .cell-eye:hover svg{color:#219669;}
+.cell-out{overflow-x:auto;}
+.cell-wrap.cell-disabled{opacity:0.45;filter:saturate(0.3);}
+.cell-wrap.cell-disabled .code-cell{border:1.5px dashed var(--warm-300) !important;background:var(--disabled-cell-bg) !important;}
+.cell-wrap.cell-disabled .code-cell::before{display:none !important;}
+.cell-wrap.cell-disabled .cell-out{opacity:0.5;}
+.cell-wrap.cell-disabled .cell-ctrls{opacity:1 !important;transform:none !important;pointer-events:auto !important;}
+.cell-wrap:has(.code-cell.cv-skipped){opacity:0.4;}
+.cell-wrap:has(.code-cell.cv-skipped) .cell-body{border:1.5px dashed var(--warm-300);border-radius:8px;}
+.cell-wrap:has(.code-cell.cv-skipped) .code-cell{border-color:transparent !important;}
+.cell-skipped-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-3);font-style:italic;padding:4px 0;}
+.dark .cell-wrap.wrap-skipped{border-color:var(--warm-700);}
+
+.cell-wrap{position:relative;padding-top:5px;padding-bottom:5px;padding-right:5px;}
+.cell-body{position:relative;border-radius:8px;transform:translate(0,0);transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .3s ease;}
+.cell-wrap.has-output:not(.code-hidden) .cell-out{border-left:1px solid var(--cell-border);padding-left:14px !important;padding-bottom:0 !important;margin-bottom:-1px;}
+
+.cell-shoulder{position:absolute;top:0;bottom:0;left:-1000px;width:1000px;cursor:grab;z-index:2;transition:background .15s;}
+.cell-shoulder:active{cursor:grabbing;}
+.cell-wrap:hover .cell-shoulder{background:rgba(0,0,0,.03);}
+.cell-wrap.dragging{opacity:.4;}
+.cell-wrap.selected{background:rgba(212,117,154,.1);border-radius:0 8px 8px 0;}
+.cell-wrap.selected .code-cell{border-color:var(--accent);}
+
+.dark .rt-badge{color:#7A7A8E;background:transparent;border:none;}
+
+/* Cell-ctrls pill (top-right; anchored explicitly here — the IDE's
+   copy gets the position from Tailwind utilities on the CellView DOM,
+   but the published bundle isn't in the Tailwind scan path, so we bake
+   it in). */
+.cell-ctrls{position:absolute;top:4px;right:6px;z-index:10;display:flex;align-items:center;gap:4px;padding:2px 4px;background:var(--cell-bg);border:none;border-radius:6px;box-shadow:-12px 0 14px 4px var(--cell-bg);}
+.cell-ctrls .ctrl-btn{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:6px;color:#9B8F82;cursor:pointer;padding:0;transition:background .12s,color .12s;}
+.cell-ctrls .ctrl-btn:hover{background:rgba(0,0,0,.05);color:#6B4C3B;}
+.cell-ctrls .ctrl-btn[data-open="1"]{background:rgba(0,0,0,.05);color:#6B4C3B;}
+.cell-ctrls .ctrl-btn svg{width:13px;height:13px;display:block;}
+.dark .cell-ctrls .ctrl-btn{color:#6B6A7A;}
+.dark .cell-ctrls .ctrl-btn:hover{background:rgba(255,255,255,.05);color:#C7BEAD;}
+.dark .cell-ctrls .ctrl-btn[data-open="1"]{background:rgba(255,255,255,.05);color:#C7BEAD;}
+
+/* Cell action menu dropdown (IDE only uses this, but the tokens are
+   notebook-scoped so it lives here). */
+.cell-menu{position:fixed;z-index:9999;background:#FFFFFF;border:1px solid rgba(0,0,0,.08);border-radius:10px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px;font-family:'DM Sans',system-ui,sans-serif;}
+.cell-menu-item{display:flex;align-items:center;gap:10px;padding:7px 10px;font-size:13px;cursor:pointer;color:#6B4C3B;border-radius:7px;transition:background .1s,color .1s;}
+.cell-menu-item:hover{background:#F0EBE4;}
+.cell-menu-item svg{width:14px;height:14px;color:#9B8F82;flex-shrink:0;}
+.cell-menu-item.danger{color:#993C1D;}
+.cell-menu-item.danger svg{color:#993C1D;}
+.cell-menu-item.danger:hover{background:#FAECE7;}
+.cell-menu-sep{height:1px;background:rgba(0,0,0,.06);margin:3px 8px;}
+.dark .cell-menu{background:#282A3A;border-color:rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.dark .cell-menu-item{color:#C7BEAD;}
+.dark .cell-menu-item svg{color:#6B6A7A;}
+.dark .cell-menu-item:hover{background:#353749;}
+.dark .cell-menu-item.danger{color:#F09595;}
+.dark .cell-menu-item.danger svg{color:#F09595;}
+.dark .cell-menu-item.danger:hover{background:rgba(240,149,149,.1);}
+.dark .cell-menu-sep{background:rgba(255,255,255,.06);}
 .dark .cell-eye svg{color:#3d5068;}
 .dark .cell-eye:hover svg{color:#56d4a0;}
+.dark .cell-wrap:hover .cell-shoulder{background:rgba(255,255,255,.04);}
+.dark .cell-wrap.selected{background:rgba(212,117,154,.08);}
+.dark .cell-wrap.selected .code-cell{border-color:var(--accent);}
 
-/* ── Read-only CodeMirror host (published editor) ──────────────────
-   Visual parity with the live IDE editor: transparent background so
-   the code-cell card color shows through, JetBrains Mono 13px/1.65,
-   minimal gutters. Full theme is applied by notebook-init.js via
-   CodeMirror's theme() API — these rules are just the bits that need
-   to be live before CM attaches (avoid flash of unstyled host). */
-.cm-cell-published{position:relative;}
-.cm-cell-published .cm-editor{background:transparent;}
-.cm-cell-published .cm-editor .cm-scroller{font-family:'JetBrains Mono',monospace;}
-.cm-cell-published .cm-editor .cm-content{padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65;}
-.cm-cell-published .cm-editor .cm-gutters{background:transparent;border:none;color:var(--text-3);min-width:38px;}
-.cm-cell-published .cm-editor .cm-line{padding-left:4px;}
-.cm-cell-published .cm-editor .cm-matchingBracket{font-weight:bold;background-color:var(--cm-matching-bracket-bg);}
+/* Fold toggle — `.code-hidden` on cell-wrap hides the code wrapper.
+   IDE drives this via the CellView @island's is_open signal; published
+   notebooks toggle the class via inline onclick on .cell-eye. */
+.cell-wrap.code-hidden .cell-code-wrap{display:none;}
 
-/* ── Cell output (markdown prose, tables, images) ────────────────── */
+/* ═══ Cell output / Markdown prose — Sessions/input.css 217–298 ═══ */
 .cell-out{font-family:'DM Sans',system-ui,sans-serif;color:var(--md-text);line-height:1.6em;font-size:14.5px;word-spacing:0.04em;overflow-x:auto;overflow-y:hidden;}
 .cell-out h1,.cell-out h2,.cell-out h3,.cell-out h4,.cell-out h5,.cell-out h6{font-family:'Fraunces',Georgia,serif;font-feature-settings:'lnum','pnum';font-weight:600;color:var(--md-heading);margin-block-start:1rem;margin-block-end:0;line-height:1.25em;}
 .cell-out h1,.cell-out h2{font-weight:700;margin-block-start:2rem;}
@@ -169,9 +241,9 @@
 .cell-out mjx-assistive-mml{height:1px;}
 .dark .cell-out .admonition .admonition-title{color:#000;}
 .dark .cell-out table:not(.pluto-table) tbody tr:hover{background:rgba(193,192,235,.12);}
-.cell-out pre code.hljs{background:transparent;padding:0;}
 
-/* ── Tables.jl / DataFrame (pluto-table parity) ──────────────────── */
+/* ═══ Widgets + Tables.jl (Pluto-table parity) — 300–343 ════════ */
+.notebook-plotly{border-radius:8px;overflow:hidden;}
 .pluto-table-wrap{position:relative;max-width:100%;overflow-x:auto;}
 .pluto-table{table-layout:fixed;border-collapse:collapse;background:transparent;border:2px solid var(--md-table-border);border-left:none;border-right:none;margin:0 auto;}
 .pluto-table > thead{border-bottom:1px solid var(--md-table-border);}
@@ -190,7 +262,7 @@
 .pluto-table pluto-tree-more{display:inline-block;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--md-link);padding:1px 6px;border-radius:4px;}
 .pluto-table pluto-tree-more:hover{background:rgba(159,158,224,.15);}
 
-/* ── Structured errors ───────────────────────────────────────────── */
+/* ═══ Structured errors — Sessions/input.css 345–400 ═══════════ */
 .jl-error{font-family:'JetBrains Mono',monospace;font-size:13px;background:transparent;}
 .jl-error-content{padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px;}
 .jl-error-header{display:flex;align-items:center;gap:8px;}
@@ -235,7 +307,30 @@
 .dark .jl-frame-loc{color:#6B6A7A;}
 .dark .jl-frame-tag{color:#6B6A7A;background:rgba(255,255,255,0.04);}
 
-/* ── Collapsible tree view ───────────────────────────────────────── */
+/* ═══ Stdout + logs — Sessions/input.css 402–429 ════════════════ */
+.cell-stdout{position:relative;font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c0ffab;white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;padding:0.6em 0.9em;margin:0;background:radial-gradient(hsl(36deg 20% 37%),hsl(36deg 20% 37%) 20%,hsl(31deg 12% 28%));border:4px solid #b7b7b7;border-radius:0 0 8px 8px;line-height:1.5;text-shadow:1px 1px 2px rgba(0,0,0,.35);min-width:18em;}
+.cell-stdout::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:0.2;background:linear-gradient(180deg,hsl(37deg 20% 27%),transparent,#1a1a1a);background-size:100% 7px;background-repeat:repeat;}
+.cell-stdout::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0.3;background:linear-gradient(349deg,#000,transparent);}
+.dark .cell-stdout{background:radial-gradient(hsl(36deg 16% 22%),hsl(36deg 16% 22%) 20%,hsl(31deg 10% 16%));border-color:#555;}
+.cell-assignee{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-3);padding:0 0 4px;user-select:none;}
+.cell-logs{display:block;overflow-x:hidden;overflow-y:auto;max-height:50vh;margin:0;border-radius:0 0 8px 8px;}
+.cell-logs:not(:empty){background:var(--logs-bg);padding:6px;}
+.log-entry{display:flex;flex-direction:row;align-items:flex-start;gap:0;margin:2px;border-radius:6px;background:linear-gradient(148deg,var(--log-bg),transparent);background-size:200% 100%;font-family:'JetBrains Mono',monospace;font-size:0.65rem;}
+.log-icon{display:flex;align-items:center;justify-content:center;padding:0.4em 0.3em;font-size:0.7rem;min-width:1.4em;}
+.log-body{display:flex;flex-direction:column;flex:1;padding:0.4em 0.7em 0.4em 0.1em;min-width:0;}
+.log-msg{color:var(--log-accent);white-space:pre-wrap;word-break:break-word;}
+.log-kwargs{display:flex;flex-wrap:wrap;gap:0 0.8em;margin-top:1px;}
+.log-kw{font-size:0.6rem;}
+.log-kw-key{color:var(--logs-key);opacity:0.8;}
+.log-kw-key::after{content:": ";}
+.log-kw-val{color:var(--log-accent);}
+.log-entry.log-info{--log-bg:var(--logs-info);--log-accent:inherit;}
+.log-entry.log-info .log-icon{opacity:0.4;}
+.log-entry.log-warn{--log-bg:var(--logs-warn);--log-accent:var(--logs-warn-accent);}
+.log-entry.log-error{--log-bg:var(--logs-error);--log-accent:var(--logs-error-accent);}
+.log-entry.log-debug{--log-bg:var(--logs-debug);--log-accent:var(--logs-debug-accent);}
+
+/* ═══ Collapsible tree view — Sessions/input.css 431–446 ═════════ */
 .jl-tree{font-family:'JetBrains Mono',monospace;font-size:13px;}
 .jl-tree summary{cursor:pointer;user-select:none;color:var(--text-2);list-style:none;}
 .jl-tree summary::-webkit-details-marker{display:none;}
@@ -251,3 +346,56 @@
 .jl-tree-val .jl-tree{margin-left:0;}
 .jl-tree-more{color:var(--text-3);font-size:11px;font-style:italic;padding:2px 0;}
 .dark .jl-tree-key{color:#b08fd8;}
+
+/* ═══ highlight.js overrides — Sessions/input.css 448–459 ════════ */
+.cell-out pre code.hljs{background:transparent;padding:0;}
+.hljs{color:var(--cm-editor-text);}
+.hljs-keyword{color:var(--cm-keyword);}
+.hljs-built_in,.hljs-type{color:var(--cm-variable);}
+.hljs-literal,.hljs-number{color:var(--cm-literal);}
+.hljs-string{color:var(--cm-string);}
+.hljs-comment{color:var(--cm-comment);font-style:italic;}
+.hljs-function,.hljs-title{color:var(--cm-function);}
+.hljs-symbol{color:var(--cm-symbol);}
+.hljs-meta{color:var(--cm-macro);font-weight:bold;}
+.hljs-variable{color:var(--cm-variable);}
+
+/* ═══ CodeMirror overrides — Sessions/input.css 485–488 ═════════ */
+.cm-cell .cm-editor{background:transparent !important;}
+.cm-cell .cm-scroller{overflow-x:auto;}
+.cm-cell .cm-focused{outline:none !important;}
+
+/* Published CodeMirror hosts layer on top — minimal extra so the host
+   renders right BEFORE CM attaches (avoids flash). */
+.cm-cell-published{position:relative;}
+.cm-cell-published .cm-editor .cm-scroller{font-family:'JetBrains Mono',monospace;}
+.cm-cell-published .cm-editor .cm-content{padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65;}
+.cm-cell-published .cm-editor .cm-gutters{background:transparent;border:none;color:var(--text-3);min-width:38px;}
+.cm-cell-published .cm-editor .cm-line{padding-left:4px;}
+.cm-cell-published .cm-editor .cm-matchingBracket{font-weight:bold;background-color:var(--cm-matching-bracket-bg);}
+
+/* ═══ nb-cell-list outer wrapper — Sessions/input.css 502 ════════ */
+.nb-cell-list{padding-top:20px;}
+
+/* ═══ Cell states — Sessions/input.css 514, 522–549 ══════════════
+   Markdown-cell left stripe + running/queued/stale/errored shadow
+   lift. In published mode only `cv-errored` fires at extract time;
+   the other state classes are included so live-IDE rendering of the
+   same CSS also works. */
+.md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
+.cell-wrap:has(.code-cell.cv-running) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.45);animation:shadow-pulse-light 3s ease-in-out infinite;}
+.cell-wrap:has(.code-cell.cv-running) .code-cell{border-color:rgba(55,138,221,.25) !important;}
+.cell-wrap:has(.code-cell.cv-queued) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.3);}
+.cell-wrap:has(.code-cell.cv-queued) .code-cell{border-color:rgba(55,138,221,.2) !important;}
+.cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(239,159,39,.22);}
+.cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .code-cell{border-color:rgba(186,117,23,.2) !important;}
+.cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .cell-out{opacity:.5;}
+.cell-wrap:has(.code-cell.cv-errored) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(226,75,74,.18);}
+.cell-wrap:has(.code-cell.cv-errored) .code-cell{border-color:rgba(226,75,74,.15) !important;}
+.dark .cell-wrap:has(.code-cell.cv-running) .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.6);animation-name:shadow-pulse-dark;}
+.dark .cell-wrap:has(.code-cell.cv-queued) .cell-body{box-shadow:4px 4px 0 rgba(133,183,235,.38);}
+.dark .cell-wrap:has(.code-cell.stale):not(:has(.code-cell.cv-running)):not(:has(.code-cell.cv-queued)):not(:has(.code-cell.cv-errored)) .cell-body{box-shadow:4px 4px 0 rgba(239,159,39,.3);}
+.dark .cell-wrap:has(.code-cell.cv-errored) .cell-body{box-shadow:4px 4px 0 rgba(226,75,74,.22);}
+.dark .cell-wrap:has(.code-cell.cv-errored) .code-cell{border-color:rgba(226,75,74,.2) !important;}
+@keyframes shadow-pulse-light{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.45);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.7);}}
+@keyframes shadow-pulse-dark{0%,100%{box-shadow:4px 4px 0 rgba(133,183,235,.6);}50%{box-shadow:4px 4px 0 rgba(133,183,235,.85);}}

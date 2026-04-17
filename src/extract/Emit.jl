@@ -275,12 +275,37 @@ end
 
 # ─── File assembly ─────────────────────────────────────────────────────
 
+"""
+Bake the full notebook asset bundle (CSS + CodeMirror + init JS)
+into the generated module as a single `const _NOTEBOOK_ASSETS_HTML`
+literal. Read at extract time, emitted verbatim — the .jl file is
+then fully self-contained: every rule, every byte of CodeMirror, the
+read-only init script. Drop it into any Therapy app that has Sessions
++ Therapy in its Project.toml and it renders pixel-identical to the
+live IDE without the host touching any stylesheet.
+
+`repr` handles all escape concerns (the one `\"\"\"` sequence in
+editor.js, `\$` interpolation marks, arbitrary binary byte sequences
+in the minified JS bundle). The resulting literal round-trips through
+Julia's parser back to the original string.
+"""
+function emit_asset_bundle_const()::String
+    html = published_notebook_assets_html()
+    "    const _NOTEBOOK_ASSETS_HTML = $(repr(html))\n"
+end
+
 function assemble(plan::ExtractionPlan)::String
     io = IOBuffer()
     _write_header(io, plan)
     println(io, "module $(plan.component_name)Mod")
     println(io)
     _write_imports(io, plan)
+    println(io, "    # ── Self-contained CSS + CodeMirror + init JS bundle ──")
+    println(io, "    # Baked in at extraction time so this file renders in ANY")
+    println(io, "    # Therapy app without reaching into Sessions's static/")
+    println(io, "    # assets at runtime. Re-extraction refreshes the bundle.")
+    print(io, emit_asset_bundle_const())
+    println(io)
     println(io, emit_shared_signals(plan))
     println(io)
 
@@ -322,7 +347,11 @@ function assemble(plan::ExtractionPlan)::String
         push!(cell_calls, line)
     end
     print(io, join(cell_calls, ",\n"))
-    println(io, ",")
+    println(io, ";")
+    # Pass the baked-in assets so render_published_notebook emits
+    # OUR inlined CSS+JS bundle rather than reaching into Sessions's
+    # static/ at runtime. This is what makes the .jl standalone.
+    println(io, "            assets_html = _NOTEBOOK_ASSETS_HTML,")
     println(io, "        )")
     println(io, "    end")
 
