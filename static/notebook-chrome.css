@@ -394,11 +394,15 @@
 .nb-cell-list{padding-top:20px;}
 
 /* ═══ Cell states — Sessions/input.css 514, 522–549 ══════════════
-   Markdown-cell left stripe + running/queued/stale/errored shadow
-   lift. In published mode only `cv-errored` fires at extract time;
-   the other state classes are included so live-IDE rendering of the
-   same CSS also works. */
-.md-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#b08fd8;opacity:.4;border-radius:2px 0 0 2px;}
+   Running/queued/stale/errored shadow lift. In published mode only
+   `cv-errored` + `wrap-wasm-failed` fire at extract time; the other
+   state classes are included so live-IDE rendering of the same CSS
+   works verbatim.
+
+   (The IDE's `.md-cell::before` purple stripe is deliberately
+   omitted here — in the published view it read as a stray left
+   bar on every markdown output. Live-IDE gets its stripe from
+   input.css's IDE-only rules.) */
 .cell-wrap:has(.code-cell.cv-running) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.45);animation:shadow-pulse-light 3s ease-in-out infinite;}
 .cell-wrap:has(.code-cell.cv-running) .code-cell{border-color:rgba(55,138,221,.25) !important;}
 .cell-wrap:has(.code-cell.cv-queued) .cell-body{transform:translate(-4px,-4px);box-shadow:4px 4px 0 rgba(133,183,235,.3);}

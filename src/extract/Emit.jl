@@ -1,70 +1,64 @@
 # Emit.jl — assemble an ExtractionPlan into a single .jl Therapy
-# component. Shape (one @island per notebook, the reference pattern
-# Therapy.jl uses in its own NotebookDemo):
+# component. Shape (one @island per notebook — matches Therapy.jl's
+# own NotebookDemo):
 #
 #   module <Name>Mod
-#     using Therapy: @island, create_signal, RawHtml, Div, Input, Span
+#     using Therapy: @island, create_signal, create_memo, create_effect,
+#                    RawHtml, Div, Input, Span, Canvas
 #     using Sessions: CellDiv, render_value, render_published_notebook
-#     using <user notebook deps — Markdown, DataFrames, WasmPlot, …>
+#     using <user notebook deps>
 #
 #     # Baked asset bundle so the .jl drops into any Therapy app.
 #     const _NOTEBOOK_ASSETS_HTML = "…"
 #
-#     # Bond defaults — plain constants so cell bodies can reference
-#     # `n` at module-load time. The @island overrides them with
-#     # create_signal inside its own scope.
+#     # Bond defaults as plain constants so every static cell body that
+#     # reads the bond at module-load time resolves. The @island below
+#     # shadows these with create_signal inside its scope.
 #     const _default_n = 8
 #     const n          = _default_n
 #
-#     # Each cell's source is preserved verbatim and wrapped in a
-#     # module-level try/let so (a) the user code reads as it did in
-#     # the notebook and (b) an errored cell doesn't fail the whole
-#     # module load.
-#     const _cell_<id> = try let
-#         <verbatim user code>
-#     end catch _e
-#         _e
-#     end
+#     # Each cell's body runs once at module load for SSR baseline.
+#     const _cell_<id> = try let <verbatim code> end catch _e; _e end
 #
-#     # ONE @island per notebook. Outer body runs as regular Julia at
-#     # SSR (so DataFrames / Markdown / arbitrary show methods all run
-#     # fine — confirmed at Therapy's Analysis.jl:215). Only reactive
-#     # closures (create_memo / create_effect / event handlers) get
-#     # WASM-compiled, and v1 doesn't emit any of those inside cell
-#     # bodies yet — bond SIGNALS drive the widget UI itself, every
-#     # reactive-dep cell falls through as a WALL cell frozen at the
-#     # bond default.
+#     # ONE @island per notebook. Outer body runs regular Julia at SSR
+#     # (DataFrames / Markdown / show()… all fine — confirmed via
+#     # Therapy Analysis.jl:215). Only the reactive CLOSURES passed to
+#     # create_memo / create_effect / event-handlers get WASM-compiled.
 #     @island function <Name>()
+#         # Bond signals.
 #         n, set_n = create_signal(_default_n)
 #
+#         # Reactive memos — one per simple bond-dependent cell. The
+#         # body is the cell's source with bare bond references
+#         # (`n`) rewritten to signal reads (`n()`) so updates flow.
+#         _reactive_<id> = create_memo(() -> begin <rewritten body> end)
+#
+#         # Reactive effects — WasmPlot / canvas-writing cells go
+#         # through here. Same rewrite, plus `render!(fig)` appended.
+#         create_effect(() -> begin <rewritten body>; render!(fig) end)
+#
 #         return render_published_notebook(
-#             CellDiv(cell_id=…, source_code=…, cell_type=:markdown,
-#                     folded=true, runtime_ns=…, state=:done,
-#                     output = RawHtml(render_value(_cell_<id>))),
-#             CellDiv(cell_id=…, source_code=…, runtime_ns=…,
-#                     output = Div(Input(:type=>"range", :min=>…,
-#                                        :max=>…, :value=>n,
-#                                        :on_input=>set_n, …),
-#                                  Span(:class=>"su-slider-out", n))),
-#             CellDiv(cell_id=…, source_code=…, state=:wasm_failed,
-#                     output = RawHtml(render_value(_cell_<id>))),
+#             CellDiv(output = RawHtml(render_value(_cell_<id>))),         # static
+#             CellDiv(output = Div(Input(:value=>n, :on_input=>set_n,…))), # bond
+#             CellDiv(output = Span(_reactive_<id>)),                      # reactive memo
+#             CellDiv(output = Canvas(:width=>…, :height=>…)),             # reactive plot
+#             CellDiv(output = RawHtml(render_value(_cell_<id>)),
+#                     state = :wasm_failed),                               # WALL
 #             assets_html = _NOTEBOOK_ASSETS_HTML,
 #         )
 #     end
 #   end
 #   const <Name> = <Name>Mod.<Name>
 #
-# Why not a memo-per-reactive-cell in v1: Pluto cell bodies are
-# arbitrary Julia (md"…", DataFrame, arbitrary show()); WasmTarget
-# only compiles a narrow subset. Translating every reactive cell to
-# a WASM-safe create_memo requires a static analysis we don't have
-# yet. v1 ships the correct ARCHITECTURE (one island, native Input
-# bonds, CellDiv chrome) and degrades reactive cells to WALL; v1.1
-# adds a heuristic translator for simple numeric memos.
+# WALL fallback: bond-dependent cells whose body uses patterns
+# WasmTarget can't handle (DataFrame, Markdown.MD, arbitrary show()
+# methods returning non-primitives) get frozen at the bond default
+# and decorated with a `state=:wasm_failed` band — explicit to the
+# reader that the cell isn't live.
 
 using Dates: now
 
-# ─── Helpers ──────────────────────────────────────────────────────────
+# ─── String helpers ────────────────────────────────────────────────────
 
 "Sanitize a UUID into a valid Julia identifier suffix."
 function _id_suffix(id)::String
@@ -126,9 +120,7 @@ function _suppresses_output(code::AbstractString)::Bool
     return false
 end
 
-"True if the cell's code is a Markdown string macro (`md\"…\"` or
-`md\"\"\"…\"\"\"`). Used to drive `cell_type=:markdown` so the purple
-stripe lights up (`.md-cell::before`)."
+"True if the cell's code is a Markdown string macro."
 function _is_markdown_cell_code(code::AbstractString)::Bool
     s = strip(code)
     startswith(s, "md\"\"\"") || startswith(s, "md\"")
@@ -144,22 +136,6 @@ _cell_runtime_literal(cc::CellClass)::String = string(Int(cc.cell.output.runtime
 
 # ─── Bond widget parsing ───────────────────────────────────────────────
 
-"""
-    BondSpec
-
-Everything the emitter needs to render a `@bind name widget_expr`
-cell natively (Therapy Input + signal) rather than via frozen
-widget HTML.
-
-  - `default_expr`   Julia-source expression that produces the initial
-                     signal value (a literal, usually).
-  - `kind`           `:slider` for now — extendable later.
-  - `min_expr`, `max_expr`, `step_expr`  source-level attribute
-                     expressions emitted directly into `Input(:min=>…)`.
-  - `widget_class`   CSS class to attach (`"su-slider"`, …) so any
-                     widget-specific styles from notebook-chrome.css
-                     still apply.
-"""
 struct BondSpec
     default_expr::String
     kind::Symbol
@@ -171,15 +147,8 @@ end
 
 """
 Best-effort parse of a `@bind name widget_expr` cell into a `BondSpec`.
-Returns `nothing` if the widget isn't a shape v1 can emit natively;
-callers fall back to frozen widget HTML.
-
-Handles:
-  - `BoundSlider(X:Y)`             step defaults to 1
-  - `BoundSlider(X:Y; default=Z)`  explicit default
-  - `BoundSlider(X:S:Y; …)`        explicit float / non-unit step
-
-Anything else → `nothing`.
+Returns `nothing` if the widget isn't a shape v1 can emit natively.
+Supports `BoundSlider(X:Y)` and `BoundSlider(X:S:Y; default=…)`.
 """
 function _parse_bond_widget(code::AbstractString)::Union{BondSpec, Nothing}
     expr = try
@@ -190,17 +159,12 @@ function _parse_bond_widget(code::AbstractString)::Union{BondSpec, Nothing}
     widget_call = _find_bind_widget(expr)
     widget_call === nothing && return nothing
 
-    # widget_call looks like `BoundSlider(2:30; default=8)` — strip any
-    # leading module prefix (SessionsUI.BoundSlider, etc.) to get the
-    # bare constructor name.
     fname = widget_call.args[1]
     name_sym = fname isa Expr && fname.head === :. ? fname.args[end].value : fname
     name_sym isa QuoteNode && (name_sym = name_sym.value)
     name_sym isa Symbol || return nothing
 
-    if name_sym === :BoundSlider
-        return _parse_slider_args(widget_call)
-    end
+    name_sym === :BoundSlider && return _parse_slider_args(widget_call)
     return nothing
 end
 
@@ -211,7 +175,7 @@ function _find_bind_widget(expr)
         if expr.head === :macrocall && length(expr.args) >= 3 &&
            (expr.args[1] === Symbol("@bind") ||
             expr.args[1] isa GlobalRef && expr.args[1].name === Symbol("@bind"))
-            w = expr.args[4]  # :line is args[2], name is args[3], widget is args[4]
+            w = expr.args[4]
             w isa Expr && w.head === :call && return w
         end
         for a in expr.args
@@ -222,10 +186,8 @@ function _find_bind_widget(expr)
     return nothing
 end
 
-"`BoundSlider(X:Y)` / `BoundSlider(X:Y; default=Z)` → BondSpec. Returns
-`nothing` on unexpected shapes."
+"`BoundSlider(X:Y)` / `BoundSlider(X:Y; default=Z)` → BondSpec."
 function _parse_slider_args(call::Expr)::Union{BondSpec, Nothing}
-    # call.args[1] = fname, [2:end] = positional + parameters
     positional = Any[]
     default_expr = nothing
     for a in call.args[2:end]
@@ -242,20 +204,12 @@ function _parse_slider_args(call::Expr)::Union{BondSpec, Nothing}
     isempty(positional) && return nothing
     range_expr = positional[1]
 
-    # We need min / max / step as source-level expressions. The cleanest
-    # way is to recognise `a:b` and `a:s:b` directly; anything else (a
-    # pre-built vector, an expression returning a range) is too hard
-    # to statically analyse and we fall back to non-native rendering.
     if range_expr isa Expr && range_expr.head === :call && range_expr.args[1] === :(:)
         args = range_expr.args
-        if length(args) == 3           # a:b
-            min_e  = string(args[2])
-            max_e  = string(args[3])
-            step_e = "1"
-        elseif length(args) == 4       # a:s:b
-            min_e  = string(args[2])
-            step_e = string(args[3])
-            max_e  = string(args[4])
+        if length(args) == 3       # a:b
+            min_e, step_e, max_e = string(args[2]), "1", string(args[3])
+        elseif length(args) == 4   # a:s:b
+            min_e, step_e, max_e = string(args[2]), string(args[3]), string(args[4])
         else
             return nothing
         end
@@ -265,18 +219,248 @@ function _parse_slider_args(call::Expr)::Union{BondSpec, Nothing}
     return nothing
 end
 
+# ─── Reactive-cell translator ──────────────────────────────────────────
+#
+# Strategy:
+#
+#   1. Parse the cell body to an AST.
+#   2. Detect whether the cell is (a) WALL (patterns WasmTarget can't
+#      handle — DataFrame, arbitrary show() methods), (b) WasmPlot
+#      (Figure + render!-style canvas output), or (c) plain memo.
+#   3. AST-walk the body replacing bare bond `Symbol`s with
+#      `:(n())` (signal reads) so updates flow. Shadowing binders
+#      (`let n = …`, `for n in …`, `n = …`) are detected and their
+#      LHS is left alone.
+#   4. Serialize the rewritten AST via `string(expr)` (surface syntax).
+#
+# The memo/effect declarations land at the top of the @island body;
+# the cell's `output=` slot references the local getter (`Span(m)`)
+# or a Canvas placeholder.
+
+"""
+Result of classifying + translating a single reactive cell. Each
+variant is what the @island emitter needs to produce — declarations
+above the return tree and a CellDiv `output=` expression.
+"""
+struct ReactiveEmit
+    kind::Symbol                 # :memo | :effect | :wall | :unparseable
+    decl_source::String          # Julia to splice above the return (empty for wall)
+    output_expr::String          # goes into CellDiv(output = …)
+end
+
+"True if `code` contains a pattern WasmTarget definitely can't
+handle. Conservative — better to WALL a translatable cell than to
+break the whole @island compile."
+function _is_wall_body(code::AbstractString)::Bool
+    occursin(r"\bDataFrame\s*[\(\{]", code)      && return true
+    occursin(r"\bmd\"", code)                    && return true
+    # Arbitrary `show` redefinitions, @show / @info usage at cell
+    # level — all too risky for the compiler.
+    occursin(r"\b@show\b",  code) && return true
+    occursin(r"\b@info\b",  code) && return true
+    occursin(r"\b@warn\b",  code) && return true
+    occursin(r"\b@error\b", code) && return true
+    occursin(r"\bdisplay\s*\(", code) && return true
+    return false
+end
+
+"True if `code` looks like a WasmPlot figure cell. WasmPlot is WASM-
+compatible (Therapy's NotebookDemo uses it), so these cells translate
+to `create_effect + render!(fig)` over a Canvas output."
+function _is_wasmplot_body(code::AbstractString)::Bool
+    occursin(r"\b(WP\.|WasmPlot\.)?Figure\s*\(", code)              && return true
+    occursin(r"\b(barplot|lines|scatter|heatmap|hist)\s*!", code)   && return true
+    return false
+end
+
+"""
+Extract `(width, height)` from a `Figure(size=(W,H))` call anywhere in
+`body_expr`. Returns `(680, 220)` if none found (NotebookStep4 default).
+Uses `Ref`s since Julia closures don't rebind captured locals.
+"""
+function _wasmplot_canvas_size(body_expr)::Tuple{Int, Int}
+    w = Ref(680); h = Ref(220)
+    _walk(body_expr) do node
+        if node isa Expr && node.head === :call
+            fn = node.args[1]
+            is_figure = (fn === :Figure) ||
+                (fn isa Expr && fn.head === :. && fn.args[end] isa QuoteNode &&
+                 fn.args[end].value === :Figure)
+            is_figure || return
+            for arg in node.args[2:end]
+                # Kwargs can appear two ways depending on whether the
+                # call used a semicolon: `f(;key=val)` wraps them in
+                # an `Expr(:parameters, kw...)`; `f(key=val)` emits the
+                # bare `Expr(:kw, key, val)` at the call site.
+                kws = if arg isa Expr && arg.head === :parameters
+                    arg.args
+                elseif arg isa Expr && arg.head === :kw
+                    (arg,)
+                else
+                    continue
+                end
+                for kw in kws
+                    kw isa Expr && kw.head === :kw && kw.args[1] === :size || continue
+                    val = kw.args[2]
+                    val isa Expr && val.head === :tuple && length(val.args) == 2 || continue
+                    wv, hv = val.args
+                    wv isa Integer && (w[] = Int(wv))
+                    hv isa Integer && (h[] = Int(hv))
+                end
+            end
+        end
+    end
+    return (w[], h[])
+end
+
+"Depth-first Expr walker — applies `fn` to every node."
+function _walk(fn, expr)
+    fn(expr)
+    if expr isa Expr
+        for a in expr.args
+            _walk(fn, a)
+        end
+    end
+end
+
+"""
+Strip every `LineNumberNode` out of an `Expr` tree. `string(expr)`
+otherwise emits them as `#= file:line =#` block comments that
+clutter the generated .jl output without adding any value.
+"""
+function _strip_linenumbers(expr)
+    if expr isa Expr
+        new_args = Any[]
+        for a in expr.args
+            a isa LineNumberNode && continue
+            push!(new_args, _strip_linenumbers(a))
+        end
+        return Expr(expr.head, new_args...)
+    else
+        return expr
+    end
+end
+
+"""
+Walk `expr` and replace every bare `Symbol` matching a bond name with
+`:(name())` (a signal read). Skips LHS of assignment, `for`/`let`
+binders, and macro-name slots — so local shadowing still works and
+`@bind` / `@some_other_macro` aren't accidentally rewritten.
+"""
+function _rewrite_bond_reads(expr, bonds::Set{Symbol})
+    if expr isa Symbol
+        return expr in bonds ? Expr(:call, expr) : expr
+    elseif !(expr isa Expr)
+        return expr
+    end
+
+    h = expr.head
+    if h === :(=) && length(expr.args) == 2
+        return Expr(:(=), expr.args[1], _rewrite_bond_reads(expr.args[2], bonds))
+    elseif h === :for
+        # `for iter ; body end` — rewrite body + iter RHS, leave iter LHS alone.
+        iter = expr.args[1]; body = expr.args[2]
+        return Expr(:for, _rewrite_iter(iter, bonds),
+                    _rewrite_bond_reads(body, bonds))
+    elseif h === :let
+        return Expr(:let, expr.args[1], _rewrite_bond_reads(expr.args[2], bonds))
+    elseif h === :macrocall
+        # args[1] macro name, args[2] LineNumberNode, args[3…] rewritten.
+        new_args = Any[expr.args[1], expr.args[2]]
+        for a in expr.args[3:end]
+            push!(new_args, _rewrite_bond_reads(a, bonds))
+        end
+        return Expr(:macrocall, new_args...)
+    elseif h === :. && length(expr.args) == 2 && expr.args[2] isa QuoteNode
+        # Field access a.b — rewrite `a` only if it's a bond; field stays.
+        return Expr(:., _rewrite_bond_reads(expr.args[1], bonds), expr.args[2])
+    else
+        return Expr(h, [_rewrite_bond_reads(a, bonds) for a in expr.args]...)
+    end
+end
+
+"Walk a `for` iteration spec (either `var = range` or a block of
+them) and rewrite only the range RHS — loop variables must keep
+their original name so the body reads them locally."
+function _rewrite_iter(iter, bonds::Set{Symbol})
+    if iter isa Expr && iter.head === :block
+        return Expr(:block, [_rewrite_iter(a, bonds) for a in iter.args]...)
+    elseif iter isa Expr && iter.head === :(=)
+        return Expr(:(=), iter.args[1], _rewrite_bond_reads(iter.args[2], bonds))
+    else
+        return iter
+    end
+end
+
+"""
+Translate a bond-dependent cell into declarations + output expression
+for embedding in the @island body.
+"""
+function translate_reactive(cc::CellClass, bonds::Set{Symbol})::ReactiveEmit
+    code    = String(strip(cc.cell.code))
+    suffix  = _id_suffix(cc.cell.id)
+    memo_id = "_reactive_$(suffix)"
+
+    _is_wall_body(code) && return ReactiveEmit(:wall, "",
+        "RawHtml(render_value(_cell_$(suffix)))")
+
+    body_expr = try
+        Base.Meta.parse("begin\n$(code)\nend")
+    catch
+        return ReactiveEmit(:wall, "",
+            "RawHtml(render_value(_cell_$(suffix)))")
+    end
+
+    rewritten = _rewrite_bond_reads(body_expr, bonds)
+    rewritten_str = _strip_wrapping_block(_strip_linenumbers(rewritten))
+
+    if _is_wasmplot_body(code)
+        w, h = _wasmplot_canvas_size(body_expr)
+        # The cell body already returns a Figure. We pipe that return
+        # value into a local `_fig_<id>`, then `render!(_fig_<id>)`
+        # writes to the canvas. Re-running the effect rebuilds the
+        # figure on every upstream signal change — matches Therapy's
+        # NotebookStep4 pattern.
+        decl = join([
+            "        create_effect(() -> begin",
+            "            _fig_$(suffix) = begin",
+            _indent(rewritten_str, 16),
+            "            end",
+            "            render!(_fig_$(suffix))",
+            "        end)",
+            "",
+        ], "\n")
+        output = "Canvas(:width => $(w), :height => $(h))"
+        return ReactiveEmit(:effect, decl, output)
+    end
+
+    decl = join([
+        "        $(memo_id) = create_memo(() -> begin",
+        _indent(rewritten_str, 12),
+        "        end)",
+        "",
+    ], "\n")
+    output = "Span($(memo_id))"
+    return ReactiveEmit(:memo, decl, output)
+end
+
+"Unwrap a top-level `begin … end` wrapper produced by our parse so
+the serialized source doesn't get an extra layer of `begin/end`."
+function _strip_wrapping_block(expr)::String
+    if expr isa Expr && expr.head === :block
+        # Drop leading LineNumberNodes for readability.
+        args = filter(a -> !(a isa LineNumberNode), expr.args)
+        if length(args) == 1
+            return string(args[1])
+        else
+            return join(map(string, args), "\n")
+        end
+    end
+    return string(expr)
+end
+
 # ─── Module-level constants ────────────────────────────────────────────
 
-"""
-`const _cell_<id> = try let <user code> end catch _e; _e end` — every
-cell's body runs once at module load. Bond-default consts (`const n =
-8`) are declared before cells, so reactive cells that read `n` resolve
-to the default at this stage. The @island then overrides `n` locally
-with its signal.
-
-Returns an empty string for bootstrap cells (Pkg / using blocks that
-belong at module top).
-"""
 function emit_cell_const(cc::CellClass)::String
     code = strip(cc.cell.code)
     _is_bootstrap_cell(code) && return ""
@@ -293,28 +477,14 @@ function emit_cell_const(cc::CellClass)::String
     ], "\n") * "\n"
 end
 
-"""
-`const _default_<bond> = <default>` + plain alias `const <bond> =
-_default_<bond>` for every bond in the notebook. The plain alias is
-what lets a reactive cell body (executed at module load) read `n` or
-`l` and resolve to the default — the @island overrides these names
-with signals inside its own scope.
-
-Emits bond-spec constants too (range min/max/step) so the @island
-body can reference them when constructing the Input.
-"""
 function emit_bond_defaults(specs::Dict{Symbol, BondSpec},
                             fallback_defaults::Dict{Symbol, String})::String
     isempty(specs) && isempty(fallback_defaults) && return "    # (no bonds)\n"
     lines = String["    # ── Bond defaults (one per @bind) ──"]
-    # Specs we could parse fully.
     for (bond, spec) in pairs(specs)
         push!(lines, "    const _default_$(bond) = $(spec.default_expr)")
         push!(lines, "    const $(bond)          = _default_$(bond)")
     end
-    # Bonds we couldn't parse — need SOME default so the reactive cell
-    # bodies don't throw UndefVar at module load. `missing` matches
-    # SessionsUI's `initial_value` fallback.
     for (bond, def) in pairs(fallback_defaults)
         haskey(specs, bond) && continue
         push!(lines, "    const _default_$(bond) = $(def)")
@@ -323,13 +493,8 @@ function emit_bond_defaults(specs::Dict{Symbol, BondSpec},
     return join(lines, "\n") * "\n"
 end
 
-# ─── Per-cell emission inside @island return tree ──────────────────────
+# ─── CellDiv call-site emitters ────────────────────────────────────────
 
-"""
-Static cell — pre-computed module-level value rendered via
-`render_value` (same MIME classifier the live IDE uses, so DataFrames
-/ Markdown / WasmPlot all render identically to the IDE).
-"""
 function emit_static_cell_call(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
     folded_lit   = cc.cell.folded ? "true" : "false"
@@ -349,26 +514,14 @@ function emit_static_cell_call(cc::CellClass)::String
     ], "\n")
 end
 
-"""
-Bond cell — native Therapy `Input` widget bound to the create_signal
-declared at the top of the @island. Widget renders via a Div
-containing the slider + a live-value Span — matches SessionsUI's
-BoundSlider HTML (su-slider + su-slider-out classes) so existing CSS
-applies. For widgets we can't natively emit, falls back to a frozen
-RawHtml of the rendered widget (no reactivity — caller handles).
-"""
 function emit_bond_cell_call(cc::CellClass, spec::Union{BondSpec, Nothing})::String
     bond         = cc.bond_name
     folded_lit   = cc.cell.folded ? "true" : "false"
-    show_out_lit = "true"  # always show the widget — it's the control
     suffix       = _id_suffix(cc.cell.id)
 
     output_expr = if spec === nothing
-        # Unparseable widget — render the frozen SessionsUI HTML.
         "RawHtml(render_value(_cell_$(suffix)))"
     else
-        # Native Therapy Input. Step/min/max/default all source-level
-        # expressions so `2:30` → "2" / "30" / "1" untouched.
         "Div(:class => \"flex items-center gap-3\",\n" *
         "                    Input(:type     => \"range\",\n" *
         "                          :min      => $(repr(spec.min_expr)),\n" *
@@ -387,57 +540,42 @@ function emit_bond_cell_call(cc::CellClass, spec::Union{BondSpec, Nothing})::Str
         "                runtime_ns  = $(_cell_runtime_literal(cc)),",
         "                state       = $(_cell_state_literal(cc)),",
         "                folded      = $(folded_lit),",
-        "                show_output = $(show_out_lit),",
+        "                show_output = true,",
         "                output      = $(output_expr),",
         "            )",
     ], "\n")
 end
 
-"""
-Reactive cell (bond-dependent) — WALL for v1. The cell body was
-evaluated once at module load with every bond at its default, so
-the output reflects the initial bond state. State `:wasm_failed`
-triggers the red band above the output making it obvious to the
-reader that this cell is frozen rather than live.
-"""
-function emit_reactive_cell_call(cc::CellClass)::String
+"`re` is the `ReactiveEmit` for this cell; its `output_expr` goes into
+the CellDiv slot, and `:wasm_failed` is applied only when the cell
+fell back to WALL."
+function emit_reactive_cell_call(cc::CellClass, re::ReactiveEmit)::String
     suffix       = _id_suffix(cc.cell.id)
     folded_lit   = cc.cell.folded ? "true" : "false"
     show_out_lit = _suppresses_output(cc.cell.code) ? "false" : "true"
     cell_type_lit = _is_markdown_cell_code(cc.cell.code) ? ":markdown" : ":code"
+    state_lit = re.kind === :wall ? ":wasm_failed" : _cell_state_literal(cc)
     join([
         "            CellDiv(",
         "                cell_id     = $(repr(string(cc.cell.id))),",
         "                source_code = $(_code_literal(cc.cell.code)),",
         "                runtime_ns  = $(_cell_runtime_literal(cc)),",
-        "                state       = :wasm_failed,",
+        "                state       = $(state_lit),",
         "                cell_type   = $(cell_type_lit),",
         "                folded      = $(folded_lit),",
         "                show_output = $(show_out_lit),",
-        "                output      = RawHtml(render_value(_cell_$(suffix))),",
+        "                output      = $(re.output_expr),",
         "            )",
     ], "\n")
 end
 
 # ─── File assembly ─────────────────────────────────────────────────────
 
-"""
-Bake the full notebook asset bundle (CSS + CodeMirror + init JS)
-into the generated module as a single `const _NOTEBOOK_ASSETS_HTML`
-literal. `repr` handles all escape concerns.
-"""
 function emit_asset_bundle_const()::String
     html = published_notebook_assets_html()
     "    const _NOTEBOOK_ASSETS_HTML = $(repr(html))\n"
 end
 
-"""
-Build the `(specs, fallback_defaults)` maps needed by
-`emit_bond_defaults`. Bond cells whose widget is parseable produce
-a BondSpec; others fall back to `missing` (the SessionsUI default
-convention) so reactive cell bodies that read the bond at module
-load still have a value.
-"""
 function _collect_bond_specs(plan::ExtractionPlan)
     specs             = Dict{Symbol, BondSpec}()
     fallback_defaults = Dict{Symbol, String}()
@@ -471,7 +609,7 @@ function assemble(plan::ExtractionPlan)::String
     print(io, emit_bond_defaults(specs, fallback_defaults))
     println(io)
 
-    # Cell value consts (module-load eval).
+    # Cell-value consts (module-load eval).
     println(io, "    # ── Cell values (source preserved, evaluated at module load)")
     println(io, "    # Bond reads inside cell bodies resolve against the plain")
     println(io, "    # `const <bond>` aliases declared above. The @island body")
@@ -483,13 +621,24 @@ function assemble(plan::ExtractionPlan)::String
     end
     println(io)
 
+    # Pre-translate every reactive cell so we know its declarations
+    # (memos / effects) before emitting the @island body.
+    bond_names = Set(keys(specs)) ∪ Set(keys(fallback_defaults))
+    reactive_by_id = Dict{Any, ReactiveEmit}()
+    for cc in plan.cells
+        cc.kind === :reactive || continue
+        reactive_by_id[cc.cell.id] = translate_reactive(cc, bond_names)
+    end
+
     # The one @island per notebook.
     println(io, "    @island function $(plan.component_name)()")
-    # Signal declarations.
+
+    # Signal decls (bond_names iteration preserves insertion order via
+    # explicit loop over keys).
     if isempty(specs) && isempty(fallback_defaults)
         println(io, "        # (no bonds in this notebook)")
     else
-        println(io, "        # ── Bond signals (create_signal captures the default) ──")
+        println(io, "        # ── Bond signals ──")
         for bond in keys(specs)
             println(io, "        $(bond), set_$(bond) = create_signal(_default_$(bond))")
         end
@@ -497,14 +646,25 @@ function assemble(plan::ExtractionPlan)::String
             haskey(specs, bond) && continue
             println(io, "        $(bond), set_$(bond) = create_signal(_default_$(bond))")
         end
+        println(io)
     end
-    println(io)
+
+    # Reactive decls.
+    any_reactive = any(cc -> cc.kind === :reactive, plan.cells)
+    if any_reactive
+        println(io, "        # ── Reactive memos + effects ──")
+        for cc in plan.cells
+            cc.kind === :reactive || continue
+            re = reactive_by_id[cc.cell.id]
+            isempty(re.decl_source) && continue
+            print(io, re.decl_source)
+        end
+        println(io)
+    end
 
     println(io, "        render_published_notebook(")
     cell_calls = String[]
     for cc in plan.cells
-        # Skip bootstrap-only cells (their imports are at module top via
-        # collect_imports; nothing to render).
         if cc.kind === :static && _is_bootstrap_cell(cc.cell.code)
             continue
         end
@@ -513,7 +673,7 @@ function assemble(plan::ExtractionPlan)::String
         elseif cc.kind === :bond
             emit_bond_cell_call(cc, get(specs, cc.bond_name, nothing))
         else  # :reactive
-            emit_reactive_cell_call(cc)
+            emit_reactive_cell_call(cc, reactive_by_id[cc.cell.id])
         end
         push!(cell_calls, line)
     end
@@ -537,25 +697,27 @@ function _write_header(io::IO, plan::ExtractionPlan)
     println(io, "# Source : $(plan.notebook_path)")
     println(io, "# Date   : $(now())")
     println(io, "#")
-    println(io, "# This file is a self-contained Therapy component. Cell SOURCE")
-    println(io, "# is preserved verbatim and rendered through a read-only")
-    println(io, "# CodeMirror editor. Each cell value is computed once at module")
-    println(io, "# load and rendered through `Sessions.render_value` — the same")
-    println(io, "# MIME classifier the live IDE output pipeline uses.")
+    println(io, "# Self-contained Therapy component. Cell SOURCE is preserved")
+    println(io, "# verbatim; cell VALUES are computed once at module load and")
+    println(io, "# rendered through `Sessions.render_value` — the same MIME")
+    println(io, "# classifier the live IDE output pipeline uses.")
     println(io, "#")
     println(io, "# Architecture (matches Therapy.jl's NotebookDemo reference):")
     println(io, "#   - ONE @island function per notebook. Outer body runs as")
     println(io, "#     regular Julia at SSR (DataFrames / Markdown / arbitrary")
     println(io, "#     show() methods all fine). Only reactive closures inside")
     println(io, "#     the body get WASM-compiled.")
-    println(io, "#   - Each @bind becomes a create_signal whose getter is")
-    println(io, "#     bound into a native Therapy `Input(:value=>, :on_input=>)` —")
-    println(io, "#     no `<bond>` bridge JS, no WebSocket.")
-    println(io, "#   - Reactive cells (bond-dependent) render v1-frozen at the")
-    println(io, "#     bond default with a `state=:wasm_failed` badge — WasmTarget")
-    println(io, "#     can't compile md\"…\" / DataFrame / arbitrary show() in")
-    println(io, "#     memo bodies yet. v1.1 adds a heuristic translator for")
-    println(io, "#     simple numeric cells.")
+    println(io, "#   - Each @bind becomes a create_signal bound into a native")
+    println(io, "#     Therapy `Input(:value=>, :on_input=>)` — no <bond>")
+    println(io, "#     bridge JS, no WebSocket.")
+    println(io, "#   - Each bond-dependent cell becomes a create_memo (simple")
+    println(io, "#     return value, rendered via Span) or create_effect (canvas-")
+    println(io, "#     drawing cell, rendered via Canvas). Bare bond refs in the")
+    println(io, "#     cell body are rewritten to signal reads (n → n()).")
+    println(io, "#   - Cells whose body uses WasmTarget-hostile patterns")
+    println(io, "#     (DataFrame, md\"…\", @show, display) fall back to WALL:")
+    println(io, "#     frozen at the bond default with a `state=:wasm_failed`")
+    println(io, "#     badge making the non-reactivity visible to the reader.")
     println(io, "#   - Static cells are pure SSR: frozen output via render_value.")
     println(io, "#")
     println(io, "# Re-running `Sessions.extract_notebook` with the same out_path")

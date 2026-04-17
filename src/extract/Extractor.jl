@@ -93,7 +93,7 @@ function extract_notebook(
     # tree built natively from the signal), plus the Sessions-side cell
     # chrome (CellDiv + render_value + render_published_notebook).
     runtime_imports = [
-        "using Therapy: @island, create_signal, RawHtml, Div, Input, Span",
+        "using Therapy: @island, create_signal, create_memo, create_effect, RawHtml, Div, Input, Span, Canvas",
         "using Sessions: render_value, CellDiv, render_published_notebook",
     ]
 
