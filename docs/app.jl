@@ -2,17 +2,12 @@
 # Sessions.jl Documentation Site
 #
 # Usage (from Sessions.jl root directory):
-#   julia +1.12 --project=. docs/app.jl dev    # Development server
-#   julia +1.12 --project=. docs/app.jl build  # Build static site to docs/dist
-
-# Use local Therapy.jl if available (sibling directory)
-local_therapy = joinpath(dirname(@__DIR__), "..", "Therapy.jl")
-if isdir(local_therapy)
-    push!(LOAD_PATH, local_therapy)
-end
-
-# Use local Sessions.jl package
-push!(LOAD_PATH, dirname(@__DIR__))
+#   julia +1.12 --project=docs docs/app.jl dev    # Development server
+#   julia +1.12 --project=docs docs/app.jl build  # Build static site to docs/dist
+#
+# The docs project (docs/Project.toml) declares its own deps — including
+# demo-only packages like WasmPlot + DataFrames used by extracted
+# notebooks — so they do not leak into the root Sessions runtime.
 
 using Therapy
 using Sessions

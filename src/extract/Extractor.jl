@@ -84,7 +84,13 @@ function extract_notebook(
 
     progress("Lifting notebook imports…")
     imports = collect_imports(nb)
-    runtime_imports = ["using Therapy"]
+    # Target only the specific Therapy names the scaffolding uses.
+    # `using Therapy` (all exports) clashes with notebook imports that
+    # export the same HTML5 element names — e.g. WasmPlot.Figure vs
+    # Therapy.Figure (<figure>), or a user-defined Header / Section /
+    # Details. The extracted module needs Div / RawHtml / create_signal /
+    # @island for the generated scaffolding — that's it.
+    runtime_imports = ["using Therapy: Div, RawHtml, create_signal, @island"]
 
     plan = ExtractionPlan(
         nb_abs, cn, out_abs,
@@ -119,10 +125,15 @@ function collect_imports(nb::Notebook)::Vector{String}
         for line in split(c.code, '\n'; keepempty=false)
             s = strip(line)
             startswith(s, "using ") || startswith(s, "import ") || continue
-            # Skip notebook-bootstrap deps that would never be in a
-            # downstream Therapy project (Sessions, PDE, Pkg.activate).
-            occursin(r"\bSessions\b",        s) && continue
-            occursin(r"\bSessionsUI\b",      s) && continue
+            # Skip notebook-bootstrap / tooling imports that don't
+            # belong in the extracted component:
+            #   - `using Sessions`              (the IDE itself)
+            #   - `using PlutoDependencyExplorer` (extraction-only tool)
+            #   - `using Pkg`                    (notebook env bootstrap)
+            # SessionsUI STAYS — it exports @bind / BoundSlider / the
+            # notebook-widget surface that users actively call from cells.
+            occursin(r"^using\s+Sessions(\s*$|\s*[,:])", s) && continue
+            occursin(r"^import\s+Sessions(\s*$|\s*[,:])", s) && continue
             occursin(r"\bPlutoDependencyExplorer\b", s) && continue
             occursin(r"\bPkg\b",             s) && continue
             ss = String(s)

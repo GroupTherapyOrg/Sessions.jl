@@ -1,0 +1,49 @@
+# This is the docs-site-only project. It lives separately from the
+# root Sessions.jl package so that docs-only demo dependencies
+# (WasmPlot, DataFrames, …) do not leak into Sessions's runtime
+# dep graph — users who `Pkg.Apps.add` Sessions only pay for what
+# the IDE itself needs.
+#
+# Usage (from Sessions.jl root):
+#   julia +1.12 --project=docs docs/app.jl dev
+#   julia +1.12 --project=docs docs/app.jl build
+#
+# All unregistered packages in the full dependency graph (including
+# transitive ones inherited via Therapy / WasmPlot) must appear in
+# both [deps] and [sources] here — Pkg only consults the ROOT
+# project's [sources] block when resolving.
+
+[deps]
+# ── Stdlibs used in docs/app.jl or extracted notebooks ──
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+
+# ── Registered packages used by extracted notebooks ──
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+
+# ── Sessions + friends (unregistered; see [sources] below) ──
+Sessions = "c3d4e5f6-a7b8-9012-cdef-123456789012"
+SessionsUI = "d4e5f6a7-b8c9-0123-defa-234567890123"
+Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+WasmPlot = "c1c0b9ed-8be2-478a-b5eb-22e4f5885b7b"
+
+# ── Transitive unregistered deps pulled in by Therapy / WasmPlot.
+# Must be listed here because [sources] in inner packages is ignored
+# by Pkg for non-root projects.
+JuliaLowering = "f3c80556-a63f-4383-b822-37d64f81a311"
+JuliaSyntax = "70703baa-626e-46a2-a12c-08ffd08c73b4"
+WasmTarget = "9f3a1415-1112-405b-ae89-c61daf9872bd"
+
+[sources]
+Sessions = {path = ".."}
+SessionsUI = {path = "../SessionsUI"}
+Therapy = {path = "../../Therapy.jl"}
+WasmPlot = {rev = "main", url = "https://github.com/GroupTherapyOrg/WasmPlot.jl"}
+WasmTarget = {rev = "main", url = "https://github.com/GroupTherapyOrg/WasmTarget.jl"}
+JuliaLowering = {rev = "main", url = "https://github.com/JuliaLang/JuliaLowering.jl"}
+JuliaSyntax = {rev = "main", url = "https://github.com/JuliaLang/JuliaSyntax.jl"}
+
+[compat]
+DataFrames = "1.8.2"
+julia = "~1.12"

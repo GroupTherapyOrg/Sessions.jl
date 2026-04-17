@@ -20,6 +20,16 @@ jobs:
     steps:
       - name: Checkout Sessions.jl
         uses: actions/checkout@v4
+        with:
+          path: Sessions.jl
+
+      # docs/Project.toml references Therapy via relative path
+      # (../../Therapy.jl) — checkout the sibling repo to match.
+      - name: Checkout Therapy.jl
+        uses: actions/checkout@v4
+        with:
+          repository: GroupTherapyOrg/Therapy.jl
+          path: Therapy.jl
 
       - name: Setup Julia
         uses: julia-actions/setup-julia@v2
@@ -31,14 +41,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          julia --project=. -e '
+          cd Sessions.jl
+          julia --project=docs -e '
             using Pkg
             Pkg.instantiate()
           '
 
       - name: Build docs
         run: |
-          julia --project=. docs/app.jl build
+          cd Sessions.jl
+          julia --project=docs docs/app.jl build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -46,7 +58,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/dist
+          path: Sessions.jl/docs/dist
 
   deploy:
     environment:

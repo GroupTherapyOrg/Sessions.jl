@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/interactive.jl
-# Date   : 2026-04-16T22:17:23.319
+# Date   : 2026-04-17T09:22:54.119
 #
 # This file is a self-contained Therapy component. The user's
 # cell SOURCE is preserved verbatim — markdown stays markdown,
@@ -30,18 +30,31 @@ module InteractiveMod
 
     using Therapy
     using Markdown
+    using SessionsUI: @bind, BoundSlider
     using WasmPlot
     using DataFrames
 
 """
-Render any cell value to an HTML string. Tries Sessions's tree
-renderer for Dicts/Sets/structs (if the host loaded it), then
-`Base.show(MIME"text/html"(), …)` for everything else (Markdown,
-DataFrames, plots — they all define their own show methods),
-falling back to `print` for plain values.
+Render any cell value to an HTML string. Priority matches the
+Sessions IDE's output classifier (see Sessions/.../boot.jl):
+  1. Exceptions → styled error block
+  2. `showable(MIME"text/html"(), x)` → use that show method.
+     This covers Markdown.MD, DataFrames.DataFrame, WasmPlot.Figure,
+     SessionsUI.Bond, and anything else that opts in.
+  3. Dict / Set / struct that Sessions marks as tree-like → tree
+     renderer (only if Sessions is loaded in Main — the IDE path).
+  4. Fallback: `sprint(print, x)`.
+The order is critical: Markdown.MD has BOTH a text/html show AND
+is "tree-like" per Sessions, and we want the HTML form.
 """
 function _render(x)::String
     x isa Exception && return string("<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>", sprint(showerror, x), "</pre>")
+    try
+        if Base.showable(MIME"text/html"(), x)
+            return sprint(io -> show(io, MIME"text/html"(), x))
+        end
+    catch
+    end
     if isdefined(Main, :Sessions)
         try
             sess = Main.Sessions
@@ -51,17 +64,15 @@ function _render(x)::String
         catch
         end
     end
-    try
-        sprint(io -> show(io, MIME"text/html"(), x))
-    catch
-        sprint(print, x)
-    end
+    sprint(print, x)
 end
 
 
     # ── Shared signals (one per @bind in the source) ──
     const n_signal = create_signal(8)
+    const n = 8
     const l_signal = create_signal(7.5)
+    const l = 7.5
 
     # ── Cell values (source preserved, evaluated at module load) ──
     # ── Cell 20000000-0000-0000-0000-000000000001 (static) ──

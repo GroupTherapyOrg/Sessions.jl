@@ -176,6 +176,11 @@ function emit_shared_signals(plan::ExtractionPlan)::String
         any_bond = true
         default_lit = _bond_default_literal(cc.cell.code)
         push!(lines, "    const $(cc.bond_name)_signal = create_signal($(default_lit))")
+        # Also expose the plain default at module scope so reactive cells
+        # that read `n` / `l` at module-load can resolve the name.
+        # (v1: cells see the frozen default; v2 WASM islands override via
+        # signal destructure inside the @island body.)
+        push!(lines, "    const $(cc.bond_name) = $(default_lit)")
     end
     any_bond || push!(lines, "    # (none)")
     return join(lines, "\n")
@@ -184,14 +189,26 @@ end
 function emit_render_helper()::String
     return """
     \"\"\"
-    Render any cell value to an HTML string. Tries Sessions's tree
-    renderer for Dicts/Sets/structs (if the host loaded it), then
-    `Base.show(MIME"text/html"(), …)` for everything else (Markdown,
-    DataFrames, plots — they all define their own show methods),
-    falling back to `print` for plain values.
+    Render any cell value to an HTML string. Priority matches the
+    Sessions IDE's output classifier (see Sessions/.../boot.jl):
+      1. Exceptions → styled error block
+      2. `showable(MIME"text/html"(), x)` → use that show method.
+         This covers Markdown.MD, DataFrames.DataFrame, WasmPlot.Figure,
+         SessionsUI.Bond, and anything else that opts in.
+      3. Dict / Set / struct that Sessions marks as tree-like → tree
+         renderer (only if Sessions is loaded in Main — the IDE path).
+      4. Fallback: `sprint(print, x)`.
+    The order is critical: Markdown.MD has BOTH a text/html show AND
+    is \"tree-like\" per Sessions, and we want the HTML form.
     \"\"\"
     function _render(x)::String
         x isa Exception && return string(\"<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>\", sprint(showerror, x), \"</pre>\")
+        try
+            if Base.showable(MIME\"text/html\"(), x)
+                return sprint(io -> show(io, MIME\"text/html\"(), x))
+            end
+        catch
+        end
         if isdefined(Main, :Sessions)
             try
                 sess = Main.Sessions
@@ -201,11 +218,7 @@ function emit_render_helper()::String
             catch
             end
         end
-        try
-            sprint(io -> show(io, MIME\"text/html\"(), x))
-        catch
-            sprint(print, x)
-        end
+        sprint(print, x)
     end
     """
 end
