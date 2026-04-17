@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/welcome.jl
-# Date   : 2026-04-17T09:22:45.529
+# Date   : 2026-04-17T09:23:12.153
 #
 # This file is a self-contained Therapy component. The user's
 # cell SOURCE is preserved verbatim — markdown stays markdown,
@@ -28,7 +28,7 @@
 
 module WelcomeMod
 
-    using Therapy
+    using Therapy: Div, RawHtml, create_signal, @island
     using Markdown
     using Dates
 

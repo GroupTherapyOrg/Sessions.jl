@@ -31,7 +31,10 @@ using SessionsUI: @bind, BoundSlider
 
 # ╔═╡ 20000000-0000-0000-0000-000000000003
 # ╠═╡ show_logs = false
-using WasmPlot
+# Namespace WasmPlot to avoid collisions — Therapy exports `Figure`
+# (the HTML5 <figure> element) and so does WasmPlot (the plot type).
+# Every call site below uses `WP.Figure`, `WP.Axis`, `WP.barplot!`.
+import WasmPlot as WP
 
 # ╔═╡ 20000000-0000-0000-0000-000000000004
 # ╠═╡ show_logs = false
@@ -77,9 +80,9 @@ redraws.
 # notebook output area. Defining it here keeps the fixture self-contained;
 # this hook lives in WasmPlot itself once Phase 3 of the SessionsUI build
 # wires per-cell @island compilation.
-function Base.show(io::IO, ::MIME"text/html", fig::WasmPlot.Figure)
-    glue = WasmPlot.canvas2d_js_glue()
-    js   = WasmPlot.generate_js_render(fig)
+function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
+    glue = WP.canvas2d_js_glue()
+    js   = WP.generate_js_render(fig)
     id   = "wp_" * string(hash(fig); base=16)
     print(io, """
     <canvas id="$(id)" width="$(fig.width)" height="$(fig.height)"
@@ -99,10 +102,10 @@ end
 
 # ╔═╡ 20000000-0000-0000-0000-000000000009
 let
-    fig = Figure(size=(750, 360))
-    ax  = Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
+    fig = WP.Figure(size=(750, 360))
+    ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
     xs  = Float64.(1:n)
-    barplot!(ax, xs, xs.^2; color=:red)
+    WP.barplot!(ax, xs, xs.^2; color=:red)
     fig
 end
 

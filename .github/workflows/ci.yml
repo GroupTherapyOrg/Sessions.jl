@@ -17,6 +17,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
+          - windows-latest
     steps:
       - name: Checkout Sessions.jl
         uses: actions/checkout@v4
@@ -38,6 +39,7 @@ jobs:
       - uses: julia-actions/cache@v2
 
       - name: Install dependencies
+        shell: bash
         run: |
           cd Sessions.jl
           julia --project=. -e '
@@ -46,6 +48,7 @@ jobs:
           '
 
       - name: Run tests
+        shell: bash
         run: |
           cd Sessions.jl
           julia --project=. test/runtests.jl

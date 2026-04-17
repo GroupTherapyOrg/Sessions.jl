@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/interactive.jl
-# Date   : 2026-04-17T09:22:54.119
+# Date   : 2026-04-17T09:25:05.565
 #
 # This file is a self-contained Therapy component. The user's
 # cell SOURCE is preserved verbatim — markdown stays markdown,
@@ -28,10 +28,10 @@
 
 module InteractiveMod
 
-    using Therapy
+    using Therapy: Div, RawHtml, create_signal, @island
     using Markdown
     using SessionsUI: @bind, BoundSlider
-    using WasmPlot
+    import WasmPlot as WP
     using DataFrames
 
 """
@@ -137,9 +137,9 @@ end
             # notebook output area. Defining it here keeps the fixture self-contained;
             # this hook lives in WasmPlot itself once Phase 3 of the SessionsUI build
             # wires per-cell @island compilation.
-            function Base.show(io::IO, ::MIME"text/html", fig::WasmPlot.Figure)
-                glue = WasmPlot.canvas2d_js_glue()
-                js   = WasmPlot.generate_js_render(fig)
+            function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
+                glue = WP.canvas2d_js_glue()
+                js   = WP.generate_js_render(fig)
                 id   = "wp_" * string(hash(fig); base=16)
                 print(io, """
                 <canvas id="$(id)" width="$(fig.width)" height="$(fig.height)"
@@ -163,10 +163,10 @@ end
     const _cell__20000000_0000_0000_0000_000000000009 = try
         let
             let
-                fig = Figure(size=(750, 360))
-                ax  = Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
+                fig = WP.Figure(size=(750, 360))
+                ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares", subtitle = "n = $(n)")
                 xs  = Float64.(1:n)
-                barplot!(ax, xs, xs.^2; color=:red)
+                WP.barplot!(ax, xs, xs.^2; color=:red)
                 fig
             end
         end
