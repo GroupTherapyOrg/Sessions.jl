@@ -168,7 +168,23 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
   // Expose a global rebuild hook so external code (e.g. tab-switch handlers
   // in the Sessions IDE) can request a rebuild without inventing its own.
   window._sessionsBuildToc = debouncedBuild;
-  new MutationObserver(debouncedBuild).observe(document.body, {childList:true, subtree:true});
+
+  // Scope the observer to the notebook container so the ToC's own
+  // innerHTML rewrites (during buildToc) don't trigger themselves —
+  // that's the classic MutationObserver feedback-loop bug.
+  // Sessions IDE: #nb exists, ToC is a sibling → safe.
+  // Pluto / standalone HTML: fall back to document.body but skip
+  // any mutation originating inside the ToC itself.
+  var observerTarget = document.getElementById('nb') || document.body;
+  new MutationObserver(function(mutations){
+    // If every mutation is inside the ToC, it's our own write — ignore.
+    var allFromToc = true;
+    for (var i = 0; i < mutations.length; i++) {
+      if (!tocNav.contains(mutations[i].target)) { allFromToc = false; break; }
+    }
+    if (allFromToc) return;
+    debouncedBuild();
+  }).observe(observerTarget, {childList:true, subtree:true});
 
   // First build (in case it boots already-open).
   if (!tocNav.classList.contains('hide')) buildToc();

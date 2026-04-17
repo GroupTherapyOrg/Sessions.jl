@@ -459,11 +459,14 @@
 .hljs-variable{color:var(--cm-variable);}
 
 /* ── Table of Contents ──
-   Styling now lives in SessionsUI/src/toc.jl (the widget's inline
-   <style> block), so the IDE chrome and a user's `using SessionsUI:
-   TableOfContents` cell render IDENTICALLY. The only Sessions-IDE-
-   specific rule is the cell-list width-clamp when the ToC is open —
-   that knowledge belongs to the IDE layout, not the widget. */
+   Widget styling lives in SessionsUI/src/toc.jl. Two IDE-specific
+   overrides stay here because they're layout knowledge, not widget
+   knowledge:
+     1. position: absolute → anchors the ToC to nb-island (the
+        notebook panel) instead of the viewport, so it sits a hair
+        below the panel's top border instead of hugging the page top.
+     2. cell-list width clamp when the ToC is open. */
+#nb-island .sessions-toc.aside{position:absolute;top:58px;}  /* tab-bar (38px) + .nb-cell-list padding-top (20px) — vertically aligns with the top cell */
 @container (min-width: 900px) {
   #nb.toc-open div[style*="max-width"]{max-width:min(900px, calc(100% - 300px)) !important;margin-left:auto !important;margin-right:calc(300px + 0.5rem) !important;}
 }
