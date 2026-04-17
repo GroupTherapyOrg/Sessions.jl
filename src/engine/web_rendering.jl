@@ -943,6 +943,32 @@ function render_value(x)::String
     _inject_therapy_script_markers(html)
 end
 
+# ── Therapy SSR fallback ────────────────────────────────────────────
+#
+# Therapy.SSR.Render has specialised `render_html!` methods for Strings,
+# Numbers, VNodes, and a handful of primitives; anything else crashes
+# the page-render step with a MethodError. That matters for reactive
+# cells whose `create_memo` returns a "rich" value Therapy doesn't
+# recognise — DataFrames, Markdown.MD, custom structs with a
+# `show(::MIME"text/html")` method, etc.
+#
+# The extractor intentionally doesn't pre-filter those cells (nothing
+# should STOP from compiling at extract time — WasmTarget is the sole
+# gatekeeper), so the SSR pass has to cope. This fallback routes any
+# value Therapy's method table doesn't handle through `render_value`
+# (the same MIME classifier the live IDE uses), giving DataFrames +
+# Markdown + WasmPlot figures a working SSR path without special-
+# casing the extractor.
+#
+# At WASM hydrate time this method isn't involved — Therapy's WASM
+# runtime updates DOM nodes directly based on the memo type. If the
+# @island failed to compile (e.g. DataFrame memo), no WASM loads and
+# the SSR-rendered frozen output stays visible; the sliders render but
+# don't drive anything, which matches the "try-to-compile, fall back
+# gracefully" contract.
+Therapy.render_html!(io::IO, x, ctx::Therapy.SSRContext) =
+    print(io, render_value(x))
+
 function _render_value_raw(x)::String
     x isa Exception && return string(
         "<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>",

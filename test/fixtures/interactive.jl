@@ -44,12 +44,32 @@ using DataFrames
 md"""
 # Interactive Sessions
 
-A live demo of `@bind` + `BoundSlider` driving a **WasmPlot** figure and a
-**DataFrame** that recompute together. Move the slider — both update.
+A live demo of `@bind` + `BoundSlider` driving three reactive dependents:
+a **numeric memo**, a **WasmPlot bar chart**, and a **DataFrame** table.
 
-In Sessions IDE this happens via the live Julia kernel; once published to
-WASM the same controls drive Therapy signals in the browser, no server
-round-trip required.
+Depending on how the notebook is run they behave differently — that's
+intentional, so you can see where the WASM-publish pipeline holds the
+full reactive promise and where it runs up against WasmTarget's
+current compile coverage.
+
+| Mode | Kernel | Numeric memo (`n*n`) | Bar chart | DataFrame |
+|---|---|---|---|---|
+| **Sessions IDE** | Live Julia | ✅ reactive | ✅ reactive | ✅ reactive |
+| **Plain script** | Single-pass Julia | runs once at `default` | runs once | runs once |
+| **WASM publish** | In-browser, no server | ✅ reactive (compiles) | ✅ reactive (compiles) | ⚠️ fails to compile |
+
+In **WASM publish** mode every reactive cell is translated to a
+Therapy `create_memo` / `create_effect` and handed to WasmTarget. No
+preemptive pattern-matching at extract time — the translator emits
+the reactive shape for every bond-dependent cell and lets WasmTarget
+decide. If the whole `@island` compile fails (because one cell uses a
+path WasmTarget can't lower yet — DataFrames today, say), Therapy
+logs the compile error and falls back to rendering the SSR output as
+plain static HTML: slider widgets still display, but their dependents
+freeze at the default value.
+
+The cell source round-trips 1:1 from the `.jl` file either way — the
+reader can always inspect what the notebook was trying to do.
 """
 
 # ╔═╡ 20000000-0000-0000-0000-000000000005
@@ -80,10 +100,17 @@ redraws.
 """
 
 # ╔═╡ 20000000-0000-0000-0000-000000000008
-# WasmPlot Figures need a Base.show MIME"text/html" method to render in the
-# notebook output area. Defining it here keeps the fixture self-contained;
-# this hook lives in WasmPlot itself once Phase 3 of the SessionsUI build
-# wires per-cell @island compilation.
+# WasmPlot Figures need a Base.show MIME"text/html" method to render in
+# Sessions IDE's output pipeline (the live kernel renders cell values
+# via `show(::IO, ::MIME"text/html", x)`). In the published WASM
+# notebook this method isn't called — the extractor translates the
+# reactive bar chart cell into a `create_effect + Canvas + render!(fig)`
+# pattern that writes straight to the canvas element. Keeping the show
+# method here keeps the fixture self-contained for IDE mode.
+#
+# Trailing `nothing;` suppresses this cell's cell-output slot — the
+# method is registered as a side effect of module load; there's no
+# meaningful value to render below it.
 function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
     glue = WP.canvas2d_js_glue()
     js   = WP.generate_js_render(fig)
@@ -103,6 +130,7 @@ function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
     })();</script>
     """)
 end
+nothing;
 
 # ╔═╡ 20000000-0000-0000-0000-000000000009
 # Reactive bar chart. Built with the Therapy NotebookStep4 discipline:
@@ -133,10 +161,32 @@ end
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000a
 md"""
-### A reactive table
+### A reactive table — where WASM currently runs out of road
 
-The same `n` driving the plot also drives this DataFrame. Notice the row
-count mirrors the slider exactly.
+The same slider that drives the bar chart also drives this DataFrame.
+
+- **In Sessions IDE** the cell reruns through the live Julia kernel
+  every time you move the slider, and the rendered table updates row-
+  by-row.
+- **In WASM publish mode** the extractor emits this cell as a
+  `create_memo(() -> DataFrame(…))` just like any other reactive cell
+  — no preemptive pattern-matching. When WasmTarget then tries to
+  compile the `@island`, DataFrames.jl pulls in column storage,
+  PrettyTables dispatch, and `show(::MIME"text/html", ::DataFrame)`
+  methods that aren't in WasmTarget's lowering coverage yet. The
+  compile fails, Therapy logs the error, and the notebook renders as
+  SSR-only: sliders display but stay frozen.
+
+That all-or-nothing granularity is a current limitation. Options as
+WasmTarget grows: (a) lower more Base/stdlib so today's failing
+cells start compiling; (b) split the notebook into multiple
+`@island`s so one failing cell doesn't pin the rest to static mode;
+(c) rewrite specific cells to use only WASM-safe patterns (see the
+bar chart cell for an example). For now, this cell intentionally
+stays as a DataFrame to demonstrate the fail-mode.
+
+The cell source still round-trips 1:1 regardless of compile
+outcome, so readers can always see what the notebook *meant*.
 """
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000b
@@ -151,17 +201,40 @@ md"""
 
 ### What's happening under the hood
 
-In **dev mode** (this view), the slider sends a value to the live Julia
-kernel, which re-runs every cell that reads `n`.
+The same `@bind` macro drives three different runtimes from the same
+source — no "publish mode" variant of the file, no fake-bind
+injection, the `.jl` you see here is the same one the extractor
+consumes byte-for-byte.
 
-In **script mode** (`julia interactive.jl` with `using SessionsUI` in your
-env), `@bind` falls back to the slider's default value (`8`) and the
-notebook runs straight through as a normal program.
+**Sessions IDE** — the slider sends a WebSocket message to the live
+Julia kernel, which re-runs every cell that references `n` and streams
+output back. Any value the cell produces (DataFrames, Markdown, custom
+`show` methods — anything with a `MIME"text/html"` method) just works
+because full Julia is available server-side.
 
-In **WASM publish mode**, this whole notebook becomes static HTML with
-each `<bond>` widget and each cell that reads `n` wrapped in a Therapy
-`@island`. The slider drives a signal in the browser; dependent islands
-recompute locally. No server.
+**Plain script** (`julia interactive.jl` with `using SessionsUI` on
+your load path) — `@bind` uses the widget's `initial_value` and the
+notebook runs straight through as a normal program. No interactivity,
+just a single-pass script.
+
+**WASM publish** — `Sessions.extract_notebook(...)` emits a single
+self-contained `.jl` component:
+- ONE `@island` per notebook wrapping every cell position.
+- Each `@bind` becomes a `create_signal` bound into a native Therapy
+  `Input(:value=>sig, :on_input=>set_sig)` — no `<bond>` bridge, no
+  WebSocket.
+- Every bond-dependent cell becomes a `create_memo` (value cell,
+  rendered via `Span(memo)`) or a `create_effect` + `Canvas` (plot
+  cell). Bare bond references inside the body (`n`) get rewritten to
+  signal reads (`n()`) so updates flow. No preemptive pattern-
+  matching at extract time — WasmTarget is the sole gatekeeper.
+- If WasmTarget rejects the `@island`, Therapy's build pipeline
+  skips WASM emission for that component and the notebook renders
+  as SSR-only. Sliders display but stay frozen (no hydration). The
+  reader can inspect cell source to see what was attempted.
+
+When the `@island` DOES compile, the slider drives a signal in the
+browser and dependent islands recompute locally. No server.
 """
 
 # ╔═╡ Cell order:

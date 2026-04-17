@@ -285,60 +285,10 @@ function _strip_comments_linewise(code::AbstractString)::String
     return String(take!(out))
 end
 
-"""
-True if `code` contains a pattern WasmTarget definitely can't
-handle today. Conservative — a WALL'd but translatable cell is
-just a visible degradation; a broken @island compile skips the
-whole notebook's reactivity.
-
-Rejected: DataFrame / md"…" / @show,@info,@warn,@error /
-display() / string-interpolation touching a bond / broadcast
-operators touching a bond. Reason each: DataFrames/Markdown have
-non-compilable method tables; logging macros lower to non-WASM-
-friendly calls; `\$(n)` lowers to `string(::Any, …)` whose
-general-path WasmGC support isn't there yet (Therapy's
-NotebookDemo only uses STATIC strings inside reactive closures);
-broadcast machinery relies on `Broadcast.materialize` + iterator
-protocols WasmTarget can't unroll.
-
-NotebookStep4 (the WasmPlot reference) works because it uses
-explicit `while` loops (no broadcasts), static title/xlabel/ylabel
-strings (no `\$` interp), and primitive typed numerics
-(`Int64` / `Float64`).
-"""
-function _is_wall_body(code::AbstractString, bonds::Set{Symbol})::Bool
-    code = _strip_comments_linewise(code)
-    occursin(r"\bDataFrame\s*[\(\{]", code)  && return true
-    occursin(r"\bmd\"", code)                && return true
-    occursin(r"\b@show\b",  code)            && return true
-    occursin(r"\b@info\b",  code)            && return true
-    occursin(r"\b@warn\b",  code)            && return true
-    occursin(r"\b@error\b", code)            && return true
-    occursin(r"\bdisplay\s*\(", code)        && return true
-
-    # String interpolation with a bond reference: `"… $(n) …"` /
-    # `"… $n …"`. Only bonds matter — purely static strings are fine.
-    for b in bonds
-        occursin(Regex("\\\$\\{?$(b)\\b"), code)               && return true
-        occursin(Regex("\\\$\\(\\s*$(b)\\s*[\\)\\.]"), code)  && return true
-        occursin(Regex("\\\$\\(.*\\b$(b)\\b.*\\)"), code)     && return true
-    end
-
-    # Broadcast operators (either dotted ops or dotted calls) anywhere
-    # in the body. Precise bond-touching detection would need the AST;
-    # broadcasts in non-reactive paths are harmless so we only apply
-    # this to cells we've already classified reactive by the caller.
-    occursin(r"[A-Za-z_0-9\)\]]\.[\^\*\+\-\/]", code) && return true  # xs.^2, a.*b, ...
-    occursin(r"\b[A-Za-z_][A-Za-z_0-9]*\.\(", code)   && return true  # f.(…)
-    occursin(r"\.\|\|", code)                         && return true
-    return false
-end
-
-"True if `code` looks like a WasmPlot figure cell. WasmPlot IS WASM-
-compatible (Therapy's NotebookDemo uses it), so these cells translate
-to `create_effect + render!(fig)` over a Canvas output. Caller has
-already cleared `_is_wall_body`, so by the time this runs we know
-the cell uses static strings + explicit loops."
+"True if `code` looks like a WasmPlot figure cell — determines
+whether the reactive translator emits a `create_effect + Canvas`
+shape vs a plain `create_memo + Span`. Pattern-matching on the cell
+source; WasmTarget compilability is checked at BUILD time, not here."
 function _is_wasmplot_body(code::AbstractString)::Bool
     code = _strip_comments_linewise(code)
     occursin(r"\b(WP\.|WasmPlot\.)?Figure\s*\(", code)            && return true
@@ -468,14 +418,25 @@ end
 """
 Translate a bond-dependent cell into declarations + output expression
 for embedding in the @island body.
+
+The extractor does NOT preemptively refuse to translate a cell — every
+reactive cell is emitted as `create_memo` / `create_effect` (or a
+Canvas-backed effect for WasmPlot cells) and WasmTarget decides at
+build time whether the closure compiles. If the whole @island fails
+to compile, Therapy logs the warning and falls back to SSR-only
+(sliders frozen at default). Individual cells aren't gated by
+heuristics at extract time — the translator's job is to emit the
+reactive shape, not to guess what the compiler accepts.
+
+The only "fallback" is a parse failure: if the cell body isn't valid
+Julia we can't rewrite its AST, so we bake the frozen output and
+flag `:wasm_failed`. This is rare in practice (Pluto notebooks
+already gate on parseability).
 """
 function translate_reactive(cc::CellClass, bonds::Set{Symbol})::ReactiveEmit
     code    = String(strip(cc.cell.code))
     suffix  = _id_suffix(cc.cell.id)
     memo_id = "_reactive_$(suffix)"
-
-    _is_wall_body(code, bonds) && return ReactiveEmit(:wall, "",
-        "RawHtml(render_value(_cell_$(suffix)))")
 
     body_expr = try
         Base.Meta.parse("begin\n$(code)\nend")
@@ -485,21 +446,19 @@ function translate_reactive(cc::CellClass, bonds::Set{Symbol})::ReactiveEmit
     end
 
     rewritten = _rewrite_bond_reads(body_expr, bonds)
-    rewritten_str = _strip_wrapping_block(_strip_linenumbers(rewritten))
+    rewritten_stripped = _strip_linenumbers(rewritten)
 
     if _is_wasmplot_body(code)
         w, h = _wasmplot_canvas_size(body_expr)
-        # The cell body already returns a Figure. We pipe that return
-        # value into a local `_fig_<id>`, then `render!(_fig_<id>)`
-        # writes to the canvas. Re-running the effect rebuilds the
-        # figure on every upstream signal change — matches Therapy's
-        # NotebookStep4 pattern.
+        # Flatten the cell body into a single begin-block whose
+        # trailing `fig` reference is replaced by `render!(fig)`.
+        # Matches Therapy NotebookStep4's shape (one flat begin-block
+        # inside create_effect) exactly — WasmTarget's type-inferrer
+        # is demonstrably happy with that shape.
+        body_str = _flatten_for_render(rewritten_stripped)
         decl = join([
             "        create_effect(() -> begin",
-            "            _fig_$(suffix) = begin",
-            _indent(rewritten_str, 16),
-            "            end",
-            "            render!(_fig_$(suffix))",
+            _indent(body_str, 12),
             "        end)",
             "",
         ], "\n")
@@ -507,14 +466,67 @@ function translate_reactive(cc::CellClass, bonds::Set{Symbol})::ReactiveEmit
         return ReactiveEmit(:effect, decl, output)
     end
 
+    body_str = _strip_wrapping_block(rewritten_stripped)
     decl = join([
         "        $(memo_id) = create_memo(() -> begin",
-        _indent(rewritten_str, 12),
+        _indent(body_str, 12),
         "        end)",
         "",
     ], "\n")
     output = "Span($(memo_id))"
     return ReactiveEmit(:memo, decl, output)
+end
+
+"""
+Flatten a WasmPlot cell body into a `begin`-block suitable for
+dropping straight inside `create_effect(() -> begin … end)`.
+
+Unwraps a single outer `let` (if present), and if the trailing
+expression is a bare variable reference — the usual Pluto shape
+`let fig = Figure(); …; fig end` — rewrites the trailing reference
+to `render!(<var>)` so the canvas actually gets drawn to. If the
+trailing expression is a complex one (e.g. `Figure(…)` directly),
+it's assigned to `_wasmplot_fig` first and that local is rendered.
+
+Falls through to `string(expr)` for any shape we don't recognise
+(which WasmTarget will usually reject, prompting the user to
+rewrite — but the translator doesn't pre-judge).
+"""
+function _flatten_for_render(expr)::String
+    # If wrapped in begin-block, peel it off.
+    inner = expr
+    if inner isa Expr && inner.head === :block
+        stmts = filter(a -> !(a isa LineNumberNode), inner.args)
+        if length(stmts) == 1 && stmts[1] isa Expr && stmts[1].head === :let
+            # let { … } end  — extract the body block.
+            body = stmts[1].args[2]
+            if body isa Expr && body.head === :block
+                return _append_render_bang(body)
+            end
+        end
+        # Plain block with (possibly) many stmts.
+        return _append_render_bang(inner)
+    end
+    # Anything else — just stringify.
+    return string(expr)
+end
+
+"Take an `Expr(:block, stmts…, last)` and return a stringified
+`begin`-less body whose trailing expression has been replaced by
+`render!(last)` (bare variable) or assigned then rendered (complex)."
+function _append_render_bang(block::Expr)::String
+    stmts = filter(a -> !(a isa LineNumberNode), block.args)
+    isempty(stmts) && return ""
+    head_stmts = stmts[1:end-1]
+    tail       = stmts[end]
+    new_tail = tail isa Symbol ?
+        Expr(:call, :render!, tail) :
+        Expr(:block,
+             Expr(:(=), :_wasmplot_fig, tail),
+             Expr(:call, :render!, :_wasmplot_fig))
+    body_expr = Expr(:block, head_stmts..., new_tail)
+    # Drop the `begin`/`end` wrapping `string` adds to a :block.
+    return _strip_wrapping_block(body_expr)
 end
 
 "Unwrap a top-level `begin … end` wrapper produced by our parse so

@@ -98,7 +98,14 @@
 }
 
 /* ═══ Cell shell — verbatim port of Sessions/input.css 137–216 ════ */
-.code-cell{background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
+/* position:relative + overflow:hidden are REQUIRED for .cell-ctrls to
+   anchor its pill (top:4px; right:6px) inside the code-cell's bounds
+   — without them it falls through to .cell-wrap (the nearest
+   positioned ancestor), which puts the pill in the notebook's top-
+   right area, outside the cell. The live IDE's CellView DOM gets
+   these via Tailwind utilities on the code-cell host; the published
+   bundle isn't in the Tailwind scan path, so we bake them in. */
+.code-cell{position:relative;overflow:hidden;background:var(--cell-bg);border:1px solid var(--cell-border);border-radius:8px;transition:border-color .2s;}
 .cell-wrap.has-output:not(.code-hidden) .code-cell{border-top-left-radius:0 !important;}
 .code-cell:hover{border-color:var(--cell-border-hov);}
 .cell-ctrls{opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s;pointer-events:none;}
