@@ -1112,14 +1112,27 @@ back via `render_published_notebook(…; assets_html = …)` — the
 host never has to reach into Sessions at all.
 """
 function published_notebook_assets_html()::String
+    # Each <script> starts with `/* __therapy */` so Therapy.jl's
+    # ClientRouter picks it up for re-execution after a client-side
+    # page swap. The router uses a substring match on the script
+    # body (`ClientRouter.jl` line 162–170: any of `therapy-island`,
+    # `TherapyHydrate`, `__therapy`, `__tw`) to decide whether to
+    # re-run after swap; without the marker, navigating to a notebook
+    # page via SPA nav leaves the new scripts inert and the CM hosts
+    # render as empty divs. The marker is a plain JS comment so it
+    # costs nothing at runtime.
     string(
         "<style data-sessions-nb-chrome=\"1\">", NOTEBOOK_CHROME_CSS, "</style>",
         "<script data-sessions-nb-editor=\"1\">",
+            "/* __therapy */ ",
             "if(!window.__SESSIONS_NB_CM_LOADED){window.__SESSIONS_NB_CM_LOADED=true;",
             NOTEBOOK_EDITOR_JS,
             "}",
         "</script>",
-        "<script data-sessions-nb-init=\"1\">", NOTEBOOK_INIT_JS, "</script>",
+        "<script data-sessions-nb-init=\"1\">",
+            "/* __therapy */ ",
+            NOTEBOOK_INIT_JS,
+        "</script>",
     )
 end
 
