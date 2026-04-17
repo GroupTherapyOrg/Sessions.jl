@@ -102,7 +102,13 @@ function Base.show(io::IO, ::MIME"text/html", toc::TableOfContents)
     if (!t) return;
     e.stopPropagation();
     tocNav.classList.toggle('hide');
-    if (!tocNav.classList.contains('hide')) buildToc();
+    var isOpen = !tocNav.classList.contains('hide');
+    // Mirror open/closed onto the notebook container so layout CSS
+    // (Sessions IDE: shift the cells to make room when there's space)
+    // can react. No-op in standalone (no #nb).
+    var nb = document.getElementById('nb');
+    if (nb) nb.classList.toggle('toc-open', isOpen);
+    if (isOpen) buildToc();
   });
 
   function getHeaders(){

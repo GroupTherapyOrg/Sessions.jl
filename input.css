@@ -467,8 +467,18 @@
         below the panel's top border instead of hugging the page top.
      2. cell-list width clamp when the ToC is open. */
 #nb-island .sessions-toc.aside{position:absolute;top:58px;}  /* tab-bar (38px) + .nb-cell-list padding-top (20px) — vertically aligns with the top cell */
-@container (min-width: 900px) {
-  #nb.toc-open div[style*="max-width"]{max-width:min(900px, calc(100% - 300px)) !important;margin-left:auto !important;margin-right:calc(300px + 0.5rem) !important;}
+
+/* When the notebook panel is wide enough that the cells (max 900px) +
+   the ToC sidebar (~300px) both fit comfortably, shift the cells so
+   they're centered in the SHIFTED panel — the ToC's left edge becomes
+   the new right boundary, cells re-center themselves automatically via
+   their existing `margin: 0 auto`. Below 1200px there isn't enough
+   slack so the ToC just floats over the cells (current behaviour). */
+#nb-island:has(#nb.toc-open) {
+  container-type: inline-size;
+}
+@container (min-width: 1200px) {
+  #nb.toc-open { padding-right: calc(300px + 0.5rem) !important; }
 }
 #nb-island:has(#nb.toc-open){container-type:inline-size;}
 
