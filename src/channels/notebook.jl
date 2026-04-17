@@ -85,6 +85,26 @@ function active_worker(state::WebNotebookState)
     tab === nothing ? nothing : tab.worker
 end
 
+# Make sure the active tab's worker is alive before we hand it to a
+# `remote_execute_cell!` call. `Malt.interrupt(...)` sometimes terminates
+# the underlying worker process (especially on macOS — the SIGINT can
+# unwind through `_jl_mutex_unlock` in the scheduler and crash the
+# process instead of raising InterruptException). Once the process is
+# dead every subsequent execution throws Malt.TerminatedWorkerException.
+# Auto-reboot here so the user can re-run after pressing Stop.
+function ensure_active_worker_alive!(state::WebNotebookState)
+    worker = active_worker(state)
+    worker === nothing && return nothing
+    is_worker_alive(worker) && return worker
+    @info "[notebook] Worker died — rebooting"
+    try
+        restart_worker!(worker)
+    catch e
+        @warn "[notebook] Worker reboot failed" exception=e
+    end
+    worker
+end
+
 function is_notebook_tab(state::WebNotebookState)
     tab = active_tab(state)
     tab !== nothing && tab.tab_type == :notebook
@@ -350,6 +370,10 @@ end
 
 function _run_order!(state::WebNotebookState, order)
     nb = active_nb(state)
+    # If a previous Stop killed the worker process, reboot before we
+    # try to execute anything. Otherwise every cell instantly errors
+    # with Malt.TerminatedWorkerException and the user is locked out.
+    ensure_active_worker_alive!(state)
     # The cleanup broadcast at the end of this function MUST fire even
     # if a cell raises during execution — otherwise the toolbar is left
     # showing "Stop / N / 0" forever (is_executing=1, run_progress
