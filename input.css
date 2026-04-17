@@ -458,28 +458,12 @@
 .hljs-meta{color:var(--cm-macro);font-weight:bold;}
 .hljs-variable{color:var(--cm-variable);}
 
-/* ── Table of Contents ── */
-.sessions-toc{font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;--toc-bg:var(--warm-50);--toc-color:var(--warm-600);--toc-color-h:var(--warm-800);--toc-active-bg:rgb(235,235,235);--toc-icon-filter:unset;}
-.dark .sessions-toc{--toc-bg:#1a2332;--toc-color:var(--text-2);--toc-color-h:var(--text-1);--toc-active-bg:rgb(60,65,75);--toc-icon-filter:invert(1);}
-.sessions-toc.aside{color:var(--toc-color);position:absolute;right:0.5rem;top:3rem;width:min(80vw,280px);padding:0.5rem;padding-top:0;border-radius:10px;max-height:calc(100% - 4rem);overflow:auto;z-index:100;background:var(--toc-bg);transition:transform 300ms cubic-bezier(0.18,0.89,0.45,1.12);}
-.sessions-toc.aside:not(.hide){box-shadow:0 0 11px 0px rgba(0,0,0,.06);}
-.sessions-toc.aside.hide{transform:translateX(calc(100% - 28px));color:transparent;}
-.sessions-toc.aside.hide section{display:none;}
-.sessions-toc.aside.hide header{margin-bottom:0;padding-bottom:0;border-bottom:none;}
-.sessions-toc.aside.hide .open-toc,.sessions-toc.aside:not(.hide) .closed-toc{display:none;}
-.toc-toggle{cursor:pointer;padding:1em;margin:-1em;margin-right:-0.7em;line-height:1em;display:flex;}
-.toc-toggle::before{content:'';display:inline-block;height:1em;width:1em;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath d='M160 144h288M160 256h288M160 368h288' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='48'/%3E%3Ccircle cx='80' cy='144' r='16' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='32'/%3E%3Ccircle cx='80' cy='256' r='16' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='32'/%3E%3Ccircle cx='80' cy='368' r='16' fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='32'/%3E%3C/svg%3E");background-size:1em;filter:var(--toc-icon-filter);}
-.sessions-toc header{display:flex;align-items:center;gap:.3em;font-size:1.5em;margin-bottom:0.4em;padding:0.5rem 0;font-weight:bold;position:sticky;top:0;background:var(--toc-bg);z-index:41;}
-.sessions-toc section .toc-row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:.1em;border-radius:.2em;}
-.sessions-toc section .toc-row.H1{margin-top:1em;}
-.sessions-toc.aside section .toc-row.in-view{background:var(--toc-active-bg);}
-.sessions-toc section a{text-decoration:none;font-weight:normal;color:var(--toc-color);display:block;}
-.sessions-toc section a:hover{color:var(--toc-color-h);}
-.sessions-toc.indent section a.H1{font-weight:700;line-height:1em;padding-left:0;}
-.sessions-toc.indent section a.H2{padding-left:10px;}
-.sessions-toc.indent section a.H3{padding-left:20px;}
-.sessions-toc.indent section a.H4{padding-left:30px;}
-.toc-empty{color:var(--toc-color);opacity:.5;font-size:12px;font-style:italic;padding:8px;}
+/* ── Table of Contents ──
+   Styling now lives in SessionsUI/src/toc.jl (the widget's inline
+   <style> block), so the IDE chrome and a user's `using SessionsUI:
+   TableOfContents` cell render IDENTICALLY. The only Sessions-IDE-
+   specific rule is the cell-list width-clamp when the ToC is open —
+   that knowledge belongs to the IDE layout, not the widget. */
 @container (min-width: 900px) {
   #nb.toc-open div[style*="max-width"]{max-width:min(900px, calc(100% - 300px)) !important;margin-left:auto !important;margin-right:calc(300px + 0.5rem) !important;}
 }

@@ -117,16 +117,18 @@ function NotebookPanel(state)
         Span(:class => "dot-pulse"))
 
     # ═══════════════════════════════════════════════════════════
-    # Table of Contents (floating fixed panel — PlutoUI parity)
+    # Table of Contents — render the SessionsUI widget so the IDE
+    # chrome and a user's `using SessionsUI: TableOfContents` cell
+    # use the EXACT same DOM / CSS / JS. The widget self-dedups via
+    # a singleton `#toc-panel` check, so adding the widget in a cell
+    # while the IDE has injected one yields ONE sidebar, not two.
+    # The notebook source itself still doesn't carry the chrome ToC
+    # — it's only inside the IDE's HTML stream.
     # ═══════════════════════════════════════════════════════════
-    toc_panel = RawHtml("""<nav id="toc-panel" class="sessions-toc aside indent hide">
-        <header>
-            <span class="toc-toggle open-toc"></span>
-            <span class="toc-toggle closed-toc"></span>
-            Contents
-        </header>
-        <section id="toc-content"></section>
-    </nav>""")
+    toc_panel = let toc_html = sprint(io ->
+            show(io, MIME"text/html"(), Main.Sessions.SessionsUI.TableOfContents(; title="Contents")))
+        RawHtml(toc_html)
+    end
 
     # ═══════════════════════════════════════════════════════════
     # Assemble

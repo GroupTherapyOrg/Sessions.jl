@@ -1431,121 +1431,14 @@ function _notebook_island_js()
       }
     }
   });
-  // ── Table of Contents (PlutoUI parity) ──
-  (function() {
-    var tocNav = document.getElementById('toc-panel');
-    if (!tocNav) return;
-    var tocSection = document.getElementById('toc-content');
-    var headerMap = new Map();
-    var inViewSet = new Set();
-    var obs1, obs2;
-
-    // Toggle: toolbar button toggles hide class
-    window._sessionsToggleToc = function() {
-      tocNav.classList.toggle('hide');
-      var isOpen = !tocNav.classList.contains('hide');
-      var nb = document.getElementById('nb');
-      if (nb) nb.classList.toggle('toc-open', isOpen);
-      if (isOpen) buildToc();
-    };
-
-    // Toggle: clicking the toc-toggle icon
-    document.addEventListener('click', function(e) {
-      var toggle = e.target.closest('.toc-toggle');
-      if (toggle && toggle.closest('.sessions-toc')) {
-        e.stopImmediatePropagation();
-        tocNav.classList.toggle('hide');
-        var isOpen = !tocNav.classList.contains('hide');
-        var nb = document.getElementById('nb');
-        if (nb) nb.classList.toggle('toc-open', isOpen);
-        if (isOpen) buildToc();
-      }
-    });
-
-    // Always start closed on fresh page load (user opens manually)
-
-    function getHeaders() {
-      return Array.from(document.querySelectorAll('#nb .cell-out h1, #nb .cell-out h2, #nb .cell-out h3, #nb .cell-out h4'));
-    }
-
-    function buildToc() {
-      var headers = getHeaders();
-      if (!headers.length) { tocSection.innerHTML = '<div class="toc-empty">No headings</div>'; return; }
-
-      // Disconnect old observers
-      if (obs1) obs1.disconnect();
-      if (obs2) obs2.disconnect();
-      headerMap.clear();
-      inViewSet.clear();
-
-      var frag = document.createDocumentFragment();
-      headers.forEach(function(h) {
-        var cls = h.tagName; // H1, H2, H3, H4
-        var text = h.textContent.trim();
-        if (!text) return;
-        if (!h.id) h.id = 'h-' + text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+\\x24/g, '');
-
-        var row = document.createElement('div');
-        row.className = 'toc-row ' + cls;
-        var a = document.createElement('a');
-        a.className = cls;
-        a.href = '#' + h.id;
-        a.title = text;
-        a.textContent = text;
-        a.onclick = function(e) {
-          e.preventDefault();
-          h.scrollIntoView({behavior: 'smooth', block: 'start'});
-        };
-        row.appendChild(a);
-        frag.appendChild(row);
-        headerMap.set(h, row);
-      });
-      tocSection.innerHTML = '';
-      tocSection.appendChild(frag);
-
-      // IntersectionObserver: highlight heading in top half of viewport
-      var ixCallback = function(entries) {
-        entries.forEach(function(ix) {
-          if (ix.intersectionRatio > 0 && ix.intersectionRect.y < ix.rootBounds.height / 2) {
-            inViewSet.forEach(function(r) { r.classList.remove('in-view'); });
-            inViewSet.clear();
-            var row = headerMap.get(ix.target);
-            if (row) { row.classList.add('in-view'); inViewSet.add(row); }
-          }
-        });
-      };
-      obs1 = new IntersectionObserver(ixCallback, {root: null, threshold: 1, rootMargin: '-15px'});
-      obs2 = new IntersectionObserver(ixCallback, {root: null, threshold: 1, rootMargin: '15px'});
-      headers.forEach(function(h) { obs1.observe(h); obs2.observe(h); });
-    }
-
-    // Auto-rebuild on DOM changes
-    var _tocTimer = null;
-    function debouncedBuild() {
-      if (_tocTimer) clearTimeout(_tocTimer);
-      _tocTimer = setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 300);
-    }
-    window._sessionsBuildToc = debouncedBuild;
-
-    var nb = document.getElementById('nb');
-    if (nb) new MutationObserver(debouncedBuild).observe(nb, {childList: true, subtree: true});
-
-    // Re-init after tab switch (DOM replaced, old refs stale)
-    window._sessionsReinitToc = function() {
-      tocNav = document.getElementById('toc-panel');
-      tocSection = document.getElementById('toc-content');
-      if (!tocNav || !tocSection) return;
-      if (localStorage.getItem('sessions-toc') === '1') tocNav.classList.remove('hide');
-      if (!tocNav.classList.contains('hide')) buildToc();
-      // Re-attach MutationObserver to new #nb
-      var newNb = document.getElementById('nb');
-      if (newNb) new MutationObserver(debouncedBuild).observe(newNb, {childList: true, subtree: true});
-    };
-
-    // Initial builds with retries (PlutoUI pattern)
-    setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 500);
-    setTimeout(function() { if (!tocNav.classList.contains('hide')) buildToc(); }, 2000);
-  })();
+  // ── Table of Contents ──
+  // Implementation lives in SessionsUI.TableOfContents (rendered by
+  // NotebookPanel.jl). Build/observers set up in the widget's inline
+  // <script>; we just expose a tab-switch reinit hook that calls into
+  // the widget's globally-registered debounced rebuild (window._sessionsBuildToc).
+  window._sessionsReinitToc = function() {
+    if (typeof window._sessionsBuildToc === 'function') window._sessionsBuildToc();
+  };
 
 })();
 """
