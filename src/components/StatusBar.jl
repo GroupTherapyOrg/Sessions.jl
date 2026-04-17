@@ -1,8 +1,8 @@
 # StatusBar.jl — footer strip: WS connection dot, cell count, theme toggle
 #
-# Same pattern as CellView / NotebookToolbar — the dynamic parts are
-# driven by `create_effect(() -> ... js("...", value))`. Logic in
-# Julia inside the effect, single js() write per concern.
+# THERAPY COMPILER LIMITATION: js() args MUST be DIRECT signal-getter
+# results. Conditional branches go INSIDE the JS string. (See header
+# of CellView.jl for the longer write-up.)
 
 @island function StatusBar(; initial_cells::Int = 0)
     cellcount, _  = cellcount_signal
@@ -12,21 +12,21 @@
     # ── Effect: cell-count text ──
     create_effect(() -> begin
         n = cellcount()
-        txt = string(n, " cells")
-        js("var el=island.querySelector('[data-cell-count]');if(el)el.textContent=\$1;", txt)
+        js("""
+            var el=island.querySelector('[data-cell-count]');
+            if(el)el.textContent=String(\$1)+' cells';
+        """, n)
     end)
 
     # ── Effect: WS connection dot color + label ──
     create_effect(() -> begin
         c = connection()
-        dot_color = c == 1 ? "color:var(--status-done);" : "color:var(--status-error);"
-        label = c == 1 ? " connected" : " disconnected"
         js("""
             var d=island.querySelector('[data-ws-dot]');
-            if(d)d.style.cssText=\$1;
+            if(d)d.style.color=\$1?'var(--status-done)':'var(--status-error)';
             var l=island.querySelector('[data-ws-label]');
-            if(l)l.textContent=\$2;
-        """, dot_color, label)
+            if(l)l.textContent=\$1?' connected':' disconnected';
+        """, c)
     end)
 
     return Div(:id => "status-bar",
