@@ -78,15 +78,3 @@ const active_is_file_signal = create_signal(0)
 # Notebooks: always 1. File tabs: only when JuliaFormatter recognises
 # the extension. NotebookToolbar reflects this on the Format button.
 const active_can_format_signal = create_signal(1)
-
-# ── Panel visibility ─────────────────────────────────────────
-# Cross-island shared so ActivityBar (the buttons) and the panel
-# wrapper @islands (SidebarPanel, TerminalPanel) coordinate without
-# either reaching into the other's DOM. The page-level IIFE in
-# SessionsApp.jl pre-seeds these from localStorage via
-# `window.__therapy.set` BEFORE any island hydrates, so the wrapper
-# effects fire with the restored state on first run and the panel
-# is visible from the first paint when localStorage says so.
-
-const sidebar_open_signal  = create_signal(0)
-const terminal_open_signal = create_signal(0)

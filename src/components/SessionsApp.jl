@@ -17,11 +17,11 @@ function SessionsApp(children...)
                 # Activity Bar (@island — panel toggles)
                 ActivityBar(),
 
-                # File Explorer panel — wrapper @island owns visibility
-                # via sidebar_open_signal. Effect-driven display:none
-                # (NOT Show()) so FileExplorer's hydrated tree state
-                # survives toggling.
-                SidebarPanel(
+                # File Explorer (@island — Shoelace tree)
+                # Wrapped in a container that Show(sidebar_open) will control
+                Div(:id => "fpanel",
+                    :class => "rounded-xl flex flex-col overflow-hidden shrink-0",
+                    :style => "width:234px;max-height:100%;display:none;background:var(--panel-bg);border:1px solid var(--cell-border);",
                     Div(:class => "flex items-center shrink-0",
                         :style => "height:42px;padding:0 14px;border-bottom:1px solid var(--divider);",
                         Span(:style => "font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3);", "Explorer")),
@@ -31,15 +31,16 @@ function SessionsApp(children...)
                 Div(:id => "editor-area",
                     :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;",
                     children...,
-                    # Terminal panel — same pattern, terminal_open_signal owned.
-                    TerminalPanel(ReplPanel()))),
+                    # Terminal (@island — xterm.js)
+                    Div(:id => "repl-panel",
+                        :style => "display:none;flex-shrink:0;",
+                        ReplPanel()))),
 
             # Status Bar (@island — theme toggle, connection, cell count)
             StatusBar()),
 
-        # Panel visibility restore script — runs synchronously before
-        # any island hydrates so the first paint already shows the
-        # right panels (no flicker).
+        # Panel visibility restore script (bridges shared signals to existing panels)
+        # This will be replaced when FileExplorer and Terminal become proper Show()-based islands
         RawHtml("""<script>
 (function() {
     var fp = document.getElementById('fpanel');
@@ -47,19 +48,22 @@ function SessionsApp(children...)
     var sb = localStorage.getItem('sessions-sidebar');
     var rp = localStorage.getItem('sessions-repl');
     var ws = document.getElementById('workspace');
-
-    // 1. Direct DOM display flip — first paint matches localStorage.
     if (fp && sb === '1') fp.style.display = '';
     if (repl && rp === '1') repl.style.display = '';
 
-    // 2. Pre-seed shared signals so the SidebarPanel / TerminalPanel /
-    //    ActivityBar islands all hydrate with the restored values.
-    //    `__therapy.set` before `__therapy.reg` is OK — the runtime
-    //    stores the value and replays it to each island on registration
-    //    (see Therapy.jl/src/Compiler/SignalRuntime.jl).
-    if (window.__therapy) {
-        window.__therapy.set('sidebar_open',  sb === '1' ? 1 : 0);
-        window.__therapy.set('terminal_open', rp === '1' ? 1 : 0);
+    // ── Seed ActivityBar @island kwargs from localStorage before hydration.
+    // Therapy's compiled hydration reads props.initial_sidebar / initial_terminal
+    // and writes them to signal_0/signal_1 via `ex.signal_N.value = BigInt(...)`
+    // BEFORE the initial _rt_flush. That way the first effect fire sees the
+    // restored values and sets the DOM + localStorage to match. Must run
+    // before requestIdleCallback wakes hydrate_activitybar.
+    var ab = document.querySelector('[data-component="activitybar"]');
+    if (ab) {
+        var props = {};
+        try { props = JSON.parse(ab.dataset.props || '{}'); } catch (e) {}
+        props.initial_sidebar  = sb === '1' ? 1 : 0;
+        props.initial_terminal = rp === '1' ? 1 : 0;
+        ab.dataset.props = JSON.stringify(props);
     }
 
     // ── Restore saved panel sizes ──
