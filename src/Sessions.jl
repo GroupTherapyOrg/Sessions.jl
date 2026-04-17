@@ -48,6 +48,7 @@ include("engine/session.jl")
 include("engine/web_rendering.jl")
 export notebook_title
 export session_path, save_session!, load_session, apply_session!, load_notebook_with_session
+export render_value, render_source_block, render_published_cell, render_published_notebook
 
 # Services: PTY, Watcher
 include("services/pty.jl")

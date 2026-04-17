@@ -911,3 +911,117 @@ function CellGap(; after_cell_id::String="")
                 RawHtml(_SVG_PLUS))))
 end
 
+# =============================================================================
+# Published-notebook helpers — single source of truth for extracted
+# notebooks. Emit.jl generates calls into these so the published output
+# reuses IDE cell chrome; any styling tweak to cell-wrap/cell-body/cell-out
+# propagates to both live IDE and published docs automatically.
+# =============================================================================
+
+"""
+    render_value(x) -> String
+
+Render any cell value to an HTML string. Same MIME classifier the live
+IDE output pipeline uses. Priority:
+
+  1. Exception → styled error block.
+  2. `showable(MIME"text/html"(), x)` → `show(MIME"text/html"(), x)`.
+     Covers Markdown.MD, DataFrames.DataFrame, WasmPlot.Figure,
+     SessionsUI.Bond, and anything else that opts in.
+  3. Tree-like values (Dict, Set, structs, Tuples, non-string arrays) →
+     collapsible tree (`_render_tree_html`).
+  4. Fallback: `sprint(print, x)`.
+
+Step 2 before 3 is deliberate: Markdown.MD has both a text/html show
+method AND is tree-like — we want the HTML form.
+
+Public API. Called from extracted notebook @islands and from
+`render_published_cell` for frozen output.
+"""
+function render_value(x)::String
+    x isa Exception && return string(
+        "<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>",
+        sprint(showerror, x), "</pre>")
+    try
+        if Base.showable(MIME"text/html"(), x)
+            return sprint(io -> show(io, MIME"text/html"(), x))
+        end
+    catch
+    end
+    try
+        if _is_tree_value(x)
+            return _render_tree_html(x)
+        end
+    catch
+    end
+    sprint(print, x)
+end
+
+"""
+    render_source_block(code; cell_id="") -> Union{VNode, Nothing}
+
+Return a read-only CodeMirror host div. Docs Layout picks up every
+`.cm-cell` on page load (and on `therapy:router:loaded` SPA
+navigation) and renders it as a read-only editor via the `data-src`
+attribute.
+
+Empty code yields `nothing` so bootstrap cells don't get a blank
+editor. The `cm-cell-published` class lets CSS distinguish published
+editors from live IDE editors if fine-tuning is ever needed.
+"""
+function render_source_block(code::AbstractString; cell_id::AbstractString="")
+    code = rstrip(code)
+    isempty(code) && return nothing
+    Div(:class => "cm-cell cm-cell-published",
+        :data_cell_id => cell_id,
+        :data_src => String(code),
+        :data_readonly => "1")
+end
+
+"""
+    render_published_cell(; cell_id, source_code, output_content,
+                            show_source=true) -> VNode
+
+Produce the canonical cell chrome for a published notebook. Matches
+the live IDE's `cell-wrap > cell-body > [source, cell-out]` structure
+so a styling tweak lands in both paths simultaneously.
+
+`output_content` can be:
+  - `RawHtml(...)` for a frozen static cell,
+  - an `@island` call (e.g. `_Bond_n_abc()`) for bond / reactive cells,
+  - `nothing` to render source-only.
+"""
+function render_published_cell(; cell_id::AbstractString,
+                                 source_code::AbstractString,
+                                 output_content,
+                                 show_source::Bool=true)
+    parts = Any[]
+    # Output above source — Pluto-style, matches live IDE `render_cell`.
+    if output_content !== nothing
+        push!(parts, Div(:class => "cell-out",
+            :data_cell_id => cell_id,
+            :style => "padding:4px 0 2px;overflow-x:auto;",
+            output_content))
+    end
+    if show_source
+        src = render_source_block(source_code; cell_id=cell_id)
+        src !== nothing && push!(parts, src)
+    end
+    Div(:data_cell_id => cell_id, :class => "cell-wrap relative",
+        Div(:class => "cell-body", parts...))
+end
+
+"""
+    render_published_notebook(cells...) -> VNode
+
+Outer container for a published notebook. Matches the live IDE's
+`.nb-cell-list` inner container (max-width, horizontal padding) so
+published pages feel identical to the IDE's notebook body.
+"""
+function render_published_notebook(cells...)
+    Div(:class => "notebook-extracted",
+        Div(:class => "nb-cell-list",
+            :style => "max-width:900px;margin:0 auto;padding-left:28px;padding-right:28px;position:relative;",
+            cells...))
+end
+

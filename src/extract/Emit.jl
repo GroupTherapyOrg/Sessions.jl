@@ -1,37 +1,53 @@
 # Emit.jl — assemble an ExtractionPlan into a single .jl Therapy
-# component. Shape is the (B) layout the user signed off on:
+# component. Shape:
 #
 #   module <Name>Mod
-#     using Therapy
+#     using Therapy: @island, create_signal, RawHtml
+#     using Sessions: render_value, render_published_cell,
+#                     render_published_notebook
 #     using <user notebook deps>
 #
-#     _render(x) = ...                 # MIME text/html bridge
-#
-#     const <bond>_signal = create_signal(default)   # one per @bind
+#     # One shared signal per @bind (module scope so islands can
+#     # cross-subscribe). The plain-name alias lets static cells that
+#     # read `n` / `l` at module load resolve against the default.
+#     const <bond>_signal = create_signal(default)
+#     const <bond>       = default
 #
 #     # Cell values — source preserved verbatim, evaluated at module
-#     # load by Julia (NOT compiled to WASM). This is where Markdown,
-#     # WasmPlot, DataFrames, etc. live. They run host-side at SSG
-#     # build, which is fine — the result objects are what we render.
+#     # load by Julia (NOT compiled to WASM). Markdown, WasmPlot,
+#     # DataFrames run host-side at SSG build; the result objects are
+#     # what we render.
 #     const _cell_<id> = try begin <user code> end catch e; e end
 #
-#     # Per-bond tiny @island — wraps the SessionsUI widget. WASM-
-#     # compiles trivially (just a signal destructure + the widget's
-#     # show()-emitted HTML).
-#     @island function _Bond_<bond>_<id>() ... end
+#     # Per-bond tiny @island — destructures the shared signal and
+#     # returns the widget's frozen HTML. WASM-compiles trivially.
+#     # cell-out wrapping happens in render_published_cell, NOT here.
+#     @island function _Bond_<bond>_<id>()
+#         <bond>, set_<bond> = <bond>_signal
+#         RawHtml(render_value(_cell_<id>))
+#     end
 #
 #     # Per-reactive-cell tiny @island — captures upstream bond signals
-#     # so cross-island sync wires correctly. v1: renders the frozen
+#     # so cross-island sync wires correctly. v1 renders the frozen
 #     # _cell_<id> value (computed at module load with the bond
-#     # default). v2: re-execute in WASM as WasmTarget coverage grows.
-#     @island function _Cell_<id>() ... end
+#     # default). v2 re-executes in WASM as WasmTarget coverage grows.
+#     @island function _Cell_<id>()
+#         <bond>, _ = <bond>_signal   # one line per upstream bond
+#         RawHtml(render_value(_cell_<id>))
+#     end
 #
-#     # Outer notebook = PLAIN function. No WASM constraint here, so it
+#     # Outer notebook = plain function. No WASM constraint, so it
 #     # always renders regardless of any @island compile failures.
-#     # Cells appear in document order, each wrapped in the same
-#     # cell-wrap > cell-body > cell-out chain the Sessions IDE uses.
+#     # Every cell flows through render_published_cell → same
+#     # cell-wrap/cell-body/cell-out chrome the live IDE uses, so any
+#     # styling tweak in web_rendering.jl propagates here for free.
 #     function <Name>()
-#         Div(...)
+#         render_published_notebook(
+#             render_published_cell(cell_id=…, source_code=…,
+#                                   output_content=RawHtml(render_value(_cell_<id>))),
+#             render_published_cell(cell_id=…, source_code=…,
+#                                   output_content=_Bond_<bond>_<id>()),
+#             …)
 #     end
 #   end
 #   const <Name> = <Name>Mod.<Name>
@@ -62,7 +78,14 @@ function _bond_default_literal(code::AbstractString)::String
     m === nothing ? "0" : strip(m.captures[1])
 end
 
-# ─── Per-cell emission ────────────────────────────────────────────────
+"""
+Emit a Julia string literal containing `code` verbatim. Uses `repr`
+so triple-quoted markdown blocks (`md\"\"\"…\"\"\"`), `\$` interpolations,
+and any escape sequences in user code all round-trip safely through
+the generated file. The output is one-line with `\\n` escapes — less
+pretty to human-read than triple-quoted blocks, but always correct.
+"""
+_code_literal(code::AbstractString) = repr(String(code))
 
 """
 True if the cell is purely `using/import` lines and/or `Pkg.activate /
@@ -91,82 +114,101 @@ function _is_bootstrap_cell(code::AbstractString)::Bool
     return true
 end
 
+# ─── Per-cell emission ────────────────────────────────────────────────
+
 "`const _cell_<id> = try begin <code> end catch e; e end` — module-load eval.
 Returns an empty string when the cell is pure bootstrap (skip)."
 function emit_cell_const(cc::CellClass)::String
     code = strip(cc.cell.code)
     _is_bootstrap_cell(code) && return ""
     suffix = _id_suffix(cc.cell.id)
-    return """
-    # ── Cell $(cc.cell.id) ($(cc.kind)) ──
-    const _cell_$(suffix) = try
-        let
-$(_indent(code, 12))
-        end
-    catch _e
-        _e
-    end
-    """
+    join([
+        "    # ── Cell $(cc.cell.id) ($(cc.kind)) ──",
+        "    const _cell_$(suffix) = try",
+        "        let",
+        _indent(code, 12),
+        "        end",
+        "    catch _e",
+        "        _e",
+        "    end",
+    ], "\n") * "\n"
 end
 
-"Tiny @island per @bind — destructures the shared signal, renders the widget."
+"""
+Tiny @island per @bind — destructures the shared signal, returns the
+widget's frozen HTML. The enclosing `render_published_cell` owns the
+cell-out wrapping; this just emits the inner content.
+"""
 function emit_bond_island(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
     bond   = cc.bond_name
     fname  = "_Bond_$(bond)_$(suffix)"
-    return """
-    @island function $(fname)()
-        $(bond), set_$(bond) = $(bond)_signal
-        Div(:class => "cell-out", :style => "padding:4px 0 2px;overflow-x:auto;",
-            RawHtml(_render(_cell_$(suffix))))
-    end
-    """
+    join([
+        "    @island function $(fname)()",
+        "        $(bond), set_$(bond) = $(bond)_signal",
+        "        RawHtml(render_value(_cell_$(suffix)))",
+        "    end",
+    ], "\n") * "\n"
 end
 
-"Tiny @island per reactive cell — captures upstream bonds, frozen render in v1."
+"""
+Tiny @island per reactive cell — captures upstream bonds, returns the
+frozen cell value rendered through the shared render_value pipeline.
+As with the bond island, cell-out wrapping happens in the outer call
+to render_published_cell, not here.
+"""
 function emit_reactive_island(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
     fname  = "_Cell_$(suffix)"
-    binds  = String[]
+    lines = [
+        "    # TODO[extract-v2]: re-execute this cell body in WASM on bond change.",
+        "    # v1 freezes the output at the bond defaults; the bond widget itself",
+        "    # remains interactive.",
+        "    @island function $(fname)()",
+    ]
     for b in sort(collect(cc.upstream_bonds))
-        push!(binds, "        $(b), _ = $(b)_signal")
+        push!(lines, "        $(b), _ = $(b)_signal")
     end
-    binds_block = isempty(binds) ? "" : join(binds, "\n") * "\n"
-    return """
-    # TODO[extract-v2]: re-execute this cell body in WASM on bond change.
-    # v1 freezes the output at the bond defaults; the bond widget itself
-    # remains interactive.
-    @island function $(fname)()
-$(binds_block)        Div(:class => "cell-out", :style => "padding:4px 0 2px;overflow-x:auto;",
-            RawHtml(_render(_cell_$(suffix))))
-    end
-    """
+    push!(lines, "        RawHtml(render_value(_cell_$(suffix)))")
+    push!(lines, "    end")
+    join(lines, "\n") * "\n"
 end
 
 # ─── Outer-function cell call sites ───────────────────────────────────
 
 """
-A static cell: the outer function renders its frozen value via _render.
-Wraps in `cell-wrap > cell-body > cell-out` to match the IDE chrome.
+A static cell: render its frozen value via `render_value` inside the
+shared `render_published_cell` shell.
 """
 function emit_static_call(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
-    return """        Div(:class => "cell-wrap relative",
-            Div(:class => "cell-body",
-                Div(:class => "cell-out", :style => "padding:4px 0 2px;overflow-x:auto;",
-                    RawHtml(_render(_cell_$(suffix))))))"""
+    join([
+        "            render_published_cell(",
+        "                cell_id = $(repr(string(cc.cell.id))),",
+        "                source_code = $(_code_literal(cc.cell.code)),",
+        "                output_content = RawHtml(render_value(_cell_$(suffix))),",
+        "            )",
+    ], "\n")
 end
 
-"A bond/reactive cell: outer function calls into the cell's tiny @island."
+"""
+A bond or reactive cell: the cell-out slot becomes a call to the
+cell's tiny @island. The shared shell handles cell-wrap/cell-body
+chrome and the read-only CodeMirror source block.
+"""
 function emit_island_call(cc::CellClass)::String
     suffix = _id_suffix(cc.cell.id)
     fname  = cc.kind === :bond ? "_Bond_$(cc.bond_name)_$(suffix)" : "_Cell_$(suffix)"
-    return """        Div(:class => "cell-wrap relative",
-            Div(:class => "cell-body",
-                $(fname)()))"""
+    join([
+        "            render_published_cell(",
+        "                cell_id = $(repr(string(cc.cell.id))),",
+        "                source_code = $(_code_literal(cc.cell.code)),",
+        "                output_content = $(fname)(),",
+        "            )",
+    ], "\n")
 end
 
-# ─── Shared signals + render helper ────────────────────────────────────
+# ─── Shared signals ────────────────────────────────────────────────────
 
 function emit_shared_signals(plan::ExtractionPlan)::String
     lines = String["    # ── Shared signals (one per @bind in the source) ──"]
@@ -176,51 +218,14 @@ function emit_shared_signals(plan::ExtractionPlan)::String
         any_bond = true
         default_lit = _bond_default_literal(cc.cell.code)
         push!(lines, "    const $(cc.bond_name)_signal = create_signal($(default_lit))")
-        # Also expose the plain default at module scope so reactive cells
-        # that read `n` / `l` at module-load can resolve the name.
-        # (v1: cells see the frozen default; v2 WASM islands override via
-        # signal destructure inside the @island body.)
+        # Expose the plain default at module scope so reactive cells that
+        # read `n` / `l` at module-load can resolve the name. v1: cells
+        # see the frozen default; v2 WASM islands override via signal
+        # destructure inside the @island body.
         push!(lines, "    const $(cc.bond_name) = $(default_lit)")
     end
     any_bond || push!(lines, "    # (none)")
     return join(lines, "\n")
-end
-
-function emit_render_helper()::String
-    return """
-    \"\"\"
-    Render any cell value to an HTML string. Priority matches the
-    Sessions IDE's output classifier (see Sessions/.../boot.jl):
-      1. Exceptions → styled error block
-      2. `showable(MIME"text/html"(), x)` → use that show method.
-         This covers Markdown.MD, DataFrames.DataFrame, WasmPlot.Figure,
-         SessionsUI.Bond, and anything else that opts in.
-      3. Dict / Set / struct that Sessions marks as tree-like → tree
-         renderer (only if Sessions is loaded in Main — the IDE path).
-      4. Fallback: `sprint(print, x)`.
-    The order is critical: Markdown.MD has BOTH a text/html show AND
-    is \"tree-like\" per Sessions, and we want the HTML form.
-    \"\"\"
-    function _render(x)::String
-        x isa Exception && return string(\"<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>\", sprint(showerror, x), \"</pre>\")
-        try
-            if Base.showable(MIME\"text/html\"(), x)
-                return sprint(io -> show(io, MIME\"text/html\"(), x))
-            end
-        catch
-        end
-        if isdefined(Main, :Sessions)
-            try
-                sess = Main.Sessions
-                if Base.invokelatest(getfield(sess, :_is_tree_value), x)
-                    return Base.invokelatest(getfield(sess, :_render_tree_html), x)
-                end
-            catch
-            end
-        end
-        sprint(print, x)
-    end
-    """
 end
 
 # ─── File assembly ─────────────────────────────────────────────────────
@@ -231,15 +236,15 @@ function assemble(plan::ExtractionPlan)::String
     println(io, "module $(plan.component_name)Mod")
     println(io)
     _write_imports(io, plan)
-    println(io, emit_render_helper())
-    println(io)
     println(io, emit_shared_signals(plan))
     println(io)
 
     # Cell value consts (module-load eval).
     println(io, "    # ── Cell values (source preserved, evaluated at module load) ──")
     for cc in plan.cells
-        print(io, _indent(emit_cell_const(cc), 0))
+        s = emit_cell_const(cc)
+        isempty(s) && continue
+        print(io, s)
     end
     println(io)
 
@@ -249,16 +254,14 @@ function assemble(plan::ExtractionPlan)::String
         cc.kind === :static && continue
         any_island = true
         emit_fn = cc.kind === :bond ? emit_bond_island : emit_reactive_island
-        print(io, _indent(emit_fn(cc), 0))
+        print(io, emit_fn(cc))
         println(io)
     end
     any_island || println(io, "    # (no bond / reactive cells — notebook is fully static)")
 
     # Outer notebook function (plain — no @island).
     println(io, "    function $(plan.component_name)()")
-    println(io, "        Div(:class => \"notebook-extracted\",")
-    println(io, "            Div(:class => \"nb-cell-list\",")
-    println(io, "                :style => \"max-width:900px;margin:0 auto;padding-left:28px;padding-right:28px;position:relative;\",")
+    println(io, "        render_published_notebook(")
     cell_calls = String[]
     for cc in plan.cells
         # Skip bootstrap-only static cells (their imports are at module
@@ -271,12 +274,10 @@ function assemble(plan::ExtractionPlan)::String
         else
             emit_island_call(cc)
         end
-        # Re-indent two extra levels (we're inside the nb-cell-list nest).
-        line = replace(line, "        " => "                "; count=1)
         push!(cell_calls, line)
     end
-    println(io, join(cell_calls, ",\n"))
-    println(io, "            )")
+    print(io, join(cell_calls, ",\n"))
+    println(io, ",")
     println(io, "        )")
     println(io, "    end")
 
@@ -294,16 +295,23 @@ function _write_header(io::IO, plan::ExtractionPlan)
     println(io, "# Source : $(plan.notebook_path)")
     println(io, "# Date   : $(now())")
     println(io, "#")
-    println(io, "# This file is a self-contained Therapy component. The user's")
-    println(io, "# cell SOURCE is preserved verbatim — markdown stays markdown,")
-    println(io, "# code stays code. Each cell evaluates once at module load and")
-    println(io, "# its value is rendered through Base.show(MIME\"text/html\"(),…)")
-    println(io, "# (the same pipeline the Sessions IDE uses live).")
+    println(io, "# This file is a self-contained Therapy component. Cell SOURCE")
+    println(io, "# is preserved verbatim and rendered through a read-only")
+    println(io, "# CodeMirror editor (the docs site's Layout picks up every")
+    println(io, "# .cm-cell element on load + SPA navigation). Each cell value")
+    println(io, "# is computed once at module load and rendered through")
+    println(io, "# `Sessions.render_value` — the same MIME classifier the live")
+    println(io, "# IDE output pipeline uses, so Markdown/DataFrames/WasmPlot/")
+    println(io, "# SessionsUI.Bond all render identically to the IDE.")
     println(io, "#")
     println(io, "# Architecture:")
+    println(io, "#   - Cell chrome (cell-wrap > cell-body > [cell-out, cm-cell])")
+    println(io, "#     flows through `Sessions.render_published_cell` — single")
+    println(io, "#     source of truth with the live IDE's `render_cell`.")
     println(io, "#   - Outer `function $(plan.component_name)()` is plain Julia.")
-    println(io, "#     It just lays out cells in document order; it always works")
-    println(io, "#     regardless of WASM compile state.")
+    println(io, "#     It just calls `render_published_notebook` with the cells")
+    println(io, "#     in document order; it always works regardless of WASM")
+    println(io, "#     compile state.")
     println(io, "#   - Each @bind cell becomes a tiny @island that wraps the")
     println(io, "#     SessionsUI widget. Bond signals are module-level shared")
     println(io, "#     signals so cross-island sync is automatic.")
@@ -312,14 +320,18 @@ function _write_header(io::IO, plan::ExtractionPlan)
     println(io, "#     computed at module load (using the bond defaults). v2")
     println(io, "#     re-executes the body in WASM as WasmTarget grows.")
     println(io, "#")
-    println(io, "# Edit by hand to restyle Tailwind classes, change cell content,")
-    println(io, "# remove cells, etc. Re-running `Sessions.extract_notebook` with")
-    println(io, "# the same out_path overwrites the file.")
+    println(io, "# Re-running `Sessions.extract_notebook` with the same out_path")
+    println(io, "# overwrites the file. Hand-edits survive until the next")
+    println(io, "# extraction, so prefer editing the source notebook fixture.")
     println(io, "# ───────────────────────────────────────────────────────────")
     println(io)
 end
 
 function _write_imports(io::IO, plan::ExtractionPlan)
+    # Runtime imports (populated by Extractor.jl): Therapy primitives +
+    # Sessions published-notebook helpers. `Sessions` also provides
+    # `render_value` — the same MIME classifier the live IDE uses, so we
+    # never duplicate it here.
     for line in plan.runtime_imports
         println(io, "    " * line)
     end

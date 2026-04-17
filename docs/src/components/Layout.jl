@@ -12,9 +12,12 @@ function SessionsWordmark()
     )
 end
 
-# CodeMirror bundle for notebook rendering
+# CodeMirror bundle for notebook rendering.
+# Path walks up from docs/src/components/ → docs/src/ → docs/ → Sessions.jl/
+# and then into static/. Fixed from a stale src/web/static/ path that
+# pre-dates the rebuild PRD's directory restructure.
 const _SESSIONS_EDITOR_JS = let
-    p = joinpath(dirname(dirname(dirname(@__DIR__))), "src", "web", "static", "editor.js")
+    p = joinpath(dirname(dirname(dirname(@__DIR__))), "static", "editor.js")
     isfile(p) ? read(p, String) : "/* editor.js not found */"
 end
 
@@ -162,7 +165,14 @@ function _cm_init_script()
     initCM();
   }
 
-  initCM();
+  // This <script> is inlined in <body> BEFORE the cell DOM, so `.cm-cell`
+  // hosts don't exist yet when we fire. Defer until the parser has walked
+  // past them. `therapy:router:loaded` covers SPA navigation afterward.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCM);
+  } else {
+    initCM();
+  }
   window.addEventListener('therapy:router:loaded', initCM);
   var _lastDark = isDark();
   new MutationObserver(function() {
