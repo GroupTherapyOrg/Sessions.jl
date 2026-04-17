@@ -24,7 +24,7 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [sources]
 SessionsUI = {subdir = "SessionsUI", url = "https://github.com/GroupTherapyOrg/Sessions.jl.git"}
-Therapy = {path = "../Therapy.jl"}
+Therapy = {url = "https://github.com/GroupTherapyOrg/Therapy.jl.git"}
 
 [compat]
 ExpressionExplorer = "1"

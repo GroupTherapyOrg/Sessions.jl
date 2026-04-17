@@ -2,12 +2,22 @@
 # Sessions.jl Documentation Site
 #
 # Usage (from Sessions.jl root directory):
-#   julia +1.12 --project=docs docs/app.jl dev    # Development server
-#   julia +1.12 --project=docs docs/app.jl build  # Build static site to docs/dist
+#   julia +1.12 --project=. docs/app.jl dev      # also works (auto-activates docs env)
+#   julia +1.12 --project=docs docs/app.jl dev   # Development server
+#   julia +1.12 --project=docs docs/app.jl build # Build static site to docs/dist
 #
 # The docs project (docs/Project.toml) declares its own deps — including
 # demo-only packages like WasmPlot + DataFrames used by extracted
 # notebooks — so they do not leak into the root Sessions runtime.
+# For convenience, this script re-activates docs/ on launch so the shorter
+# `--project=.` command still works.
+
+import Pkg
+let docs_env = @__DIR__
+    if Base.active_project() != joinpath(docs_env, "Project.toml")
+        Pkg.activate(docs_env; io = devnull)
+    end
+end
 
 using Therapy
 using Sessions
