@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/interactive.jl
-# Date   : 2026-04-17T23:45:36.161
+# Date   : 2026-04-18T00:09:50.349
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -299,11 +299,18 @@ module InteractiveMod
 
     @island function _Bond_n()
         n, set_n = _n_signal
-        create_effect(() -> n())  # forces shared_name detection
+        # Dummy memo reads the getter so Therapy's closure-capture pass
+        # picks up `shared_name = "n"` — without a closure
+        # capturing the getter the cross-island broadcast in Compile.jl:1295
+        # doesn't fire. `create_memo` is chosen over `create_effect` because
+        # effect closures currently produce malformed WASM for Float64 signals
+        # (`local.set's value type must be correct` at wasm-opt); memos have
+        # a clean return value and compile identically across signal types.
+        _ = create_memo(() -> n())
         CellDiv(
             cell_id     = "20000000-0000-0000-0000-000000000006",
             source_code = "@bind n BoundSlider(2:30; default=8)",
-            runtime_ns  = 116727083,
+            runtime_ns  = 117215041,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -321,11 +328,18 @@ module InteractiveMod
 
     @island function _Bond_l()
         l, set_l = _l_signal
-        create_effect(() -> l())  # forces shared_name detection
+        # Dummy memo reads the getter so Therapy's closure-capture pass
+        # picks up `shared_name = "l"` — without a closure
+        # capturing the getter the cross-island broadcast in Compile.jl:1295
+        # doesn't fire. `create_memo` is chosen over `create_effect` because
+        # effect closures currently produce malformed WASM for Float64 signals
+        # (`local.set's value type must be correct` at wasm-opt); memos have
+        # a clean return value and compile identically across signal types.
+        _ = create_memo(() -> l())
         CellDiv(
             cell_id     = "d4e88179-6c23-4713-abe8-5c18e8c94497",
             source_code = "@bind l BoundSlider(1:0.5:15; default=7.5)",
-            runtime_ns  = 35713542,
+            runtime_ns  = 37404666,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -349,7 +363,7 @@ module InteractiveMod
         CellDiv(
             cell_id     = "1b95c056-9b5a-456f-8007-177b202a1581",
             source_code = "# Square of the slider value. Pure integer arithmetic — compiles to WASM\n# and stays reactive in the published notebook. (String interpolation\n# like `\"n = \$(n)\"` would need `string(::Integer)` which WasmTarget\n# doesn't lower yet, so we keep it to a raw numeric memo.)\nn * n",
-            runtime_ns  = 169917,
+            runtime_ns  = 179208,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -375,12 +389,12 @@ module InteractiveMod
                 i = i + Int64(1)
             end
             WP.barplot!(ax, xs, ys; color = :red)
-            render!(fig)
+            WP.render!(fig)
         end)
         CellDiv(
             cell_id     = "20000000-0000-0000-0000-000000000009",
             source_code = "# Reactive bar chart. Built with the Therapy NotebookStep4 discipline:\n# explicit `while` loop in place of `Float64.(1:n)` / `xs.^2` broadcasts\n# (broadcast machinery isn't in WasmTarget yet), static title/xlabel/\n# ylabel strings (dynamic `subtitle = \"n = \$(n)\"` would need\n# `string(::Integer)`), and primitive typed numerics so the extractor's\n# reactive-cell translator emits a WASM-safe `create_effect`.\nlet\n    fig = WP.Figure(size=(750, 360))\n    ax  = WP.Axis(fig[1, 1]; xlabel=\"i\", ylabel=\"i²\", title=\"Squares\")\n    xs = Float64[]\n    ys = Float64[]\n    i = Int64(1)\n    count = Int64(n)\n    while i <= count\n        xi = Float64(i)\n        push!(xs, xi)\n        push!(ys, xi * xi)\n        i = i + Int64(1)\n    end\n    WP.barplot!(ax, xs, ys; color=:red)\n    fig\nend",
-            runtime_ns  = 45657250,
+            runtime_ns  = 47370834,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -398,7 +412,7 @@ module InteractiveMod
         CellDiv(
             cell_id     = "20000000-0000-0000-0000-00000000000b",
             source_code = "# String => column form (rather than kwargs) so we can use unicode column\n# names like √i — the parser would otherwise read `√i = …` as the unary\n# √ operator applied to `i`, not a keyword name.\nDataFrame(\"i²\" => (1:l) .^ 2, \"√i\" => sqrt.(1:l))",
-            runtime_ns  = 56900625,
+            runtime_ns  = 60629500,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -413,7 +427,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Interactive Sessions\n\nA live demo of `@bind` + `BoundSlider` driving three reactive dependents:\na **numeric memo**, a **WasmPlot bar chart**, and a **DataFrame** table.\n\nDepending on how the notebook is run they behave differently — that's\nintentional, so you can see where the WASM-publish pipeline holds the\nfull reactive promise and where it runs up against WasmTarget's\ncurrent compile coverage.\n\n| Mode | Kernel | Numeric memo (`n*n`) | Bar chart | DataFrame |\n|---|---|---|---|---|\n| **Sessions IDE** | Live Julia | ✅ reactive | ✅ reactive | ✅ reactive |\n| **Plain script** | Single-pass Julia | runs once at `default` | runs once | runs once |\n| **WASM publish** | In-browser, no server | ✅ reactive (compiles) | ✅ reactive (compiles) | ⚠️ fails to compile |\n\nIn **WASM publish** mode every reactive cell is translated to a\nTherapy `create_memo` / `create_effect` and handed to WasmTarget. No\npreemptive pattern-matching at extract time — the translator emits\nthe reactive shape for every bond-dependent cell and lets WasmTarget\ndecide. If the whole `@island` compile fails (because one cell uses a\npath WasmTarget can't lower yet — DataFrames today, say), Therapy\nlogs the compile error and falls back to rendering the SSR output as\nplain static HTML: slider widgets still display, but their dependents\nfreeze at the default value.\n\nThe cell source round-trips 1:1 from the `.jl` file either way — the\nreader can always inspect what the notebook was trying to do.\n\"\"\"",
-                runtime_ns  = 191073333,
+                runtime_ns  = 200442250,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -423,7 +437,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000005",
                 source_code = "md\"\"\"\n### A bond\n\n`BoundSlider(2:30; default=8)` produces a slider over the integer range\n`2:30`. The macro `@bind n …` makes `n` reactive — every cell that reads\n`n` re-runs when the user moves the slider.\n\"\"\"",
-                runtime_ns  = 310125,
+                runtime_ns  = 294542,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -435,7 +449,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000007",
                 source_code = "md\"\"\"\n### A reactive plot\n\nA bar chart of `i²` for `i ∈ 1:n`. Move the slider above and the plot\nredraws.\n\"\"\"",
-                runtime_ns  = 270667,
+                runtime_ns  = 271750,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -445,7 +459,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000008",
                 source_code = "# WasmPlot Figures need a Base.show MIME\"text/html\" method to render in\n# Sessions IDE's output pipeline (the live kernel renders cell values\n# notebook this method isn't called — the extractor translates the\n# reactive bar chart cell into a `create_effect + Canvas + render!(fig)`\n# pattern that writes straight to the canvas element. Keeping the show\n# method here keeps the fixture self-contained for IDE mode.\n#\n# Trailing `nothing;` suppresses this cell's cell-output slot — the\n# method is registered as a side effect of module load; there's no\n# meaningful value to render below it.\nfunction Base.show(io::IO, ::MIME\"text/html\", fig::WP.Figure)\n    glue = WP.canvas2d_js_glue()\n    js   = WP.generate_js_render(fig)\n    id   = \"wp_\" * string(hash(fig); base=16)\n    print(io, \"\"\"\n    <canvas id=\"\$(id)\" width=\"\$(fig.width)\" height=\"\$(fig.height)\"\n            style=\"border:1px solid var(--cell-border);border-radius:8px;background:#fff\"></canvas>\n    <script>(function(){\n      \$(glue)\n      var c = document.getElementById('\$(id)');\n      var dpr = window.devicePixelRatio||1;\n      c.width = \$(fig.width)*dpr; c.height = \$(fig.height)*dpr;\n      c.style.width='\$(fig.width)px'; c.style.height='\$(fig.height)px';\n      var ctx = c.getContext('2d'); ctx.scale(dpr,dpr);\n      var c2d = canvas2d_imports(ctx);\n      \$(js)\n    })();</script>\n    \"\"\")\nend\nnothing;",
-                runtime_ns  = 700208,
+                runtime_ns  = 715500,
                 state       = :done,
                 cell_type   = :code,
                 folded      = true,
@@ -457,7 +471,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-00000000000a",
                 source_code = "md\"\"\"\n### A reactive table — where WASM currently runs out of road\n\nThe same slider that drives the bar chart also drives this DataFrame.\n\n- **In Sessions IDE** the cell reruns through the live Julia kernel\n  every time you move the slider, and the rendered table updates row-\n  by-row.\n- **In WASM publish mode** the extractor emits this cell as a\n  `create_memo(() -> DataFrame(…))` just like any other reactive cell\n  — no preemptive pattern-matching. When WasmTarget then tries to\n  compile the `@island`, DataFrames.jl pulls in column storage,\n  PrettyTables dispatch, and `show(::MIME\"text/html\", ::DataFrame)`\n  methods that aren't in WasmTarget's lowering coverage yet. The\n  compile fails, Therapy logs the error, and the notebook renders as\n  SSR-only: sliders display but stay frozen.\n\nThat all-or-nothing granularity is a current limitation. Options as\nWasmTarget grows: (a) lower more Base/stdlib so today's failing\ncells start compiling; (b) split the notebook into multiple\n`@island`s so one failing cell doesn't pin the rest to static mode;\n(c) rewrite specific cells to use only WASM-safe patterns (see the\nbar chart cell for an example). For now, this cell intentionally\nstays as a DataFrame to demonstrate the fail-mode.\n\nThe cell source still round-trips 1:1 regardless of compile\noutcome, so readers can always see what the notebook *meant*.\n\"\"\"",
-                runtime_ns  = 548583,
+                runtime_ns  = 541584,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -468,7 +482,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-00000000000c",
                 source_code = "md\"\"\"\n---\n\n### What's happening under the hood\n\nThe same `@bind` macro drives three different runtimes from the same\nsource — no \"publish mode\" variant of the file, no fake-bind\ninjection, the `.jl` you see here is the same one the extractor\nconsumes byte-for-byte.\n\n**Sessions IDE** — the slider sends a WebSocket message to the live\nJulia kernel, which re-runs every cell that references `n` and streams\noutput back. Any value the cell produces (DataFrames, Markdown, custom\n`show` methods — anything with a `MIME\"text/html\"` method) just works\nbecause full Julia is available server-side.\n\n**Plain script** (`julia interactive.jl` with `using SessionsUI` on\nyour load path) — `@bind` uses the widget's `initial_value` and the\nnotebook runs straight through as a normal program. No interactivity,\njust a single-pass script.\n\n**WASM publish** — `Sessions.extract_notebook(...)` emits a single\nself-contained `.jl` component:\n- ONE `@island` per notebook wrapping every cell position.\n- Each `@bind` becomes a `create_signal` bound into a native Therapy\n  `Input(:value=>sig, :on_input=>set_sig)` — no `<bond>` bridge, no\n  WebSocket.\n- Every bond-dependent cell becomes a `create_memo` (value cell,\n  rendered via `Span(memo)`) or a `create_effect` + `Canvas` (plot\n  cell). Bare bond references inside the body (`n`) get rewritten to\n  signal reads (`n()`) so updates flow. No preemptive pattern-\n  matching at extract time — WasmTarget is the sole gatekeeper.\n- If WasmTarget rejects the `@island`, Therapy's build pipeline\n  skips WASM emission for that component and the notebook renders\n  as SSR-only. Sliders display but stay frozen (no hydration). The\n  reader can inspect cell source to see what was attempted.\n\nWhen the `@island` DOES compile, the slider drives a signal in the\nbrowser and dependent islands recompute locally. No server.\n\"\"\"",
-                runtime_ns  = 1733916,
+                runtime_ns  = 1744834,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,

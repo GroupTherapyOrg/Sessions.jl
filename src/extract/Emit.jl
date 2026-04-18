@@ -381,39 +381,64 @@ function _is_wasmplot_body(code::AbstractString)::Bool
 end
 
 """
+    _wasmplot_render_symbol(imports) -> Union{Symbol, Expr}
+
+Scan user imports for how WasmPlot is brought into scope and return
+the right AST node to call `render!` via that binding. The emit
+doesn't inject extra `using` — it respects the user's namespace:
+
+  - `import WasmPlot as WP` → `:(WP.render!)` — user uses `WP.Figure`
+    etc. already; matches their style.
+  - `import WasmPlot`      → `:(WasmPlot.render!)`.
+  - `using WasmPlot`       → `:render!` (bare, brought into scope).
+  - none detected          → `:(WasmPlot.render!)` fallback.
+"""
+function _wasmplot_render_symbol(imports::Vector{String})
+    for line in imports
+        m = match(r"^\s*import\s+WasmPlot\s+as\s+(\w+)", line)
+        m !== nothing && return Expr(:., Symbol(String(m.captures[1])), QuoteNode(:render!))
+        occursin(r"^\s*using\s+WasmPlot\b(?!\s*:)", line) && return :render!
+        occursin(r"^\s*using\s+WasmPlot\s*:\s*[^,]*\brender!\b", line) && return :render!
+        occursin(r"^\s*import\s+WasmPlot\b(?!\s*:)(?!\s+as)", line) && return Expr(:., :WasmPlot, QuoteNode(:render!))
+    end
+    return Expr(:., :WasmPlot, QuoteNode(:render!))
+end
+
+"""
 Flatten a WasmPlot cell body into a `begin`-block suitable for
 dropping inside `create_effect(() -> begin … end)`.
 
 Unwraps a single outer `let`; if the trailing expression is a bare
 variable reference (usual Pluto shape `let fig = …; fig end`),
-replaces the tail with `render!(<var>)`. Complex trailing
+replaces the tail with `<qualified>.render!(<var>)` using whatever
+namespace the user brought WasmPlot in under. Complex trailing
 expressions get bound to `_wasmplot_fig` and that local is rendered.
 """
-function _flatten_for_render(expr)::String
+function _flatten_for_render(expr, render_sym)::String
     inner = expr
     if inner isa Expr && inner.head === :block
         stmts = filter(a -> !(a isa LineNumberNode), inner.args)
         if length(stmts) == 1 && stmts[1] isa Expr && stmts[1].head === :let
             body = stmts[1].args[2]
             if body isa Expr && body.head === :block
-                return _append_render_bang(body)
+                return _append_render_bang(body, render_sym)
             end
         end
-        return _append_render_bang(inner)
+        return _append_render_bang(inner, render_sym)
     end
     return string(expr)
 end
 
-function _append_render_bang(block::Expr)::String
+function _append_render_bang(block::Expr, render_sym)::String
     stmts = filter(a -> !(a isa LineNumberNode), block.args)
     isempty(stmts) && return ""
     head_stmts = stmts[1:end-1]
     tail       = stmts[end]
     new_tail = tail isa Symbol ?
-        Expr(:call, :render!, tail) :
+        Expr(:call, render_sym, tail) :
         Expr(:block,
              Expr(:(=), :_wasmplot_fig, tail),
-             Expr(:call, :render!, :_wasmplot_fig))
+             Expr(:call, render_sym, :_wasmplot_fig))
     body_expr = Expr(:block, head_stmts..., new_tail)
     return _strip_wrapping_block(body_expr)
 end
@@ -438,14 +463,15 @@ Throws `ParseError` when the cell body isn't valid Julia; caller
 turns that into a WALL emit.
 """
 function translate_reactive_body(code::AbstractString, bonds::Set{Symbol},
-                                 memo_local::AbstractString)::ReactiveBody
+                                 memo_local::AbstractString,
+                                 render_sym)::ReactiveBody
     body_expr = Base.Meta.parse("begin\n$(strip(code))\nend")
     rewritten = _rewrite_bond_reads(body_expr, bonds)
     rewritten = _strip_linenumbers(rewritten)
 
     if _is_wasmplot_body(code)
         w, h = _wasmplot_canvas_size(body_expr)
-        body_str = _flatten_for_render(rewritten)
+        body_str = _flatten_for_render(rewritten, render_sym)
         decl = join([
             "        create_effect(() -> begin",
             _indent(body_str, 12),
@@ -558,7 +584,14 @@ function emit_bond_island(cc::CellClass, spec::Union{BondSpec, Nothing})::String
     join([
         "    @island function $(fname)()",
         "        $(bond), set_$(bond) = _$(bond)_signal",
-        "        create_effect(() -> $(bond)())  # forces shared_name detection",
+        "        # Dummy memo reads the getter so Therapy's closure-capture pass",
+        "        # picks up `shared_name = $(repr(string(bond)))` — without a closure",
+        "        # capturing the getter the cross-island broadcast in Compile.jl:1295",
+        "        # doesn't fire. `create_memo` is chosen over `create_effect` because",
+        "        # effect closures currently produce malformed WASM for Float64 signals",
+        "        # (`local.set's value type must be correct` at wasm-opt); memos have",
+        "        # a clean return value and compile identically across signal types.",
+        "        _ = create_memo(() -> $(bond)())",
         "        CellDiv(",
         "            cell_id     = $(repr(string(cc.cell.id))),",
         "            source_code = $(_code_literal(cc.cell.code)),",
@@ -578,7 +611,7 @@ Each is an independent compile unit: WasmTarget-rejection for one
 doesn't affect its siblings. The runtime fallback in notebook-init.js
 paints a WALL band on any island that never hydrates.
 """
-function emit_reactive_island(cc::CellClass, bonds::Set{Symbol})::String
+function emit_reactive_island(cc::CellClass, bonds::Set{Symbol}, render_sym)::String
     fname        = _reactive_island_name(cc)
     suffix       = _id_suffix(cc.cell.id)
     folded       = cc.cell.folded ? "true" : "false"
@@ -591,7 +624,7 @@ function emit_reactive_island(cc::CellClass, bonds::Set{Symbol})::String
     # or any failure, emit a WALL island — its `CellDiv` gets
     # `state = :wasm_failed` + a frozen SSR output.
     translation = try
-        translate_reactive_body(cc.cell.code, bonds, memo_local)
+        translate_reactive_body(cc.cell.code, bonds, memo_local, render_sym)
     catch _e
         nothing
     end
@@ -712,6 +745,13 @@ function assemble(plan::ExtractionPlan)::String
 
     bond_names = Set(keys(specs)) ∪ Set(keys(fallback_defaults))
 
+    # How does the user's notebook bring WasmPlot into scope? That
+    # determines what we emit for the `render!(fig)` call spliced
+    # into every WasmPlot-shaped `create_effect` body. We respect
+    # their naming: `import WasmPlot as WP` → `WP.render!`,
+    # `using WasmPlot` → bare `render!`, etc.
+    render_sym = _wasmplot_render_symbol(plan.imports)
+
     # Per-bond @island (shared signal widget).
     for cc in plan.cells
         cc.kind === :bond || continue
@@ -722,7 +762,7 @@ function assemble(plan::ExtractionPlan)::String
     # Per-reactive-cell @island.
     for cc in plan.cells
         cc.kind === :reactive || continue
-        print(io, emit_reactive_island(cc, bond_names))
+        print(io, emit_reactive_island(cc, bond_names, render_sym))
         println(io)
     end
 
