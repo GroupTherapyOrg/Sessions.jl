@@ -179,19 +179,28 @@ function _extracted_notebooks()
     isdefined(Main, :EXTRACTED_NOTEBOOKS) ? Main.EXTRACTED_NOTEBOOKS : Dict{String, Any}()
 end
 
-"""Sidebar for notebooks section."""
+"""Sidebar for notebooks section. The heading itself links to the
+`/notebooks/` index (the gallery) — no separate "Overview" row, which
+was a redundant click target on top of the already-clickable section
+header + the "Notebooks" nav link in the top bar."""
 function NotebooksSidebar()
     items = _ordered_notebook_slugs(keys(_extracted_notebooks()))
 
     Nav(:class => "py-4 px-2",
-        H4(:class => "px-3 mb-2 text-xs font-semibold tracking-wider uppercase text-warm-600 dark:text-warm-400",
-            "Notebooks"),
+        # Clickable heading — same semantics the old "Overview" row
+        # had, just collapsed into the section label so the sidebar
+        # starts with one fewer line. Uses the same active-class
+        # machinery as the per-notebook entries below so it highlights
+        # on `/notebooks/` (exact match — otherwise every notebook
+        # subpage would light it up too).
+        NavLink("./notebooks/",
+            Span(:class => "block px-3 mb-2 text-xs font-semibold tracking-wider uppercase",
+                "Notebooks");
+            class = "block transition-colors no-underline",
+            active_class = "text-accent-700 dark:text-accent-400",
+            inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-warm-200",
+            exact = true),
         Div(:class => "space-y-0.5 mb-2",
-            NavLink("./notebooks/", "Overview";
-                class = "block px-3 py-1.5 text-sm rounded transition-colors",
-                active_class = "text-accent-700 dark:text-accent-400 bg-warm-100 dark:bg-warm-900 border-l-2 border-accent-600 -ml-0.5 pl-[calc(0.75rem+2px)]",
-                inactive_class = "text-warm-600 dark:text-warm-400 hover:text-warm-800 dark:hover:text-white hover:bg-warm-50 dark:hover:bg-warm-900",
-                exact = true),
             map(items) do slug
                 NavLink("./notebooks/$(slug)/", _notebook_display_title(slug);
                     class = "block px-3 py-1.5 text-sm rounded transition-colors",
