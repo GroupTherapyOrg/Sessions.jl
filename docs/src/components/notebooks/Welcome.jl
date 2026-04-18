@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/welcome.jl
-# Date   : 2026-04-18T00:09:57.850
+# Date   : 2026-04-18T12:21:59.385
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -43,15 +43,11 @@ module WelcomeMod
     const _cell__10000000_0000_0000_0000_000000000001 = try
         let
             md"""
-            # Welcome to **Sessions.jl**
+            # Sessions.jl
             
-            A reactive Julia notebook for the terminal *and* the browser.
-            
-            This notebook is a tour of the **markdown features** Sessions supports out of
-            the box — modeled on
-            [Pluto's basic markdown showcase](https://featured.plutojl.org/basic/markdown).
-            Every cell below is hidden, so what you see is the rendered output. Toggle
-            the eye icon on the left of any cell to see the source.
+            A reactive Julia notebook for the terminal *and* the browser. Every cell
+            on this page is hidden — toggle the eye on the left of any cell to peek
+            at its source.
             """
         end
     catch _e
@@ -61,17 +57,11 @@ module WelcomeMod
     const _cell__10000000_0000_0000_0000_000000000002 = try
         let
             md"""
-            ---
-            
-            ## Headings
-            
-            Six levels of `#`, just like ordinary markdown.
-            
-            # Heading 1
-            ## Heading 2
-            ### Heading 3
-            #### Heading 4
-            ##### Heading 5
+            !!! info "You're reading a live notebook"
+                This page isn't static HTML. Each reactive cell is compiled to
+                WebAssembly and runs directly in your browser — no server, no
+                round-trip, no Jupyter. Open the devtools network tab and move a
+                slider in the **Interactive** notebook: nothing leaves the page.
             """
         end
     catch _e
@@ -81,13 +71,9 @@ module WelcomeMod
     const _cell__10000000_0000_0000_0000_000000000003 = try
         let
             md"""
-            ## Text formatting
-            
-            You can write **bold**, *italic*, ***bold italic***, `inline code`, and
-            ~~strikethrough~~ all in the natural way.
-            
-            Inline code is great for keyboard shortcuts: press `Ctrl+Enter` to run the
-            current cell, `Shift+Enter` to run-and-advance, or `Ctrl+S` to save.
+            Markdown cells can interpolate live Julia with `\$(…)`. As of this
+            render, Julia is **$(VERSION)** and today is
+            **$(Dates.dayname(Dates.today())), $(Dates.monthname(Dates.today())) $(Dates.day(Dates.today()))**.
             """
         end
     catch _e
@@ -96,316 +82,24 @@ module WelcomeMod
     # ── Cell 10000000-0000-0000-0000-000000000004 (static) ──
     const _cell__10000000_0000_0000_0000_000000000004 = try
         let
-            md"""
-            ## Lists
-            
-            A bullet list:
-            
-            - Reactive execution — cells re-run when their dependencies change
-            - Pluto-compatible `.jl` file format
-            - Rich output: markdown, tables, images, plots
-            
-            A numbered list:
-            
-            1. Open the file explorer (the folder icon, top-left)
-            2. Pick a notebook
-            3. Edit any cell and press `Ctrl+Enter`
-            """
+            greeting = "Hello from a real Julia kernel."
         end
     catch _e
         _e
     end
-    # ── Cell 10000000-0000-0000-0000-000000000006 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000006 = try
+    # ── Cell 10000000-0000-0000-0000-000000000005 (static) ──
+    const _cell__10000000_0000_0000_0000_000000000005 = try
         let
             md"""
-            ## Code blocks
-            
-            You get fenced blocks with language tags:
-            
-            ```julia
-            function fib(n)
-                n < 2 && return n
-                return fib(n - 1) + fib(n - 2)
-            end
-            ```
-            
-            …and bare ones for shell or plain text:
-            
-            ```
-            $ julia +1.12 --project=. app.jl dev welcome.jl
-            ```
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000007 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000007 = try
-        let
-            md"""
-            ## Math
-            
-            Inline math via double-backticks: ``e^{i\pi} + 1 = 0`` (Euler's identity).
-            
-            Display math via `…`:
-            
-            ∫−∞∞e−x2dx=π
-            
-            The renderer is MathJax under the hood, so anything LaTeX understands works:
-            ``\sum_{k=0}^{\infty} \frac{x^k}{k!}``.
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000008 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000008 = try
-        let
-            md"""
-            ## Tables
-            
-            | Symbol | Meaning            | Example                  |
-            |:------:|:-------------------|:-------------------------|
-            | `╠═`   | visible code cell  | `using Markdown`         |
-            | `╟─`   | hidden / markdown  | `md"# Title"`            |
-            | `🔁`   | reactive re-run    | bonds, cell deps         |
-            
-            Alignment is controlled by the `:` placement in the header separator.
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000009 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000009 = try
-        let
-            md"""
-            ## Links & footnotes
-            
-            Find Sessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl) or
-            read the [Pluto markdown reference][pluto] for a wider tour.
-            
-            [pluto]: https://featured.plutojl.org/basic/markdown
-            
-            You can also footnote inline like this[^why-pluto-style] for asides.
-            
-            [^why-pluto-style]: We mirror Pluto's notebook-file format so notebooks are
-                portable between the two.
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000000a (static) ──
-    const _cell__10000000_0000_0000_0000_00000000000a = try
-        let
-            md"""
-            ## Live values
-            
-            Markdown cells can interpolate live Julia with `$(…)`:
-            
-            The current Julia version is **$(VERSION)**, the day of the week is
-            **$(Dates.dayname(Dates.today()))**, and 2 + 2 = $(2 + 2).
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000000c (static) ──
-    const _cell__10000000_0000_0000_0000_00000000000c = try
-        let
-            greeting = "Hello, Sessions.jl 👋"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000010 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000010 = try
-        let
-            md"""
-            ---
-            
-            ## Output inspection
-            
-            Sessions inspects most Julia values automatically. Below is a tour of
-            the kinds of output you'll see — every cell is hidden by default, toggle
-            the eye on the left to peek at the source.
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000011 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000011 = try
-        let
-            md"### Numbers"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000012 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000012 = try
-        let
-            2^100
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000013 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000013 = try
-        let
-            md"### Strings"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000014 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000014 = try
-        let
-            "The quick brown fox jumps over the lazy dog."
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000015 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000015 = try
-        let
-            md"### Vectors and ranges"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000016 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000016 = try
-        let
-            xx = collect(1:25)
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000017 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000017 = try
-        let
-            md"### Dictionaries"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000018 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000018 = try
-        let
-            Dict(
-                :name => "Sessions.jl",
-                :version => v"0.1.0",
-                :status => :alpha,
-                :stars => 0,
-                :langs => ["Julia", "JavaScript", "WASM"],
-            )
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000019 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000019 = try
-        let
-            md"### Tuples and named tuples"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000001a (static) ──
-    const _cell__10000000_0000_0000_0000_00000000001a = try
-        let
-            (1, "two", 3.0, :four, [5, 6])
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000001b (static) ──
-    const _cell__10000000_0000_0000_0000_00000000001b = try
-        let
-            (name = "Alice", age = 30, roles = [:admin, :editor], active = true)
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000001c (static) ──
-    const _cell__10000000_0000_0000_0000_00000000001c = try
-        let
-            md"### Structs"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000001d (static) ──
-    const _cell__10000000_0000_0000_0000_00000000001d = try
-        let
-            struct Point
-                x::Float64
-                y::Float64
-            end
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000001e (static) ──
-    const _cell__10000000_0000_0000_0000_00000000001e = try
-        let
-            Point(3.14, 2.71)
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000001f (static) ──
-    const _cell__10000000_0000_0000_0000_00000000001f = try
-        let
-            md"### Sets"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000020 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000020 = try
-        let
-            Set([rand(100)...])
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000021 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000021 = try
-        let
-            md"### Errors"
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000022 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000022 = try
-        let
-            md"""Errors render with the exception type, message, and a collapsed
-            stack trace — click the trace to expand. Try uncommenting the line below:"""
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-000000000023 (static) ──
-    const _cell__10000000_0000_0000_0000_000000000023 = try
-        let
-            sqrt(-1)
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 10000000-0000-0000-0000-00000000000d (static) ──
-    const _cell__10000000_0000_0000_0000_00000000000d = try
-        let
-            md"""
-            ---
-            
-            That's the tour. Try editing any of the hidden cells (toggle the eye on the
-            left) to see the markdown source — and welcome aboard.
+            !!! tip "Where to next"
+                - **Markdown** — every markdown feature Sessions renders, with
+                  admonitions, tables, math, and live interpolation.
+                - **Interactive** — `@bind`, sliders, and reactive cells driven by
+                  the same signal engine that powers the IDE.
+                - **Plots** — slider-linked WasmPlot figures that redraw entirely
+                  in the browser.
+                - **Reactivity** — multiple widgets feeding a single computed
+                  output, zero callback wiring.
             """
         end
     catch _e
@@ -416,8 +110,8 @@ module WelcomeMod
         render_published_notebook(
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000001",
-                source_code = "md\"\"\"\n# Welcome to **Sessions.jl**\n\nA reactive Julia notebook for the terminal *and* the browser.\n\nThis notebook is a tour of the **markdown features** Sessions supports out of\nthe box — modeled on\n[Pluto's basic markdown showcase](https://featured.plutojl.org/basic/markdown).\nEvery cell below is hidden, so what you see is the rendered output. Toggle\nthe eye icon on the left of any cell to see the source.\n\"\"\"",
-                runtime_ns  = 2611708,
+                source_code = "md\"\"\"\n# Sessions.jl\n\nA reactive Julia notebook for the terminal *and* the browser. Every cell\non this page is hidden — toggle the eye on the left of any cell to peek\nat its source.\n\"\"\"",
+                runtime_ns  = 2522167,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -426,8 +120,8 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000002",
-                source_code = "md\"\"\"\n---\n\n## Headings\n\nSix levels of `#`, just like ordinary markdown.\n\n# Heading 1\n## Heading 2\n### Heading 3\n#### Heading 4\n##### Heading 5\n\"\"\"",
-                runtime_ns  = 1375416,
+                source_code = "md\"\"\"\n!!! info \"You're reading a live notebook\"\n    This page isn't static HTML. Each reactive cell is compiled to\n    WebAssembly and runs directly in your browser — no server, no\n    round-trip, no Jupyter. Open the devtools network tab and move a\n    slider in the **Interactive** notebook: nothing leaves the page.\n\"\"\"",
+                runtime_ns  = 3852917,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -436,8 +130,8 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000003",
-                source_code = "md\"\"\"\n## Text formatting\n\nYou can write **bold**, *italic*, ***bold italic***, `inline code`, and\n~~strikethrough~~ all in the natural way.\n\nInline code is great for keyboard shortcuts: press `Ctrl+Enter` to run the\ncurrent cell, `Shift+Enter` to run-and-advance, or `Ctrl+S` to save.\n\"\"\"",
-                runtime_ns  = 338667,
+                source_code = "md\"\"\"\nMarkdown cells can interpolate live Julia with `\\\$(…)`. As of this\nrender, Julia is **\$(VERSION)** and today is\n**\$(Dates.dayname(Dates.today())), \$(Dates.monthname(Dates.today())) \$(Dates.day(Dates.today()))**.\n\"\"\"",
+                runtime_ns  = 20209208,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -446,283 +140,23 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000004",
-                source_code = "md\"\"\"\n## Lists\n\nA bullet list:\n\n- Reactive execution — cells re-run when their dependencies change\n- Pluto-compatible `.jl` file format\n- Rich output: markdown, tables, images, plots\n\nA numbered list:\n\n1. Open the file explorer (the folder icon, top-left)\n2. Pick a notebook\n3. Edit any cell and press `Ctrl+Enter`\n\"\"\"",
-                runtime_ns  = 490084,
+                source_code = "greeting = \"Hello from a real Julia kernel.\"",
+                runtime_ns  = 211292,
                 state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
+                cell_type   = :code,
+                folded      = false,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000004)),
             ),
             CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000006",
-                source_code = "md\"\"\"\n## Code blocks\n\nYou get fenced blocks with language tags:\n\n```julia\nfunction fib(n)\n    n < 2 && return n\n    return fib(n - 1) + fib(n - 2)\nend\n```\n\n…and bare ones for shell or plain text:\n\n```\n\$ julia +1.12 --project=. app.jl dev welcome.jl\n```\n\"\"\"",
-                runtime_ns  = 278084,
+                cell_id     = "10000000-0000-0000-0000-000000000005",
+                source_code = "md\"\"\"\n!!! tip \"Where to next\"\n    - **Markdown** — every markdown feature Sessions renders, with\n      admonitions, tables, math, and live interpolation.\n    - **Interactive** — `@bind`, sliders, and reactive cells driven by\n      the same signal engine that powers the IDE.\n    - **Plots** — slider-linked WasmPlot figures that redraw entirely\n      in the browser.\n    - **Reactivity** — multiple widgets feeding a single computed\n      output, zero callback wiring.\n\"\"\"",
+                runtime_ns  = 491250,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000006)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000007",
-                source_code = "md\"\"\"\n## Math\n\nInline math via double-backticks: ``e^{i\\pi} + 1 = 0`` (Euler's identity).\n\nDisplay math via `…`:\n\n∫−∞∞e−x2dx=π\n\nThe renderer is MathJax under the hood, so anything LaTeX understands works:\n``\\sum_{k=0}^{\\infty} \\frac{x^k}{k!}``.\n\"\"\"",
-                runtime_ns  = 8195625,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000007)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000008",
-                source_code = "md\"\"\"\n## Tables\n\n| Symbol | Meaning            | Example                  |\n|:------:|:-------------------|:-------------------------|\n| `╠═`   | visible code cell  | `using Markdown`         |\n| `╟─`   | hidden / markdown  | `md\"# Title\"`            |\n| `🔁`   | reactive re-run    | bonds, cell deps         |\n\nAlignment is controlled by the `:` placement in the header separator.\n\"\"\"",
-                runtime_ns  = 153042958,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000008)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000009",
-                source_code = "md\"\"\"\n## Links & footnotes\n\nFind Sessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl) or\nread the [Pluto markdown reference][pluto] for a wider tour.\n\n[pluto]: https://featured.plutojl.org/basic/markdown\n\nYou can also footnote inline like this[^why-pluto-style] for asides.\n\n[^why-pluto-style]: We mirror Pluto's notebook-file format so notebooks are\n    portable between the two.\n\"\"\"",
-                runtime_ns  = 365917,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000009)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000000a",
-                source_code = "md\"\"\"\n## Live values\n\nMarkdown cells can interpolate live Julia with `\$(…)`:\n\nThe current Julia version is **\$(VERSION)**, the day of the week is\n**\$(Dates.dayname(Dates.today()))**, and 2 + 2 = \$(2 + 2).\n\"\"\"",
-                runtime_ns  = 18632083,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000000a)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000000c",
-                source_code = "greeting = \"Hello, Sessions.jl 👋\"",
-                runtime_ns  = 208708,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000000c)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000010",
-                source_code = "md\"\"\"\n---\n\n## Output inspection\n\nSessions inspects most Julia values automatically. Below is a tour of\nthe kinds of output you'll see — every cell is hidden by default, toggle\nthe eye on the left to peek at the source.\n\"\"\"",
-                runtime_ns  = 328750,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000010)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000011",
-                source_code = "md\"### Numbers\"",
-                runtime_ns  = 180667,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000011)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000012",
-                source_code = "2^100",
-                runtime_ns  = 1980917,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000012)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000013",
-                source_code = "md\"### Strings\"",
-                runtime_ns  = 211333,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000013)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000014",
-                source_code = "\"The quick brown fox jumps over the lazy dog.\"",
-                runtime_ns  = 74833,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000014)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000015",
-                source_code = "md\"### Vectors and ranges\"",
-                runtime_ns  = 162416,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000015)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000016",
-                source_code = "xx = collect(1:25)",
-                runtime_ns  = 4565208,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000016)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000017",
-                source_code = "md\"### Dictionaries\"",
-                runtime_ns  = 218291,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000017)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000018",
-                source_code = "Dict(\n    :name => \"Sessions.jl\",\n    :version => v\"0.1.0\",\n    :status => :alpha,\n    :stars => 0,\n    :langs => [\"Julia\", \"JavaScript\", \"WASM\"],\n)",
-                runtime_ns  = 61661041,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000018)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000019",
-                source_code = "md\"### Tuples and named tuples\"",
-                runtime_ns  = 218875,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000019)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000001a",
-                source_code = "(1, \"two\", 3.0, :four, [5, 6])",
-                runtime_ns  = 186167,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000001a)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000001b",
-                source_code = "(name = \"Alice\", age = 30, roles = [:admin, :editor], active = true)",
-                runtime_ns  = 2652584,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000001b)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000001c",
-                source_code = "md\"### Structs\"",
-                runtime_ns  = 214708,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000001c)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000001d",
-                source_code = "struct Point\n    x::Float64\n    y::Float64\nend",
-                runtime_ns  = 720000,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000001d)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000001e",
-                source_code = "Point(3.14, 2.71)",
-                runtime_ns  = 1447583,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000001e)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000001f",
-                source_code = "md\"### Sets\"",
-                runtime_ns  = 201250,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000001f)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000020",
-                source_code = "Set([rand(100)...])",
-                runtime_ns  = 80255459,
-                state       = :done,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000020)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000021",
-                source_code = "md\"### Errors\"",
-                runtime_ns  = 222542,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000021)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000022",
-                source_code = "md\"\"\"Errors render with the exception type, message, and a collapsed\nstack trace — click the trace to expand. Try uncommenting the line below:\"\"\"",
-                runtime_ns  = 189333,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000022)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-000000000023",
-                source_code = "sqrt(-1)",
-                runtime_ns  = 506338042,
-                state       = :errored,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000023)),
-            ),
-            CellDiv(
-                cell_id     = "10000000-0000-0000-0000-00000000000d",
-                source_code = "md\"\"\"\n---\n\nThat's the tour. Try editing any of the hidden cells (toggle the eye on the\nleft) to see the markdown source — and welcome aboard.\n\"\"\"",
-                runtime_ns  = 233292,
-                state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_00000000000d)),
+                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000005)),
             );
             assets_html = _NOTEBOOK_ASSETS_HTML,
         )

@@ -155,7 +155,7 @@ end
 # old EXECUTED_NOTEBOOKS pipeline (which was removed when we shifted
 # to the WASM-island publish target).
 
-const _NOTEBOOK_PRIORITY_ORDER = ["welcome", "interactive"]
+const _NOTEBOOK_PRIORITY_ORDER = ["welcome", "markdown", "interactive", "plots", "reactivity"]
 
 """Order extracted notebook slugs: preferred order first, then alphabetical remainder."""
 function _ordered_notebook_slugs(slugs)
