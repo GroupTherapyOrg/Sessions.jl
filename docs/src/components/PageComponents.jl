@@ -211,9 +211,16 @@ function NotebooksSidebar()
 end
 
 """Layout wrapper for the notebooks INDEX page — left sidebar + single
-content column. Used only by `/notebooks/` (the gallery)."""
+content column. Used only by `/notebooks/` (the gallery).
+
+Column widths are held in sync with `NotebookPageLayout` below so
+that the router's SPA swap between the gallery page and an
+individual notebook page doesn't shift the grid. Same column
+sizes, same sidebar classes, same sticky offset — what changes on
+navigation is only the main column's content and (on `xl:` +
+notebook pages only) whether a 3rd TOC column exists."""
 function NotebooksLayout(children...)
-    Div(:class => "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] min-h-[calc(100vh-8rem)]",
+    Div(:class => "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] min-h-[calc(100vh-8rem)]",
         Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 overflow-y-auto",
             :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
             NotebooksSidebar()),

@@ -4,6 +4,38 @@
 @source "./src/**/*.jl";
 @source "../src/web.jl";
 
+/* Single source of truth for the `--warm-*` palette (plus every
+   cell/markdown/CodeMirror token a notebook consumes). Lives in
+   notebook-chrome.css because it ALSO ships embedded in every
+   extracted notebook — a published notebook dropped into any
+   Therapy app carries its own colors without needing the host's
+   Tailwind build. Importing it here means the docs site reads the
+   same hex values; the Tailwind `--color-warm-*` theme tokens
+   below reference them via `var()` instead of repeating the hex. */
+@import "../static/notebook-chrome.css";
+
+/* View Transitions API override — Therapy's ClientRouter wraps each
+   SPA swap in `document.startViewTransition(doSwap)` when the
+   browser supports it. The default user-agent transition cross-
+   fades the whole `root` capture; during that animation old and
+   new page snapshots are both painted, briefly showing sidebar
+   width/position shifts when the two routes' `#page-content` inner
+   layouts differ (e.g. gallery → notebook page). Zeroing the
+   animation keeps the VT pipeline (so anything we tag later with a
+   custom transition-name still animates) while avoiding the
+   cross-fade artifacts on route boundaries. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+/* Stable scrollbar gutter so the document scrollbar appearing /
+   disappearing between pages doesn't reflow the grid and shift
+   sidebar widths by a few pixels. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* Enable class-based dark mode (toggle via .dark class on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -13,18 +45,23 @@
   --font-serif: 'EB Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
   --font-mono: 'JuliaMono', 'Fira Code', 'JetBrains Mono', monospace;
 
-  /* Warm neutral palette (shared across GroupTherapyOrg ecosystem) */
-  --color-warm-50: #f8f7f4;
-  --color-warm-100: #f0ece4;
-  --color-warm-200: #e8e3d9;
-  --color-warm-300: #d4d0c8;
-  --color-warm-400: #9a9590;
-  --color-warm-500: #8a8680;
-  --color-warm-600: #6b6560;
-  --color-warm-700: #5a5855;
-  --color-warm-800: #2a2520;
-  --color-warm-900: #1a1918;
-  --color-warm-950: #111110;
+  /* Warm neutral palette — SHIM. Source of truth is notebook-chrome.css
+     (imported above). Every `--color-warm-X` Tailwind token here just
+     points at `var(--warm-X)` so utility classes like `bg-warm-100`
+     resolve to whatever value that CSS declares. Changing the palette
+     is a one-file edit in notebook-chrome.css and both the live IDE
+     and the docs site + every extracted notebook pick it up. */
+  --color-warm-50: var(--warm-50);
+  --color-warm-100: var(--warm-100);
+  --color-warm-200: var(--warm-200);
+  --color-warm-300: var(--warm-300);
+  --color-warm-400: var(--warm-400);
+  --color-warm-500: var(--warm-500);
+  --color-warm-600: var(--warm-600);
+  --color-warm-700: var(--warm-700);
+  --color-warm-800: var(--warm-800);
+  --color-warm-900: var(--warm-900);
+  --color-warm-950: var(--warm-950);
 
   /* Accent palette — Rose #d4759a (Sessions.jl primary accent) */
   --color-accent-50: #fdf2f6;
