@@ -45,8 +45,13 @@ function Layout(content)
                 )
             )
         ),
-        # Main content
-        MainEl(:id => "page-content", :class => "flex-1 w-full max-w-5xl mx-auto px-6 py-12",
+        # Main content. No max-width constraint at this level —
+        # most pages want centered narrow content (hero / gallery /
+        # getting-started: ~max-w-5xl) but notebook pages run a
+        # three-column layout (sidebar + notebook + TOC) that needs
+        # the full viewport. Each page wraps its own content with
+        # the appropriate max-width.
+        MainEl(:id => "page-content", :class => "flex-1 w-full",
             content
         ),
         # Footer

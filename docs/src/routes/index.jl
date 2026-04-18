@@ -4,7 +4,10 @@
 # Uses local components from PageComponents.jl (no Suite.jl).
 
 function Index()
-    Fragment(
+    # Page's own max-width — Layout no longer wraps content in
+    # `max-w-5xl` (notebook routes need full viewport for the three-
+    # column layout), so narrow-content pages supply their own.
+    Div(:class => "max-w-5xl mx-auto px-6 py-12",
         # Hero Section
         Div(:class => "py-20 sm:py-32",
             Div(:class => "text-center max-w-4xl mx-auto",

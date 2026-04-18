@@ -64,6 +64,11 @@ const EXTRACTED_NOTEBOOKS = Dict{String, Function}()
 let extracted_dir = joinpath(@__DIR__, "src", "components", "notebooks")
     if isdir(extracted_dir)
         host = isdefined(Main, :TherapyApp) ? getfield(Main, :TherapyApp) : Main
+        # Access the TherapyApp-scoped NotebookPageLayout — it takes
+        # a slug + the notebook's rendered VNode and wraps both in
+        # the three-column [sidebar | notebook | TOC] layout.
+        NotebookPageLayout = isdefined(host, :NotebookPageLayout) ?
+            getfield(host, :NotebookPageLayout) : nothing
         for file in sort(readdir(extracted_dir))
             endswith(file, ".jl") || continue
             name_sym = Symbol(splitext(file)[1])       # "Welcome.jl" → :Welcome
@@ -80,7 +85,20 @@ let extracted_dir = joinpath(@__DIR__, "src", "components", "notebooks")
                 # ::Function conversion on `push!(routes, …)` succeeds.
                 fn = raw isa Function ? raw : (() -> Base.invokelatest(raw))
                 EXTRACTED_NOTEBOOKS[slug] = fn
-                push!(app.routes, "/notebooks/$(slug)/" => fn)
+                # Wrap the notebook in the 3-column page layout so
+                # each notebook route gets: left sidebar (with active-
+                # slug highlight) + centered notebook (keeping its own
+                # max-width/spacing chrome) + right-side auto-TOC.
+                # Fall back to the bare notebook if the layout helper
+                # isn't defined yet (loader-order safety).
+                route_fn = if NotebookPageLayout === nothing
+                    fn
+                else
+                    let s = slug, f = fn, npl = NotebookPageLayout
+                        () -> Base.invokelatest(npl, s, Base.invokelatest(f))
+                    end
+                end
+                push!(app.routes, "/notebooks/$(slug)/" => route_fn)
                 println("  Registered extracted notebook: /notebooks/$(slug)/  ← $(file)")
             catch e
                 @warn "[docs] Failed to register extracted notebook" file=file exception=e

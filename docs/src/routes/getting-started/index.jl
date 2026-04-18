@@ -4,7 +4,8 @@
 # Uses local components from PageComponents.jl (no Suite.jl).
 
 function GettingStartedIndex()
-    Fragment(
+    # Layout is now width-agnostic; page brings its own max-width.
+    Div(:class => "max-w-5xl mx-auto px-6 py-12",
         # Header
         PageHeader("Getting Started", "Install Sessions.jl and start working with reactive Julia notebooks in the browser."),
 

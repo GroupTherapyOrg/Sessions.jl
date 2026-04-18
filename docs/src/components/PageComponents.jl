@@ -201,7 +201,8 @@ function NotebooksSidebar()
             end...))
 end
 
-"""Layout wrapper for notebook pages with sidebar."""
+"""Layout wrapper for the notebooks INDEX page — left sidebar + single
+content column. Used only by `/notebooks/` (the gallery)."""
 function NotebooksLayout(children...)
     Div(:class => "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] min-h-[calc(100vh-8rem)]",
         Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-100/50 dark:bg-warm-900/50 overflow-y-auto",
@@ -209,4 +210,125 @@ function NotebooksLayout(children...)
             NotebooksSidebar()),
         Div(:class => "w-full min-w-0 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl",
             children...))
+end
+
+# ── Single-notebook page layout (3 columns) ────────────────────────
+#
+# Individual `/notebooks/<slug>/` routes use this wrapper. Three
+# columns on wide screens, collapses gracefully:
+#
+#   [ NotebooksSidebar ] [ notebook ] [ TOC ]
+#
+# Left sidebar is identical to the one on the /notebooks/ index page
+# (auto-highlights the active slug via NavLink's route match). Middle
+# column hosts the notebook's own `.nb-cell-list` chrome, which keeps
+# the 900-px max-width + auto-margins it already has — nothing about
+# the notebook's internal spacing changes. Right column is a sticky
+# "On this page" TOC populated client-side by walking the notebook's
+# h1/h2/h3 headings (same approach Therapy's docs use; the one
+# difference is that notebook headings are dynamic per-notebook so we
+# build the TOC at DOMContentLoaded instead of hard-coding the pairs
+# at compile time).
+#
+# The JS lives in `_notebook_toc_script()` — marked `/* __therapy */`
+# so the router re-executes it after SPA navigation.
+
+"""Render the per-notebook page: left sidebar + notebook + right TOC.
+
+`notebook_vnode` is the VNode/IslandVNode returned by calling the
+extracted notebook's @island function. We wrap it so the layout
+machinery can nest the notebook between the two sidebars without
+touching the notebook component itself."""
+function NotebookPageLayout(slug::AbstractString, notebook_vnode)
+    Div(
+        :class => "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_14rem] min-h-[calc(100vh-8rem)]",
+
+        # Left sidebar — list of notebooks, active one highlighted
+        # automatically via NavLink's route-match.
+        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-100/50 dark:bg-warm-900/50 overflow-y-auto",
+            :style => "position: sticky; top: 0; height: calc(100vh - 4rem);",
+            NotebooksSidebar()),
+
+        # Middle column: the notebook. `id="notebook-content"` is the
+        # TOC script's query root — it walks headings inside this
+        # element. No width overrides here; the notebook's own
+        # `.nb-cell-list` (max-width:900px;margin:0 auto) keeps its
+        # spacing identical to the standalone view.
+        MainEl(:id => "notebook-content",
+            :class => "w-full min-w-0",
+            notebook_vnode),
+
+        # Right TOC column — auto-populated by JS after DOMContentLoaded.
+        Aside(:class => "hidden xl:block",
+            :style => "position: sticky; top: 0; height: calc(100vh - 4rem); overflow-y: auto;",
+            Nav(:class => "py-10 px-6",
+                H4(:class => "text-[11px] font-semibold tracking-wider uppercase text-warm-400 dark:text-warm-500 mb-3",
+                    "On this page"),
+                Div(:id => "notebook-toc",
+                    :class => "space-y-1.5 border-l border-warm-200 dark:border-warm-800 pl-3"))),
+
+        # Client-side TOC populator.
+        RawHtml(_notebook_toc_script())
+    )
+end
+
+"""JS that walks the notebook's headings and fills #notebook-toc.
+`/* __therapy */` marker so Therapy's ClientRouter re-executes it
+after each SPA navigation (the TOC has to rebuild when a different
+notebook mounts)."""
+function _notebook_toc_script()::String
+    """
+    <script>
+    /* __therapy */
+    (function () {
+      function slugify(s) {
+        return (s || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+\$/g, '') || 'h';
+      }
+      function build() {
+        var toc = document.getElementById('notebook-toc');
+        var content = document.getElementById('notebook-content');
+        if (!toc || !content) return;
+        toc.innerHTML = '';
+        var heads = content.querySelectorAll('h1, h2, h3');
+        if (!heads.length) { toc.parentNode.parentNode.style.display = 'none'; return; }
+        var seen = {};
+        heads.forEach(function (h) {
+          var label = (h.textContent || '').trim();
+          if (!label) return;
+          if (!h.id) {
+            var base = slugify(label);
+            var id = base;
+            var n = 1;
+            while (seen[id]) id = base + '-' + (++n);
+            seen[id] = true;
+            h.id = id;
+          } else {
+            seen[h.id] = true;
+          }
+          var lvl = parseInt(h.tagName[1], 10) || 2;
+          var a = document.createElement('a');
+          a.href = '#' + h.id;
+          a.textContent = label;
+          a.className =
+            'block text-[12px] leading-relaxed py-0.5 transition-colors ' +
+            'hover:text-accent-500 dark:hover:text-accent-400 ' +
+            (lvl === 1
+               ? 'font-semibold text-warm-700 dark:text-warm-300'
+               : lvl === 2
+               ? 'text-warm-600 dark:text-warm-400'
+               : 'text-warm-500 dark:text-warm-500 pl-3');
+          toc.appendChild(a);
+        });
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', build);
+      } else {
+        build();
+      }
+    })();
+    </script>
+    """
 end
