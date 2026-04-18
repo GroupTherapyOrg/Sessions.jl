@@ -226,7 +226,7 @@ three things at once:
 3. Sidebar never overlaps the footer (flex container ends at
    MainEl's bottom, which is directly above `<footer>`)."""
 function NotebooksLayout(children...)
-    Div(:class => "flex",
+    Div(:class => "flex flex-1",
         Aside(:class => "hidden lg:block w-60 shrink-0 bg-warm-50 dark:bg-warm-900 border-r border-warm-200 dark:border-warm-700",
             Div(:class => "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto",
                 NotebooksSidebar())),
@@ -263,7 +263,7 @@ extracted notebook's @island function. We wrap it so the layout
 machinery can nest the notebook between the two sidebars without
 touching the notebook component itself."""
 function NotebookPageLayout(slug::AbstractString, notebook_vnode)
-    Div(:class => "flex",
+    Div(:class => "flex flex-1",
         # Left sidebar — aside stretches vertically to fill the flex
         # container (which ends right above the footer), so its bg +
         # border-right visually run the full column height. A sticky

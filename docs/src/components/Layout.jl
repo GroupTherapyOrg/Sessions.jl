@@ -57,7 +57,7 @@ function Layout(content)
         # three-column layout (sidebar + notebook + TOC) that needs
         # the full viewport. Each page wraps its own content with
         # the appropriate max-width.
-        MainEl(:id => "page-content", :class => "flex-1 w-full",
+        MainEl(:id => "page-content", :class => "flex-1 w-full flex flex-col",
             content
         ),
         # Footer — kept deliberately slim so it doesn't dominate
