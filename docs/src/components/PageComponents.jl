@@ -274,11 +274,18 @@ function NotebookPageLayout(slug::AbstractString, notebook_vnode)
 
         # Middle column: the notebook. Compensates for the fixed
         # left sidebar with `lg:ml-60` and (when the TOC is visible)
-        # for the fixed right rail with `xl:mr-56`. The notebook's
-        # own `.nb-cell-list` (max-width:900px;margin:0 auto) keeps
-        # its spacing identical to the standalone view.
-        MainEl(:id => "notebook-content",
-            :class => "w-full min-w-0 lg:ml-60 xl:mr-56",
+        # for the fixed right rail with `xl:mr-56`. Using `<div>`
+        # (not `<main>`) because `Layout.jl` already wraps page
+        # content in `<main id="page-content">` — nesting `<main>`
+        # is invalid HTML.
+        #
+        # Critical: NO `w-full` here. With `width:100%`, margins are
+        # additive, so `w-full + ml-60 + mr-56` overflows by 29rem
+        # and the content slides under the fixed TOC. A plain block
+        # <div> auto-fills `parent-width − margins`, which is what
+        # we want.
+        Div(:id => "notebook-content",
+            :class => "min-w-0 lg:ml-60 xl:mr-56",
             notebook_vnode),
 
         # Right TOC column — fixed-position, auto-populated by JS
