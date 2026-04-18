@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/markdown.jl
-# Date   : 2026-04-18T12:22:05.777
+# Date   : 2026-04-18T12:32:15.156
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -47,8 +47,7 @@ module MarkdownMod
             
             Everything Julia's built-in `Markdown` module understands — plus live
             interpolation, syntax-highlighted code, LaTeX math, and admonition
-            cards. Every cell below is a hidden markdown cell; toggle the eye to
-            see its source.
+            cards.
             """
         end
     catch _e
@@ -58,19 +57,13 @@ module MarkdownMod
     const _cell__30000000_0000_0000_0000_000000000002 = try
         let
             md"""
+            ## Text & lists
+            
             You can write **bold**, *italic*, ***bold italic***, `inline code`, and
             ~~strikethrough~~ all in the natural way. Inline code is great for
             keyboard shortcuts: `Ctrl+Enter` to run a cell, `Shift+Enter` to run
             and advance, `Ctrl+S` to save.
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 30000000-0000-0000-0000-000000000003 (static) ──
-    const _cell__30000000_0000_0000_0000_000000000003 = try
-        let
-            md"""
+            
             Bullet list:
             
             - Reactive execution — cells re-run when their dependencies change
@@ -87,10 +80,12 @@ module MarkdownMod
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-000000000005 (static) ──
-    const _cell__30000000_0000_0000_0000_000000000005 = try
+    # ── Cell 30000000-0000-0000-0000-000000000004 (static) ──
+    const _cell__30000000_0000_0000_0000_000000000004 = try
         let
             md"""
+            ## Code & math
+            
             Fenced code blocks with language tags get syntax highlighting:
             
             ```julia
@@ -105,15 +100,7 @@ module MarkdownMod
             ```
             \$ julia +1.12 --project=. app.jl dev
             ```
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 30000000-0000-0000-0000-000000000006 (static) ──
-    const _cell__30000000_0000_0000_0000_000000000006 = try
-        let
-            md"""
+            
             Inline math via double-backticks: ``e^{iπ} + 1 = 0`` (Euler's identity).
             
             Display math:
@@ -127,27 +114,20 @@ module MarkdownMod
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-000000000007 (static) ──
-    const _cell__30000000_0000_0000_0000_000000000007 = try
+    # ── Cell 30000000-0000-0000-0000-000000000005 (static) ──
+    const _cell__30000000_0000_0000_0000_000000000005 = try
         let
             md"""
+            ## Tables & links
+            
             | Symbol | Meaning           | Example          |
             |:------:|:------------------|:-----------------|
             | `╠═`   | visible code cell | `using Markdown` |
             | `╟─`   | hidden / markdown | `md"# Title"`    |
             | `🔁`   | reactive re-run   | bonds, cell deps |
             
-            Alignment follows the `:` placement in the header separator.
-            """
-        end
-    catch _e
-        _e
-    end
-    # ── Cell 30000000-0000-0000-0000-000000000008 (static) ──
-    const _cell__30000000_0000_0000_0000_000000000008 = try
-        let
-            md"""
-            Find Sessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl).
+            Alignment follows the `:` placement in the header separator. Find
+            Sessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl).
             Inline footnotes[^fmt] keep asides out of the main flow.
             
             [^fmt]: Sessions mirrors Pluto's `.jl` notebook format so notebooks are
@@ -157,29 +137,29 @@ module MarkdownMod
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-000000000009 (static) ──
-    const _cell__30000000_0000_0000_0000_000000000009 = try
+    # ── Cell 30000000-0000-0000-0000-000000000006 (static) ──
+    const _cell__30000000_0000_0000_0000_000000000006 = try
         let
             md"""
-            !!! tip "Output inspection"
-                Sessions inspects most Julia values automatically. The cells
-                below render a few samples — numbers, strings, collections,
-                structs, and an error. Toggle the eye to see the source.
+            ## Output inspection
+            
+            Sessions inspects most Julia values automatically. The cells below
+            render a few samples — toggle the eye on each to see the source.
             """
         end
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-00000000000a (static) ──
-    const _cell__30000000_0000_0000_0000_00000000000a = try
+    # ── Cell 30000000-0000-0000-0000-000000000007 (static) ──
+    const _cell__30000000_0000_0000_0000_000000000007 = try
         let
             2^100
         end
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-00000000000c (static) ──
-    const _cell__30000000_0000_0000_0000_00000000000c = try
+    # ── Cell 30000000-0000-0000-0000-000000000008 (static) ──
+    const _cell__30000000_0000_0000_0000_000000000008 = try
         let
             Dict(
                 :name => "Sessions.jl",
@@ -191,18 +171,51 @@ module MarkdownMod
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-00000000000d (static) ──
-    const _cell__30000000_0000_0000_0000_00000000000d = try
+    # ── Cell 30000000-0000-0000-0000-000000000009 (static) ──
+    const _cell__30000000_0000_0000_0000_000000000009 = try
         let
             (name = "Alice", age = 30, roles = [:admin, :editor], active = true)
         end
     catch _e
         _e
     end
-    # ── Cell 30000000-0000-0000-0000-00000000000e (static) ──
-    const _cell__30000000_0000_0000_0000_00000000000e = try
+    # ── Cell 30000000-0000-0000-0000-00000000000a (static) ──
+    const _cell__30000000_0000_0000_0000_00000000000a = try
+        let
+            md"""
+            ## Errors
+            
+            When a cell throws, Sessions renders the error inline with the
+            exception type, the message, and a collapsed stack trace. Click the
+            trace to expand it. The cell below deliberately throws — it's the
+            same rendering a typo in your own code would produce.
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 30000000-0000-0000-0000-00000000000c (static) ──
+    const _cell__30000000_0000_0000_0000_00000000000c = try
         let
             sqrt(-1)
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 30000000-0000-0000-0000-00000000000d (static) ──
+    const _cell__30000000_0000_0000_0000_00000000000d = try
+        let
+            md"""
+            !!! warning "WASM compile errors look different"
+                In published notebooks, some cells compile to WebAssembly. If
+                WasmTarget can't lower a cell (an unsupported Base method, a
+                package with no WASM coverage), Therapy skips WASM emission for
+                that `@island` and paints a red **'⚠ WASM compile failed'**
+                banner over the cell at runtime. The cell's last known output
+                still renders as static SSR, but interactive updates from
+                upstream bonds stop propagating to it. Sibling islands keep
+                hydrating normally.
+            """
         end
     catch _e
         _e
@@ -212,8 +225,8 @@ module MarkdownMod
         render_published_notebook(
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000001",
-                source_code = "md\"\"\"\n# Markdown\n\nEverything Julia's built-in `Markdown` module understands — plus live\ninterpolation, syntax-highlighted code, LaTeX math, and admonition\ncards. Every cell below is a hidden markdown cell; toggle the eye to\nsee its source.\n\"\"\"",
-                runtime_ns  = 2242041,
+                source_code = "md\"\"\"\n# Markdown\n\nEverything Julia's built-in `Markdown` module understands — plus live\ninterpolation, syntax-highlighted code, LaTeX math, and admonition\ncards.\n\"\"\"",
+                runtime_ns  = 2785500,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -222,8 +235,8 @@ module MarkdownMod
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000002",
-                source_code = "md\"\"\"\nYou can write **bold**, *italic*, ***bold italic***, `inline code`, and\n~~strikethrough~~ all in the natural way. Inline code is great for\nkeyboard shortcuts: `Ctrl+Enter` to run a cell, `Shift+Enter` to run\nand advance, `Ctrl+S` to save.\n\"\"\"",
-                runtime_ns  = 305917,
+                source_code = "md\"\"\"\n## Text & lists\n\nYou can write **bold**, *italic*, ***bold italic***, `inline code`, and\n~~strikethrough~~ all in the natural way. Inline code is great for\nkeyboard shortcuts: `Ctrl+Enter` to run a cell, `Shift+Enter` to run\nand advance, `Ctrl+S` to save.\n\nBullet list:\n\n- Reactive execution — cells re-run when their dependencies change\n- Pluto-compatible `.jl` file format — portable between notebook tools\n- Rich output: markdown, tables, images, plots, custom HTML\n\nNumbered list:\n\n1. Open the file explorer\n2. Pick a notebook\n3. Edit any cell and press `Ctrl+Enter`\n\"\"\"",
+                runtime_ns  = 672875,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -231,19 +244,19 @@ module MarkdownMod
                 output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_000000000002)),
             ),
             CellDiv(
-                cell_id     = "30000000-0000-0000-0000-000000000003",
-                source_code = "md\"\"\"\nBullet list:\n\n- Reactive execution — cells re-run when their dependencies change\n- Pluto-compatible `.jl` file format — portable between notebook tools\n- Rich output: markdown, tables, images, plots, custom HTML\n\nNumbered list:\n\n1. Open the file explorer\n2. Pick a notebook\n3. Edit any cell and press `Ctrl+Enter`\n\"\"\"",
-                runtime_ns  = 528083,
+                cell_id     = "30000000-0000-0000-0000-000000000004",
+                source_code = "md\"\"\"\n## Code & math\n\nFenced code blocks with language tags get syntax highlighting:\n\n```julia\nfunction fib(n)\n    n < 2 && return n\n    fib(n - 1) + fib(n - 2)\nend\n```\n\nBare fences pass through unstyled — useful for shell or plain text:\n\n```\n\\\$ julia +1.12 --project=. app.jl dev\n```\n\nInline math via double-backticks: ``e^{iπ} + 1 = 0`` (Euler's identity).\n\nDisplay math:\n\n``\\\\int_{-\\\\infty}^{\\\\infty} e^{-x^2}\\\\,dx = \\\\sqrt{\\\\pi}``\n\nAnything LaTeX understands works: ``\\\\sum_{k=0}^{\\\\infty} \\\\frac{x^k}{k!}``.\nThe renderer is MathJax under the hood.\n\"\"\"",
+                runtime_ns  = 1366833,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
-                output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_000000000003)),
+                output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_000000000004)),
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000005",
-                source_code = "md\"\"\"\nFenced code blocks with language tags get syntax highlighting:\n\n```julia\nfunction fib(n)\n    n < 2 && return n\n    fib(n - 1) + fib(n - 2)\nend\n```\n\nBare fences pass through unstyled — useful for shell or plain text:\n\n```\n\\\$ julia +1.12 --project=. app.jl dev\n```\n\"\"\"",
-                runtime_ns  = 231042,
+                source_code = "md\"\"\"\n## Tables & links\n\n| Symbol | Meaning           | Example          |\n|:------:|:------------------|:-----------------|\n| `╠═`   | visible code cell | `using Markdown` |\n| `╟─`   | hidden / markdown | `md\"# Title\"`    |\n| `🔁`   | reactive re-run   | bonds, cell deps |\n\nAlignment follows the `:` placement in the header separator. Find\nSessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl).\nInline footnotes[^fmt] keep asides out of the main flow.\n\n[^fmt]: Sessions mirrors Pluto's `.jl` notebook format so notebooks are\n    portable between the two.\n\"\"\"",
+                runtime_ns  = 126925417,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -252,8 +265,8 @@ module MarkdownMod
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000006",
-                source_code = "md\"\"\"\nInline math via double-backticks: ``e^{iπ} + 1 = 0`` (Euler's identity).\n\nDisplay math:\n\n``\\\\int_{-\\\\infty}^{\\\\infty} e^{-x^2}\\\\,dx = \\\\sqrt{\\\\pi}``\n\nAnything LaTeX understands works: ``\\\\sum_{k=0}^{\\\\infty} \\\\frac{x^k}{k!}``.\nThe renderer is MathJax under the hood.\n\"\"\"",
-                runtime_ns  = 1102833,
+                source_code = "md\"\"\"\n## Output inspection\n\nSessions inspects most Julia values automatically. The cells below\nrender a few samples — toggle the eye on each to see the source.\n\"\"\"",
+                runtime_ns  = 252792,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -262,49 +275,49 @@ module MarkdownMod
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000007",
-                source_code = "md\"\"\"\n| Symbol | Meaning           | Example          |\n|:------:|:------------------|:-----------------|\n| `╠═`   | visible code cell | `using Markdown` |\n| `╟─`   | hidden / markdown | `md\"# Title\"`    |\n| `🔁`   | reactive re-run   | bonds, cell deps |\n\nAlignment follows the `:` placement in the header separator.\n\"\"\"",
-                runtime_ns  = 114689291,
+                source_code = "2^100",
+                runtime_ns  = 1495583,
                 state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
+                cell_type   = :code,
+                folded      = false,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_000000000007)),
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000008",
-                source_code = "md\"\"\"\nFind Sessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl).\nInline footnotes[^fmt] keep asides out of the main flow.\n\n[^fmt]: Sessions mirrors Pluto's `.jl` notebook format so notebooks are\n    portable between the two.\n\"\"\"",
-                runtime_ns  = 4118917,
+                source_code = "Dict(\n    :name => \"Sessions.jl\",\n    :version => v\"0.1.0\",\n    :status => :alpha,\n    :langs => [\"Julia\", \"JavaScript\", \"WASM\"],\n)",
+                runtime_ns  = 60913958,
                 state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
+                cell_type   = :code,
+                folded      = false,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_000000000008)),
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-000000000009",
-                source_code = "md\"\"\"\n!!! tip \"Output inspection\"\n    Sessions inspects most Julia values automatically. The cells\n    below render a few samples — numbers, strings, collections,\n    structs, and an error. Toggle the eye to see the source.\n\"\"\"",
-                runtime_ns  = 258125,
+                source_code = "(name = \"Alice\", age = 30, roles = [:admin, :editor], active = true)",
+                runtime_ns  = 2031000,
                 state       = :done,
-                cell_type   = :markdown,
-                folded      = true,
+                cell_type   = :code,
+                folded      = false,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_000000000009)),
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-00000000000a",
-                source_code = "2^100",
-                runtime_ns  = 1272459,
+                source_code = "md\"\"\"\n## Errors\n\nWhen a cell throws, Sessions renders the error inline with the\nexception type, the message, and a collapsed stack trace. Click the\ntrace to expand it. The cell below deliberately throws — it's the\nsame rendering a typo in your own code would produce.\n\"\"\"",
+                runtime_ns  = 248875,
                 state       = :done,
-                cell_type   = :code,
-                folded      = false,
+                cell_type   = :markdown,
+                folded      = true,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_00000000000a)),
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-00000000000c",
-                source_code = "Dict(\n    :name => \"Sessions.jl\",\n    :version => v\"0.1.0\",\n    :status => :alpha,\n    :langs => [\"Julia\", \"JavaScript\", \"WASM\"],\n)",
-                runtime_ns  = 59956167,
-                state       = :done,
+                source_code = "sqrt(-1)",
+                runtime_ns  = 558328250,
+                state       = :errored,
                 cell_type   = :code,
                 folded      = false,
                 show_output = true,
@@ -312,23 +325,13 @@ module MarkdownMod
             ),
             CellDiv(
                 cell_id     = "30000000-0000-0000-0000-00000000000d",
-                source_code = "(name = \"Alice\", age = 30, roles = [:admin, :editor], active = true)",
-                runtime_ns  = 1915708,
+                source_code = "md\"\"\"\n!!! warning \"WASM compile errors look different\"\n    In published notebooks, some cells compile to WebAssembly. If\n    WasmTarget can't lower a cell (an unsupported Base method, a\n    package with no WASM coverage), Therapy skips WASM emission for\n    that `@island` and paints a red **'⚠ WASM compile failed'**\n    banner over the cell at runtime. The cell's last known output\n    still renders as static SSR, but interactive updates from\n    upstream bonds stop propagating to it. Sibling islands keep\n    hydrating normally.\n\"\"\"",
+                runtime_ns  = 305042,
                 state       = :done,
-                cell_type   = :code,
-                folded      = false,
+                cell_type   = :markdown,
+                folded      = true,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_00000000000d)),
-            ),
-            CellDiv(
-                cell_id     = "30000000-0000-0000-0000-00000000000e",
-                source_code = "sqrt(-1)",
-                runtime_ns  = 559744125,
-                state       = :errored,
-                cell_type   = :code,
-                folded      = false,
-                show_output = true,
-                output      = RawHtml(render_value(_cell__30000000_0000_0000_0000_00000000000e)),
             );
             assets_html = _NOTEBOOK_ASSETS_HTML,
         )

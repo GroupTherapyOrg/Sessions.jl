@@ -24,42 +24,54 @@ using SessionsUI: @bind, BoundSlider
 md"""
 # Reactivity
 
-Two sliders feed one memo. No callback wiring, no subscription plumbing
-— the reactive analyzer reads the cell body at extract time, spots
-`a` and `b` as bound signals, and compiles a
-`create_memo(() -> a() + b())`. Either slider moves, the memo re-runs,
-the rendered span updates.
+Two sliders feed two memos — sum and product. No callback wiring, no
+subscription plumbing. The reactive analyzer reads each cell body at
+extract time, spots `a` and `b` as bound signals, and compiles a
+`create_memo(() -> a() + b())` (and the same for the product).
 """
 
 # ╔═╡ 50000000-0000-0000-0000-000000000003
-@bind a BoundSlider(0:50; default=10)
+md"""
+## Two sliders, two memos
+"""
 
 # ╔═╡ 50000000-0000-0000-0000-000000000004
-@bind b BoundSlider(0:50; default=20)
+@bind a BoundSlider(0:50; default=10)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000005
-a + b
+@bind b BoundSlider(0:50; default=20)
 
 # ╔═╡ 50000000-0000-0000-0000-000000000006
-a * b
+a + b
 
 # ╔═╡ 50000000-0000-0000-0000-000000000007
+a * b
+
+# ╔═╡ 50000000-0000-0000-0000-000000000008
 md"""
-!!! info "Cross-island signals"
+## Cross-island signals
+
+!!! info "How `a` and `b` reach both memos"
     Each bond and each memo is its own `@island`, independently
     compiled and independently hydrated. The shared `a` and `b`
-    signals live at module scope as `const _a_signal = create_signal(10)`
-    and get captured by closure in every island that reads them.
-    Therapy's analyzer detects the shared names and emits a tiny
-    pub/sub bridge (`window.__therapy.set('a', v)`) so a slider move
-    broadcasts to every subscribed island in ~a frame.
+    signals live at module scope as
+    `const _a_signal = create_signal(10)` and get captured by
+    closure in every island that reads them. Therapy's analyzer
+    detects the shared names and emits a tiny pub/sub bridge
+    (`window.__therapy.set('a', v)`) so a slider move broadcasts to
+    every subscribed island in roughly one animation frame.
+"""
 
-!!! tip "Why per-cell islands"
+# ╔═╡ 50000000-0000-0000-0000-000000000009
+md"""
+## Why per-cell islands
+
+!!! tip "Isolation matters"
     If we packed every reactive cell into one monolithic island, a
     single cell WasmTarget can't compile (a `DataFrame` memo, say)
     would drop the whole notebook back to static SSR. Per-cell
     islands let the sum and product memos here keep hydrating even
-    if a sibling cell bails out.
+    if a sibling cell bails out with a red compile-failed banner.
 """
 
 # ╔═╡ Cell order:
@@ -69,6 +81,8 @@ md"""
 # ╟─50000000-0000-0000-0000-000000000001
 # ╟─50000000-0000-0000-0000-000000000003
 # ╟─50000000-0000-0000-0000-000000000004
-# ╠═50000000-0000-0000-0000-000000000005
+# ╟─50000000-0000-0000-0000-000000000005
 # ╠═50000000-0000-0000-0000-000000000006
-# ╟─50000000-0000-0000-0000-000000000007
+# ╠═50000000-0000-0000-0000-000000000007
+# ╟─50000000-0000-0000-0000-000000000008
+# ╟─50000000-0000-0000-0000-000000000009

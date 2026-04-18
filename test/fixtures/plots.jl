@@ -31,7 +31,8 @@ md"""
 
 WasmPlot figures compile to WebAssembly. Each plot cell becomes a
 `create_effect` that paints straight to a `<canvas>` — no SVG, no
-React, no server. Drag the slider and watch both plots redraw locally.
+React, no server. Drag the sliders and watch both plots redraw
+entirely in the browser.
 """
 
 # ╔═╡ 40000000-0000-0000-0000-000000000004
@@ -57,9 +58,14 @@ end
 nothing;
 
 # ╔═╡ 40000000-0000-0000-0000-000000000005
-@bind nbars BoundSlider(3:25; default=10)
+md"""
+## Bar chart
+"""
 
 # ╔═╡ 40000000-0000-0000-0000-000000000006
+@bind nbars BoundSlider(3:25; default=10)
+
+# ╔═╡ 40000000-0000-0000-0000-000000000007
 let
     fig = WP.Figure(size=(750, 360))
     ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares")
@@ -77,19 +83,24 @@ let
     fig
 end
 
-# ╔═╡ 40000000-0000-0000-0000-000000000007
+# ╔═╡ 40000000-0000-0000-0000-000000000008
 md"""
 !!! tip "Why canvas, not SVG"
-    Canvas lets WasmTarget avoid emitting large trees of DOM nodes on
-    every slider tick — a single `ctx.fillRect` call per bar beats
-    diffing hundreds of `<rect>` elements. The whole bar-chart effect
-    lands in well under 10 KB of WASM.
+    Canvas lets WasmTarget avoid emitting large trees of DOM nodes
+    on every slider tick — a single `ctx.fillRect` call per bar
+    beats diffing hundreds of `<rect>` elements. The whole bar-chart
+    effect lands in well under 10 KB of WASM.
 """
 
-# ╔═╡ 40000000-0000-0000-0000-000000000008
+# ╔═╡ 40000000-0000-0000-0000-000000000009
+md"""
+## Line chart
+"""
+
+# ╔═╡ 40000000-0000-0000-0000-00000000000a
 @bind npoints BoundSlider(5:40; default=18)
 
-# ╔═╡ 40000000-0000-0000-0000-000000000009
+# ╔═╡ 40000000-0000-0000-0000-00000000000b
 let
     fig = WP.Figure(size=(750, 360))
     ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="√i", title="Square roots")
@@ -107,11 +118,13 @@ let
     fig
 end
 
-# ╔═╡ 40000000-0000-0000-0000-00000000000a
+# ╔═╡ 40000000-0000-0000-0000-00000000000c
 md"""
+## How it works
+
 Both plots share the same compile pipeline: the extractor sees a
 `create_effect` body that ends in a `WP.Figure`, wraps it in a
-`Canvas` island, and lets WasmTarget lower the paint calls. Change
+`Canvas` island, and lets WasmTarget lower the paint calls. Move
 either slider and only the affected island's effect re-runs — the
 other plot doesn't re-render, doesn't re-layout, doesn't repaint.
 """
@@ -124,8 +137,10 @@ other plot doesn't re-render, doesn't re-layout, doesn't repaint.
 # ╟─40000000-0000-0000-0000-000000000001
 # ╟─40000000-0000-0000-0000-000000000004
 # ╟─40000000-0000-0000-0000-000000000005
-# ╠═40000000-0000-0000-0000-000000000006
-# ╟─40000000-0000-0000-0000-000000000007
+# ╟─40000000-0000-0000-0000-000000000006
+# ╠═40000000-0000-0000-0000-000000000007
 # ╟─40000000-0000-0000-0000-000000000008
-# ╠═40000000-0000-0000-0000-000000000009
+# ╟─40000000-0000-0000-0000-000000000009
 # ╟─40000000-0000-0000-0000-00000000000a
+# ╠═40000000-0000-0000-0000-00000000000b
+# ╟─40000000-0000-0000-0000-00000000000c

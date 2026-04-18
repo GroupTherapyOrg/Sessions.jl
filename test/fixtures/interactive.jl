@@ -36,19 +36,26 @@ both update in lockstep.
 
 # ╔═╡ 20000000-0000-0000-0000-000000000004
 md"""
-!!! info "Same source, three runtimes"
-    The `.jl` file you see here runs in three different ways without
-    modification:
+## Same source, three runtimes
+
+!!! info "How one `.jl` file runs in three places"
+    The notebook you see here runs unchanged in three different
+    environments:
 
     - **Sessions IDE** — cells re-run through a live Julia kernel
-      over WebSocket. Any Julia value that defines a
+      over WebSocket. Any Julia value with a
       `show(::MIME"text/html", …)` method just works.
     - **Plain script** — `julia interactive.jl` executes straight
       through. Bonds resolve to their default values; no
       interactivity.
     - **WASM publish** *(this page)* — every reactive cell compiles
-      to WebAssembly. Sliders drive signals in the browser, dependent
-      cells recompute locally, no kernel, no server.
+      to WebAssembly. Sliders drive signals in the browser,
+      dependents recompute locally, no kernel, no server.
+"""
+
+# ╔═╡ 20000000-0000-0000-0000-000000000005
+md"""
+## The slider and its memo
 """
 
 # ╔═╡ 20000000-0000-0000-0000-000000000006
@@ -59,11 +66,19 @@ n * n
 
 # ╔═╡ 20000000-0000-0000-0000-000000000007
 md"""
-The memo above is `n * n` — pure integer arithmetic. The bar chart
-below is `i²` for `i ∈ 1:n`. Both recompute from the same slider.
+The memo above is `n * n` — pure integer arithmetic. The reactive
+analyzer sees the cell body mentions the bound signal `n`, so it
+wraps the body in a `create_memo(() -> n() * n())`. Every time the
+slider moves, the memo re-runs and the rendered `<span>` updates in
+place.
 """
 
 # ╔═╡ 20000000-0000-0000-0000-000000000008
+md"""
+## The bar chart
+"""
+
+# ╔═╡ 20000000-0000-0000-0000-00000000000a
 function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
     glue = WP.canvas2d_js_glue()
     js   = WP.generate_js_render(fig)
@@ -85,7 +100,7 @@ function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
 end
 nothing;
 
-# ╔═╡ 20000000-0000-0000-0000-000000000009
+# ╔═╡ 20000000-0000-0000-0000-00000000000b
 let
     fig = WP.Figure(size=(750, 360))
     ax  = WP.Axis(fig[1, 1]; xlabel="i", ylabel="i²", title="Squares")
@@ -105,7 +120,39 @@ end
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000c
 md"""
-!!! info "Under the hood"
+The bar chart above is a `create_effect` that paints `i²` for
+`i ∈ 1:n` straight onto a `<canvas>`. No SVG, no virtual DOM diff
+— the slider moves, the effect re-runs, the canvas is cleared and
+repainted in a single frame.
+"""
+
+# ╔═╡ 20000000-0000-0000-0000-00000000000d
+md"""
+## When a cell can't compile
+
+!!! warning "WASM compile errors"
+    Some cells can't compile to WebAssembly — a `DataFrame`
+    memo, a plotting package without WASM coverage, a Base method
+    WasmTarget hasn't lowered yet. When that happens:
+
+    - Therapy logs the compile error at build time.
+    - A red **'⚠ WASM compile failed'** banner appears over the
+      affected cell at runtime.
+    - The cell's last SSR output still renders (so the reader sees
+      *something*), but slider moves no longer propagate to it —
+      the island is frozen.
+    - Sibling islands keep hydrating normally. One broken cell
+      doesn't poison the rest of the notebook.
+
+    The cell source round-trips 1:1 regardless of compile outcome,
+    so the reader can always inspect what the notebook meant to do.
+"""
+
+# ╔═╡ 20000000-0000-0000-0000-00000000000e
+md"""
+## Under the hood
+
+!!! info "What the extractor emits"
     `Sessions.extract_notebook(...)` emits one `@island` per reactive
     cell. Each `@bind` becomes a `create_signal` plus a native Therapy
     `Input(:value => sig, :on_input => set_sig)` — no `<bond>` bridge,
@@ -113,12 +160,6 @@ md"""
     (rendered as a `Span`) or a `create_effect + Canvas` (for plots).
     Bare references to bond names (`n`) are rewritten to signal reads
     (`n()`) so updates flow.
-
-    When WasmTarget can't compile an island, Therapy logs the error
-    and renders that island as static SSR — sliders display but stay
-    frozen. The rest of the notebook keeps hydrating normally. The
-    cell source round-trips 1:1 either way, so a reader can always
-    inspect what the notebook meant to do.
 """
 
 # ╔═╡ Cell order:
@@ -128,9 +169,13 @@ md"""
 # ╠═20000000-0000-0000-0000-000000000003
 # ╟─20000000-0000-0000-0000-000000000001
 # ╟─20000000-0000-0000-0000-000000000004
+# ╟─20000000-0000-0000-0000-000000000005
 # ╟─20000000-0000-0000-0000-000000000006
 # ╠═1b95c056-9b5a-456f-8007-177b202a1581
 # ╟─20000000-0000-0000-0000-000000000007
 # ╟─20000000-0000-0000-0000-000000000008
-# ╠═20000000-0000-0000-0000-000000000009
+# ╟─20000000-0000-0000-0000-00000000000a
+# ╠═20000000-0000-0000-0000-00000000000b
 # ╟─20000000-0000-0000-0000-00000000000c
+# ╟─20000000-0000-0000-0000-00000000000d
+# ╟─20000000-0000-0000-0000-00000000000e

@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/welcome.jl
-# Date   : 2026-04-18T12:21:59.385
+# Date   : 2026-04-18T12:32:08.456
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -45,9 +45,7 @@ module WelcomeMod
             md"""
             # Sessions.jl
             
-            A reactive Julia notebook for the terminal *and* the browser. Every cell
-            on this page is hidden — toggle the eye on the left of any cell to peek
-            at its source.
+            A reactive Julia notebook for the terminal *and* the browser.
             """
         end
     catch _e
@@ -57,6 +55,8 @@ module WelcomeMod
     const _cell__10000000_0000_0000_0000_000000000002 = try
         let
             md"""
+            ## What this is
+            
             !!! info "You're reading a live notebook"
                 This page isn't static HTML. Each reactive cell is compiled to
                 WebAssembly and runs directly in your browser — no server, no
@@ -71,9 +71,21 @@ module WelcomeMod
     const _cell__10000000_0000_0000_0000_000000000003 = try
         let
             md"""
-            Markdown cells can interpolate live Julia with `\$(…)`. As of this
-            render, Julia is **$(VERSION)** and today is
-            **$(Dates.dayname(Dates.today())), $(Dates.monthname(Dates.today())) $(Dates.day(Dates.today()))**.
+            ## Cell visibility
+            
+            Notebooks have two kinds of cells, with different visibility rules:
+            
+            - **Hidden by default** (markdown cells, like this one). These are
+              *always* hidden in the published view — there's no reveal toggle
+              because authors sometimes hide cells to keep implementation details
+              private. Every markdown cell on this page is one of these.
+            - **Visible by default** (code cells). You'll see the source and the
+              output side-by-side. An eye icon appears on the left — click it
+              to hide the source if you want to focus on the output only, and
+              click again to bring it back.
+            
+            The `greeting` cell below is visible by default. Try toggling the eye
+            next to it.
             """
         end
     catch _e
@@ -91,11 +103,25 @@ module WelcomeMod
     const _cell__10000000_0000_0000_0000_000000000005 = try
         let
             md"""
-            !!! tip "Where to next"
+            Markdown cells can interpolate live Julia with `\$(…)`. As of this
+            render, Julia is **$(VERSION)** and today is
+            **$(Dates.dayname(Dates.today())), $(Dates.monthname(Dates.today())) $(Dates.day(Dates.today()))**.
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 10000000-0000-0000-0000-000000000006 (static) ──
+    const _cell__10000000_0000_0000_0000_000000000006 = try
+        let
+            md"""
+            ## Where to next
+            
+            !!! tip "Pick a notebook"
                 - **Markdown** — every markdown feature Sessions renders, with
                   admonitions, tables, math, and live interpolation.
-                - **Interactive** — `@bind`, sliders, and reactive cells driven by
-                  the same signal engine that powers the IDE.
+                - **Interactive** — `@bind`, sliders, and reactive cells driven
+                  by the same signal engine that powers the IDE.
                 - **Plots** — slider-linked WasmPlot figures that redraw entirely
                   in the browser.
                 - **Reactivity** — multiple widgets feeding a single computed
@@ -110,8 +136,8 @@ module WelcomeMod
         render_published_notebook(
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000001",
-                source_code = "md\"\"\"\n# Sessions.jl\n\nA reactive Julia notebook for the terminal *and* the browser. Every cell\non this page is hidden — toggle the eye on the left of any cell to peek\nat its source.\n\"\"\"",
-                runtime_ns  = 2522167,
+                source_code = "md\"\"\"\n# Sessions.jl\n\nA reactive Julia notebook for the terminal *and* the browser.\n\"\"\"",
+                runtime_ns  = 2335625,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -120,8 +146,8 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000002",
-                source_code = "md\"\"\"\n!!! info \"You're reading a live notebook\"\n    This page isn't static HTML. Each reactive cell is compiled to\n    WebAssembly and runs directly in your browser — no server, no\n    round-trip, no Jupyter. Open the devtools network tab and move a\n    slider in the **Interactive** notebook: nothing leaves the page.\n\"\"\"",
-                runtime_ns  = 3852917,
+                source_code = "md\"\"\"\n## What this is\n\n!!! info \"You're reading a live notebook\"\n    This page isn't static HTML. Each reactive cell is compiled to\n    WebAssembly and runs directly in your browser — no server, no\n    round-trip, no Jupyter. Open the devtools network tab and move a\n    slider in the **Interactive** notebook: nothing leaves the page.\n\"\"\"",
+                runtime_ns  = 4361917,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -130,8 +156,8 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000003",
-                source_code = "md\"\"\"\nMarkdown cells can interpolate live Julia with `\\\$(…)`. As of this\nrender, Julia is **\$(VERSION)** and today is\n**\$(Dates.dayname(Dates.today())), \$(Dates.monthname(Dates.today())) \$(Dates.day(Dates.today()))**.\n\"\"\"",
-                runtime_ns  = 20209208,
+                source_code = "md\"\"\"\n## Cell visibility\n\nNotebooks have two kinds of cells, with different visibility rules:\n\n- **Hidden by default** (markdown cells, like this one). These are\n  *always* hidden in the published view — there's no reveal toggle\n  because authors sometimes hide cells to keep implementation details\n  private. Every markdown cell on this page is one of these.\n- **Visible by default** (code cells). You'll see the source and the\n  output side-by-side. An eye icon appears on the left — click it\n  to hide the source if you want to focus on the output only, and\n  click again to bring it back.\n\nThe `greeting` cell below is visible by default. Try toggling the eye\nnext to it.\n\"\"\"",
+                runtime_ns  = 465333,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -141,7 +167,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000004",
                 source_code = "greeting = \"Hello from a real Julia kernel.\"",
-                runtime_ns  = 211292,
+                runtime_ns  = 228500,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -150,13 +176,23 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000005",
-                source_code = "md\"\"\"\n!!! tip \"Where to next\"\n    - **Markdown** — every markdown feature Sessions renders, with\n      admonitions, tables, math, and live interpolation.\n    - **Interactive** — `@bind`, sliders, and reactive cells driven by\n      the same signal engine that powers the IDE.\n    - **Plots** — slider-linked WasmPlot figures that redraw entirely\n      in the browser.\n    - **Reactivity** — multiple widgets feeding a single computed\n      output, zero callback wiring.\n\"\"\"",
-                runtime_ns  = 491250,
+                source_code = "md\"\"\"\nMarkdown cells can interpolate live Julia with `\\\$(…)`. As of this\nrender, Julia is **\$(VERSION)** and today is\n**\$(Dates.dayname(Dates.today())), \$(Dates.monthname(Dates.today())) \$(Dates.day(Dates.today()))**.\n\"\"\"",
+                runtime_ns  = 21825000,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000005)),
+            ),
+            CellDiv(
+                cell_id     = "10000000-0000-0000-0000-000000000006",
+                source_code = "md\"\"\"\n## Where to next\n\n!!! tip \"Pick a notebook\"\n    - **Markdown** — every markdown feature Sessions renders, with\n      admonitions, tables, math, and live interpolation.\n    - **Interactive** — `@bind`, sliders, and reactive cells driven\n      by the same signal engine that powers the IDE.\n    - **Plots** — slider-linked WasmPlot figures that redraw entirely\n      in the browser.\n    - **Reactivity** — multiple widgets feeding a single computed\n      output, zero callback wiring.\n\"\"\"",
+                runtime_ns  = 516750,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__10000000_0000_0000_0000_000000000006)),
             );
             assets_html = _NOTEBOOK_ASSETS_HTML,
         )

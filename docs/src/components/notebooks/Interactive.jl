@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/interactive.jl
-# Date   : 2026-04-18T12:22:14.029
+# Date   : 2026-04-18T12:32:23.252
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -60,19 +60,31 @@ module InteractiveMod
     const _cell__20000000_0000_0000_0000_000000000004 = try
         let
             md"""
-            !!! info "Same source, three runtimes"
-                The `.jl` file you see here runs in three different ways without
-                modification:
+            ## Same source, three runtimes
+            
+            !!! info "How one `.jl` file runs in three places"
+                The notebook you see here runs unchanged in three different
+                environments:
             
                 - **Sessions IDE** — cells re-run through a live Julia kernel
-                  over WebSocket. Any Julia value that defines a
+                  over WebSocket. Any Julia value with a
                   `show(::MIME"text/html", …)` method just works.
                 - **Plain script** — `julia interactive.jl` executes straight
                   through. Bonds resolve to their default values; no
                   interactivity.
                 - **WASM publish** *(this page)* — every reactive cell compiles
-                  to WebAssembly. Sliders drive signals in the browser, dependent
-                  cells recompute locally, no kernel, no server.
+                  to WebAssembly. Sliders drive signals in the browser,
+                  dependents recompute locally, no kernel, no server.
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 20000000-0000-0000-0000-000000000005 (static) ──
+    const _cell__20000000_0000_0000_0000_000000000005 = try
+        let
+            md"""
+            ## The slider and its memo
             """
         end
     catch _e
@@ -98,8 +110,11 @@ module InteractiveMod
     const _cell__20000000_0000_0000_0000_000000000007 = try
         let
             md"""
-            The memo above is `n * n` — pure integer arithmetic. The bar chart
-            below is `i²` for `i ∈ 1:n`. Both recompute from the same slider.
+            The memo above is `n * n` — pure integer arithmetic. The reactive
+            analyzer sees the cell body mentions the bound signal `n`, so it
+            wraps the body in a `create_memo(() -> n() * n())`. Every time the
+            slider moves, the memo re-runs and the rendered `<span>` updates in
+            place.
             """
         end
     catch _e
@@ -107,6 +122,16 @@ module InteractiveMod
     end
     # ── Cell 20000000-0000-0000-0000-000000000008 (static) ──
     const _cell__20000000_0000_0000_0000_000000000008 = try
+        let
+            md"""
+            ## The bar chart
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 20000000-0000-0000-0000-00000000000a (static) ──
+    const _cell__20000000_0000_0000_0000_00000000000a = try
         let
             function Base.show(io::IO, ::MIME"text/html", fig::WP.Figure)
                 glue = WP.canvas2d_js_glue()
@@ -132,8 +157,8 @@ module InteractiveMod
     catch _e
         _e
     end
-    # ── Cell 20000000-0000-0000-0000-000000000009 (reactive) ──
-    const _cell__20000000_0000_0000_0000_000000000009 = try
+    # ── Cell 20000000-0000-0000-0000-00000000000b (reactive) ──
+    const _cell__20000000_0000_0000_0000_00000000000b = try
         let
             let
                 fig = WP.Figure(size=(750, 360))
@@ -159,7 +184,49 @@ module InteractiveMod
     const _cell__20000000_0000_0000_0000_00000000000c = try
         let
             md"""
-            !!! info "Under the hood"
+            The bar chart above is a `create_effect` that paints `i²` for
+            `i ∈ 1:n` straight onto a `<canvas>`. No SVG, no virtual DOM diff
+            — the slider moves, the effect re-runs, the canvas is cleared and
+            repainted in a single frame.
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 20000000-0000-0000-0000-00000000000d (static) ──
+    const _cell__20000000_0000_0000_0000_00000000000d = try
+        let
+            md"""
+            ## When a cell can't compile
+            
+            !!! warning "WASM compile errors"
+                Some cells can't compile to WebAssembly — a `DataFrame`
+                memo, a plotting package without WASM coverage, a Base method
+                WasmTarget hasn't lowered yet. When that happens:
+            
+                - Therapy logs the compile error at build time.
+                - A red **'⚠ WASM compile failed'** banner appears over the
+                  affected cell at runtime.
+                - The cell's last SSR output still renders (so the reader sees
+                  *something*), but slider moves no longer propagate to it —
+                  the island is frozen.
+                - Sibling islands keep hydrating normally. One broken cell
+                  doesn't poison the rest of the notebook.
+            
+                The cell source round-trips 1:1 regardless of compile outcome,
+                so the reader can always inspect what the notebook meant to do.
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 20000000-0000-0000-0000-00000000000e (static) ──
+    const _cell__20000000_0000_0000_0000_00000000000e = try
+        let
+            md"""
+            ## Under the hood
+            
+            !!! info "What the extractor emits"
                 `Sessions.extract_notebook(...)` emits one `@island` per reactive
                 cell. Each `@bind` becomes a `create_signal` plus a native Therapy
                 `Input(:value => sig, :on_input => set_sig)` — no `<bond>` bridge,
@@ -167,12 +234,6 @@ module InteractiveMod
                 (rendered as a `Span`) or a `create_effect + Canvas` (for plots).
                 Bare references to bond names (`n`) are rewritten to signal reads
                 (`n()`) so updates flow.
-            
-                When WasmTarget can't compile an island, Therapy logs the error
-                and renders that island as static SSR — sliders display but stay
-                frozen. The rest of the notebook keeps hydrating normally. The
-                cell source round-trips 1:1 either way, so a reader can always
-                inspect what the notebook meant to do.
             """
         end
     catch _e
@@ -192,7 +253,7 @@ module InteractiveMod
         CellDiv(
             cell_id     = "20000000-0000-0000-0000-000000000006",
             source_code = "@bind n BoundSlider(2:30; default=8)",
-            runtime_ns  = 113272750,
+            runtime_ns  = 129771708,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -216,7 +277,7 @@ module InteractiveMod
         CellDiv(
             cell_id     = "1b95c056-9b5a-456f-8007-177b202a1581",
             source_code = "n * n",
-            runtime_ns  = 183209,
+            runtime_ns  = 175583,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -226,7 +287,7 @@ module InteractiveMod
         )
     end
 
-    @island function _Reactive__20000000_0000_0000_0000_000000000009()
+    @island function _Reactive__20000000_0000_0000_0000_00000000000b()
         n, _ = _n_signal
         create_effect(() -> begin
             fig = WP.Figure(size = (750, 360))
@@ -245,9 +306,9 @@ module InteractiveMod
             WP.render!(fig)
         end)
         CellDiv(
-            cell_id     = "20000000-0000-0000-0000-000000000009",
+            cell_id     = "20000000-0000-0000-0000-00000000000b",
             source_code = "let\n    fig = WP.Figure(size=(750, 360))\n    ax  = WP.Axis(fig[1, 1]; xlabel=\"i\", ylabel=\"i²\", title=\"Squares\")\n    xs = Float64[]\n    ys = Float64[]\n    i = Int64(1)\n    count = Int64(n)\n    while i <= count\n        xi = Float64(i)\n        push!(xs, xi)\n        push!(ys, xi * xi)\n        i = i + Int64(1)\n    end\n    WP.barplot!(ax, xs, ys; color=:red)\n    fig\nend",
-            runtime_ns  = 45352083,
+            runtime_ns  = 45565583,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -262,7 +323,7 @@ module InteractiveMod
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Interactive\n\nA live demo of `@bind` + `BoundSlider` driving two reactive dependents:\na numeric memo and a WasmPlot bar chart. Drag the slider and watch\nboth update in lockstep.\n\"\"\"",
-                runtime_ns  = 2247417,
+                runtime_ns  = 2181875,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -271,20 +332,30 @@ module InteractiveMod
             ),
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000004",
-                source_code = "md\"\"\"\n!!! info \"Same source, three runtimes\"\n    The `.jl` file you see here runs in three different ways without\n    modification:\n\n    - **Sessions IDE** — cells re-run through a live Julia kernel\n      over WebSocket. Any Julia value that defines a\n      `show(::MIME\"text/html\", …)` method just works.\n    - **Plain script** — `julia interactive.jl` executes straight\n      through. Bonds resolve to their default values; no\n      interactivity.\n    - **WASM publish** *(this page)* — every reactive cell compiles\n      to WebAssembly. Sliders drive signals in the browser, dependent\n      cells recompute locally, no kernel, no server.\n\"\"\"",
-                runtime_ns  = 4429250,
+                source_code = "md\"\"\"\n## Same source, three runtimes\n\n!!! info \"How one `.jl` file runs in three places\"\n    The notebook you see here runs unchanged in three different\n    environments:\n\n    - **Sessions IDE** — cells re-run through a live Julia kernel\n      over WebSocket. Any Julia value with a\n      `show(::MIME\"text/html\", …)` method just works.\n    - **Plain script** — `julia interactive.jl` executes straight\n      through. Bonds resolve to their default values; no\n      interactivity.\n    - **WASM publish** *(this page)* — every reactive cell compiles\n      to WebAssembly. Sliders drive signals in the browser,\n      dependents recompute locally, no kernel, no server.\n\"\"\"",
+                runtime_ns  = 4394667,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_000000000004)),
             ),
+            CellDiv(
+                cell_id     = "20000000-0000-0000-0000-000000000005",
+                source_code = "md\"\"\"\n## The slider and its memo\n\"\"\"",
+                runtime_ns  = 224208,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_000000000005)),
+            ),
             _Bond_n(),
             _Reactive__1b95c056_9b5a_456f_8007_177b202a1581(),
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000007",
-                source_code = "md\"\"\"\nThe memo above is `n * n` — pure integer arithmetic. The bar chart\nbelow is `i²` for `i ∈ 1:n`. Both recompute from the same slider.\n\"\"\"",
-                runtime_ns  = 262791,
+                source_code = "md\"\"\"\nThe memo above is `n * n` — pure integer arithmetic. The reactive\nanalyzer sees the cell body mentions the bound signal `n`, so it\nwraps the body in a `create_memo(() -> n() * n())`. Every time the\nslider moves, the memo re-runs and the rendered `<span>` updates in\nplace.\n\"\"\"",
+                runtime_ns  = 251083,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -293,24 +364,54 @@ module InteractiveMod
             ),
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-000000000008",
+                source_code = "md\"\"\"\n## The bar chart\n\"\"\"",
+                runtime_ns  = 158792,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_000000000008)),
+            ),
+            CellDiv(
+                cell_id     = "20000000-0000-0000-0000-00000000000a",
                 source_code = "function Base.show(io::IO, ::MIME\"text/html\", fig::WP.Figure)\n    glue = WP.canvas2d_js_glue()\n    js   = WP.generate_js_render(fig)\n    id   = \"wp_\" * string(hash(fig); base=16)\n    print(io, \"\"\"\n    <canvas id=\"\$(id)\" width=\"\$(fig.width)\" height=\"\$(fig.height)\"\n            style=\"border:1px solid var(--cell-border);border-radius:8px;background:#fff\"></canvas>\n    <script>(function(){\n      \$(glue)\n      var c = document.getElementById('\$(id)');\n      var dpr = window.devicePixelRatio||1;\n      c.width = \$(fig.width)*dpr; c.height = \$(fig.height)*dpr;\n      c.style.width='\$(fig.width)px'; c.style.height='\$(fig.height)px';\n      var ctx = c.getContext('2d'); ctx.scale(dpr,dpr);\n      var c2d = canvas2d_imports(ctx);\n      \$(js)\n    })();</script>\n    \"\"\")\nend\nnothing;",
-                runtime_ns  = 942416,
+                runtime_ns  = 705500,
                 state       = :done,
                 cell_type   = :code,
                 folded      = true,
                 show_output = false,
-                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_000000000008)),
+                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_00000000000a)),
             ),
-            _Reactive__20000000_0000_0000_0000_000000000009(),
+            _Reactive__20000000_0000_0000_0000_00000000000b(),
             CellDiv(
                 cell_id     = "20000000-0000-0000-0000-00000000000c",
-                source_code = "md\"\"\"\n!!! info \"Under the hood\"\n    `Sessions.extract_notebook(...)` emits one `@island` per reactive\n    cell. Each `@bind` becomes a `create_signal` plus a native Therapy\n    `Input(:value => sig, :on_input => set_sig)` — no `<bond>` bridge,\n    no WebSocket. Every bond-dependent cell becomes a `create_memo`\n    (rendered as a `Span`) or a `create_effect + Canvas` (for plots).\n    Bare references to bond names (`n`) are rewritten to signal reads\n    (`n()`) so updates flow.\n\n    When WasmTarget can't compile an island, Therapy logs the error\n    and renders that island as static SSR — sliders display but stay\n    frozen. The rest of the notebook keeps hydrating normally. The\n    cell source round-trips 1:1 either way, so a reader can always\n    inspect what the notebook meant to do.\n\"\"\"",
-                runtime_ns  = 335416,
+                source_code = "md\"\"\"\nThe bar chart above is a `create_effect` that paints `i²` for\n`i ∈ 1:n` straight onto a `<canvas>`. No SVG, no virtual DOM diff\n— the slider moves, the effect re-runs, the canvas is cleared and\nrepainted in a single frame.\n\"\"\"",
+                runtime_ns  = 251167,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_00000000000c)),
+            ),
+            CellDiv(
+                cell_id     = "20000000-0000-0000-0000-00000000000d",
+                source_code = "md\"\"\"\n## When a cell can't compile\n\n!!! warning \"WASM compile errors\"\n    Some cells can't compile to WebAssembly — a `DataFrame`\n    memo, a plotting package without WASM coverage, a Base method\n    WasmTarget hasn't lowered yet. When that happens:\n\n    - Therapy logs the compile error at build time.\n    - A red **'⚠ WASM compile failed'** banner appears over the\n      affected cell at runtime.\n    - The cell's last SSR output still renders (so the reader sees\n      *something*), but slider moves no longer propagate to it —\n      the island is frozen.\n    - Sibling islands keep hydrating normally. One broken cell\n      doesn't poison the rest of the notebook.\n\n    The cell source round-trips 1:1 regardless of compile outcome,\n    so the reader can always inspect what the notebook meant to do.\n\"\"\"",
+                runtime_ns  = 432250,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_00000000000d)),
+            ),
+            CellDiv(
+                cell_id     = "20000000-0000-0000-0000-00000000000e",
+                source_code = "md\"\"\"\n## Under the hood\n\n!!! info \"What the extractor emits\"\n    `Sessions.extract_notebook(...)` emits one `@island` per reactive\n    cell. Each `@bind` becomes a `create_signal` plus a native Therapy\n    `Input(:value => sig, :on_input => set_sig)` — no `<bond>` bridge,\n    no WebSocket. Every bond-dependent cell becomes a `create_memo`\n    (rendered as a `Span`) or a `create_effect + Canvas` (for plots).\n    Bare references to bond names (`n`) are rewritten to signal reads\n    (`n()`) so updates flow.\n\"\"\"",
+                runtime_ns  = 222333,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__20000000_0000_0000_0000_00000000000e)),
             );
             assets_html = _NOTEBOOK_ASSETS_HTML,
         )

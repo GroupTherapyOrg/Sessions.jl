@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/reactivity.jl
-# Date   : 2026-04-18T12:22:28.631
+# Date   : 2026-04-18T12:32:38.786
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -49,20 +49,21 @@ module ReactivityMod
             md"""
             # Reactivity
             
-            Two sliders feed one memo. No callback wiring, no subscription plumbing
-            — the reactive analyzer reads the cell body at extract time, spots
-            `a` and `b` as bound signals, and compiles a
-            `create_memo(() -> a() + b())`. Either slider moves, the memo re-runs,
-            the rendered span updates.
+            Two sliders feed two memos — sum and product. No callback wiring, no
+            subscription plumbing. The reactive analyzer reads each cell body at
+            extract time, spots `a` and `b` as bound signals, and compiles a
+            `create_memo(() -> a() + b())` (and the same for the product).
             """
         end
     catch _e
         _e
     end
-    # ── Cell 50000000-0000-0000-0000-000000000003 (bond) ──
+    # ── Cell 50000000-0000-0000-0000-000000000003 (static) ──
     const _cell__50000000_0000_0000_0000_000000000003 = try
         let
-            @bind a BoundSlider(0:50; default=10)
+            md"""
+            ## Two sliders, two memos
+            """
         end
     catch _e
         _e
@@ -70,15 +71,15 @@ module ReactivityMod
     # ── Cell 50000000-0000-0000-0000-000000000004 (bond) ──
     const _cell__50000000_0000_0000_0000_000000000004 = try
         let
-            @bind b BoundSlider(0:50; default=20)
+            @bind a BoundSlider(0:50; default=10)
         end
     catch _e
         _e
     end
-    # ── Cell 50000000-0000-0000-0000-000000000005 (reactive) ──
+    # ── Cell 50000000-0000-0000-0000-000000000005 (bond) ──
     const _cell__50000000_0000_0000_0000_000000000005 = try
         let
-            a + b
+            @bind b BoundSlider(0:50; default=20)
         end
     catch _e
         _e
@@ -86,30 +87,51 @@ module ReactivityMod
     # ── Cell 50000000-0000-0000-0000-000000000006 (reactive) ──
     const _cell__50000000_0000_0000_0000_000000000006 = try
         let
+            a + b
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 50000000-0000-0000-0000-000000000007 (reactive) ──
+    const _cell__50000000_0000_0000_0000_000000000007 = try
+        let
             a * b
         end
     catch _e
         _e
     end
-    # ── Cell 50000000-0000-0000-0000-000000000007 (static) ──
-    const _cell__50000000_0000_0000_0000_000000000007 = try
+    # ── Cell 50000000-0000-0000-0000-000000000008 (static) ──
+    const _cell__50000000_0000_0000_0000_000000000008 = try
         let
             md"""
-            !!! info "Cross-island signals"
+            ## Cross-island signals
+            
+            !!! info "How `a` and `b` reach both memos"
                 Each bond and each memo is its own `@island`, independently
                 compiled and independently hydrated. The shared `a` and `b`
-                signals live at module scope as `const _a_signal = create_signal(10)`
-                and get captured by closure in every island that reads them.
-                Therapy's analyzer detects the shared names and emits a tiny
-                pub/sub bridge (`window.__therapy.set('a', v)`) so a slider move
-                broadcasts to every subscribed island in ~a frame.
+                signals live at module scope as
+                `const _a_signal = create_signal(10)` and get captured by
+                closure in every island that reads them. Therapy's analyzer
+                detects the shared names and emits a tiny pub/sub bridge
+                (`window.__therapy.set('a', v)`) so a slider move broadcasts to
+                every subscribed island in roughly one animation frame.
+            """
+        end
+    catch _e
+        _e
+    end
+    # ── Cell 50000000-0000-0000-0000-000000000009 (static) ──
+    const _cell__50000000_0000_0000_0000_000000000009 = try
+        let
+            md"""
+            ## Why per-cell islands
             
-            !!! tip "Why per-cell islands"
+            !!! tip "Isolation matters"
                 If we packed every reactive cell into one monolithic island, a
                 single cell WasmTarget can't compile (a `DataFrame` memo, say)
                 would drop the whole notebook back to static SSR. Per-cell
                 islands let the sum and product memos here keep hydrating even
-                if a sibling cell bails out.
+                if a sibling cell bails out with a red compile-failed banner.
             """
         end
     catch _e
@@ -127,9 +149,9 @@ module ReactivityMod
         # a clean return value and compile identically across signal types.
         _ = create_memo(() -> a())
         CellDiv(
-            cell_id     = "50000000-0000-0000-0000-000000000003",
+            cell_id     = "50000000-0000-0000-0000-000000000004",
             source_code = "@bind a BoundSlider(0:50; default=10)",
-            runtime_ns  = 120864083,
+            runtime_ns  = 122471333,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -156,9 +178,9 @@ module ReactivityMod
         # a clean return value and compile identically across signal types.
         _ = create_memo(() -> b())
         CellDiv(
-            cell_id     = "50000000-0000-0000-0000-000000000004",
+            cell_id     = "50000000-0000-0000-0000-000000000005",
             source_code = "@bind b BoundSlider(0:50; default=20)",
-            runtime_ns  = 794875,
+            runtime_ns  = 884000,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -174,35 +196,16 @@ module ReactivityMod
         )
     end
 
-    @island function _Reactive__50000000_0000_0000_0000_000000000005()
-        a, _ = _a_signal
-        b, _ = _b_signal
-        _reactive__50000000_0000_0000_0000_000000000005 = create_memo(() -> begin
-            a() + b()
-        end)
-        CellDiv(
-            cell_id     = "50000000-0000-0000-0000-000000000005",
-            source_code = "a + b",
-            runtime_ns  = 127250,
-            state       = :done,
-            cell_type   = :code,
-            folded      = false,
-            show_output = true,
-            reactive    = true,
-            output      = Span(_reactive__50000000_0000_0000_0000_000000000005),
-        )
-    end
-
     @island function _Reactive__50000000_0000_0000_0000_000000000006()
         a, _ = _a_signal
         b, _ = _b_signal
         _reactive__50000000_0000_0000_0000_000000000006 = create_memo(() -> begin
-            a() * b()
+            a() + b()
         end)
         CellDiv(
             cell_id     = "50000000-0000-0000-0000-000000000006",
-            source_code = "a * b",
-            runtime_ns  = 174041,
+            source_code = "a + b",
+            runtime_ns  = 136208,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -212,31 +215,70 @@ module ReactivityMod
         )
     end
 
+    @island function _Reactive__50000000_0000_0000_0000_000000000007()
+        a, _ = _a_signal
+        b, _ = _b_signal
+        _reactive__50000000_0000_0000_0000_000000000007 = create_memo(() -> begin
+            a() * b()
+        end)
+        CellDiv(
+            cell_id     = "50000000-0000-0000-0000-000000000007",
+            source_code = "a * b",
+            runtime_ns  = 177958,
+            state       = :done,
+            cell_type   = :code,
+            folded      = false,
+            show_output = true,
+            reactive    = true,
+            output      = Span(_reactive__50000000_0000_0000_0000_000000000007),
+        )
+    end
+
     function Reactivity()
         render_published_notebook(
             CellDiv(
                 cell_id     = "50000000-0000-0000-0000-000000000001",
-                source_code = "md\"\"\"\n# Reactivity\n\nTwo sliders feed one memo. No callback wiring, no subscription plumbing\n— the reactive analyzer reads the cell body at extract time, spots\n`a` and `b` as bound signals, and compiles a\n`create_memo(() -> a() + b())`. Either slider moves, the memo re-runs,\nthe rendered span updates.\n\"\"\"",
-                runtime_ns  = 2255917,
+                source_code = "md\"\"\"\n# Reactivity\n\nTwo sliders feed two memos — sum and product. No callback wiring, no\nsubscription plumbing. The reactive analyzer reads each cell body at\nextract time, spots `a` and `b` as bound signals, and compiles a\n`create_memo(() -> a() + b())` (and the same for the product).\n\"\"\"",
+                runtime_ns  = 2274834,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
                 output      = RawHtml(render_value(_cell__50000000_0000_0000_0000_000000000001)),
             ),
-            _Bond_a(),
-            _Bond_b(),
-            _Reactive__50000000_0000_0000_0000_000000000005(),
-            _Reactive__50000000_0000_0000_0000_000000000006(),
             CellDiv(
-                cell_id     = "50000000-0000-0000-0000-000000000007",
-                source_code = "md\"\"\"\n!!! info \"Cross-island signals\"\n    Each bond and each memo is its own `@island`, independently\n    compiled and independently hydrated. The shared `a` and `b`\n    signals live at module scope as `const _a_signal = create_signal(10)`\n    and get captured by closure in every island that reads them.\n    Therapy's analyzer detects the shared names and emits a tiny\n    pub/sub bridge (`window.__therapy.set('a', v)`) so a slider move\n    broadcasts to every subscribed island in ~a frame.\n\n!!! tip \"Why per-cell islands\"\n    If we packed every reactive cell into one monolithic island, a\n    single cell WasmTarget can't compile (a `DataFrame` memo, say)\n    would drop the whole notebook back to static SSR. Per-cell\n    islands let the sum and product memos here keep hydrating even\n    if a sibling cell bails out.\n\"\"\"",
-                runtime_ns  = 4105042,
+                cell_id     = "50000000-0000-0000-0000-000000000003",
+                source_code = "md\"\"\"\n## Two sliders, two memos\n\"\"\"",
+                runtime_ns  = 241792,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
                 show_output = true,
-                output      = RawHtml(render_value(_cell__50000000_0000_0000_0000_000000000007)),
+                output      = RawHtml(render_value(_cell__50000000_0000_0000_0000_000000000003)),
+            ),
+            _Bond_a(),
+            _Bond_b(),
+            _Reactive__50000000_0000_0000_0000_000000000006(),
+            _Reactive__50000000_0000_0000_0000_000000000007(),
+            CellDiv(
+                cell_id     = "50000000-0000-0000-0000-000000000008",
+                source_code = "md\"\"\"\n## Cross-island signals\n\n!!! info \"How `a` and `b` reach both memos\"\n    Each bond and each memo is its own `@island`, independently\n    compiled and independently hydrated. The shared `a` and `b`\n    signals live at module scope as\n    `const _a_signal = create_signal(10)` and get captured by\n    closure in every island that reads them. Therapy's analyzer\n    detects the shared names and emits a tiny pub/sub bridge\n    (`window.__therapy.set('a', v)`) so a slider move broadcasts to\n    every subscribed island in roughly one animation frame.\n\"\"\"",
+                runtime_ns  = 5112125,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__50000000_0000_0000_0000_000000000008)),
+            ),
+            CellDiv(
+                cell_id     = "50000000-0000-0000-0000-000000000009",
+                source_code = "md\"\"\"\n## Why per-cell islands\n\n!!! tip \"Isolation matters\"\n    If we packed every reactive cell into one monolithic island, a\n    single cell WasmTarget can't compile (a `DataFrame` memo, say)\n    would drop the whole notebook back to static SSR. Per-cell\n    islands let the sum and product memos here keep hydrating even\n    if a sibling cell bails out with a red compile-failed banner.\n\"\"\"",
+                runtime_ns  = 327500,
+                state       = :done,
+                cell_type   = :markdown,
+                folded      = true,
+                show_output = true,
+                output      = RawHtml(render_value(_cell__50000000_0000_0000_0000_000000000009)),
             );
             assets_html = _NOTEBOOK_ASSETS_HTML,
         )
