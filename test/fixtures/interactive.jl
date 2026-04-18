@@ -157,7 +157,13 @@ let
 end
 
 # ╔═╡ d4e88179-6c23-4713-abe8-5c18e8c94497
-@bind l BoundSlider(1:0.5:15; default=7.5)
+# Integer range. WasmTarget currently has an f64-global-to-local type-
+# tracking bug that trips wasm-opt validation for Float64 bond signals
+# ("local.set's value type must be correct"), so we use an Int slider
+# here while that's getting fixed upstream. The extractor emits the
+# same native-Input two-way binding; shared_name detection works
+# identically to the `n` slider above.
+@bind l BoundSlider(1:15; default=7)
 
 # ╔═╡ 20000000-0000-0000-0000-00000000000a
 md"""
