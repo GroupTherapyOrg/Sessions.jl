@@ -416,27 +416,53 @@ function _rewrite_iter(iter, bonds::Set{Symbol})
 end
 
 """
+True if `code` uses a package that is **known** to be incompatible
+with WasmTarget — not a heuristic, a hard fact about where Julia
+stdlibs + common ecosystem packages currently stand:
+
+  - `DataFrame(` / `DataFrame{`  DataFrames.jl is column-storage +
+     PrettyTables; none of that exists in WasmTarget's method cover.
+  - `md"…"`                     Markdown macro expands to parser
+     machinery + html rendering that's not in coverage either.
+
+Cells matching these patterns would turn into malformed WASM when
+WasmTarget tries to lower them, which then either crashes wasm-opt
+("popping from empty stack", our exact symptom) OR even if it slips
+past validation it crashes on the first instantiation. Either way,
+ONE such cell in the `@island` kills reactivity for every OTHER
+bond-dependent cell, because Therapy has one compile unit per
+island. To keep the sibling cells reactive we freeze these at the
+bond default with a `:wasm_failed` band, while every OTHER reactive
+cell (simple arithmetic, WasmPlot closures, etc.) is still emitted
+untouched and handed to WasmTarget. This isn't the old heuristic
+wall — broadcasts, string-interp, and friends all still go through.
+"""
+function _is_known_incompatible_body(code::AbstractString)::Bool
+    code = _strip_comments_linewise(code)
+    occursin(r"\bDataFrame\s*[\(\{]", code) && return true
+    occursin(r"\bmd\"", code)               && return true
+    return false
+end
+
+"""
 Translate a bond-dependent cell into declarations + output expression
 for embedding in the @island body.
 
-The extractor does NOT preemptively refuse to translate a cell — every
-reactive cell is emitted as `create_memo` / `create_effect` (or a
-Canvas-backed effect for WasmPlot cells) and WasmTarget decides at
-build time whether the closure compiles. If the whole @island fails
-to compile, Therapy logs the warning and falls back to SSR-only
-(sliders frozen at default). Individual cells aren't gated by
-heuristics at extract time — the translator's job is to emit the
-reactive shape, not to guess what the compiler accepts.
-
-The only "fallback" is a parse failure: if the cell body isn't valid
-Julia we can't rewrite its AST, so we bake the frozen output and
-flag `:wasm_failed`. This is rare in practice (Pluto notebooks
-already gate on parseability).
+Extractor default: emit every reactive cell as `create_memo` /
+`create_effect` and let WasmTarget decide. The only preemptive
+walling is for `_is_known_incompatible_body` patterns (DataFrames,
+Markdown) — if left as a live memo, these would take the whole
+`@island` down with them (wasm-opt rejects the malformed bytecode,
+Therapy skips WASM for EVERY cell in that island). Walling just
+those known-impossible cells keeps their siblings reactive.
 """
 function translate_reactive(cc::CellClass, bonds::Set{Symbol})::ReactiveEmit
     code    = String(strip(cc.cell.code))
     suffix  = _id_suffix(cc.cell.id)
     memo_id = "_reactive_$(suffix)"
+
+    _is_known_incompatible_body(code) && return ReactiveEmit(:wall, "",
+        "RawHtml(render_value(_cell_$(suffix)))")
 
     body_expr = try
         Base.Meta.parse("begin\n$(code)\nend")
