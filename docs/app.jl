@@ -46,18 +46,15 @@ app = App(
 Therapy.load_app!(app)
 
 # =============================================================================
-# Auto-discover Sessions-extracted notebooks
+# Register routes for Sessions-extracted notebooks
 # =============================================================================
 # Each .jl file under docs/src/components/notebooks/ is a self-contained
-# Therapy component (output of `Sessions.extract_notebook(...)`). They
-# live in components/ — not their own tree — because that's exactly
-# what they are: regular Therapy components. Shadcn-style.
-#
-# For every file `Foo.jl` we:
-#   1. Include it into Main.TherapyApp so its `function Foo()` is in scope.
-#   2. Register a route at /notebooks/<slug>/ pointing at that function.
-#   3. Add the slug → function entry to the global `EXTRACTED_NOTEBOOKS`
-#      dict the gallery + sidebar iterate (PageComponents.jl).
+# Therapy component (output of `Sessions.extract_notebook(...)`).
+# `Therapy.load_app!` above walks `components/` recursively, so the
+# notebook files are already included into Main.TherapyApp and their
+# `@island` definitions are in the island registry. All we need to
+# do here is wire up the /notebooks/<slug>/ routes + expose the
+# slug → function map to the gallery + sidebar (PageComponents.jl).
 #
 # Slug = lowercased filename without .jl. Dropping a freshly-extracted
 # notebook in the dir + restarting picks it up automatically.
@@ -69,46 +66,27 @@ let extracted_dir = joinpath(@__DIR__, "src", "components", "notebooks")
         host = isdefined(Main, :TherapyApp) ? getfield(Main, :TherapyApp) : Main
         for file in sort(readdir(extracted_dir))
             endswith(file, ".jl") || continue
-            path = joinpath(extracted_dir, file)
-            name_sym = Symbol(splitext(file)[1])      # "Welcome.jl" → :Welcome
+            name_sym = Symbol(splitext(file)[1])       # "Welcome.jl" → :Welcome
             slug = lowercase(String(name_sym))         # :Welcome → "welcome"
             try
-                Base.include(host, path)
-                # World-age dance: the function we just `include`d
-                # is in a later world than this loop, so a bare
-                # `getfield` triggers Julia 1.12's strict-binding
-                # warning. invokelatest does the right thing.
+                # World-age dance: the @island definition reached its
+                # final world AFTER `Therapy.load_app!` returned, so a
+                # bare `getfield` triggers Julia 1.12's strict-binding
+                # warning. `invokelatest` does the right thing.
                 raw = Base.invokelatest(getfield, host, name_sym)
-                # Extracted notebooks now export an `@island` (an
-                # IslandDef). Therapy routes + EXTRACTED_NOTEBOOKS both
-                # expect a plain Function. Wrap the island in a closure
-                # that calls it (IslandDef is callable but fails the
-                # ::Function conversion on `push!`). Plain functions
-                # (Welcome-style, if a notebook has zero bonds and we
-                # ever emit one without @island) pass straight through.
+                # Extracted notebooks export an `@island` (IslandDef).
+                # Routes + EXTRACTED_NOTEBOOKS both expect a plain
+                # Function — wrap the IslandDef in a thunk so the
+                # ::Function conversion on `push!(routes, …)` succeeds.
                 fn = raw isa Function ? raw : (() -> Base.invokelatest(raw))
                 EXTRACTED_NOTEBOOKS[slug] = fn
                 push!(app.routes, "/notebooks/$(slug)/" => fn)
                 println("  Registered extracted notebook: /notebooks/$(slug)/  ← $(file)")
             catch e
-                @warn "[docs] Failed to load extracted notebook" file=path exception=e
+                @warn "[docs] Failed to register extracted notebook" file=file exception=e
             end
         end
     end
-end
-
-# Extracted notebooks register @island functions at `Base.include` time
-# (Bond widgets + reactive cell shells). That happens AFTER
-# `Therapy.load_app!` above snapshotted the island registry into
-# `app.interactive`, so without a re-discovery pass Therapy's build
-# step sees zero extracted islands and skips WASM compilation for
-# them. Re-merge now so slider widgets + reactive cells actually
-# hydrate in the browser (signal plumbing depends on it).
-let existing = Set(ic.name for ic in app.interactive)
-    for island in Therapy.discover_islands()
-        island.name ∉ existing && push!(app.interactive, island)
-    end
-    println("  Interactive components after notebook discovery: $(length(app.interactive))")
 end
 
 # =============================================================================
