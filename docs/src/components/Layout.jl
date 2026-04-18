@@ -22,8 +22,14 @@ function Layout(content)
         # notebook component carries its own styling + CM renderer, so
         # the Layout doesn't need to pre-wire them. Pages that don't
         # render a notebook incur zero cost.
-        # Nav
-        Nav(:class => "border-b border-warm-200 dark:border-warm-800 px-6 py-4",
+        # Nav — sticky at the top of the viewport so the sidebars
+        # have a fixed anchor they can slot beneath. Matches the
+        # canonical docs layout (Astro Starlight / Vercel /
+        # Supabase): top nav always visible, sidebars scroll
+        # independently. `backdrop-blur` + translucent bg so content
+        # scrolling behind stays faintly visible. `z-40` keeps it
+        # above the sidebars' sticky content.
+        Nav(:class => "sticky top-0 z-40 border-b border-warm-200 dark:border-warm-800 px-6 py-4 bg-warm-100/80 dark:bg-warm-950/80 backdrop-blur supports-[backdrop-filter]:bg-warm-100/60 supports-[backdrop-filter]:dark:bg-warm-950/60",
             Div(:class => "max-w-5xl mx-auto flex items-center justify-between",
                 SessionsWordmark(),
                 Div(:class => "flex items-center gap-6",
@@ -54,25 +60,29 @@ function Layout(content)
         MainEl(:id => "page-content", :class => "flex-1 w-full",
             content
         ),
-        # Footer
-        Footer(:class => "border-t border-warm-200 dark:border-warm-800 px-6 py-6",
-            Div(:class => "max-w-5xl mx-auto flex items-center justify-between",
+        # Footer — kept deliberately slim so it doesn't dominate
+        # scroll at the bottom of a long notebook. `py-3` + smaller
+        # text hits roughly the same height as a sidebar row. Not
+        # sticky on purpose — docs sites almost never stick the
+        # footer (would compete with the TOC rail) — so it just
+        # slides in at the end of the document flow.
+        Footer(:class => "border-t border-warm-200 dark:border-warm-800 px-6 py-3",
+            Div(:class => "max-w-5xl mx-auto flex items-center justify-between text-xs text-warm-500 dark:text-warm-500",
                 A(:href => "https://github.com/GroupTherapyOrg", :target => "_blank",
-                    :class => "text-sm text-warm-600 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300 transition-colors no-underline",
+                    :class => "hover:text-warm-700 dark:hover:text-warm-300 transition-colors no-underline",
                     "GroupTherapyOrg"
                 ),
-                Div(:class => "flex items-center gap-2 text-sm text-warm-500 dark:text-warm-500",
+                Div(:class => "flex items-center gap-1.5",
                     A(:href => "https://github.com/GroupTherapyOrg/Sessions.jl", :target => "_blank",
                         :class => "hover:text-warm-600 dark:hover:text-warm-300 transition-colors no-underline", "Sessions.jl"),
-                    Span("/"),
+                    Span("·"),
                     A(:href => "https://github.com/GroupTherapyOrg/Therapy.jl", :target => "_blank",
                         :class => "hover:text-warm-600 dark:hover:text-warm-300 transition-colors no-underline", "Therapy.jl"),
-                    Span("/"),
+                    Span("·"),
                     A(:href => "https://github.com/GroupTherapyOrg/JavaScriptTarget.jl", :target => "_blank",
                         :class => "hover:text-warm-600 dark:hover:text-warm-300 transition-colors no-underline", "JavaScriptTarget.jl")
                 ),
-                P(:class => "text-sm text-warm-500 dark:text-warm-500",
-                    "Built with ",
+                Span("Built with ",
                     RawHtml("""<span class="font-serif">Therapy<span style="color:var(--jl-dot)">.</span><span style="color:var(--jl-j)">j</span><span style="color:var(--jl-l)">l</span></span>""")
                 )
             )

@@ -215,7 +215,7 @@ content column. Used only by `/notebooks/` (the gallery)."""
 function NotebooksLayout(children...)
     Div(:class => "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] min-h-[calc(100vh-8rem)]",
         Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-100/50 dark:bg-warm-900/50 overflow-y-auto",
-            :style => "position: sticky; top: 0; height: calc(100vh - 4rem);",
+            :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
             NotebooksSidebar()),
         Div(:class => "w-full min-w-0 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl",
             children...))
@@ -255,7 +255,7 @@ function NotebookPageLayout(slug::AbstractString, notebook_vnode)
         # Left sidebar — list of notebooks, active one highlighted
         # automatically via NavLink's route-match.
         Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-100/50 dark:bg-warm-900/50 overflow-y-auto",
-            :style => "position: sticky; top: 0; height: calc(100vh - 4rem);",
+            :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
             NotebooksSidebar()),
 
         # Middle column: the notebook. `id="notebook-content"` is the
@@ -269,7 +269,7 @@ function NotebookPageLayout(slug::AbstractString, notebook_vnode)
 
         # Right TOC column — auto-populated by JS after DOMContentLoaded.
         Aside(:class => "hidden xl:block",
-            :style => "position: sticky; top: 0; height: calc(100vh - 4rem); overflow-y: auto;",
+            :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem); overflow-y: auto;",
             Nav(:class => "py-10 px-6",
                 H4(:class => "text-[11px] font-semibold tracking-wider uppercase text-warm-400 dark:text-warm-500 mb-3",
                     "On this page"),
