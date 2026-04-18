@@ -53,11 +53,13 @@ md"""
 > "The best way to predict the future is to invent it."
 > — Alan Kay
 
-!!! info "Hidden cells"
-    Hidden markdown cells are marked `╟─` in the source `.jl` file.
-    Visible code cells are marked `╠═`. Sessions hides markdown by
-    default because you usually want to see the rendered output, not
-    the source.
+!!! info "Cell markers"
+    In the source `.jl` file, each cell is tagged `╠═` (visible) or
+    `╟─` (hidden) by the author in the IDE. The extractor honors
+    whichever state each cell is in at extract time — either cell
+    type can be either marker. Markdown cells are usually hidden (the
+    rendered prose *is* the output) and code cells are usually
+    visible, but it's a convention, not a rule.
 
 !!! warning "Dependency order, not source order"
     Cells run in topological order of their data dependencies, not

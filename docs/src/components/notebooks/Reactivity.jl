@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/reactivity.jl
-# Date   : 2026-04-18T12:32:38.786
+# Date   : 2026-04-18T12:36:39.408
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -151,7 +151,7 @@ module ReactivityMod
         CellDiv(
             cell_id     = "50000000-0000-0000-0000-000000000004",
             source_code = "@bind a BoundSlider(0:50; default=10)",
-            runtime_ns  = 122471333,
+            runtime_ns  = 121435166,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -180,7 +180,7 @@ module ReactivityMod
         CellDiv(
             cell_id     = "50000000-0000-0000-0000-000000000005",
             source_code = "@bind b BoundSlider(0:50; default=20)",
-            runtime_ns  = 884000,
+            runtime_ns  = 824916,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -205,7 +205,7 @@ module ReactivityMod
         CellDiv(
             cell_id     = "50000000-0000-0000-0000-000000000006",
             source_code = "a + b",
-            runtime_ns  = 136208,
+            runtime_ns  = 170084,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -224,7 +224,7 @@ module ReactivityMod
         CellDiv(
             cell_id     = "50000000-0000-0000-0000-000000000007",
             source_code = "a * b",
-            runtime_ns  = 177958,
+            runtime_ns  = 171625,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -239,7 +239,7 @@ module ReactivityMod
             CellDiv(
                 cell_id     = "50000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Reactivity\n\nTwo sliders feed two memos — sum and product. No callback wiring, no\nsubscription plumbing. The reactive analyzer reads each cell body at\nextract time, spots `a` and `b` as bound signals, and compiles a\n`create_memo(() -> a() + b())` (and the same for the product).\n\"\"\"",
-                runtime_ns  = 2274834,
+                runtime_ns  = 2048167,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -249,7 +249,7 @@ module ReactivityMod
             CellDiv(
                 cell_id     = "50000000-0000-0000-0000-000000000003",
                 source_code = "md\"\"\"\n## Two sliders, two memos\n\"\"\"",
-                runtime_ns  = 241792,
+                runtime_ns  = 238500,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -263,7 +263,7 @@ module ReactivityMod
             CellDiv(
                 cell_id     = "50000000-0000-0000-0000-000000000008",
                 source_code = "md\"\"\"\n## Cross-island signals\n\n!!! info \"How `a` and `b` reach both memos\"\n    Each bond and each memo is its own `@island`, independently\n    compiled and independently hydrated. The shared `a` and `b`\n    signals live at module scope as\n    `const _a_signal = create_signal(10)` and get captured by\n    closure in every island that reads them. Therapy's analyzer\n    detects the shared names and emits a tiny pub/sub bridge\n    (`window.__therapy.set('a', v)`) so a slider move broadcasts to\n    every subscribed island in roughly one animation frame.\n\"\"\"",
-                runtime_ns  = 5112125,
+                runtime_ns  = 4691500,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -273,7 +273,7 @@ module ReactivityMod
             CellDiv(
                 cell_id     = "50000000-0000-0000-0000-000000000009",
                 source_code = "md\"\"\"\n## Why per-cell islands\n\n!!! tip \"Isolation matters\"\n    If we packed every reactive cell into one monolithic island, a\n    single cell WasmTarget can't compile (a `DataFrame` memo, say)\n    would drop the whole notebook back to static SSR. Per-cell\n    islands let the sum and product memos here keep hydrating even\n    if a sibling cell bails out with a red compile-failed banner.\n\"\"\"",
-                runtime_ns  = 327500,
+                runtime_ns  = 271542,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,

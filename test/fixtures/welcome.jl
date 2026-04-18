@@ -37,19 +37,24 @@ md"""
 md"""
 ## Cell visibility
 
-Notebooks have two kinds of cells, with different visibility rules:
+Every cell in the source file carries a visibility flag — `╠═` for
+visible, `╟─` for hidden. The author toggles the flag per-cell in
+the IDE, and the extractor freezes whatever state each cell was in
+at extract time:
 
-- **Hidden by default** (markdown cells, like this one). These are
-  *always* hidden in the published view — there's no reveal toggle
-  because authors sometimes hide cells to keep implementation details
-  private. Every markdown cell on this page is one of these.
-- **Visible by default** (code cells). You'll see the source and the
-  output side-by-side. An eye icon appears on the left — click it
-  to hide the source if you want to focus on the output only, and
+- **Cells visible at extract time** render their source alongside
+  their output. An eye icon appears on the left of the cell — click
+  it to hide the source when you want to focus on the output, and
   click again to bring it back.
+- **Cells hidden at extract time** render only their output. The
+  source is gone from the published artifact entirely, with no
+  reveal toggle. Useful for scratch scaffolding or implementation
+  details an author doesn't want surfaced.
 
-The `greeting` cell below is visible by default. Try toggling the eye
-next to it.
+By convention markdown cells are usually hidden (the rendered prose
+*is* the point) and code cells are usually visible — but either cell
+type can be either visibility. The `greeting` cell below is visible;
+try toggling its eye.
 """
 
 # ╔═╡ 10000000-0000-0000-0000-000000000004

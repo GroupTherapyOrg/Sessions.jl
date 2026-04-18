@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/plots.jl
-# Date   : 2026-04-18T12:32:31.370
+# Date   : 2026-04-18T12:36:32.494
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -212,7 +212,7 @@ module PlotsMod
         CellDiv(
             cell_id     = "40000000-0000-0000-0000-000000000006",
             source_code = "@bind nbars BoundSlider(3:25; default=10)",
-            runtime_ns  = 153520583,
+            runtime_ns  = 122902500,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -241,7 +241,7 @@ module PlotsMod
         CellDiv(
             cell_id     = "40000000-0000-0000-0000-00000000000a",
             source_code = "@bind npoints BoundSlider(5:40; default=18)",
-            runtime_ns  = 763834,
+            runtime_ns  = 747292,
             state       = :done,
             folded      = true,
             show_output = true,
@@ -278,7 +278,7 @@ module PlotsMod
         CellDiv(
             cell_id     = "40000000-0000-0000-0000-000000000007",
             source_code = "let\n    fig = WP.Figure(size=(750, 360))\n    ax  = WP.Axis(fig[1, 1]; xlabel=\"i\", ylabel=\"i²\", title=\"Squares\")\n    xs = Float64[]\n    ys = Float64[]\n    i = Int64(1)\n    count = Int64(nbars)\n    while i <= count\n        xi = Float64(i)\n        push!(xs, xi)\n        push!(ys, xi * xi)\n        i = i + Int64(1)\n    end\n    WP.barplot!(ax, xs, ys; color=:blue)\n    fig\nend",
-            runtime_ns  = 45635959,
+            runtime_ns  = 45377292,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -309,7 +309,7 @@ module PlotsMod
         CellDiv(
             cell_id     = "40000000-0000-0000-0000-00000000000b",
             source_code = "let\n    fig = WP.Figure(size=(750, 360))\n    ax  = WP.Axis(fig[1, 1]; xlabel=\"i\", ylabel=\"√i\", title=\"Square roots\")\n    xs = Float64[]\n    ys = Float64[]\n    i = Int64(1)\n    count = Int64(npoints)\n    while i <= count\n        xi = Float64(i)\n        push!(xs, xi)\n        push!(ys, sqrt(xi))\n        i = i + Int64(1)\n    end\n    WP.lines!(ax, xs, ys; color=:purple)\n    fig\nend",
-            runtime_ns  = 22947666,
+            runtime_ns  = 21735750,
             state       = :done,
             cell_type   = :code,
             folded      = false,
@@ -324,7 +324,7 @@ module PlotsMod
             CellDiv(
                 cell_id     = "40000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Plots\n\nWasmPlot figures compile to WebAssembly. Each plot cell becomes a\n`create_effect` that paints straight to a `<canvas>` — no SVG, no\nReact, no server. Drag the sliders and watch both plots redraw\nentirely in the browser.\n\"\"\"",
-                runtime_ns  = 5689125,
+                runtime_ns  = 2220292,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -334,7 +334,7 @@ module PlotsMod
             CellDiv(
                 cell_id     = "40000000-0000-0000-0000-000000000004",
                 source_code = "function Base.show(io::IO, ::MIME\"text/html\", fig::WP.Figure)\n    glue = WP.canvas2d_js_glue()\n    js   = WP.generate_js_render(fig)\n    id   = \"wp_\" * string(hash(fig); base=16)\n    print(io, \"\"\"\n    <canvas id=\"\$(id)\" width=\"\$(fig.width)\" height=\"\$(fig.height)\"\n            style=\"border:1px solid var(--cell-border);border-radius:8px;background:#fff\"></canvas>\n    <script>(function(){\n      \$(glue)\n      var c = document.getElementById('\$(id)');\n      var dpr = window.devicePixelRatio||1;\n      c.width = \$(fig.width)*dpr; c.height = \$(fig.height)*dpr;\n      c.style.width='\$(fig.width)px'; c.style.height='\$(fig.height)px';\n      var ctx = c.getContext('2d'); ctx.scale(dpr,dpr);\n      var c2d = canvas2d_imports(ctx);\n      \$(js)\n    })();</script>\n    \"\"\")\nend\nnothing;",
-                runtime_ns  = 816250,
+                runtime_ns  = 755666,
                 state       = :done,
                 cell_type   = :code,
                 folded      = true,
@@ -344,7 +344,7 @@ module PlotsMod
             CellDiv(
                 cell_id     = "40000000-0000-0000-0000-000000000005",
                 source_code = "md\"\"\"\n## Bar chart\n\"\"\"",
-                runtime_ns  = 284208,
+                runtime_ns  = 191167,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -356,7 +356,7 @@ module PlotsMod
             CellDiv(
                 cell_id     = "40000000-0000-0000-0000-000000000008",
                 source_code = "md\"\"\"\n!!! tip \"Why canvas, not SVG\"\n    Canvas lets WasmTarget avoid emitting large trees of DOM nodes\n    on every slider tick — a single `ctx.fillRect` call per bar\n    beats diffing hundreds of `<rect>` elements. The whole bar-chart\n    effect lands in well under 10 KB of WASM.\n\"\"\"",
-                runtime_ns  = 5059375,
+                runtime_ns  = 4377792,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -366,7 +366,7 @@ module PlotsMod
             CellDiv(
                 cell_id     = "40000000-0000-0000-0000-000000000009",
                 source_code = "md\"\"\"\n## Line chart\n\"\"\"",
-                runtime_ns  = 217125,
+                runtime_ns  = 209792,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -378,7 +378,7 @@ module PlotsMod
             CellDiv(
                 cell_id     = "40000000-0000-0000-0000-00000000000c",
                 source_code = "md\"\"\"\n## How it works\n\nBoth plots share the same compile pipeline: the extractor sees a\n`create_effect` body that ends in a `WP.Figure`, wraps it in a\n`Canvas` island, and lets WasmTarget lower the paint calls. Move\neither slider and only the affected island's effect re-runs — the\nother plot doesn't re-render, doesn't re-layout, doesn't repaint.\n\"\"\"",
-                runtime_ns  = 287875,
+                runtime_ns  = 267250,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,

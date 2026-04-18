@@ -1,7 +1,7 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/welcome.jl
-# Date   : 2026-04-18T12:32:08.456
+# Date   : 2026-04-18T12:36:09.834
 #
 # Self-contained Therapy component. Each @bind cell + each
 # bond-dependent cell becomes its OWN `@island` — each with
@@ -73,19 +73,24 @@ module WelcomeMod
             md"""
             ## Cell visibility
             
-            Notebooks have two kinds of cells, with different visibility rules:
+            Every cell in the source file carries a visibility flag — `╠═` for
+            visible, `╟─` for hidden. The author toggles the flag per-cell in
+            the IDE, and the extractor freezes whatever state each cell was in
+            at extract time:
             
-            - **Hidden by default** (markdown cells, like this one). These are
-              *always* hidden in the published view — there's no reveal toggle
-              because authors sometimes hide cells to keep implementation details
-              private. Every markdown cell on this page is one of these.
-            - **Visible by default** (code cells). You'll see the source and the
-              output side-by-side. An eye icon appears on the left — click it
-              to hide the source if you want to focus on the output only, and
+            - **Cells visible at extract time** render their source alongside
+              their output. An eye icon appears on the left of the cell — click
+              it to hide the source when you want to focus on the output, and
               click again to bring it back.
+            - **Cells hidden at extract time** render only their output. The
+              source is gone from the published artifact entirely, with no
+              reveal toggle. Useful for scratch scaffolding or implementation
+              details an author doesn't want surfaced.
             
-            The `greeting` cell below is visible by default. Try toggling the eye
-            next to it.
+            By convention markdown cells are usually hidden (the rendered prose
+            *is* the point) and code cells are usually visible — but either cell
+            type can be either visibility. The `greeting` cell below is visible;
+            try toggling its eye.
             """
         end
     catch _e
@@ -137,7 +142,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Sessions.jl\n\nA reactive Julia notebook for the terminal *and* the browser.\n\"\"\"",
-                runtime_ns  = 2335625,
+                runtime_ns  = 2604500,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -147,7 +152,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000002",
                 source_code = "md\"\"\"\n## What this is\n\n!!! info \"You're reading a live notebook\"\n    This page isn't static HTML. Each reactive cell is compiled to\n    WebAssembly and runs directly in your browser — no server, no\n    round-trip, no Jupyter. Open the devtools network tab and move a\n    slider in the **Interactive** notebook: nothing leaves the page.\n\"\"\"",
-                runtime_ns  = 4361917,
+                runtime_ns  = 4245333,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -156,8 +161,8 @@ module WelcomeMod
             ),
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000003",
-                source_code = "md\"\"\"\n## Cell visibility\n\nNotebooks have two kinds of cells, with different visibility rules:\n\n- **Hidden by default** (markdown cells, like this one). These are\n  *always* hidden in the published view — there's no reveal toggle\n  because authors sometimes hide cells to keep implementation details\n  private. Every markdown cell on this page is one of these.\n- **Visible by default** (code cells). You'll see the source and the\n  output side-by-side. An eye icon appears on the left — click it\n  to hide the source if you want to focus on the output only, and\n  click again to bring it back.\n\nThe `greeting` cell below is visible by default. Try toggling the eye\nnext to it.\n\"\"\"",
-                runtime_ns  = 465333,
+                source_code = "md\"\"\"\n## Cell visibility\n\nEvery cell in the source file carries a visibility flag — `╠═` for\nvisible, `╟─` for hidden. The author toggles the flag per-cell in\nthe IDE, and the extractor freezes whatever state each cell was in\nat extract time:\n\n- **Cells visible at extract time** render their source alongside\n  their output. An eye icon appears on the left of the cell — click\n  it to hide the source when you want to focus on the output, and\n  click again to bring it back.\n- **Cells hidden at extract time** render only their output. The\n  source is gone from the published artifact entirely, with no\n  reveal toggle. Useful for scratch scaffolding or implementation\n  details an author doesn't want surfaced.\n\nBy convention markdown cells are usually hidden (the rendered prose\n*is* the point) and code cells are usually visible — but either cell\ntype can be either visibility. The `greeting` cell below is visible;\ntry toggling its eye.\n\"\"\"",
+                runtime_ns  = 488709,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -167,7 +172,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000004",
                 source_code = "greeting = \"Hello from a real Julia kernel.\"",
-                runtime_ns  = 228500,
+                runtime_ns  = 224500,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -177,7 +182,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000005",
                 source_code = "md\"\"\"\nMarkdown cells can interpolate live Julia with `\\\$(…)`. As of this\nrender, Julia is **\$(VERSION)** and today is\n**\$(Dates.dayname(Dates.today())), \$(Dates.monthname(Dates.today())) \$(Dates.day(Dates.today()))**.\n\"\"\"",
-                runtime_ns  = 21825000,
+                runtime_ns  = 20892375,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -187,7 +192,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000006",
                 source_code = "md\"\"\"\n## Where to next\n\n!!! tip \"Pick a notebook\"\n    - **Markdown** — every markdown feature Sessions renders, with\n      admonitions, tables, math, and live interpolation.\n    - **Interactive** — `@bind`, sliders, and reactive cells driven\n      by the same signal engine that powers the IDE.\n    - **Plots** — slider-linked WasmPlot figures that redraw entirely\n      in the browser.\n    - **Reactivity** — multiple widgets feeding a single computed\n      output, zero callback wiring.\n\"\"\"",
-                runtime_ns  = 516750,
+                runtime_ns  = 482458,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
