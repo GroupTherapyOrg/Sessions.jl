@@ -210,22 +210,28 @@ function NotebooksSidebar()
             end...))
 end
 
-"""Layout wrapper for the notebooks INDEX page — left sidebar + single
+"""Layout wrapper for the notebooks INDEX page — fixed left sidebar +
 content column. Used only by `/notebooks/` (the gallery).
 
-Column widths are held in sync with `NotebookPageLayout` below so
-that the router's SPA swap between the gallery page and an
-individual notebook page doesn't shift the grid. Same column
-sizes, same sidebar classes, same sticky offset — what changes on
-navigation is only the main column's content and (on `xl:` +
-notebook pages only) whether a 3rd TOC column exists."""
+The sidebar is `position: fixed` (not `sticky`) so it always spans
+`top: 4rem` → `bottom: 0` of the viewport regardless of how tall
+the page content is or where the user has scrolled. Sticky
+positioning is limited by the nearest scrollable ancestor — when a
+long notebook grew the grid taller than the viewport, the sticky
+aside got "pushed up" out of the grid's top edge on scroll-to-
+bottom, clipping the NOTEBOOKS heading. Fixed positioning sidesteps
+all of that.
+
+The content area compensates with `lg:ml-60` so it doesn't sit
+under the 15rem fixed sidebar."""
 function NotebooksLayout(children...)
-    Div(:class => "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] min-h-[calc(100vh-8rem)]",
-        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 overflow-y-auto",
-            :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
+    Fragment(
+        Aside(:class => "hidden lg:block fixed left-0 w-60 overflow-y-auto border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 z-30",
+            :style => "top: 4rem; bottom: 0;",
             NotebooksSidebar()),
-        Div(:class => "w-full min-w-0 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl",
-            children...))
+        Div(:class => "lg:ml-60",
+            Div(:class => "w-full min-w-0 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl",
+                children...)))
 end
 
 # ── Single-notebook page layout (3 columns) ────────────────────────
@@ -256,27 +262,30 @@ extracted notebook's @island function. We wrap it so the layout
 machinery can nest the notebook between the two sidebars without
 touching the notebook component itself."""
 function NotebookPageLayout(slug::AbstractString, notebook_vnode)
-    Div(
-        :class => "lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_14rem] min-h-[calc(100vh-8rem)]",
-
-        # Left sidebar — list of notebooks, active one highlighted
-        # automatically via NavLink's route-match.
-        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 overflow-y-auto",
-            :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
+    Fragment(
+        # Left sidebar — fixed-position so it always spans top:4rem →
+        # bottom:0 of the viewport regardless of grid / document
+        # height. `position: sticky` was clipping the NOTEBOOKS
+        # heading on scroll-to-bottom of long notebooks; `fixed`
+        # decouples the aside from the main content's box.
+        Aside(:class => "hidden lg:block fixed left-0 w-60 overflow-y-auto border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 z-30",
+            :style => "top: 4rem; bottom: 0;",
             NotebooksSidebar()),
 
-        # Middle column: the notebook. `id="notebook-content"` is the
-        # TOC script's query root — it walks headings inside this
-        # element. No width overrides here; the notebook's own
-        # `.nb-cell-list` (max-width:900px;margin:0 auto) keeps its
-        # spacing identical to the standalone view.
+        # Middle column: the notebook. Compensates for the fixed
+        # left sidebar with `lg:ml-60` and (when the TOC is visible)
+        # for the fixed right rail with `xl:mr-56`. The notebook's
+        # own `.nb-cell-list` (max-width:900px;margin:0 auto) keeps
+        # its spacing identical to the standalone view.
         MainEl(:id => "notebook-content",
-            :class => "w-full min-w-0",
+            :class => "w-full min-w-0 lg:ml-60 xl:mr-56",
             notebook_vnode),
 
-        # Right TOC column — auto-populated by JS after DOMContentLoaded.
-        Aside(:class => "hidden xl:block",
-            :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem); overflow-y: auto;",
+        # Right TOC column — fixed-position, auto-populated by JS
+        # after DOMContentLoaded. Same "always visible" contract as
+        # the left sidebar.
+        Aside(:class => "hidden xl:block fixed right-0 w-56 overflow-y-auto z-30",
+            :style => "top: 4rem; bottom: 0;",
             Nav(:class => "py-10 px-6",
                 H4(:class => "text-[11px] font-semibold tracking-wider uppercase text-warm-400 dark:text-warm-500 mb-3",
                     "On this page"),
