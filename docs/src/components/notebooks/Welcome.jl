@@ -1,30 +1,23 @@
 # ── Sessions.jl extracted notebook ─────────────────────────
 #
 # Source : /Users/daleblack/Documents/dev/GroupTherapyOrg/Sessions.jl/test/fixtures/welcome.jl
-# Date   : 2026-04-17T23:25:36.840
+# Date   : 2026-04-17T23:45:43.357
 #
-# Self-contained Therapy component. Cell SOURCE is preserved
-# verbatim; cell VALUES are computed once at module load and
-# rendered through `Sessions.render_value` — the same MIME
-# classifier the live IDE output pipeline uses.
+# Self-contained Therapy component. Each @bind cell + each
+# bond-dependent cell becomes its OWN `@island` — each with
+# an independent WasmTarget compile. If WasmTarget rejects
+# one island (a DataFrame memo, a package with no WASM
+# coverage, …), siblings still hydrate. A runtime fallback
+# in notebook-init.js paints a red 'WASM compile failed'
+# band over any island that never reaches data-hydrated.
 #
-# Architecture (matches Therapy.jl's NotebookDemo reference):
-#   - ONE @island function per notebook. Outer body runs as
-#     regular Julia at SSR (DataFrames / Markdown / arbitrary
-#     show() methods all fine). Only reactive closures inside
-#     the body get WASM-compiled.
-#   - Each @bind becomes a create_signal bound into a native
-#     Therapy `Input(:value=>, :on_input=>)` — no <bond>
-#     bridge JS, no WebSocket.
-#   - Each bond-dependent cell becomes a create_memo (simple
-#     return value, rendered via Span) or create_effect (canvas-
-#     drawing cell, rendered via Canvas). Bare bond refs in the
-#     cell body are rewritten to signal reads (n → n()).
-#   - Cells whose body uses WasmTarget-hostile patterns
-#     (DataFrame, md"…", @show, display) fall back to WALL:
-#     frozen at the bond default with a `state=:wasm_failed`
-#     badge making the non-reactivity visible to the reader.
-#   - Static cells are pure SSR: frozen output via render_value.
+# Bond signals live at module scope: `const _<name>_signal =
+# create_signal(default)`. Each island destructures it and
+# captures it in a closure; Therapy's analyzer detects the
+# shared `@(name)` binding and emits cross-island imports.
+# Move the slider → bond island broadcasts via
+# `window.__therapy.set('<name>', v)` → every subscribed
+# island re-runs its memo/effect locally. No server.
 #
 # Re-running `Sessions.extract_notebook` with the same out_path
 # overwrites the file.
@@ -46,9 +39,6 @@ module WelcomeMod
     # (no bonds)
 
     # ── Cell values (source preserved, evaluated at module load)
-    # Bond reads inside cell bodies resolve against the plain
-    # `const <bond>` aliases declared above. The @island body
-    # below overrides those names locally with create_signal.
     # ── Cell 10000000-0000-0000-0000-000000000001 (static) ──
     const _cell__10000000_0000_0000_0000_000000000001 = try
         let
@@ -422,13 +412,12 @@ module WelcomeMod
         _e
     end
 
-    @island function Welcome()
-        # (no bonds in this notebook)
+    function Welcome()
         render_published_notebook(
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000001",
                 source_code = "md\"\"\"\n# Welcome to **Sessions.jl**\n\nA reactive Julia notebook for the terminal *and* the browser.\n\nThis notebook is a tour of the **markdown features** Sessions supports out of\nthe box — modeled on\n[Pluto's basic markdown showcase](https://featured.plutojl.org/basic/markdown).\nEvery cell below is hidden, so what you see is the rendered output. Toggle\nthe eye icon on the left of any cell to see the source.\n\"\"\"",
-                runtime_ns  = 2176167,
+                runtime_ns  = 2470917,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -438,7 +427,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000002",
                 source_code = "md\"\"\"\n---\n\n## Headings\n\nSix levels of `#`, just like ordinary markdown.\n\n# Heading 1\n## Heading 2\n### Heading 3\n#### Heading 4\n##### Heading 5\n\"\"\"",
-                runtime_ns  = 1375167,
+                runtime_ns  = 4163750,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -448,7 +437,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000003",
                 source_code = "md\"\"\"\n## Text formatting\n\nYou can write **bold**, *italic*, ***bold italic***, `inline code`, and\n~~strikethrough~~ all in the natural way.\n\nInline code is great for keyboard shortcuts: press `Ctrl+Enter` to run the\ncurrent cell, `Shift+Enter` to run-and-advance, or `Ctrl+S` to save.\n\"\"\"",
-                runtime_ns  = 340583,
+                runtime_ns  = 329250,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -458,7 +447,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000004",
                 source_code = "md\"\"\"\n## Lists\n\nA bullet list:\n\n- Reactive execution — cells re-run when their dependencies change\n- Pluto-compatible `.jl` file format\n- Rich output: markdown, tables, images, plots\n\nA numbered list:\n\n1. Open the file explorer (the folder icon, top-left)\n2. Pick a notebook\n3. Edit any cell and press `Ctrl+Enter`\n\"\"\"",
-                runtime_ns  = 580709,
+                runtime_ns  = 469041,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -468,7 +457,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000006",
                 source_code = "md\"\"\"\n## Code blocks\n\nYou get fenced blocks with language tags:\n\n```julia\nfunction fib(n)\n    n < 2 && return n\n    return fib(n - 1) + fib(n - 2)\nend\n```\n\n…and bare ones for shell or plain text:\n\n```\n\$ julia +1.12 --project=. app.jl dev welcome.jl\n```\n\"\"\"",
-                runtime_ns  = 282167,
+                runtime_ns  = 282833,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -478,7 +467,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000007",
                 source_code = "md\"\"\"\n## Math\n\nInline math via double-backticks: ``e^{i\\pi} + 1 = 0`` (Euler's identity).\n\nDisplay math via `…`:\n\n∫−∞∞e−x2dx=π\n\nThe renderer is MathJax under the hood, so anything LaTeX understands works:\n``\\sum_{k=0}^{\\infty} \\frac{x^k}{k!}``.\n\"\"\"",
-                runtime_ns  = 1437625,
+                runtime_ns  = 1320667,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -488,7 +477,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000008",
                 source_code = "md\"\"\"\n## Tables\n\n| Symbol | Meaning            | Example                  |\n|:------:|:-------------------|:-------------------------|\n| `╠═`   | visible code cell  | `using Markdown`         |\n| `╟─`   | hidden / markdown  | `md\"# Title\"`            |\n| `🔁`   | reactive re-run    | bonds, cell deps         |\n\nAlignment is controlled by the `:` placement in the header separator.\n\"\"\"",
-                runtime_ns  = 128754791,
+                runtime_ns  = 116822208,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -498,7 +487,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000009",
                 source_code = "md\"\"\"\n## Links & footnotes\n\nFind Sessions on [GitHub](https://github.com/GroupTherapyOrg/Sessions.jl) or\nread the [Pluto markdown reference][pluto] for a wider tour.\n\n[pluto]: https://featured.plutojl.org/basic/markdown\n\nYou can also footnote inline like this[^why-pluto-style] for asides.\n\n[^why-pluto-style]: We mirror Pluto's notebook-file format so notebooks are\n    portable between the two.\n\"\"\"",
-                runtime_ns  = 331166,
+                runtime_ns  = 332083,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -508,7 +497,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000000a",
                 source_code = "md\"\"\"\n## Live values\n\nMarkdown cells can interpolate live Julia with `\$(…)`:\n\nThe current Julia version is **\$(VERSION)**, the day of the week is\n**\$(Dates.dayname(Dates.today()))**, and 2 + 2 = \$(2 + 2).\n\"\"\"",
-                runtime_ns  = 17466166,
+                runtime_ns  = 16902417,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -518,7 +507,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000000c",
                 source_code = "greeting = \"Hello, Sessions.jl 👋\"",
-                runtime_ns  = 217833,
+                runtime_ns  = 217416,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -528,7 +517,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000010",
                 source_code = "md\"\"\"\n---\n\n## Output inspection\n\nSessions inspects most Julia values automatically. Below is a tour of\nthe kinds of output you'll see — every cell is hidden by default, toggle\nthe eye on the left to peek at the source.\n\"\"\"",
-                runtime_ns  = 315000,
+                runtime_ns  = 260959,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -538,7 +527,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000011",
                 source_code = "md\"### Numbers\"",
-                runtime_ns  = 164459,
+                runtime_ns  = 177417,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -548,7 +537,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000012",
                 source_code = "2^100",
-                runtime_ns  = 1567125,
+                runtime_ns  = 1416750,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -558,7 +547,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000013",
                 source_code = "md\"### Strings\"",
-                runtime_ns  = 245875,
+                runtime_ns  = 206000,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -568,7 +557,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000014",
                 source_code = "\"The quick brown fox jumps over the lazy dog.\"",
-                runtime_ns  = 76333,
+                runtime_ns  = 81917,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -578,7 +567,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000015",
                 source_code = "md\"### Vectors and ranges\"",
-                runtime_ns  = 151750,
+                runtime_ns  = 158750,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -588,7 +577,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000016",
                 source_code = "xx = collect(1:25)",
-                runtime_ns  = 5263375,
+                runtime_ns  = 4540291,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -598,7 +587,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000017",
                 source_code = "md\"### Dictionaries\"",
-                runtime_ns  = 216709,
+                runtime_ns  = 216791,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -608,7 +597,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000018",
                 source_code = "Dict(\n    :name => \"Sessions.jl\",\n    :version => v\"0.1.0\",\n    :status => :alpha,\n    :stars => 0,\n    :langs => [\"Julia\", \"JavaScript\", \"WASM\"],\n)",
-                runtime_ns  = 85924791,
+                runtime_ns  = 58698500,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -618,7 +607,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000019",
                 source_code = "md\"### Tuples and named tuples\"",
-                runtime_ns  = 314625,
+                runtime_ns  = 214041,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -628,7 +617,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000001a",
                 source_code = "(1, \"two\", 3.0, :four, [5, 6])",
-                runtime_ns  = 221416,
+                runtime_ns  = 165625,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -638,7 +627,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000001b",
                 source_code = "(name = \"Alice\", age = 30, roles = [:admin, :editor], active = true)",
-                runtime_ns  = 2295625,
+                runtime_ns  = 2018375,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -648,7 +637,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000001c",
                 source_code = "md\"### Structs\"",
-                runtime_ns  = 241959,
+                runtime_ns  = 210917,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -658,7 +647,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000001d",
                 source_code = "struct Point\n    x::Float64\n    y::Float64\nend",
-                runtime_ns  = 723375,
+                runtime_ns  = 721959,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -668,7 +657,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000001e",
                 source_code = "Point(3.14, 2.71)",
-                runtime_ns  = 1715833,
+                runtime_ns  = 1345542,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -678,7 +667,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000001f",
                 source_code = "md\"### Sets\"",
-                runtime_ns  = 230375,
+                runtime_ns  = 216250,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -688,7 +677,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000020",
                 source_code = "Set([rand(100)...])",
-                runtime_ns  = 78955834,
+                runtime_ns  = 79890708,
                 state       = :done,
                 cell_type   = :code,
                 folded      = false,
@@ -698,7 +687,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000021",
                 source_code = "md\"### Errors\"",
-                runtime_ns  = 235041,
+                runtime_ns  = 199791,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -708,7 +697,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000022",
                 source_code = "md\"\"\"Errors render with the exception type, message, and a collapsed\nstack trace — click the trace to expand. Try uncommenting the line below:\"\"\"",
-                runtime_ns  = 198083,
+                runtime_ns  = 166541,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -718,7 +707,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-000000000023",
                 source_code = "sqrt(-1)",
-                runtime_ns  = 537475458,
+                runtime_ns  = 561750542,
                 state       = :errored,
                 cell_type   = :code,
                 folded      = false,
@@ -728,7 +717,7 @@ module WelcomeMod
             CellDiv(
                 cell_id     = "10000000-0000-0000-0000-00000000000d",
                 source_code = "md\"\"\"\n---\n\nThat's the tour. Try editing any of the hidden cells (toggle the eye on the\nleft) to see the markdown source — and welcome aboard.\n\"\"\"",
-                runtime_ns  = 249833,
+                runtime_ns  = 244916,
                 state       = :done,
                 cell_type   = :markdown,
                 folded      = true,
@@ -740,6 +729,6 @@ module WelcomeMod
     end
 end  # module WelcomeMod
 
-# Surface the @island at top scope so the docs registry
+# Surface the outer function at top scope so the docs registry
 # (or any caller) can grab it directly.
 const Welcome = WelcomeMod.Welcome
