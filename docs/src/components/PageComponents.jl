@@ -214,7 +214,7 @@ end
 content column. Used only by `/notebooks/` (the gallery)."""
 function NotebooksLayout(children...)
     Div(:class => "lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] min-h-[calc(100vh-8rem)]",
-        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-100/50 dark:bg-warm-900/50 overflow-y-auto",
+        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-200/60 dark:bg-warm-900/50 overflow-y-auto",
             :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
             NotebooksSidebar()),
         Div(:class => "w-full min-w-0 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl",
@@ -254,7 +254,7 @@ function NotebookPageLayout(slug::AbstractString, notebook_vnode)
 
         # Left sidebar — list of notebooks, active one highlighted
         # automatically via NavLink's route-match.
-        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-100/50 dark:bg-warm-900/50 overflow-y-auto",
+        Aside(:class => "hidden lg:block shrink-0 border-r border-warm-200 dark:border-warm-700 bg-warm-200/60 dark:bg-warm-900/50 overflow-y-auto",
             :style => "position: sticky; top: 4rem; height: calc(100vh - 4rem);",
             NotebooksSidebar()),
 
