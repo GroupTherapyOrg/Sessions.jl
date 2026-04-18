@@ -210,27 +210,28 @@ function NotebooksSidebar()
             end...))
 end
 
-"""Layout wrapper for the notebooks INDEX page — fixed left sidebar +
+"""Layout wrapper for the notebooks INDEX page — sidebar column +
 content column. Used only by `/notebooks/` (the gallery).
 
-The sidebar is `position: fixed` (not `sticky`) so it always spans
-`top: 4rem` → `bottom: 0` of the viewport regardless of how tall
-the page content is or where the user has scrolled. Sticky
-positioning is limited by the nearest scrollable ancestor — when a
-long notebook grew the grid taller than the viewport, the sticky
-aside got "pushed up" out of the grid's top edge on scroll-to-
-bottom, clipping the NOTEBOOKS heading. Fixed positioning sidesteps
-all of that.
+Uses the "stretched aside + sticky inner" pattern: the outer
+`<aside>` stretches vertically inside a flex row so its background/
+border fills the full column (from nav-bottom down to the end of
+main content, i.e., just above the footer). The sticky inner div
+pins the actual sidebar content at `top: 4rem` during scroll and
+shrinks to viewport height with internal overflow. This gives us
+three things at once:
 
-The content area compensates with `lg:ml-60` so it doesn't sit
-under the 15rem fixed sidebar."""
+1. Sidebar column visually extends to meet the footer — no gap.
+2. Sidebar content is always visible while scrolling.
+3. Sidebar never overlaps the footer (flex container ends at
+   MainEl's bottom, which is directly above `<footer>`)."""
 function NotebooksLayout(children...)
-    Fragment(
-        Aside(:class => "hidden lg:block fixed left-0 w-60 overflow-y-auto border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 z-30",
-            :style => "top: 4rem; bottom: 0;",
-            NotebooksSidebar()),
-        Div(:class => "lg:ml-60",
-            Div(:class => "w-full min-w-0 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl",
+    Div(:class => "flex",
+        Aside(:class => "hidden lg:block w-60 shrink-0 bg-warm-50 dark:bg-warm-900 border-r border-warm-200 dark:border-warm-700",
+            Div(:class => "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto",
+                NotebooksSidebar())),
+        Div(:class => "flex-1 min-w-0",
+            Div(:class => "max-w-4xl px-4 sm:px-6 lg:px-8 py-8",
                 children...)))
 end
 
@@ -262,46 +263,40 @@ extracted notebook's @island function. We wrap it so the layout
 machinery can nest the notebook between the two sidebars without
 touching the notebook component itself."""
 function NotebookPageLayout(slug::AbstractString, notebook_vnode)
-    Fragment(
-        # Left sidebar — fixed-position so it always spans top:4rem →
-        # bottom:0 of the viewport regardless of grid / document
-        # height. `position: sticky` was clipping the NOTEBOOKS
-        # heading on scroll-to-bottom of long notebooks; `fixed`
-        # decouples the aside from the main content's box.
-        Aside(:class => "hidden lg:block fixed left-0 w-60 overflow-y-auto border-r border-warm-200 dark:border-warm-700 bg-warm-50 dark:bg-warm-900 z-30",
-            :style => "top: 4rem; bottom: 0;",
-            NotebooksSidebar()),
+    Div(:class => "flex",
+        # Left sidebar — aside stretches vertically to fill the flex
+        # container (which ends right above the footer), so its bg +
+        # border-right visually run the full column height. A sticky
+        # inner <div> pins the actual nav content at `top: 4rem`
+        # during scroll. This replaces the previous `position: fixed;
+        # top: 4rem; bottom: 0` approach, which had two problems: it
+        # overlapped the footer on scroll-to-bottom, and the hard
+        # `bottom: 0` ignored page flow entirely.
+        Aside(:class => "hidden lg:block w-60 shrink-0 bg-warm-50 dark:bg-warm-900 border-r border-warm-200 dark:border-warm-700",
+            Div(:class => "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto",
+                NotebooksSidebar())),
 
-        # Middle column: the notebook. Compensates for the fixed
-        # left sidebar with `lg:ml-60` and (when the TOC is visible)
-        # for the fixed right rail with `xl:mr-56`. Using `<div>`
-        # (not `<main>`) because `Layout.jl` already wraps page
-        # content in `<main id="page-content">` — nesting `<main>`
-        # is invalid HTML.
-        #
-        # Critical: NO `w-full` here. With `width:100%`, margins are
-        # additive, so `w-full + ml-60 + mr-56` overflows by 29rem
-        # and the content slides under the fixed TOC. A plain block
-        # <div> auto-fills `parent-width − margins`, which is what
-        # we want.
+        # Middle column: the notebook. `flex-1 min-w-0` fills the
+        # remaining space between the two fixed-width sidebars.
+        # `<div>` (not `<main>`) because Layout.jl already wraps
+        # page content in `<main id="page-content">`.
         Div(:id => "notebook-content",
-            :class => "min-w-0 lg:ml-60 xl:mr-56",
+            :class => "flex-1 min-w-0",
             notebook_vnode),
 
-        # Right TOC column — fixed-position, auto-populated by JS
-        # after DOMContentLoaded. Same "always visible" contract as
-        # the left sidebar.
-        Aside(:class => "hidden xl:block fixed right-0 w-56 overflow-y-auto z-30",
-            :style => "top: 4rem; bottom: 0;",
-            Nav(:class => "py-10 px-6",
+        # Right TOC column — same stretched-aside + sticky-inner
+        # pattern. No bg/border so it reads as empty whitespace
+        # when the viewport isn't wide enough, but the content sits
+        # flush right at `xl:` breakpoint.
+        Aside(:class => "hidden xl:block w-56 shrink-0",
+            Div(:class => "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto py-10 px-6",
                 H4(:class => "text-[11px] font-semibold tracking-wider uppercase text-warm-400 dark:text-warm-500 mb-3",
                     "On this page"),
                 Div(:id => "notebook-toc",
                     :class => "space-y-1.5 border-l border-warm-200 dark:border-warm-800 pl-3"))),
 
         # Client-side TOC populator.
-        RawHtml(_notebook_toc_script())
-    )
+        RawHtml(_notebook_toc_script()))
 end
 
 """JS that walks the notebook's headings and fills #notebook-toc.

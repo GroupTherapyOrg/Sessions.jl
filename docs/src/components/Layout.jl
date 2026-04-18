@@ -29,8 +29,8 @@ function Layout(content)
         # independently. `backdrop-blur` + translucent bg so content
         # scrolling behind stays faintly visible. `z-40` keeps it
         # above the sidebars' sticky content.
-        Nav(:class => "sticky top-0 z-40 border-b border-warm-200 dark:border-warm-800 px-6 py-4 bg-warm-100/80 dark:bg-warm-950/80 backdrop-blur supports-[backdrop-filter]:bg-warm-100/60 supports-[backdrop-filter]:dark:bg-warm-950/60",
-            Div(:class => "max-w-5xl mx-auto flex items-center justify-between",
+        Nav(:class => "sticky top-0 z-40 border-b border-warm-200 dark:border-warm-800 h-16 px-6 bg-warm-100/80 dark:bg-warm-950/80 backdrop-blur supports-[backdrop-filter]:bg-warm-100/60 supports-[backdrop-filter]:dark:bg-warm-950/60",
+            Div(:class => "max-w-5xl mx-auto h-full flex items-center justify-between",
                 SessionsWordmark(),
                 Div(:class => "flex items-center gap-6",
                     NavLink("./getting-started/", "Getting Started";
