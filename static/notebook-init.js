@@ -138,4 +138,70 @@
   } else {
     window.__sessionsInitPublishedCM();
   }
+
+  // ── WASM-hydration failure detector ─────────────────────────────
+  //
+  // The extractor doesn't pre-filter reactive cells at extract time
+  // (per the "let WasmTarget decide" contract) — every bond-dependent
+  // cell is translated to `create_memo` / `create_effect` and handed
+  // to the compiler. When the compile fails (wasm-opt rejects the
+  // generated module, WasmTarget can't lower a specific method, …),
+  // Therapy logs a warning and skips WASM emission for that island.
+  // The SSR still runs, so the page loads with widgets/canvases/
+  // memo outputs baked at the bond default — but there's no WASM to
+  // make them reactive. Without this detector the reader just sees
+  // stale frozen output with no explanation.
+  //
+  // Each `@island` wrapper carries `data-component="<name>"`. On
+  // successful hydration Therapy's router sets `data-hydrated="true"`
+  // on the wrapper. We poll a short while after DOMContentLoaded;
+  // any island still missing `data-hydrated` gets its `data-reactive`
+  // cells (emitted by Sessions.CellDiv for memo/effect paths)
+  // decorated with the wrap-wasm-failed class + an inline error band
+  // that mirrors what the extractor would bake at :wasm_failed state.
+  //
+  // Idempotent via the `data-wasm-failed-banded` marker on each cell.
+  // Poll window caps at ~2s so slow WASM downloads don't falsely
+  // trip it; hydration that arrives late still overrides (the inject
+  // happens once, then if hydrated=true shows up later, the band
+  // stays but signals start updating — good compromise: the reader
+  // sees both the warning and live updates).
+  function __sessionsFlagFailedIslands() {
+    var islands = document.querySelectorAll('[data-component]');
+    islands.forEach(function (island) {
+      if (island.dataset.hydrated === 'true') return;
+      var reactiveCells = island.querySelectorAll('.cell-wrap[data-reactive="true"]');
+      reactiveCells.forEach(function (cell) {
+        if (cell.dataset.wasmFailedBanded === 'true') return;
+        cell.dataset.wasmFailedBanded = 'true';
+        cell.classList.add('wrap-wasm-failed');
+        var body = cell.querySelector('.cell-body');
+        if (!body) return;
+        var band = document.createElement('div');
+        band.className = 'jl-error wasm-failed-band';
+        band.innerHTML =
+          '<div class="jl-error-content">' +
+            '<div class="jl-error-header">' +
+              '<span class="jl-error-badge">WASM compile failed</span>' +
+              '<span class="jl-error-type">Cell frozen at initial value</span>' +
+            '</div>' +
+            '<div class="jl-error-message">' +
+              "This reactive cell's @island couldn't compile to WebAssembly, so it no longer re-runs when its upstream bond changes. The output below is frozen at the bond's default value. Inspect the cell source to see what was attempted." +
+            '</div>' +
+          '</div>';
+        body.insertBefore(band, body.firstChild);
+      });
+    });
+  }
+  function __sessionsScheduleFailCheck() {
+    // Poll twice: early (1000ms — most builds hydrate well before)
+    // and late (2500ms — covers slow cold-start WASM downloads).
+    setTimeout(__sessionsFlagFailedIslands, 1000);
+    setTimeout(__sessionsFlagFailedIslands, 2500);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', __sessionsScheduleFailCheck);
+  } else {
+    __sessionsScheduleFailCheck();
+  }
 })();

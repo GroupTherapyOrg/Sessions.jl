@@ -1104,7 +1104,8 @@ function CellDiv(; cell_id::AbstractString,
                    folded::Bool = false,
                    show_output::Bool = true,
                    runtime_ns::Integer = 0,
-                   state::Symbol = :done)
+                   state::Symbol = :done,
+                   reactive::Bool = false)
     parts = Any[]
     wrap_cls = "cell-wrap"
     cell_type === :markdown && (wrap_cls *= " md-cell")
@@ -1142,7 +1143,17 @@ function CellDiv(; cell_id::AbstractString,
         src !== nothing && push!(parts, src)
     end
 
-    Div(:data_cell_id => cell_id, :class => wrap_cls,
+    # `data-reactive="true"` tags cells whose output depends on WASM
+    # hydration (memos, effects). notebook-init.js scans these after
+    # DOMContentLoaded: if the surrounding `[data-component]` island
+    # never reaches `data-hydrated="true"` (the `@island` failed to
+    # WASM-compile, or WASM threw at hydrate time), the JS adds the
+    # wrap-wasm-failed class + error band so the reader sees a clear
+    # explanation instead of a stale canvas / frozen span. Static
+    # cells skip this treatment; they don't depend on WASM anyway.
+    attrs = Any[:data_cell_id => cell_id, :class => wrap_cls]
+    reactive && push!(attrs, :data_reactive => "true")
+    Div(attrs...,
         Div(:class => "cell-body", parts...))
 end
 

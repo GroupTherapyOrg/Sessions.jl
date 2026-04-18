@@ -633,13 +633,16 @@ end
 
 "`re` is the `ReactiveEmit` for this cell; its `output_expr` goes into
 the CellDiv slot, and `:wasm_failed` is applied only when the cell
-fell back to WALL."
+fell back to WALL. Non-wall cells get `reactive=true` so the runtime
+fallback (notebook-init.js) can retroactively WALL them if the
+surrounding `@island` never hydrates."
 function emit_reactive_cell_call(cc::CellClass, re::ReactiveEmit)::String
     suffix       = _id_suffix(cc.cell.id)
     folded_lit   = cc.cell.folded ? "true" : "false"
     show_out_lit = _suppresses_output(cc.cell.code) ? "false" : "true"
     cell_type_lit = _is_markdown_cell_code(cc.cell.code) ? ":markdown" : ":code"
     state_lit = re.kind === :wall ? ":wasm_failed" : _cell_state_literal(cc)
+    reactive_lit = re.kind === :wall ? "false" : "true"
     join([
         "            CellDiv(",
         "                cell_id     = $(repr(string(cc.cell.id))),",
@@ -649,6 +652,7 @@ function emit_reactive_cell_call(cc::CellClass, re::ReactiveEmit)::String
         "                cell_type   = $(cell_type_lit),",
         "                folded      = $(folded_lit),",
         "                show_output = $(show_out_lit),",
+        "                reactive    = $(reactive_lit),",
         "                output      = $(re.output_expr),",
         "            )",
     ], "\n")
