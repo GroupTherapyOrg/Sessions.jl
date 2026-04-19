@@ -1,12 +1,15 @@
 # Getting Started with Sessions.jl
 #
 # Installation, quick start, notebook API, architecture overview.
-# Uses local components from PageComponents.jl (no Suite.jl).
+# Code blocks use the same inline Pre+Code pattern the /api/ page
+# uses (no language badge, p-3, text-xs) so the two pages read as
+# part of the same visual system.
 
 function GettingStartedIndex()
-    # Layout is now width-agnostic; page brings its own max-width.
+    code_block  = "bg-warm-900 dark:bg-warm-950 text-warm-200 p-3 rounded text-xs font-mono overflow-x-auto !m-0"
+    inline_code = "text-accent-600 dark:text-accent-400"
+
     Div(:class => "max-w-5xl mx-auto px-6 py-12",
-        # Header
         PageHeader("Getting Started", "Install Sessions.jl and start working with reactive Julia notebooks in the browser."),
 
         Div(:class => "prose max-w-none space-y-12",
@@ -17,13 +20,13 @@ function GettingStartedIndex()
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
                     "Sessions.jl requires Julia 1.12+. Install it as a Julia app:"
                 ),
-                Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-4 overflow-x-auto",
-                    CodeBlock(language="julia", """using Pkg
-Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")""")
-                ),
+                Pre(:class => "$(code_block) mb-4", Code(:class => "language-julia", """using Pkg
+Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")""")),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "This installs the ", Kbd("sessions"), " command to ", Kbd("~/.julia/bin/"),
-                    ". Make sure this directory is in your ", Kbd("PATH"), "."
+                    "This installs the ", Code(:class => inline_code, "sessions"),
+                    " command to ", Kbd("~/.julia/bin/"),
+                    ". Make sure this directory is in your ",
+                    Code(:class => inline_code, "PATH"), "."
                 ),
             ),
 
@@ -31,58 +34,51 @@ Pkg.Apps.add(url="https://github.com/GroupTherapyOrg/Sessions.jl")""")
             Div(
                 SectionH2("Quick Start"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "The ", Kbd("sessions"), " command opens a web IDE in your browser:"
+                    "The ", Code(:class => inline_code, "sessions"),
+                    " command opens a web IDE in your browser:"
                 ),
 
                 SectionH3("Open a notebook"),
-                Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    CodeBlock(language="bash", """# Open an existing notebook
+                Pre(:class => "$(code_block) mb-6", Code(:class => "language-bash", """# Open an existing notebook
 sessions my_notebook.jl
 
 # Start fresh (new empty notebook)
 sessions
 
 # Start in a project directory (file explorer shows that directory)
-cd my_project/ && sessions""")
-                ),
+cd my_project/ && sessions""")),
 
                 SectionH3("Run headlessly"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
                     "Execute all cells in a notebook without the web UI. Useful for CI pipelines, batch processing, and automation."
                 ),
-                Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    CodeBlock(language="bash", "sessions run my_notebook.jl")
-                ),
+                Pre(:class => "$(code_block) mb-6", Code(:class => "language-bash", "sessions run my_notebook.jl")),
 
                 SectionH3("From the Julia REPL"),
-                Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-6 overflow-x-auto",
-                    CodeBlock(language="julia", """using Sessions
-Sessions.main(["my_notebook.jl"])""")
-                ),
+                Pre(:class => "$(code_block) mb-6", Code(:class => "language-julia", """using Sessions
+Sessions.main(["my_notebook.jl"])""")),
             ),
 
             # SessionsUI for notebooks
             Div(
                 SectionH2("Using SessionsUI in Notebooks"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "SessionsUI is a lightweight package (zero heavy dependencies) that provides the ", Kbd("@bind"), " macro and interactive widgets for notebook cells."
+                    "SessionsUI is a lightweight package (zero heavy dependencies) that provides the ",
+                    Code(:class => inline_code, "@bind"),
+                    " macro and interactive widgets for notebook cells."
                 ),
 
                 SectionH3("Installation"),
-                Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-4 overflow-x-auto",
-                    CodeBlock(language="julia", """using Pkg
-Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI")""")
-                ),
+                Pre(:class => "$(code_block) mb-4", Code(:class => "language-julia", """using Pkg
+Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI")""")),
 
                 SectionH3("Usage"),
-                Div(:class => "bg-warm-900 dark:bg-warm-950 rounded-lg p-5 mb-4 overflow-x-auto",
-                    CodeBlock(language="julia", """using SessionsUI: @bind, BoundSlider, BoundCheckBox, BoundTextField, BoundSelect
+                Pre(:class => "$(code_block) mb-4", Code(:class => "language-julia", """using SessionsUI: @bind, BoundSlider, BoundCheckBox, BoundTextField, BoundSelect
 
 @bind x BoundSlider(1:100)
 @bind name BoundTextField(default="world")
 @bind flag BoundCheckBox()
-@bind choice BoundSelect(["A", "B", "C"])""")
-                ),
+@bind choice BoundSelect(["A", "B", "C"])""")),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
                     "SessionsUI compiles in ~300ms because it only depends on UUIDs (stdlib). The heavy dependencies (Therapy.jl, Malt.jl, etc.) live in Sessions.jl (the app), not in SessionsUI."
                 ),
@@ -92,7 +88,9 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
             Div(
                 SectionH2("The Web IDE"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "When you run ", Kbd("sessions"), ", a local web server starts and the IDE opens in your browser at ", Kbd("http://127.0.0.1:8080"), "."
+                    "When you run ", Code(:class => inline_code, "sessions"),
+                    ", a local web server starts and the IDE opens in your browser at ",
+                    Kbd("http://127.0.0.1:8080"), "."
                 ),
 
                 SectionH3("Activity bar"),
@@ -107,7 +105,9 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
 
                 SectionH3("Integrated terminal"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "A real PTY-backed shell via xterm.js. Multiple tabs supported. Type ", Kbd("julia"), " to get a REPL, run build commands, or install packages. Terminal sessions survive page refreshes."
+                    "A real PTY-backed shell via xterm.js. Multiple tabs supported. Type ",
+                    Code(:class => inline_code, "julia"),
+                    " to get a REPL, run build commands, or install packages. Terminal sessions survive page refreshes."
                 ),
 
                 SectionH3("Notebook toolbar"),
@@ -124,7 +124,9 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
 
                 SectionH3("Cell menu"),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
-                    "Click the \u22EE button on any cell to access: Move up, Move down, Format cell, Delete cell. Deleted cells can be restored with Ctrl+Z (undo toast appears at bottom left)."
+                    "Click the ", Kbd("⋮"),
+                    " button on any cell to access: Move up, Move down, Format cell, Delete cell. Deleted cells can be restored with ",
+                    Kbd("Ctrl+Z"), " (undo toast appears at bottom left)."
                 ),
             ),
 
@@ -135,8 +137,10 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
                     "Every notebook produces two files:"
                 ),
                 Ul(:class => "list-disc list-inside space-y-2 text-warm-600 dark:text-warm-400 mb-4",
-                    Li(Kbd("notebook.jl"), " contains cell code, cell order, and fold/disabled metadata. This is the source of truth — safe to edit from any tool."),
-                    Li(Kbd("notebook.sessions.toml"), " contains cached outputs, stdout, runtimes, and error messages. It is optional, gitignored, and auto-regenerated when you run cells."),
+                    Li(Code(:class => inline_code, "notebook.jl"),
+                        " contains cell code, cell order, and fold/disabled metadata. This is the source of truth — safe to edit from any tool."),
+                    Li(Code(:class => inline_code, "notebook.sessions.toml"),
+                        " contains cached outputs, stdout, runtimes, and error messages. It is optional, gitignored, and auto-regenerated when you run cells."),
                 ),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
                     "The .jl file uses the same format as Pluto.jl, so you can open the same notebook in either tool."
@@ -154,7 +158,8 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
                     Li("Modify the .jl file from any editor or terminal"),
                     Li("The file watcher detects changes in under a second"),
                     Li("Modified cells are marked stale with an orange indicator"),
-                    Li("Click Run Stale or run ", Kbd("sessions run"), " to re-execute"),
+                    Li("Click Run Stale or run ",
+                        Code(:class => inline_code, "sessions run"), " to re-execute"),
                 ),
                 P(:class => "text-warm-600 dark:text-warm-400 leading-relaxed mb-4",
                     "The integrated terminal lets you run commands, install packages, and interact with your project without leaving the IDE."
@@ -182,7 +187,5 @@ Pkg.add(url="https://github.com/GroupTherapyOrg/Sessions.jl", subdir="SessionsUI
         )
     )
 end
-
-# --- Helpers ---
 
 GettingStartedIndex

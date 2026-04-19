@@ -285,15 +285,15 @@ function NotebookPageLayout(slug::AbstractString, notebook_vnode)
             notebook_vnode),
 
         # Right TOC column — same stretched-aside + sticky-inner
-        # pattern. No bg/border so it reads as empty whitespace
-        # when the viewport isn't wide enough, but the content sits
-        # flush right at `xl:` breakpoint.
+        # pattern. Styling matches the /api/ page's TOC exactly:
+        # single bordered container with a "On this page" <p>
+        # heading + auto-populated #notebook-toc list below.
         Aside(:class => "hidden xl:block w-56 shrink-0",
             Div(:class => "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto py-10 px-6",
-                H4(:class => "text-[11px] font-semibold tracking-wider uppercase text-warm-400 dark:text-warm-500 mb-3",
-                    "On this page"),
-                Div(:id => "notebook-toc",
-                    :class => "space-y-1.5 border-l border-warm-200 dark:border-warm-800 pl-3"))),
+                Div(:class => "border-l border-warm-200 dark:border-warm-800 pl-3",
+                    P(:class => "text-[11px] font-semibold text-warm-400 dark:text-warm-500 uppercase tracking-wider mb-3",
+                        "On this page"),
+                    Div(:id => "notebook-toc", :class => "space-y-1.5")))),
 
         # Client-side TOC populator.
         RawHtml(_notebook_toc_script()))
@@ -320,7 +320,11 @@ function _notebook_toc_script()::String
         if (!toc || !content) return;
         toc.innerHTML = '';
         var heads = content.querySelectorAll('h1, h2, h3');
-        if (!heads.length) { toc.parentNode.parentNode.style.display = 'none'; return; }
+        if (!heads.length) {
+          var aside = toc.closest('aside');
+          if (aside) aside.style.display = 'none';
+          return;
+        }
         var seen = {};
         heads.forEach(function (h) {
           var label = (h.textContent || '').trim();
@@ -335,18 +339,17 @@ function _notebook_toc_script()::String
           } else {
             seen[h.id] = true;
           }
-          var lvl = parseInt(h.tagName[1], 10) || 2;
           var a = document.createElement('a');
           a.href = '#' + h.id;
           a.textContent = label;
+          // Uniform link class matching /api/ TOC — no level-based
+          // font-weight/color variation. Every entry reads as a
+          // flat list of anchors, regardless of whether it came
+          // from an h1/h2/h3.
           a.className =
-            'block text-[12px] leading-relaxed py-0.5 transition-colors ' +
-            'hover:text-accent-500 dark:hover:text-accent-400 ' +
-            (lvl === 1
-               ? 'font-semibold text-warm-700 dark:text-warm-300'
-               : lvl === 2
-               ? 'text-warm-600 dark:text-warm-400'
-               : 'text-warm-500 dark:text-warm-500 pl-3');
+            'block text-[12px] leading-relaxed text-warm-500 ' +
+            'dark:text-warm-400 hover:text-accent-500 ' +
+            'dark:hover:text-accent-400 transition-colors';
           toc.appendChild(a);
         });
       }
