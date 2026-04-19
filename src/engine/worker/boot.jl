@@ -15,13 +15,62 @@ mutable struct _SessionsLogger <: AbstractLogger
     logs::Vector{_LogRecordNT}
     log_file::Union{String,Nothing}  # path to temp file for real-time streaming
     min_level::LogLevel
+    # Remaining emit count per log `id` for `@info "…" maxlog=N` support.
+    # Matches stdlib ConsoleLogger + Pluto: first call seeds, subsequent
+    # calls decrement, drops once it hits zero. Without this every
+    # `maxlog=1` `@info` in a hot loop floods the UI with duplicates.
+    message_limits::Dict{Any,Int}
 end
 
-Logging.shouldlog(l::_SessionsLogger, level, _module, group, id) = level >= l.min_level
+# Pluto-parity log gate. A module is "user-facing" if its root (walking up
+# until the parent is Main) is one of our workspace modules (SW_N, created
+# by `_create_workspace`). Those get Debug+ so user `@debug` calls show up.
+# Everything else — Base, Base.Precompilation, stdlib, installed packages —
+# must be Info+ to survive. Kills the `@debug "Ignoring cache file …"`
+# flood from Base.loading without any string-match heuristics.
+function _is_workspace_module(m::Module)
+    p = parentmodule(m)
+    while p !== m && p !== Main
+        m = p
+        p = parentmodule(m)
+    end
+    startswith(string(nameof(m)), "SW_")
+end
+_is_workspace_module(_) = false
+
+function Logging.shouldlog(l::_SessionsLogger, level, _module, group, id)
+    level >= l.min_level || return false
+    _is_workspace_module(_module) || level >= Logging.Info
+end
 Logging.min_enabled_level(l::_SessionsLogger) = l.min_level
 Logging.catch_exceptions(::_SessionsLogger) = true
 
-function Logging.handle_message(l::_SessionsLogger, level, message, _module, group, id, file, line; kwargs...)
+# Escape one of {\, \n, |} at a time so the line-per-record file format the
+# coordinator polls is unambiguous even for multi-line messages (stack
+# traces, Revise compile chatter). Decoder in manager.jl reverses this.
+function _esc_log(s::AbstractString)
+    io = IOBuffer()
+    for c in s
+        if c == '\\';     print(io, "\\\\")
+        elseif c == '\n'; print(io, "\\n")
+        elseif c == '|';  print(io, "\\p")
+        else;             print(io, c)
+        end
+    end
+    String(take!(io))
+end
+
+function Logging.handle_message(l::_SessionsLogger, level, message, _module, group, id, file, line;
+                                 maxlog=nothing, kwargs...)
+    # Honor `maxlog=N` exactly like stdlib ConsoleLogger: seed the counter
+    # on first sight, decrement, skip once we hit zero. Also strip the
+    # kwarg from the displayed payload so the UI doesn't render a
+    # pointless `maxlog: 1` tag on every entry.
+    if maxlog isa Integer
+        remaining = get!(l.message_limits, id, maxlog)
+        l.message_limits[id] = remaining - 1
+        remaining > 0 || return
+    end
     kw = Pair{String,String}[string(k) => try sprint(show, v) catch; "?" end for (k, v) in kwargs]
     rec = (level=Int32(level.level), message=string(message), file=string(file), line=Int(line), module_name=string(_module), kwargs=kw)
     push!(l.logs, rec)
@@ -29,9 +78,11 @@ function Logging.handle_message(l::_SessionsLogger, level, message, _module, gro
     if l.log_file !== nothing
         try
             open(l.log_file, "a") do io
-                # Simple line format: level|message|kwarg1=val1,kwarg2=val2
-                kw_str = join(["$(k)=$(v)" for (k, v) in kw], ",")
-                println(io, "$(rec.level)|$(rec.message)|$(kw_str)")
+                # One record per line; escape \n/|/\\ in fields so the
+                # poller's line-splitter never fragments a multi-line
+                # message into bogus orphan entries.
+                kw_str = join(["$(_esc_log(string(k)))=$(_esc_log(string(v)))" for (k, v) in kw], ",")
+                println(io, "$(rec.level)|$(_esc_log(rec.message))|$(kw_str)")
                 flush(io)
             end
         catch; end
@@ -82,7 +133,7 @@ function _worker_execute(ws::SessionsWorkspace, code::String; log_file::String="
     error_text = ""
     logs_buffer = _LogRecordNT[]
     lf = isempty(log_file) ? nothing : log_file
-    logger = _SessionsLogger(logs_buffer, lf, Logging.Debug)
+    logger = _SessionsLogger(logs_buffer, lf, Logging.Debug, Dict{Any,Int}())
 
     # Tell SessionsUI's @bind macro which cell is executing so bonds get
     # registered against a real cell_id. Without this every bond was

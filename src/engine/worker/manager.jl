@@ -10,6 +10,30 @@ import Malt
 # Boot script content path (worker includes this file)
 const _BOOT_SCRIPT_PATH = joinpath(@__DIR__, "boot.jl")
 
+# Reverse of `_esc_log` in boot.jl: turn "\\n" back into \n, "\\p" back
+# into |, "\\\\" back into \\. Single-pass so we never misinterpret a
+# literal backslash-n the user actually typed as an escaped newline.
+function _unesc_log(s::AbstractString)
+    io = IOBuffer()
+    i = firstindex(s); last = lastindex(s)
+    while i <= last
+        c = s[i]
+        if c == '\\' && i < last
+            j = nextind(s, i); nxt = s[j]
+            if     nxt == 'n';  print(io, '\n')
+            elseif nxt == 'p';  print(io, '|')
+            elseif nxt == '\\'; print(io, '\\')
+            else;               print(io, c, nxt)
+            end
+            i = nextind(s, j)
+        else
+            print(io, c)
+            i = nextind(s, i)
+        end
+    end
+    String(take!(io))
+end
+
 """A Malt worker process for a single notebook."""
 mutable struct NotebookWorker
     worker::Malt.Worker
@@ -113,35 +137,57 @@ function remote_execute_cell!(nw::NotebookWorker, cell::Cell; log_callback=nothi
     log_file = tempname() * "_logs.txt"
     touch(log_file)
 
-    # Start log poller — reads new lines from the file every 150ms and calls log_callback
+    # Start log poller — reads new lines from the file every 150ms and calls log_callback.
+    #
+    # Two subtle correctness issues this has to handle:
+    #
+    # 1. Duplicate records under heavy @info load. The original implementation
+    #    captured `filesize()` BEFORE opening the file and advanced `last_pos`
+    #    by that captured size — but `read(io, String)` reads to the current
+    #    EOF, which may have grown between the filesize() probe and the read.
+    #    Records written in that window got included in this poll's emit AND
+    #    re-read on the next poll. We now advance `last_pos` only by the byte
+    #    offset of the last complete newline we actually consumed, so partial
+    #    trailing writes are deferred to the next poll.
+    #
+    # 2. Multi-line messages (stack traces, Revise compile chatter) used to
+    #    get split into fragments at every embedded \n, with each fragment
+    #    dropped by the parser — while the in-memory buffer on the worker
+    #    held the intact record, so the final cell_output event "undid" the
+    #    visible flood. boot.jl now escapes \n/|/\\ in message+kwargs; we
+    #    decode here so the streamed records match the canonical set 1:1.
     poll_running = Ref(true)
-    last_pos = Ref(0)  # byte offset into file
+    last_pos = Ref(0)  # byte offset into file (always ends on a newline boundary)
     poller_task = if log_callback !== nothing
         @async begin
             while poll_running[]
                 try
-                    sz = filesize(log_file)
-                    if sz > last_pos[]
-                        new_bytes = open(log_file) do io
+                    if filesize(log_file) > last_pos[]
+                        new_data = open(log_file, "r") do io
                             seek(io, last_pos[])
                             read(io, String)
                         end
-                        last_pos[] = sz
-                        for line in split(new_bytes, '\n'; keepempty=false)
-                            parts = split(line, "|"; limit=3)
-                            length(parts) >= 2 || continue
-                            level = tryparse(Int32, parts[1])
-                            level === nothing && continue
-                            msg = String(parts[2])
-                            kw_str = length(parts) >= 3 ? String(parts[3]) : ""
-                            kwargs = Pair{String,String}[]
-                            if !isempty(kw_str)
-                                for p in split(kw_str, ",")
-                                    eq = findfirst('=', p)
-                                    eq !== nothing && push!(kwargs, String(p[1:eq-1]) => String(p[eq+1:end]))
+                        # Advance only up to the last complete line — any
+                        # partial trailing write stays for the next poll.
+                        nl = findlast(==('\n'), new_data)
+                        if nl !== nothing
+                            last_pos[] += nl  # \n is 1 byte in UTF-8; String indices are byte indices
+                            for line in split(SubString(new_data, 1, nl), '\n'; keepempty=false)
+                                parts = split(line, "|"; limit=3)
+                                length(parts) >= 2 || continue
+                                level = tryparse(Int32, parts[1])
+                                level === nothing && continue
+                                msg = _unesc_log(String(parts[2]))
+                                kw_str = length(parts) >= 3 ? String(parts[3]) : ""
+                                kwargs = Pair{String,String}[]
+                                if !isempty(kw_str)
+                                    for p in split(kw_str, ",")
+                                        eq = findfirst('=', p)
+                                        eq !== nothing && push!(kwargs, _unesc_log(String(p[1:eq-1])) => _unesc_log(String(p[eq+1:end])))
+                                    end
                                 end
+                                log_callback(LogRecord(level, msg, "", 0, "", kwargs))
                             end
-                            log_callback(LogRecord(level, msg, "", 0, "", kwargs))
                         end
                     end
                 catch; end
