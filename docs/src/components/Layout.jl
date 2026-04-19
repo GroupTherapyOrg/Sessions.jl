@@ -38,12 +38,12 @@ function Layout(content)
                         active_class = "text-accent-600 dark:text-accent-400 font-medium",
                         inactive_class = "text-warm-600 dark:text-warm-400 hover:text-accent-600 dark:hover:text-accent-400"
                     ),
-                    NavLink("./notebooks/", "Notebooks";
+                    NavLink("./api/", "API";
                         class = "text-sm transition-colors no-underline",
                         active_class = "text-accent-600 dark:text-accent-400 font-medium",
                         inactive_class = "text-warm-600 dark:text-warm-400 hover:text-accent-600 dark:hover:text-accent-400"
                     ),
-                    NavLink("./api/", "API";
+                    NavLink("./notebooks/", "Notebooks";
                         class = "text-sm transition-colors no-underline",
                         active_class = "text-accent-600 dark:text-accent-400 font-medium",
                         inactive_class = "text-warm-600 dark:text-warm-400 hover:text-accent-600 dark:hover:text-accent-400"
