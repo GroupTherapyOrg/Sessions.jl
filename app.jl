@@ -105,7 +105,14 @@ app = App(
     title = "Sessions.jl",
     output_dir = "dist",
     layout = :Layout,
-    middleware = [ApiMiddleware()]
+    middleware = [ApiMiddleware()],
+    # Pre-baked @island WASM/JS bundles shipped with the package. When
+    # `scripts/bake_islands.jl` has been run (CI or maintainer), these
+    # bytes are loaded directly — skipping seconds of per-island
+    # WasmTarget compile time on every `sessions` launch. If the dir
+    # is missing or an island's source SHA has drifted since the bake,
+    # Therapy transparently falls back to live compile.
+    prebaked_dir = joinpath(@__DIR__, "static", "islands"),
 )
 
 # Mount /static/* via Therapy's Oxygen-style staticfiles. Replaces the

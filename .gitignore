@@ -3,6 +3,7 @@
 Untitled.jl
 .DS_Store
 Manifest.toml
+!static/islands/manifest.toml
 LocalPreferences.toml
 ralph_loops/
 ralph_loop/

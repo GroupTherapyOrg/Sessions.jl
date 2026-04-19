@@ -1,0 +1,40 @@
+baked_at = "2026-04-18T18:51:59.355"
+julia_version = "1.12.4"
+sessions_version = "0.1.0"
+therapy_version = "0.1.0"
+wasmtarget_version = "0.1.0"
+
+[islands.ActivityBar]
+n_handlers = 2
+n_signals = 2
+source = "src/components/ActivityBar.jl"
+source_sha256 = "226ac458bed3ff806d79ea2d3b1f87a6dccb0bfa4336f7319abdcfae6e45ae66"
+wasm_size = 564
+
+[islands.CellView]
+n_handlers = 1
+n_signals = 4
+source = "src/components/CellView.jl"
+source_sha256 = "eb5b3bbf766f44fbe88e337f3c05b13143365e758b230889efcb5824f409a61e"
+wasm_size = 766
+
+[islands.NotebookIsland]
+n_handlers = 0
+n_signals = 0
+source = "src/components/Notebook.jl"
+source_sha256 = "66c3097dad4b613babc61bb9c04d927fd544837c9106809a0a03891717bf53b1"
+wasm_size = 70
+
+[islands.NotebookToolbar]
+n_handlers = 0
+n_signals = 8
+source = "src/components/NotebookToolbar.jl"
+source_sha256 = "a9e166246aa833f8d318b7d3f174d105e94ac1208ae6494b04fbe81edcc6bf40"
+wasm_size = 913
+
+[islands.StatusBar]
+n_handlers = 1
+n_signals = 3
+source = "src/components/StatusBar.jl"
+source_sha256 = "5870260c99d2c2671accbb32c131492de35cd91fbbe618da03093e4f5029003d"
+wasm_size = 519
