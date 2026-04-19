@@ -218,6 +218,17 @@ function _notebook_ws_bridge_body()
   // WS Bridge — sets up event listener + exposes optimistic APIs
   // ══════════════════════════════════════════════════════════════
   window._setupWSBridge = function() {
+    // Idempotent: every NotebookIsland re-mount (SPA nav, HMR reload, tab
+    // switch) fires on_mount which fires this setup, and each call used
+    // to register a fresh `therapy:channel:notebook` listener. Two
+    // listeners meant every streamed `cell_log` event ran the append
+    // handler twice — duplicate log entries visible during run, then
+    // "un-doubled" by the final `cell_output` event's innerHTML replace
+    // (the classic "glitches during run, fine at end" pattern the user
+    // reported). Guard matches the pattern documented in user memory
+    // (Router/WS IIFEs need singleton guards).
+    if (window._wsBridgeReady) return;
+    window._wsBridgeReady = true;
     console.log('[Sessions WS] Bridge initialized');
 
     // ── Page-level signal setters (Therapy nanostores pub/sub) ──
