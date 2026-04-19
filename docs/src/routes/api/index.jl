@@ -441,12 +441,11 @@ Sessions.apply_session!(nb, session)"""))),
             )
         ),
 
-        # Left-rail TOC — fixed position, floats in the left margin
-        # on xl+ viewports. Aligned with the other docs sidebars
-        # (notebooks list on /notebooks/*), giving the API page the
-        # same "wide nav on left" silhouette. Hidden below xl so
-        # narrow viewports get the full centered content band.
-        Nav(:class => "hidden xl:block fixed left-8 top-24 w-44 z-10",
+        # Right-rail TOC — fixed position, floats in the right
+        # margin on xl+ viewports. Matches the pattern Therapy.jl's
+        # /api/ page uses; hidden below xl so the content gets the
+        # full centered band.
+        Nav(:class => "hidden xl:block fixed right-8 top-24 w-44 z-10",
             Div(:class => "space-y-1.5 border-l border-warm-200 dark:border-warm-800 pl-3",
                 P(:class => "text-[11px] font-semibold text-warm-400 dark:text-warm-500 uppercase tracking-wider mb-3",
                     "On this page"),
