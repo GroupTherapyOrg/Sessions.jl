@@ -25,14 +25,17 @@ function ApiIndex()
         ("sessions",     "Session Files"),
     ]
 
-    Div(:class => "flex flex-1",
-        # Main content column
-        Div(:id => "notebook-content", :class => "flex-1 min-w-0",
-            Div(:class => "max-w-4xl px-6 py-12 mx-auto xl:mx-0",
-                PageHeader("API Reference",
-                    "Everything Sessions.jl exports — from the `sessions` CLI to the extract_notebook publish pipeline. IDE-internal APIs (PTY, LSP client, file watchers) are omitted."),
+    Fragment(
+        # Main content — centered in the viewport the same way
+        # /getting-started/ is, so the header lines up visually with
+        # the nav above it. The right-rail TOC is a separate fixed
+        # element below; content doesn't need to reserve space for
+        # it (the TOC floats over the right margin at xl+).
+        Div(:class => "max-w-5xl mx-auto px-6 py-12",
+            PageHeader("API Reference",
+                "Everything Sessions.jl exports — from the `sessions` CLI to the extract_notebook publish pipeline. IDE-internal APIs (PTY, LSP client, file watchers) are omitted."),
 
-                Div(:class => "space-y-14",
+            Div(:class => "space-y-14",
 
                     # ── CLI ────────────────────────────────────────
                     Div(
@@ -435,22 +438,22 @@ Sessions.apply_session!(nb, session)"""))),
                                     " in one call. Returns a ready-to-render notebook with cached outputs attached."),
                                 Pre(:class => code_block, Code(:class => "language-julia", "nb = Sessions.load_notebook_with_session(\"my.jl\")")))
                         )),
-                )
             )
         ),
 
-        # Right-rail TOC — sticky, mirrors NotebookPageLayout's shape.
-        Aside(:class => "hidden xl:block w-56 shrink-0",
-            Div(:class => "sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto py-10 px-6",
-                H4(:class => "text-[11px] font-semibold tracking-wider uppercase text-warm-400 dark:text-warm-500 mb-3",
+        # Right-rail TOC — fixed position, floats in the right
+        # margin on xl+ viewports. Matches the pattern Therapy.jl's
+        # /api/ page uses; hidden below xl so the content gets the
+        # full centered band.
+        Nav(:class => "hidden xl:block fixed right-8 top-24 w-44 z-10",
+            Div(:class => "space-y-1.5 border-l border-warm-200 dark:border-warm-800 pl-3",
+                P(:class => "text-[11px] font-semibold text-warm-400 dark:text-warm-500 uppercase tracking-wider mb-3",
                     "On this page"),
-                Nav(:class => "space-y-1.5 border-l border-warm-200 dark:border-warm-800 pl-3",
-                    map(sections) do (id, label)
-                        A(:href => "#$(id)",
-                          :class => "block text-[12px] leading-relaxed text-warm-500 dark:text-warm-400 hover:text-accent-500 dark:hover:text-accent-400 transition-colors",
-                          label)
-                    end...
-                )
+                map(sections) do (id, label)
+                    A(:href => "#$(id)",
+                      :class => "block text-[12px] leading-relaxed text-warm-500 dark:text-warm-400 hover:text-accent-500 dark:hover:text-accent-400 transition-colors",
+                      label)
+                end...
             )
         )
     )
