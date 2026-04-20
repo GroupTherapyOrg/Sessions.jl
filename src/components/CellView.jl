@@ -92,16 +92,24 @@ const _CV_MENU_ONCLICK = "window._sessionsShowCellMenu(this,this.closest('.cell-
         """, ns)
     end)
 
-    # ── Effect: is_open → .cell-code-wrap visibility + WS dispatch ──
-    # The dispatch is gated by an init flag so the very first effect
-    # run (during hydration) doesn't fire a spurious toggle_fold.
+    # ── Effect: is_open → .cell-code-wrap visibility + .code-hidden class + WS ──
+    # Single writer for fold state: inline style on .cell-code-wrap AND
+    # .code-hidden on .cell-wrap. The class must move together with the
+    # inline style — the CSS rule `.cell-wrap.code-hidden .cell-code-wrap
+    # {display:none}` otherwise overrides a cleared inline style, leaving
+    # the cell stuck hidden when re-opened. Init flag gates WS so hydration
+    # doesn't fire a spurious toggle_fold.
     create_effect(() -> begin
         v = is_open()
         js("""
             var c=island.querySelector('.cell-code-wrap');
             if(c)c.style.display=\$1?'':'none';
-            if(!island._foldInit){island._foldInit=true;return;}
             var wrap=island.closest('.cell-wrap');
+            if(wrap){
+                if(\$1) wrap.classList.remove('code-hidden');
+                else wrap.classList.add('code-hidden');
+            }
+            if(!island._foldInit){island._foldInit=true;return;}
             var cid=wrap?wrap.dataset.cellId:'';
             if(cid&&window.TherapyWS&&TherapyWS.sendMessage){
                 TherapyWS.sendMessage('notebook',{action:'toggle_fold',cell_id:cid,folded:!\$1});

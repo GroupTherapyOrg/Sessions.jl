@@ -14,36 +14,15 @@
     # into the bridge threw `undefined is not a function` on every WS message.
     # The WS bridge now owns cell-order tracking via DOM traversal instead.
 
-    # Hydrate: wire CM editors + WS bridge to existing SSR'd DOM
+    # Hydrate: wire CM editors + WS bridge to existing SSR'd DOM.
+    # Fold state (.code-hidden class, inline style, toggle_fold WS) is
+    # owned entirely by CellView's is_open effect — a previous design
+    # had a MutationObserver here that duplicated the WS send AND fought
+    # with CellView's inline style (the observer's class stayed stuck,
+    # CSS kept the code-wrap hidden on re-open).
     on_mount(() -> begin
-        # Init CM editors on existing .cm-cell elements
         js("if(window._initAllCM) _initAllCM()")
-
-        # Setup WS bridge — no setter crosses the boundary
         js("if(window._setupWSBridge) _setupWSBridge()")
-
-        # Init fold observers on existing .cell-island elements
-        js("""
-            document.querySelectorAll('.cell-island').forEach(function(island) {
-                var cellWrap = island.closest('.cell-wrap');
-                var cellId = cellWrap ? cellWrap.dataset.cellId : '';
-                if (!cellId) return;
-                var lastFolded = null;
-                var observer = new MutationObserver(function() {
-                    var codeCell = island.querySelector('.code-cell');
-                    var folded = !codeCell || codeCell.offsetParent === null;
-                    if (folded !== lastFolded) {
-                        lastFolded = folded;
-                        // Toggle traffic light bar visibility
-                        if (cellWrap) { if (folded) cellWrap.classList.add('code-hidden'); else cellWrap.classList.remove('code-hidden'); }
-                        if (window.TherapyWS && TherapyWS.sendMessage) {
-                            TherapyWS.sendMessage('notebook', {action: 'toggle_fold', cell_id: cellId, folded: folded});
-                        }
-                    }
-                });
-                observer.observe(island, {childList: true, subtree: true, attributes: true, attributeFilter: ['style']});
-            });
-        """)
     end)
 
     # SSR'd children (render_cell output) rendered directly — no For(), no skeletons

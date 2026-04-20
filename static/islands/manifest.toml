@@ -1,4 +1,4 @@
-baked_at = "2026-04-18T18:51:59.355"
+baked_at = "2026-04-20T09:21:22.575"
 julia_version = "1.12.4"
 sessions_version = "0.1.0"
 therapy_version = "0.1.0"
@@ -15,14 +15,14 @@ wasm_size = 564
 n_handlers = 1
 n_signals = 4
 source = "src/components/CellView.jl"
-source_sha256 = "eb5b3bbf766f44fbe88e337f3c05b13143365e758b230889efcb5824f409a61e"
+source_sha256 = "0a78dcf1ffc6359d566297448936bc1cf9c83b2a7b6e4d8924b873e8c3c9339d"
 wasm_size = 766
 
 [islands.NotebookIsland]
 n_handlers = 0
 n_signals = 0
 source = "src/components/Notebook.jl"
-source_sha256 = "66c3097dad4b613babc61bb9c04d927fd544837c9106809a0a03891717bf53b1"
+source_sha256 = "7c4b47f61051b546c21d79ebd305eafcfde504c2dacebe140d7c76f5ec4f07b3"
 wasm_size = 70
 
 [islands.NotebookToolbar]
