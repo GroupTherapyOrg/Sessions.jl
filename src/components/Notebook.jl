@@ -569,6 +569,17 @@ function _notebook_ws_bridge_body()
           }
         }
         setCellState(el, data.state, data.cell_id);
+        // Optimistically clear the stale class the moment a cell
+        // finishes running — the authoritative `stale_update` broadcast
+        // always arrives after this event but can be delayed by
+        // save_session! I/O (or, in pathological cases, skipped if
+        // _run_order! raises). Clearing here eliminates the visible
+        // flash between cell_output and stale_update on the happy path
+        // and covers the exception path too; if the user edited the
+        // cell during the run, the next update_code will re-mark it.
+        if (data.state === 'cell_done' || data.state === 'cell_errored') {
+          setCellStale(data.cell_id, false);
+        }
         // Runtime badge text is now driven by the CellView runtime_ns
         // signal (its effect formats and writes the text). The error
         // tint stays imperative — it's a one-off color set, not state.

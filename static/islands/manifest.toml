@@ -1,4 +1,4 @@
-baked_at = "2026-04-20T09:21:22.575"
+baked_at = "2026-04-20T09:41:12.943"
 julia_version = "1.12.4"
 sessions_version = "0.1.0"
 therapy_version = "0.1.0"
@@ -22,7 +22,7 @@ wasm_size = 766
 n_handlers = 0
 n_signals = 0
 source = "src/components/Notebook.jl"
-source_sha256 = "7c4b47f61051b546c21d79ebd305eafcfde504c2dacebe140d7c76f5ec4f07b3"
+source_sha256 = "28ba0c7d9f77288759a4eb0c69f547775121fd62ef6f438ce44db57198c82c98"
 wasm_size = 70
 
 [islands.NotebookToolbar]

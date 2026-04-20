@@ -352,9 +352,9 @@ function _handle_run_all!(state::WebNotebookState, conn, data)
             nb = active_nb(state)
             update_topology!(nb)
             order = execution_order(nb)
+            # _run_order! handles save_session! + _broadcast_stale! in
+            # its own finally block — no need to call them again here.
             _run_order!(state, order)
-            save_session!(nb)
-            _broadcast_stale!(state)
         finally
             state.executing = false
         end
@@ -456,10 +456,15 @@ function _run_order!(state::WebNotebookState, order)
             "running_index" => 0,
             "total" => 0
         ))
+        # save_session! + _broadcast_stale! MUST run in finally too —
+        # otherwise an exception during the execute loop (Malt hiccup,
+        # JSON serialize error, etc.) skips the post-run stale-clear
+        # broadcast, leaving every just-ran cell visually stuck on the
+        # stale class until the user manually saves. Both helpers have
+        # their own try/catch internally so they can't re-throw here.
+        try save_session!(nb) catch; end
+        try _broadcast_stale!(state) catch; end
     end
-
-    save_session!(nb)
-    _broadcast_stale!(state)
 end
 
 function _broadcast_stale!(state::WebNotebookState)
