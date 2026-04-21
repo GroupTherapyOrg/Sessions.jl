@@ -29,7 +29,7 @@ function SessionsApp(children...)
 
                 # Editor Area (notebook/file + terminal)
                 Div(:id => "editor-area",
-                    :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:12px;",
+                    :style => "flex:1 1 0%;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:clip;gap:12px;",
                     children...,
                     # Terminal (@island — xterm.js)
                     Div(:id => "repl-panel",

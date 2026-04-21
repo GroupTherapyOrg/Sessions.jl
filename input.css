@@ -98,9 +98,18 @@
    Structural layout — workspace / panels / scrollbars / animations
    ═══════════════════════════════════════════════════════════════════ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;margin:0;padding:0;}
-#sessions-root{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;background:var(--workspace-bg);color:var(--text-1);transition:background .2s,color .2s;}
-#workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
+/* `overflow: clip` instead of `hidden` on every layout container that wraps
+   the scrollable #nb. `hidden` still makes an element a scrolling box (it
+   has a scrollTop, just no visible scrollbar), and `scrollIntoView` walks
+   up the ancestor chain and scrolls every scrolling box it finds. When the
+   ToC jumps to a heading near the bottom of a large notebook, #nb runs out
+   of scroll room, so the browser continues and also scrolls nb-island /
+   editor-area — which pushes the tab bar off the top of nb-island. `clip`
+   explicitly is NOT a scroll container, so scrollIntoView skips it.
+   See NotebookPanel.jl for the matching nb-island change. */
+html,body{height:100%;overflow:clip;margin:0;padding:0;}
+#sessions-root{display:flex;flex-direction:column;height:100vh;overflow:clip;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;background:var(--workspace-bg);color:var(--text-1);transition:background .2s,color .2s;}
+#workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:clip;}
 #workspace>*{min-height:0;}
 #workspace>div{min-height:0;}
 #nb-island>therapy-island{flex:1;display:flex;flex-direction:column;min-height:0;}

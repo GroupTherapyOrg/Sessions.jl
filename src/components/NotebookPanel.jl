@@ -19,7 +19,7 @@ function NotebookPanel(state)
 
     if tab === nothing
         return Div(:id => "nb-island",
-            :class => "flex-1 flex flex-col rounded-xl overflow-hidden min-h-0",
+            :class => "flex-1 flex flex-col rounded-xl overflow-clip min-h-0",
             :style => "background:var(--panel-bg);border:1px solid var(--cell-border);",
             Div(:class => "flex-1 flex items-center text-sm",
                 :style => "justify-content:center;color:var(--text-3);",
@@ -133,8 +133,15 @@ function NotebookPanel(state)
     # ═══════════════════════════════════════════════════════════
     # Assemble
     # ═══════════════════════════════════════════════════════════
+    # `overflow-clip` (not `overflow-hidden`): the tab_bar is a flex child
+    # at top:0, and the dedicated scrollable area is #nb a couple levels in.
+    # With `hidden`, ToC clicks on headings near the notebook's bottom run
+    # scrollIntoView past #nb's max scroll, and the browser then scrolls
+    # nb-island too — which lifts the tab_bar off the top of the panel.
+    # `clip` explicitly is not a scroll container, so scrollIntoView stops
+    # at #nb.
     Div(:id => "nb-island",
-        :class => "flex-1 flex flex-col rounded-xl overflow-hidden min-h-0",
+        :class => "flex-1 flex flex-col rounded-xl overflow-clip min-h-0",
         :style => "background:var(--panel-bg);border:1px solid var(--cell-border);position:relative;",
         tab_bar,
         loading_overlay,
