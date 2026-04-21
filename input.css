@@ -80,8 +80,17 @@
      2. cell-list width clamp when the ToC is open.
    ═══════════════════════════════════════════════════════════════════ */
 #nb-island .sessions-toc.aside{position:absolute;top:58px;}
-#nb-island:has(#nb.toc-open){container-type:inline-size;}
-@container (min-width: 1200px) {
+/* Reserve right-side space for the ToC when it's open on wide viewports.
+   Previously keyed off `container-type: inline-size` on #nb-island so the
+   query tracked the panel's width instead of the viewport. That stacked
+   `contain: layout inline-size style` onto the flex-column parent, and
+   Chromium rewrites child flex sizing under that combination — the
+   `h-[38px] shrink-0` tab_bar collapsed to 0px, so the file tab, Stop,
+   progress, Save, and Format all vanished the moment the ToC opened
+   (returned when it was hidden because the rule stopped matching).
+   Plain @media dodges the containment entirely; viewport width tracks
+   nb-island width closely enough in the single-pane IDE layout. */
+@media (min-width: 1200px) {
   #nb.toc-open{padding-right: calc(300px + 0.5rem) !important;}
 }
 
