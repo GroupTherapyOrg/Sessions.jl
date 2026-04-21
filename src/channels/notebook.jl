@@ -124,6 +124,43 @@ function _nb_send!(conn, msg::Dict)
     try; Therapy.send_ws_message(conn, msg); catch; end
 end
 
+# Apply a client-supplied code update to `cell` with stale-client detection.
+# Returns `(applied::Bool, server_code::String)` — when `applied` is false the
+# caller should push `server_code` back so the client's CodeMirror catches up
+# to whatever overwrote `cell.code` (typically a watcher merge of an external
+# edit). The check: if the client's incoming code matches the last-executed
+# hash *and* the server has since diverged from that hash, the client is
+# echoing pre-merge state and we keep the server version.
+#
+# Edge case: never-run cells have empty `produced_by_hash`, so this falls
+# open and the client always wins. That's acceptable — there's no "last
+# executed" baseline to detect staleness against.
+function _apply_client_code!(cell::Cell, client_code::String)
+    server_code = cell.code
+    client_code == server_code && return (true, server_code)
+    if !isempty(cell.produced_by_hash)
+        client_hash = string(hash(strip(client_code)), base=16)
+        server_hash = source_hash(cell)
+        if client_hash == cell.produced_by_hash && server_hash != cell.produced_by_hash
+            return (false, server_code)
+        end
+    end
+    cell.code = client_code
+    return (true, client_code)
+end
+
+# Broadcast a cell_code_updated event so every client's CodeMirror catches up.
+# The client-side handler diff-checks against the current buffer (Notebook.jl
+# `if (data.code !== cur)`), so if the user's editor already matches the
+# server, no dispatch fires and the cursor stays put.
+function _broadcast_cell_code!(cell_id::AbstractString, code::AbstractString)
+    _nb_broadcast!(Dict(
+        "event" => "cell_code_updated",
+        "cell_id" => String(cell_id),
+        "code" => String(code)
+    ))
+end
+
 function _update_cell_signal!(cell::Cell)
     try
         Therapy.broadcast_all(Dict{String,Any}(
@@ -713,7 +750,14 @@ function _handle_update_code!(state::WebNotebookState, conn, data)
 
     cell = get_cell(active_nb(state), UUID(cell_id_str))
     cell === nothing && return
-    cell.code = new_code
+
+    applied, server_code = _apply_client_code!(cell, String(new_code))
+    if !applied
+        # Server has a newer external edit (likely from the watcher merging
+        # an agent change). Echo it back so the client's CodeMirror replaces
+        # its stale buffer instead of having silently-rejected typing.
+        _broadcast_cell_code!(cell_id_str, server_code)
+    end
 
     _broadcast_stale!(state)
 end
@@ -741,10 +785,13 @@ function _handle_save!(state::WebNotebookState, conn, data)
 
     nb = active_nb(state)
     codes = get(data, "codes", nothing)
+    rejected = Tuple{String,String}[]  # cell_id, server_code — pushed back below
     if codes !== nothing
         for (cid, code) in codes
             cell = get_cell(nb, UUID(String(cid)))
-            cell !== nothing && (cell.code = String(code))
+            cell === nothing && continue
+            applied, server_code = _apply_client_code!(cell, String(code))
+            applied || push!(rejected, (String(cid), server_code))
         end
     end
 
@@ -753,6 +800,13 @@ function _handle_save!(state::WebNotebookState, conn, data)
     tab.last_written_hash[] = hash(codeunits(serialized))
     tab.snapshot[] = _snapshot_notebook(nb)
     save_session!(nb)
+
+    # Push the authoritative code back for any cell where the client's buffer
+    # was stale relative to a server-side merge. Done after the disk write so
+    # what we tell the client matches what's now on disk.
+    for (cid, server_code) in rejected
+        _broadcast_cell_code!(cid, server_code)
+    end
 
     msg = Dict("event" => "saved", "notebook_path" => nb.path)
     mutation_id !== nothing && (msg["ack_mutation"] = mutation_id)
@@ -783,19 +837,17 @@ end
 function _handle_run_stale!(state::WebNotebookState, conn, data)
     nb = active_nb(state)
     codes = get(data, "codes", nothing)
+    rejected = Tuple{String,String}[]
     if codes !== nothing
         for (cid, code) in codes
             cell = get_cell(nb, UUID(String(cid)))
             cell === nothing && continue
-            client_code = String(code)
-            if is_stale(cell) && client_code != cell.code
-                client_hash = string(hash(strip(client_code)), base=16)
-                if client_hash == cell.produced_by_hash
-                    continue
-                end
-            end
-            cell.code = client_code
+            applied, server_code = _apply_client_code!(cell, String(code))
+            applied || push!(rejected, (String(cid), server_code))
         end
+    end
+    for (cid, server_code) in rejected
+        _broadcast_cell_code!(cid, server_code)
     end
 
     @async begin
@@ -1171,9 +1223,21 @@ function _start_tab_watcher!(state::WebNotebookState, tab::WebTab)
 end
 
 function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
-    state.executing && return
-
     try
+        # Snapshot which cells are mid-flight before we touch anything. Agent
+        # edits to those cells are deferred — applying them now would race with
+        # the worker (the cell would re-emit output for code that's no longer
+        # the source). We restore busy cells' code AND rewind their snapshot
+        # entry below so the next watcher poll re-merges them once they idle.
+        busy_codes = Dict{UUID, String}()
+        if state.executing
+            for (id, c) in tab.nb.cells
+                if c.state == cell_running || c.state == cell_queued
+                    busy_codes[id] = c.code
+                end
+            end
+        end
+
         old_order = copy(tab.nb.cell_order)
         # merge_external_changes hashes the disk bytes and compares against
         # the hash recorded after our last save. If they match, the watcher
@@ -1182,8 +1246,25 @@ function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
         # poll cycle cannot be reverted by a stale-disk apply.
         diff = merge_external_changes!(tab.nb, tab.snapshot, tab.last_written_hash)
 
+        # Restore busy cells in BOTH the notebook and the snapshot. Rewinding
+        # the snapshot entry is critical: merge updated snapshot[] = disk_nb
+        # wholesale, so without rewinding, the next poll's diff would be empty
+        # for that cell and the deferred agent edit would be lost forever.
+        if !isempty(busy_codes)
+            snap = tab.snapshot[]
+            for (id, original_code) in busy_codes
+                haskey(tab.nb.cells, id)  && (tab.nb.cells[id].code  = original_code)
+                haskey(snap.cells,    id) && (snap.cells[id].code   = original_code)
+            end
+        end
+
         reordered = diff.new_order != old_order
-        n_changes = length(diff.added) + length(diff.changed) + length(diff.removed) + length(diff.metadata_changed)
+        # Filter the broadcast list — busy cells haven't actually changed
+        # in-memory yet, so emitting cell_code_updated for them would push
+        # the agent's version to CodeMirror prematurely.
+        changed = isempty(busy_codes) ? diff.changed :
+                  [(id, code) for (id, code) in diff.changed if !haskey(busy_codes, id)]
+        n_changes = length(diff.added) + length(changed) + length(diff.removed) + length(diff.metadata_changed)
         n_changes == 0 && !reordered && return
 
         create_cell_signals!(state)
@@ -1192,7 +1273,7 @@ function _on_web_external_change!(state::WebNotebookState, tab::WebTab)
         if !isempty(diff.added) || !isempty(diff.removed) || reordered
             _broadcast_nb_html!(state)
         else
-            for (id, new_code) in diff.changed
+            for (id, new_code) in changed
                 haskey(tab.nb.cells, id) || continue
                 _nb_broadcast!(Dict(
                     "event" => "cell_code_updated",
