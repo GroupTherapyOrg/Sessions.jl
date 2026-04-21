@@ -103,7 +103,13 @@ html,body{height:100%;overflow:hidden;margin:0;padding:0;}
 #workspace{flex:1 1 0%;display:flex;gap:12px;padding:12px;min-height:0;overflow:hidden;}
 #workspace>*{min-height:0;}
 #workspace>div{min-height:0;}
-therapy-island,therapy-children{display:contents;}
+/* Custom elements default to display:inline. Give therapy-island a proper
+   block-level box so flex/block parents size it correctly (NotebookToolbar
+   in the tab bar, CellView inside each cell-body). Collapse therapy-children
+   out of layout entirely — that's the scroll-lock fix from 88af5ea, now
+   scoped so it doesn't also nuke the tab bar's therapy-island layout box. */
+therapy-island{display:block;}
+therapy-children{display:contents;}
 #nb-island>therapy-island{flex:1;display:flex;flex-direction:column;min-height:0;}
 #nb{overflow-x:hidden;}
 
