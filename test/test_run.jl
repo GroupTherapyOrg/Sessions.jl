@@ -1,19 +1,26 @@
 using Test
 using Sessions
 
-const _FIXTURES = joinpath(@__DIR__, "fixtures")
-
 @testset "run.jl" begin
     @testset "Sessions.run with file path" begin
-        nb = Sessions.run(joinpath(_FIXTURES, "test_basic.jl"))
+        # Build a tiny on-disk notebook in a tempdir so we exercise the
+        # file-path entry point without depending on a checked-in fixture.
+        nb_in = Notebook()
+        add_cell!(nb_in, "x = 1")
+        add_cell!(nb_in, "y = x + 1")
+        add_cell!(nb_in, "z = x * y")
+        tmp = joinpath(mktempdir(), "tiny.jl")
+        write(tmp, serialize_notebook(nb_in))
+
+        nb = Sessions.run(tmp)
         @test nb isa Sessions.Notebook
         @test length(nb) == 3
 
         cells = ordered_cells(nb)
         @test cells[1].state == cell_done
-        @test cells[1].output.result == 1   # x = 1
-        @test cells[2].output.result == 2   # y = x + 1
-        @test cells[3].output.result == 2   # z = x * y
+        @test cells[1].output.result == 1
+        @test cells[2].output.result == 2
+        @test cells[3].output.result == 2
     end
 
     @testset "Sessions.run with Notebook object" begin
@@ -74,11 +81,19 @@ const _FIXTURES = joinpath(@__DIR__, "fixtures")
     end
 
     @testset "Sessions.run folded notebook" begin
-        nb = Sessions.run(joinpath(_FIXTURES, "folded_notebook.jl"))
-        cells = ordered_cells(nb)
+        # Folded cells should still execute — the fold flag is a UI hint,
+        # not an execution gate. Build the fixture programmatically so we
+        # don't need a checked-in folded_notebook.jl.
+        nb = Notebook()
+        add_cell!(nb, "visible_var = 42")
+        add_cell!(nb, "folded_var = 100"; folded=true)
+        add_cell!(nb, "result = visible_var + folded_var")
 
-        @test cells[1].output.result == 42    # visible_var = 42
-        @test cells[2].output.result == 100   # folded_var = 100
-        @test cells[3].output.result == 142   # result = visible_var + folded_var
+        Sessions.run(nb)
+        cells = ordered_cells(nb)
+        @test cells[1].output.result == 42
+        @test cells[2].output.result == 100
+        @test cells[2].folded == true
+        @test cells[3].output.result == 142
     end
 end

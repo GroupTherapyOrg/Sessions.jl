@@ -4,16 +4,11 @@ using UUIDs
 
 const FIXTURES_DIR = joinpath(@__DIR__, "fixtures")
 
-# All Pluto fixture files to test
+# Pluto-format fixtures we actually ship (curated to demo files in
+# de66a12 — see test/fixtures/{welcome,interactive}.jl).
 const PLUTO_FIXTURES = [
-    "basic_notebook.jl",
-    "folded_notebook.jl",
-    "pluto_getting_started.jl",
-    "pluto_plutoui_sample.jl",
-    "pluto_sample_basic.jl",
-    "pluto_sample_hanoi.jl",
-    "pluto_sample_interactive.jl",
-    "with_pkgs_notebook.jl",
+    "welcome.jl",
+    "interactive.jl",
 ]
 
 @testset "Pluto compatibility" begin
@@ -71,75 +66,41 @@ const PLUTO_FIXTURES = [
         end
     end
 
-    # --- Specific format features ---
+    # --- Specific format features (against shipped fixtures) ---
 
-    @testset "Folded cells preserved" begin
-        path = joinpath(FIXTURES_DIR, "folded_notebook.jl")
+    @testset "Folded cells preserved (welcome.jl)" begin
+        # welcome.jl is the markdown showcase — every cell is hidden so
+        # the rendered output IS the experience. That makes it a natural
+        # fold-flag fixture too.
+        path = joinpath(FIXTURES_DIR, "welcome.jl")
         nb = load_notebook(path)
-        cells = ordered_cells(nb)
-
-        # At least one folded cell expected
-        has_folded = any(c -> c.folded, cells)
-        @test has_folded
+        @test any(c -> c.folded, ordered_cells(nb))
     end
 
-    @testset "Folded roundtrip" begin
-        path = joinpath(FIXTURES_DIR, "folded_notebook.jl")
+    @testset "Folded roundtrip (welcome.jl)" begin
+        path = joinpath(FIXTURES_DIR, "welcome.jl")
         nb = load_notebook(path)
         folded_before = Dict(c.id => c.folded for c in ordered_cells(nb))
-
-        content = serialize_notebook(nb)
-        nb2 = parse_notebook(content)
-
+        nb2 = parse_notebook(serialize_notebook(nb))
         for (id, was_folded) in folded_before
             cell2 = get_cell(nb2, id)
             @test cell2.folded == was_folded
         end
     end
 
-    @testset "Pkg section handled gracefully" begin
-        path = joinpath(FIXTURES_DIR, "with_pkgs_notebook.jl")
+    @testset "Pkg section handled gracefully (interactive.jl)" begin
+        # interactive.jl opens with Pkg.activate(mktempdir()) + Pkg.add
+        # cells, so it exercises the Pkg-bootstrap path through the
+        # notebook parser without needing a separate fixture.
+        path = joinpath(FIXTURES_DIR, "interactive.jl")
         nb = load_notebook(path)
         @test length(nb) > 0
-        # Should not crash, Pkg section is skipped
-    end
-
-    @testset "Getting started notebook — multi-cell" begin
-        path = joinpath(FIXTURES_DIR, "pluto_getting_started.jl")
-        nb = load_notebook(path)
-        @test length(nb) >= 5  # Has many cells
-    end
-
-    @testset "Hanoi notebook — complex code preserved" begin
-        path = joinpath(FIXTURES_DIR, "pluto_sample_hanoi.jl")
-        nb = load_notebook(path)
-        cells = ordered_cells(nb)
-
-        # Should contain function definitions
-        has_function = any(c -> contains(c.code, "function"), cells)
-        @test has_function
     end
 
     @testset "Interactive notebook — @bind syntax preserved" begin
-        path = joinpath(FIXTURES_DIR, "pluto_sample_interactive.jl")
+        path = joinpath(FIXTURES_DIR, "interactive.jl")
         nb = load_notebook(path)
-        cells = ordered_cells(nb)
-
-        # Interactive notebooks often have @bind or Slider
-        has_interactive = any(c -> contains(c.code, "@bind") || contains(c.code, "Slider"), cells)
-        # May not have @bind in this particular fixture, but should load fine
-        @test length(nb) > 0
-    end
-
-    @testset "PlutoUI sample — complex notebook loads" begin
-        path = joinpath(FIXTURES_DIR, "pluto_plutoui_sample.jl")
-        nb = load_notebook(path)
-        @test length(nb) >= 10  # Large notebook
-
-        # Roundtrip
-        content = serialize_notebook(nb)
-        nb2 = parse_notebook(content)
-        @test length(nb2) == length(nb)
+        @test any(c -> contains(c.code, "@bind"), ordered_cells(nb))
     end
 
     # --- Parse robustness ---
