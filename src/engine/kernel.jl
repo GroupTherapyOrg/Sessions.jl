@@ -393,7 +393,7 @@ function _parse_error_text(error_text::String)::StructuredError
     isempty(lines) && return StructuredError("Error", error_text, StructuredFrame[], 0, error_text)
 
     msg_lines = String[]
-    stack_start = 0
+    stack_start = length(lines) + 1
     for (i, line) in enumerate(lines)
         if startswith(strip(line), "Stacktrace:")
             stack_start = i + 1

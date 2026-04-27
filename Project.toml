@@ -11,8 +11,6 @@ Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 ExpressionExplorer = "21656369-7473-754a-2065-74616d696c43"
 FileWatching = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
-JuliaLowering = "f3c80556-a63f-4383-b822-37d64f81a311"
-JuliaSyntax = "70703baa-626e-46a2-a12c-08ffd08c73b4"
 Malt = "36869731-bdee-424d-aa32-cab38c994e3b"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
@@ -24,14 +22,9 @@ SessionsUI = "d4e5f6a7-b8c9-0123-defa-234567890123"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Therapy = "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
-WasmTarget = "9f3a1415-1112-405b-ae89-c61daf9872bd"
 
 [sources]
-JuliaLowering = {rev = "main", url = "https://github.com/JuliaLang/JuliaLowering.jl"}
-JuliaSyntax = {rev = "main", url = "https://github.com/JuliaLang/JuliaSyntax.jl"}
 SessionsUI = {subdir = "SessionsUI", url = "https://github.com/GroupTherapyOrg/Sessions.jl.git"}
-Therapy = {url = "https://github.com/GroupTherapyOrg/Therapy.jl.git"}
-WasmTarget = {rev = "main", url = "https://github.com/GroupTherapyOrg/WasmTarget.jl"}
 
 [compat]
 ExpressionExplorer = "1"

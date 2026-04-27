@@ -1157,7 +1157,7 @@ function _broadcast_nb_html!(state::WebNotebookState)
         vnode = Base.invokelatest(_NP, state)
         vnode !== nothing ? Therapy.render_to_string(vnode) : ""
     catch e
-        @warn "[notebook] Failed to render notebook panel" exception=e
+        @warn "[notebook] Failed to render notebook panel" exception=(e, catch_backtrace())
         ""
     end
 
