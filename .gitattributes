@@ -1,2 +1,11 @@
 # Exclude e2e test scaffolding from GitHub language statistics
 test/e2e/** linguist-vendored
+
+# Pluto-format notebooks are LF-sensitive: the parser splits on '\n' and
+# the cell-marker regex matches UUID strings up to the line end. Git's
+# default `core.autocrlf=true` on Windows would otherwise rewrite *.jl
+# checkouts as CRLF, leaving "<uuid>\r" tokens that break UUID parsing.
+# Pin .jl (and .toml, since notebooks embed Project/Manifest sections)
+# to LF on every platform.
+*.jl text eol=lf
+*.toml text eol=lf

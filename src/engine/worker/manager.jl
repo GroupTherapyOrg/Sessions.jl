@@ -10,6 +10,11 @@ import Malt
 # Boot script content path (worker includes this file)
 const _BOOT_SCRIPT_PATH = joinpath(@__DIR__, "boot.jl")
 
+# JULIA_LOAD_PATH separator: ';' on Windows, ':' elsewhere — Julia parses
+# the env var with the platform path separator. Hardcoding ':' broke
+# stdlib resolution (Markdown etc.) for Malt workers on Windows CI.
+const _JULIA_LOAD_PATH = "@$(Sys.iswindows() ? ';' : ':')@v#.#$(Sys.iswindows() ? ';' : ':')@stdlib"
+
 # Reverse of `_esc_log` in boot.jl: turn "\\n" back into \n, "\\p" back
 # into |, "\\\\" back into \\. Single-pass so we never misinterpret a
 # literal backslash-n the user actually typed as an escaped newline.
@@ -50,7 +55,7 @@ function NotebookWorker(; notebook_path::String="")
     # Override JULIA_LOAD_PATH — the sessions CLI shim sets it to the app env,
     # which prevents the worker from finding packages in the notebook's project.
     # Malt's env is addenv (Vector{String}), so we override with the default value.
-    w = Malt.Worker(; exeflags, env=["JULIA_LOAD_PATH=@:@v#.#:@stdlib"])
+    w = Malt.Worker(; exeflags, env=["JULIA_LOAD_PATH=$(_JULIA_LOAD_PATH)"])
     nw = NotebookWorker(w, notebook_path, false)
     _boot_worker!(nw)
     nw
@@ -264,7 +269,7 @@ function restart_worker!(nw::NotebookWorker)
     stop_worker!(nw)
     proj_dir = _find_notebook_project(nw.notebook_path)
     exeflags = proj_dir !== nothing ? ["--project=$(proj_dir)"] : String[]
-    nw.worker = Malt.Worker(; exeflags, env=["JULIA_LOAD_PATH=@:@v#.#:@stdlib"])
+    nw.worker = Malt.Worker(; exeflags, env=["JULIA_LOAD_PATH=$(_JULIA_LOAD_PATH)"])
     _boot_worker!(nw)
 end
 

@@ -35,7 +35,11 @@ end
 
 """Parse notebook content string into a Notebook."""
 function parse_notebook(content::String; path::String="Untitled.jl")
-    lines = split(content, '\n')
+    # Tolerate CRLF line endings — happens whenever a notebook is checked
+    # out by Git on Windows with `core.autocrlf=true` (the default), or
+    # touched by a Windows-native editor. Strip any trailing '\r' so
+    # downstream UUID / marker matching doesn't see "<uuid>\r".
+    lines = SubString{String}[endswith(l, '\r') ? chop(l) : l for l in split(content, '\n')]
     nb = Notebook(; path)
 
     # Parse cell bodies: collect UUID → code mappings
