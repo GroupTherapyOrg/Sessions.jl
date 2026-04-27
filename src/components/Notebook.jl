@@ -289,7 +289,12 @@ function _notebook_ws_bridge_body()
       var g = ex['signal_'+idx];
       if (!g) return;
       // Therapy's i64 signals expect BigInt; smaller types accept Number.
-      g.value = (typeof g.value === 'bigint') ? BigInt(jsValue|0) : jsValue;
+      // Important: do NOT pre-truncate via `|0` — that converts to Int32
+      // first, and runtime_ns (UInt64 nanoseconds) sign-flips negative
+      // for any cell longer than 2^31 ns ≈ 2.15s, which then trips the
+      // CellView runtime_ns effect's `n<=0` guard and blanks the badge.
+      // BigInt accepts integer-valued JS Numbers up to 2^53 directly.
+      g.value = (typeof g.value === 'bigint') ? BigInt(jsValue) : jsValue;
       var subs = ex['_rt_subs_'+idx];
       if (subs && ex._rt_flush) ex._rt_flush(subs.value);
     }
@@ -313,7 +318,10 @@ function _notebook_ws_bridge_body()
       _setIslandSignal(_cellViewIsland(cellId), 1, isStale ? 1 : 0);
     }
     function setCellRuntime(cellId, ns) {
-      _setIslandSignal(_cellViewIsland(cellId), 2, ns|0);
+      // ns is UInt64 nanoseconds from the server. Pass through as a plain
+      // Number — _setIslandSignal will BigInt() it for the i64 signal.
+      // Don't `|0` here: that overflows for cells longer than ~2.15s.
+      _setIslandSignal(_cellViewIsland(cellId), 2, +ns);
     }
 
     // ── Footer cell-count helper (delta-based) ──
