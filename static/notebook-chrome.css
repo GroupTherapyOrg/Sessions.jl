@@ -330,6 +330,15 @@
 .dark .jl-frame-loc{color:#6B6A7A;}
 .dark .jl-frame-tag{color:#6B6A7A;background:rgba(255,255,255,0.04);}
 
+/* Render-path exception fallback (web_rendering.jl _render_value_raw) —
+   used when a value's `show(io, MIME"text/html"(), x)` itself throws. */
+.jl-error-fallback{color:var(--status-error);font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px;background:var(--adm-danger-bg);border-radius:4px;}
+.dark .jl-error-fallback{color:#F09595;background:rgba(226,75,74,.12);}
+
+/* Plain-text cell output (output_type == :text). Mirrors what was
+   inline at web_rendering.jl:730 before the class extraction. */
+.cell-text-output{font-family:'JetBrains Mono',monospace;font-size:13px;white-space:pre-wrap;color:var(--output-text);line-height:1.5;}
+
 /* ═══ Stdout + logs — Sessions/input.css 402–429 ════════════════ */
 .cell-stdout{position:relative;font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#c0ffab;white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;padding:0.6em 0.9em;margin:0;background:radial-gradient(hsl(36deg 20% 37%),hsl(36deg 20% 37%) 20%,hsl(31deg 12% 28%));border:4px solid #b7b7b7;border-radius:0 0 8px 8px;line-height:1.5;text-shadow:1px 1px 2px rgba(0,0,0,.35);min-width:18em;}
 .cell-stdout::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:0.2;background:linear-gradient(180deg,hsl(37deg 20% 27%),transparent,#1a1a1a);background-size:100% 7px;background-repeat:repeat;}
@@ -383,19 +392,23 @@
 .hljs-meta{color:var(--cm-macro);font-weight:bold;}
 .hljs-variable{color:var(--cm-variable);}
 
-/* ═══ CodeMirror overrides — Sessions/input.css 485–488 ═════════ */
+/* ═══ CodeMirror overrides — single source of truth for both the live
+   IDE (.cm-cell) and published bundles (which carry .cm-cell as well as
+   .cm-cell-published). Notebook.jl's runtime CodeMirror theme used to
+   duplicate the font / padding / gutters / matchingBracket rules in JS;
+   they live here now so live + published render identically. */
 .cm-cell .cm-editor{background:transparent !important;}
-.cm-cell .cm-scroller{overflow-x:auto;}
+.cm-cell .cm-scroller{overflow-x:auto;font-family:'JetBrains Mono',monospace;}
 .cm-cell .cm-focused{outline:none !important;}
+.cm-cell .cm-editor .cm-content{padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65;}
+.cm-cell .cm-editor .cm-gutters{background:transparent;border:none;color:var(--text-3);min-width:38px;}
+.cm-cell .cm-editor .cm-line{padding-left:4px;}
+.cm-cell .cm-editor .cm-matchingBracket{font-weight:bold;background-color:var(--cm-matching-bracket-bg);}
 
-/* Published CodeMirror hosts layer on top — minimal extra so the host
-   renders right BEFORE CM attaches (avoids flash). */
+/* Published wrap needs position:relative so absolutely-positioned CM
+   line decorations anchor to the host (live IDE doesn't need it — its
+   parent is already positioned). */
 .cm-cell-published{position:relative;}
-.cm-cell-published .cm-editor .cm-scroller{font-family:'JetBrains Mono',monospace;}
-.cm-cell-published .cm-editor .cm-content{padding:8px 0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65;}
-.cm-cell-published .cm-editor .cm-gutters{background:transparent;border:none;color:var(--text-3);min-width:38px;}
-.cm-cell-published .cm-editor .cm-line{padding-left:4px;}
-.cm-cell-published .cm-editor .cm-matchingBracket{font-weight:bold;background-color:var(--cm-matching-bracket-bg);}
 
 /* ═══ nb-cell-list outer wrapper — Sessions/input.css 502 ════════ */
 .nb-cell-list{padding-top:20px;}

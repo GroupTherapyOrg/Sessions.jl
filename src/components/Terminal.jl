@@ -64,72 +64,64 @@ function _terminal_js()
   var addBtn = document.getElementById('term-add-btn');
   if (!container || !tabBar) return;
 
-  // Theme — adapts to light/dark mode (check classList + localStorage fallback)
-  var isDark = document.documentElement.classList.contains('dark') || localStorage.getItem('sessions-theme') !== 'light';
-  var termTheme = isDark ? {
-    background: '#050709',
-    foreground: '#d4dce8',
-    cursor: '#d4759a',
-    cursorAccent: '#050709',
-    selectionBackground: 'rgba(212,117,154,.2)',
-    selectionForeground: '#d4dce8',
-    black: '#080b10', red: '#dc3545', green: '#56d4a0', yellow: '#d4a056',
-    blue: '#7bb8e8', magenta: '#b08fd8', cyan: '#56d4a0', white: '#d4dce8',
-    brightBlack: '#6b7d93', brightRed: '#dc3545', brightGreen: '#56d4a0',
-    brightYellow: '#d4a056', brightBlue: '#7bb8e8', brightMagenta: '#b08fd8',
-    brightCyan: '#7bb8e8', brightWhite: '#ffffff'
-  } : {
-    background: '#f0ece4',
-    foreground: '#2a2520',
-    cursor: '#d4759a',
-    cursorAccent: '#f0ece4',
-    selectionBackground: 'rgba(212,117,154,.15)',
-    selectionForeground: '#2a2520',
-    black: '#2a2520', red: '#dc3545', green: '#219669', yellow: '#b8860b',
-    blue: '#2563eb', magenta: '#9558b2', cyan: '#0d9488', white: '#f8f7f4',
-    brightBlack: '#9a9590', brightRed: '#dc3545', brightGreen: '#219669',
-    brightYellow: '#b8860b', brightBlue: '#2563eb', brightMagenta: '#9558b2',
-    brightCyan: '#0d9488', brightWhite: '#ffffff'
-  };
-
-  var darkTheme = {
-    background: '#050709', foreground: '#d4dce8', cursor: '#d4759a', cursorAccent: '#050709',
-    selectionBackground: 'rgba(212,117,154,.2)', selectionForeground: '#d4dce8',
-    black: '#080b10', red: '#dc3545', green: '#56d4a0', yellow: '#d4a056',
-    blue: '#7bb8e8', magenta: '#b08fd8', cyan: '#56d4a0', white: '#d4dce8',
-    brightBlack: '#6b7d93', brightRed: '#dc3545', brightGreen: '#56d4a0',
-    brightYellow: '#d4a056', brightBlue: '#7bb8e8', brightMagenta: '#b08fd8',
-    brightCyan: '#7bb8e8', brightWhite: '#ffffff'
-  };
-  var lightTheme = {
-    background: '#f0ece4', foreground: '#2a2520', cursor: '#d4759a', cursorAccent: '#f0ece4',
-    selectionBackground: 'rgba(212,117,154,.15)', selectionForeground: '#2a2520',
-    black: '#2a2520', red: '#dc3545', green: '#219669', yellow: '#b8860b',
-    blue: '#2563eb', magenta: '#9558b2', cyan: '#0d9488', white: '#f8f7f4',
-    brightBlack: '#9a9590', brightRed: '#dc3545', brightGreen: '#219669',
-    brightYellow: '#b8860b', brightBlue: '#2563eb', brightMagenta: '#9558b2',
-    brightCyan: '#0d9488', brightWhite: '#ffffff'
-  };
+  // Theme — driven entirely by --term-* tokens in input.css. Light vs.
+  // dark resolves through the .dark class on <html>, so we just rebuild
+  // the JS theme object from getComputedStyle and xterm.js picks up the
+  // current palette. No hex literals here — input.css is the single
+  // source of truth for terminal colors.
+  function _v(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function _buildTermTheme() {
+    return {
+      background:          _v('--term-bg'),
+      foreground:          _v('--term-fg'),
+      cursor:              _v('--term-cursor'),
+      cursorAccent:        _v('--term-cursor-accent'),
+      selectionBackground: _v('--term-selection-bg'),
+      selectionForeground: _v('--term-fg'),
+      black:        _v('--term-ansi-black'),
+      red:          _v('--term-ansi-red'),
+      green:        _v('--term-ansi-green'),
+      yellow:       _v('--term-ansi-yellow'),
+      blue:         _v('--term-ansi-blue'),
+      magenta:      _v('--term-ansi-magenta'),
+      cyan:         _v('--term-ansi-cyan'),
+      white:        _v('--term-ansi-white'),
+      brightBlack:  _v('--term-ansi-bright-black'),
+      brightRed:    _v('--term-ansi-red'),
+      brightGreen:  _v('--term-ansi-green'),
+      brightYellow: _v('--term-ansi-yellow'),
+      brightBlue:   _v('--term-ansi-blue'),
+      brightMagenta:_v('--term-ansi-magenta'),
+      brightCyan:   _v('--term-ansi-cyan'),
+      brightWhite:  _v('--term-ansi-bright-white'),
+    };
+  }
+  var termTheme = _buildTermTheme();
 
   // Terminal instances per tab: { tabId: { term, fitAddon } }
   var terminals = {};
   var activeTabId = null;
 
-  // Expose theme update for live toggle
+  // Expose theme update for live light/dark toggle — re-read CSS vars
+  // and push the fresh theme into every active xterm instance.
   window._sessionsUpdateTermTheme = function() {
-    var d = document.documentElement.classList.contains('dark');
-    var t = d ? darkTheme : lightTheme;
-    termTheme = t;
+    termTheme = _buildTermTheme();
     for (var id in terminals) {
-      terminals[id].term.options.theme = t;
+      terminals[id].term.options.theme = termTheme;
     }
   };
 
   // ── Create a new xterm.js instance for a tab ──
   function createTerminal(tabId) {
+    // xterm measures glyph width from the configured fontFamily, so it
+    // must be a JS option — not just a CSS rule on .xterm. Read it from
+    // the --font-mono token (input.css @theme) so the IDE has a single
+    // source of truth for monospace.
     var term = new Terminal({
       fontSize: 12,
-      fontFamily: \"'JetBrains Mono', 'SF Mono', monospace\",
+      fontFamily: _v('--font-mono') || \"'JetBrains Mono', 'SF Mono', monospace\",
       cursorBlink: true,
       cursorStyle: 'bar',
       scrollback: 5000,

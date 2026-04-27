@@ -727,7 +727,7 @@ function render_output_html(cell::Cell)
     # Text — plain monospace
     if output.output_type == :text
         text = output.text_representation
-        return isempty(text) ? "" : """<pre class="text-sm font-mono whitespace-pre-wrap" style="color:var(--output-text);line-height:1.5;">$(_html_esc(text))</pre>"""
+        return isempty(text) ? "" : """<pre class="cell-text-output">$(_html_esc(text))</pre>"""
     end
     # Image PNG — base64
     if output.output_type == :image_png && output.image_data !== nothing
@@ -778,7 +778,7 @@ function render_cell(cell::Cell; mode::Symbol=:static, index::Int=0)
         if !isempty(output.stdout)
             push!(parts,
                 Div(:class => "cell-out font-mono text-xs whitespace-pre overflow-x-auto",
-                    :style => "padding:6px 0 10px;line-height:1.5;color:#7ca0bf;",
+                    :style => "padding:6px 0 10px;line-height:1.5;color:var(--output-text);",
                     output.stdout))
         end
     else  # :live
@@ -971,7 +971,7 @@ Therapy.render_html!(io::IO, x, ctx::Therapy.SSRContext) =
 
 function _render_value_raw(x)::String
     x isa Exception && return string(
-        "<pre style='color:#c33;font-family:monospace;font-size:12px;padding:8px;background:#fee;border-radius:4px'>",
+        "<pre class=\"jl-error-fallback\">",
         sprint(showerror, x), "</pre>")
     try
         if Base.showable(MIME"text/html"(), x)

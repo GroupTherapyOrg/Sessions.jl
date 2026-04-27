@@ -60,6 +60,21 @@
   --term-bg:         var(--warm-100);
   --term-border:     #ffffff;
   --statusbar-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+  /* xterm.js theme tokens — read by Terminal.jl via getComputedStyle */
+  --term-fg:                 var(--warm-800);
+  --term-cursor:             var(--accent);
+  --term-cursor-accent:      var(--term-bg);
+  --term-selection-bg:       rgba(212,117,154,.15);
+  --term-ansi-black:         var(--warm-800);
+  --term-ansi-red:           #dc3545;
+  --term-ansi-green:         #219669;
+  --term-ansi-yellow:        #b8860b;
+  --term-ansi-blue:          #2563eb;
+  --term-ansi-magenta:       #9558b2;
+  --term-ansi-cyan:          #0d9488;
+  --term-ansi-white:         var(--warm-50);
+  --term-ansi-bright-black:  var(--warm-400);
+  --term-ansi-bright-white:  #ffffff;
 }
 
 .dark {
@@ -70,6 +85,20 @@
   --term-bg:         #050709;
   --term-border:     #2a3a4f;
   --statusbar-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+  --term-fg:                 #d4dce8;
+  --term-cursor:             var(--accent);
+  --term-cursor-accent:      var(--term-bg);
+  --term-selection-bg:       rgba(212,117,154,.2);
+  --term-ansi-black:         #080b10;
+  --term-ansi-red:           #dc3545;
+  --term-ansi-green:         #56d4a0;
+  --term-ansi-yellow:        #d4a056;
+  --term-ansi-blue:          #7bb8e8;
+  --term-ansi-magenta:       #b08fd8;
+  --term-ansi-cyan:          #56d4a0;
+  --term-ansi-white:         #d4dce8;
+  --term-ansi-bright-black:  #6b7d93;
+  --term-ansi-bright-white:  #ffffff;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

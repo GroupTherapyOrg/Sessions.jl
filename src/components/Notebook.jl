@@ -81,22 +81,28 @@ function _notebook_cm_script_body()
       {tag:C.t.compareOperator,color:"var(--cm-editor-text)"},
     ]);
 
-    var accentColor = '#d4759a';
+    function _cssVar(name, fallback) {
+      var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    }
     function _makeEdTheme() {
       var isDark = document.documentElement.classList.contains('dark');
+      // Caret color is the only CodeMirror theme prop that can't be
+      // driven from a stylesheet — CM stamps it as a style attribute on
+      // .cm-content. Read --accent at theme-build time so dark/light
+      // toggles still pick up the right value (the theme is rebuilt on
+      // every _initAllCM call). All font / padding / gutter / matching-
+      // bracket / line rules live in notebook-chrome.css under .cm-cell.
+      var accent = _cssVar('--accent', '#d4759a');
       return C.EditorView.theme({
-        "&":{backgroundColor:"transparent",color:"var(--text-1)"},
-        ".cm-gutters":{backgroundColor:"transparent",color:"var(--text-3)",border:"none",minWidth:"38px"},
+        "&":{color:"var(--text-1)"},
         ".cm-activeLine":{backgroundColor:"transparent"},
         "&.cm-focused .cm-activeLine":{backgroundColor:"rgba(128,128,128,.04)"},
         ".cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-3)"},
         "&.cm-focused .cm-activeLineGutter":{backgroundColor:"transparent",color:"var(--text-2)"},
-        "&.cm-focused .cm-cursor":{borderLeftColor:accentColor},
+        "&.cm-focused .cm-cursor":{borderLeftColor:accent},
         "&.cm-focused .cm-selectionBackground, .cm-selectionBackground":{backgroundColor:"var(--selection-bg) !important"},
-        ".cm-content":{caretColor:accentColor,fontFamily:"'JetBrains Mono',monospace",fontSize:"13px",lineHeight:"1.65",padding:"8px 0"},
-        ".cm-scroller":{fontFamily:"'JetBrains Mono',monospace"},
-        ".cm-matchingBracket":{fontWeight:"bold",backgroundColor:"var(--cm-matching-bracket-bg)"},
-        ".cm-line":{paddingLeft:"4px"},
+        ".cm-content":{caretColor:accent},
       },{dark:isDark});
     }
     window._sessionsRunCell = function(cellId) {
